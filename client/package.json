@@ -1,0 +1,25 @@
+{
+  "name": "sese-website",
+  "version": "0.1.0",
+  "description": "An E-Commerce Website for Southern Exposure Seed Exchange",
+  "main": "src/index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "ssh://git@bugs.sleepanarchy.com/sese-website.git"
+  },
+  "keywords": [
+    "Seeds",
+    "Website",
+    "E-Commerce",
+    "Shop",
+    "Webstore"
+  ],
+  "author": "Pavan Rikhi",
+  "license": "GPL-3.0",
+  "dependencies": {
+    "elm": "^0.18.0"
+  }
+}
