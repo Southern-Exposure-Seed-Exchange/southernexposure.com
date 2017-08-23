@@ -7,6 +7,23 @@ Single Page Application, using Haskell/Servant for the API Server & Elm for the
 Frontend.
 
 
+Quickstart
+==========
+
+.. code:: bash
+
+    # Client
+    cd client
+    npm install
+    npm run watch
+
+    # Server
+    cd server
+    stack setup
+    stack build
+    stack exec sese-website-exe
+
+
 License
 ========
 
