@@ -19,9 +19,7 @@ Quickstart
 
     # Server
     cd server
-    stack setup
-    stack build
-    stack exec sese-website-exe
+    make
 
 
 License
