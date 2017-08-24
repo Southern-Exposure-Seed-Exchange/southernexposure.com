@@ -20,8 +20,8 @@ import qualified Data.Text as T
 class Named a where
     name :: Proxy a -> T.Text
 
-instance Named Hello where
-    name _ = "hello"
+instance Named Product where
+    name _ = "products"
 
 -- | The `Entity a` instance of the Named typeclass uses the Named
 -- instance for `a`.

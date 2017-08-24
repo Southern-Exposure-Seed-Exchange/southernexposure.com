@@ -7,10 +7,37 @@
 {-# LANGUAGE TypeFamilies #-}
 module Models.DB where
 
+import Data.Int (Int64)
 import Database.Persist.TH
+
+import Models.Fields
+
+import qualified Data.Text as T
 
 
 share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistLowerCase|
-Hello json
-    world String
+Product json
+    name T.Text
+    baseSKU T.Text
+    shortDescription T.Text
+    longDescription T.Text
+    imageURL T.Text
+    UniqueBaseSKU baseSKU
+
+ProductVariant json
+    productId ProductId
+    skuSuffix T.Text
+    price Cents
+    quantity Int64
+    weight Milligrams
+    isActive Bool
+    UniqueSKU productId skuSuffix
+
+SeedAttributes
+    productId ProductId
+    isOrganic Bool
+    isHeirloom Bool
+    isEcological Bool
+    isRegional Bool
+    UniqueAttributes productId
 |]

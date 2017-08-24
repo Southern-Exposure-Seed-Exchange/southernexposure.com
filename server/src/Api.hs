@@ -34,7 +34,7 @@ api =
 
 -- | The `API` type describes the API schema of the entire Application.
 type API =
-    Get '[JSON] (JSONList (Entity Hello))
+    Get '[JSON] (JSONList (Entity Product))
 
 -- | Return the Handler functions for the `API` type.
 server :: ServerT API App
