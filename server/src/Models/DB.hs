@@ -37,12 +37,12 @@ ProductVariant json
     UniqueSku productId skuSuffix
     deriving Show
 
-SeedAttribute
+SeedAttribute json
     productId ProductId
     isOrganic Bool
     isHeirloom Bool
     isEcological Bool
     isRegional Bool
-    UniqueAttributes productId
+    UniqueAttribute productId
     deriving Show
 |]

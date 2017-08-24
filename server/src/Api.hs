@@ -1,16 +1,14 @@
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeOperators #-}
 module Api
     ( app
     ) where
 
 import Control.Monad.Reader (runReaderT)
-import Database.Persist (Entity, selectList)
 import Servant
 
 import Config
-import Models
+import Routes
 import Server
 
 -- | Turn a `Config` into a WAI `Application` representing our API.
@@ -34,10 +32,9 @@ api =
 
 -- | The `API` type describes the API schema of the entire Application.
 type API =
-    Get '[JSON] (JSONList (Entity Product))
+    ProductDetailsRoute
 
 -- | Return the Handler functions for the `API` type.
 server :: ServerT API App
-server = do
-    l <- runDB $ selectList [] []
-    return $ JSONList l
+server =
+    productDetailsRoute

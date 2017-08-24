@@ -22,6 +22,7 @@ library
                      , Models.DB
                      , Models.Utils
                      , Models.Fields
+                     , Routes
                      , Server
   build-depends:       base >= 4.7 && < 5
                      , aeson
