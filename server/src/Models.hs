@@ -1,8 +1,10 @@
 module Models
-    ( module Models.DB
-    , module Models.Classes
+    ( module Models.Classes
+    , module Models.DB
+    , module Models.Utils
     )
     where
 
-import Models.DB
 import Models.Classes
+import Models.DB
+import Models.Utils

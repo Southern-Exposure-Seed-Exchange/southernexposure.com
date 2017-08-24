@@ -81,7 +81,7 @@ makeProducts mysql = do
             _ <- return prodId
             _ <- return prodQty
             let (baseSku, skuSuffix) = splitSku prodSKU
-            return (prodId, skuSuffix, prodPrice, prodQty, prodWeight, Product name baseSku "" description prodImg)
+            return (prodId, skuSuffix, prodPrice, prodQty, prodWeight, Product name (slugify name) baseSku "" description prodImg)
 
 
 makeVariants :: [(Int32, T.Text, Scientific, Float, Float, Product)] -> [(T.Text, ProductVariant)]

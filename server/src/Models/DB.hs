@@ -18,10 +18,12 @@ import qualified Data.Text as T
 share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistLowerCase|
 Product json
     name T.Text
+    slug T.Text
     baseSku T.Text
     shortDescription T.Text
     longDescription T.Text
     imageUrl T.Text
+    UniqueProductSlug slug
     UniqueBaseSku baseSku
     deriving Show
 

@@ -20,6 +20,7 @@ library
                      , Models
                      , Models.Classes
                      , Models.DB
+                     , Models.Utils
                      , Models.Fields
                      , Server
   build-depends:       base >= 4.7 && < 5
