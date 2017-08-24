@@ -4,7 +4,7 @@
 {-# LANGUAGE TypeFamilies #-}
 import Control.Monad (forM, void)
 import Control.Monad.Trans.Class (lift)
-import Control.Monad.Logger (runStderrLoggingT)
+import Control.Monad.Logger (runNoLoggingT)
 import Data.Char (isAlpha)
 import Data.Int (Int32)
 import Data.List (nubBy)
@@ -14,7 +14,8 @@ import Database.MySQL.Base
     ( MySQLConn, ConnectInfo(..), connect, defaultConnectInfo, query_, close, MySQLValue(..)
     , prepareStmt, queryStmt
     )
-import Database.Persist (Entity(..), insertMany_, getBy, insert)
+import Database.Persist
+    (Entity(..), Filter, getBy, insert, insertMany_, deleteWhere)
 import Database.Persist.Postgresql
     (ConnectionPool, SqlWriteT, createPostgresqlPool, toSqlKey, runSqlPool)
 import System.Environment (lookupEnv)
@@ -37,7 +38,8 @@ main = do
         variants = makeVariants mysqlProducts
     attributes <- makeSeedAttributes mysqlConn
     flip runSqlPool psqlConn
-        $ insertMany_ products
+        $ dropNewDatabaseRows
+        >> insertMany_ products
         >> insertVariants variants
         >> insertAttributes attributes
     close mysqlConn
@@ -56,8 +58,14 @@ connectToMysql = do
 
 connectToPostgres :: IO ConnectionPool
 connectToPostgres =
-    runStderrLoggingT $ createPostgresqlPool "dbname=sese-website" 1
+    runNoLoggingT $ createPostgresqlPool "dbname=sese-website" 1
 
+
+dropNewDatabaseRows :: SqlWriteT IO ()
+dropNewDatabaseRows =
+        deleteWhere ([] :: [Filter SeedAttribute])
+        >> deleteWhere ([] :: [Filter ProductVariant])
+        >> deleteWhere ([] :: [Filter Product])
 
 makeProducts :: MySQLConn -> IO [(Int32, T.Text, Scientific, Float, Float, Product)]
 makeProducts mysql = do
@@ -137,6 +145,6 @@ insertAttributes =
             maybeProduct <- getBy $ UniqueBaseSku baseSku
             case maybeProduct of
                 Nothing ->
-                    return ()
+                    lift . putStrLn $ "No product for: " ++ show attribute
                 Just (Entity prodId _) ->
                     void . insert $ attribute { seedAttributeProductId = prodId }
