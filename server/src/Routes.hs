@@ -32,6 +32,7 @@ instance ToJSON ProductDetailsData where
 
 type ProductDetailsRoute =
     Capture "slug" T.Text :> Get '[JSON] ProductDetailsData
+
 productDetailsRoute :: T.Text -> App ProductDetailsData
 productDetailsRoute slug = do
         maybeProduct <- runDB . getBy $ UniqueProductSlug slug
