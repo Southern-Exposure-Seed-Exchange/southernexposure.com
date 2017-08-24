@@ -1,5 +1,4 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE TemplateHaskell #-}
 module Models.Fields where
 
 import Data.Aeson (ToJSON, FromJSON)

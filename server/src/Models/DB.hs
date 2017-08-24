@@ -18,11 +18,12 @@ import qualified Data.Text as T
 share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistLowerCase|
 Product json
     name T.Text
-    baseSKU T.Text
+    baseSku T.Text
     shortDescription T.Text
     longDescription T.Text
-    imageURL T.Text
-    UniqueBaseSKU baseSKU
+    imageUrl T.Text
+    UniqueBaseSku baseSku
+    deriving Show
 
 ProductVariant json
     productId ProductId
@@ -31,13 +32,15 @@ ProductVariant json
     quantity Int64
     weight Milligrams
     isActive Bool
-    UniqueSKU productId skuSuffix
+    UniqueSku productId skuSuffix
+    deriving Show
 
-SeedAttributes
+SeedAttribute
     productId ProductId
     isOrganic Bool
     isHeirloom Bool
     isEcological Bool
     isRegional Bool
     UniqueAttributes productId
+    deriving Show
 |]
