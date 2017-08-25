@@ -2,6 +2,7 @@ var path = require('path');
 var webpack = require('webpack');
 var CleanWebpackPlugin = require('clean-webpack-plugin');
 var HtmlWebpackPlugin = require('html-webpack-plugin');
+var CopyWebpackPlugin = require('copy-webpack-plugin');
 
 var isProduction = process.env.NODE_ENV === 'production';
 
@@ -45,7 +46,21 @@ module.exports = {
         test: /\.sass$/,
         exclude: [/node_modules/,],
         use: [ 'style-loader', 'css-loader', 'sass-loader' ],
-      }
+      },
+
+      {
+        test: /\.(jpg|png|svg|ttf)$/,
+        exclude: [/node_modules/],
+        use: [
+          {
+            loader: 'file-loader',
+            options: {
+              name: '[name].[hash].[ext]',
+              outputPath: 'static/',
+            },
+          },
+        ],
+      },
 
     ],
     noParse: [/.elm$/]
@@ -62,9 +77,13 @@ module.exports = {
       lang: 'en-US',
 
       title: 'Southern Exposure Seed Exchange',
+      links: ['https://fonts.googleapis.com/css?family=Crimson+Text|Glass+Antiqua'],
       xhtml: true,
       hash: false,
     }),
+    new CopyWebpackPlugin([
+      { from: 'src/static', to: 'static' }
+    ]),
     new webpack.ProvidePlugin({
       $: 'jquery',
       jQuery: 'jquery',
