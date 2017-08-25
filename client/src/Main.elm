@@ -1,6 +1,6 @@
 module Main exposing (main)
 
-import Html exposing (Html, text, div, h1, hr)
+import Html exposing (Html, text, div, h1, hr, node)
 import Html.Attributes exposing (class, id)
 import Html.Attributes.Extra exposing (innerHtml)
 import Http
@@ -178,6 +178,36 @@ update msg model =
 view : Model -> Html msg
 view { pageData } =
     let
+        siteHeader =
+            div [ class "container" ]
+                [ div [ class "row clearfix" ]
+                    [ div [ class "col-sm-7 col-lg-6" ]
+                        [ text "LOGO / STORE NAME" ]
+                    , div [ class "col-sm-5 col-lg-6 d-none d-sm-block" ]
+                        [ text "LINKS / SEARCH" ]
+                    ]
+                ]
+
+        navigation =
+            div [ class "container" ]
+                [ text "NAVIGATION" ]
+
+        middleContent =
+            div [ class "container" ]
+                [ div [ class "row" ]
+                    [ div [ class "col-sm-9 order-2" ] pageContent
+                    , sidebar
+                    ]
+                ]
+
+        footer =
+            div [ class "container" ]
+                [ node "footer" [] [ text "FOOTER" ]
+                ]
+
+        sidebar =
+            div [ id "sidebar", class "col-sm-3 col-lg-2 order-1" ] [ text "SIDEBAR" ]
+
         pageContent =
             case pageData of
                 RemoteData.Loading ->
@@ -203,9 +233,9 @@ view { pageData } =
                 e ->
                     [ text <| toString e ]
     in
-        div [ class "container" ]
-            [ div [ class "row" ]
-                [ div [ class "col-sm-9 order-2" ] pageContent
-                , div [ id "sidebar", class "col-sm-3 col-lg-2 order-1" ] [ text "sidebar" ]
-                ]
+        div []
+            [ siteHeader
+            , navigation
+            , middleContent
+            , footer
             ]
