@@ -1,7 +1,7 @@
 module Main exposing (main)
 
 import Html exposing (Html, text, div, h1, h4, hr, node, br, a, img, span, button, ul, li)
-import Html.Attributes exposing (attribute, id, class, href, src, type_)
+import Html.Attributes exposing (attribute, id, class, href, src, type_, target)
 import Html.Attributes.Extra exposing (innerHtml)
 import Http
 import Json.Decode as Decode
@@ -261,14 +261,14 @@ view { pageData } =
             div [ id "sidebar", class "col-sm-3 col-lg-3 col-xl-3 order-1" ]
                 [ div [ class "card mb-3" ]
                     [ div [ class "card-body text-center" ]
-                        [ a [ href "http://www.facebook.com/pages/Southern-Exposure-Seed-Exchange/353814746253?ref=ts" ]
+                        [ a [ target "_blank", href "http://www.facebook.com/pages/Southern-Exposure-Seed-Exchange/353814746253?ref=ts" ]
                             [ img [ class "img-fluid", src "/static/img/logos/facebook-big-icon.png" ] [] ]
                         , hr [] []
                         , div [ class "text-center font-weight-bold" ] [ text "Our Partners" ]
-                        , a [ href "http://www.smartgardener.com/" ]
+                        , a [ target "_blank", href "http://www.smartgardener.com/" ]
                             [ img [ class "mb-3 img-fluid", src "/static/img/logos/smart-gardener.jpg" ] [] ]
                         , br [] []
-                        , a [ href "http://www.localharvest.org/" ]
+                        , a [ target "_blank", href "http://www.localharvest.org/" ]
                             [ img [ class "img-fluid", src "/static/img/logos/local-harvest.jpg" ] [] ]
                         ]
                     ]
