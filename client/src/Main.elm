@@ -1,7 +1,7 @@
 module Main exposing (main)
 
-import Html exposing (Html, text, div, h1, hr, node)
-import Html.Attributes exposing (class, id)
+import Html exposing (Html, text, div, h1, h4, hr, node, br, a, img, span, button, ul, li)
+import Html.Attributes exposing (attribute, id, class, href, src, type_)
 import Html.Attributes.Extra exposing (innerHtml)
 import Http
 import Json.Decode as Decode
@@ -180,33 +180,99 @@ view { pageData } =
     let
         siteHeader =
             div [ class "container" ]
-                [ div [ class "row clearfix" ]
+                [ div [ id "site-header", class "row clearfix" ]
                     [ div [ class "col-sm-7 col-lg-6" ]
-                        [ text "LOGO / STORE NAME" ]
-                    , div [ class "col-sm-5 col-lg-6 d-none d-sm-block" ]
+                        [ div [ class "media" ]
+                            [ a [ href "/" ]
+                                [ img
+                                    [ id "site-logo"
+                                    , class "float-left mx-3"
+                                    , src "/static/img/logos/sese.png"
+                                    ]
+                                    []
+                                ]
+                            , div [ id "site-title", class "media-body my-auto" ]
+                                [ h1 [ class "media-heading m-0" ]
+                                    [ a [ href "/" ]
+                                        [ text "Southern Exposure"
+                                        , br [] []
+                                        , text "Seed Exchange"
+                                        ]
+                                    ]
+                                ]
+                            ]
+                        ]
+                    , div [ class "col-sm-5 col-lg-6 d-none d-sm-block text-right" ]
                         [ text "LINKS / SEARCH" ]
                     ]
                 ]
 
         navigation =
-            div [ class "container" ]
-                [ text "NAVIGATION" ]
+            div [ id "navigation", class "container" ]
+                [ node "nav"
+                    [ class "navbar navbar-expand-md navbar-light bg-success" ]
+                    [ button
+                        [ class "navbar-toggler"
+                        , type_ "button"
+                        , attribute "data-toggle" "collapse"
+                        , attribute "data-target" "#category-navbar"
+                        , attribute "aria-controls" "navbarSupportedContent"
+                        , attribute "aria-expanded" "false"
+                        , attribute "aria-label" "Toggle navigation"
+                        ]
+                        [ span [ class "navbar-toggler-icon" ] [] ]
+                    , div [ id "category-navbar", class "collapse navbar-collapse" ]
+                        [ ul [ class "navbar-nav mx-auto d-flex text-left" ]
+                            [ li [ class "nav-item" ]
+                                [ a [ class "nav-link", href "#" ] [ text "Vegetables" ]
+                                ]
+                            , li [ class "nav-item active" ]
+                                [ a [ class "nav-link", href "#" ] [ text "Flowers" ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ]
 
         middleContent =
             div [ class "container" ]
                 [ div [ class "row" ]
-                    [ div [ class "col-sm-9 order-2" ] pageContent
+                    [ div [ class "col order-2" ] pageContent
                     , sidebar
                     ]
                 ]
 
         footer =
-            div [ class "container" ]
-                [ node "footer" [] [ text "FOOTER" ]
+            div [ id "footer", class "container" ]
+                [ node "footer"
+                    []
+                    [ div [ class "row" ]
+                        [ div [ class "col-sm-4" ] [ h4 [ class "mt-3" ] [ text "Information" ] ]
+                        , div [ class "col-sm-4" ] [ h4 [ class "mt-3" ] [ text "Important Links" ] ]
+                        , div [ class "col-sm-4" ] [ h4 [ class "mt-3" ] [ text "Contact Us" ] ]
+                        , div [ class "col-sm-12 text-center" ]
+                            [ text "Copyright © 2017 Southern Exposure Seed Exchange"
+                            ]
+                        ]
+                    ]
                 ]
 
         sidebar =
-            div [ id "sidebar", class "col-sm-3 col-lg-2 order-1" ] [ text "SIDEBAR" ]
+            div [ id "sidebar", class "col-sm-3 col-lg-3 col-xl-3 order-1" ]
+                [ div [ class "card mb-3" ]
+                    [ div [ class "card-body text-center" ]
+                        [ a [ href "http://www.facebook.com/pages/Southern-Exposure-Seed-Exchange/353814746253?ref=ts" ]
+                            [ img [ class "img-fluid", src "/static/img/logos/facebook-big-icon.png" ] [] ]
+                        , hr [] []
+                        , div [ class "text-center font-weight-bold" ] [ text "Our Partners" ]
+                        , a [ href "http://www.smartgardener.com/" ]
+                            [ img [ class "mb-3 img-fluid", src "/static/img/logos/smart-gardener.jpg" ] [] ]
+                        , br [] []
+                        , a [ href "http://www.localharvest.org/" ]
+                            [ img [ class "img-fluid", src "/static/img/logos/local-harvest.jpg" ] [] ]
+                        ]
+                    ]
+                ]
 
         pageContent =
             case pageData of

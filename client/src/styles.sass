@@ -1,3 +1,164 @@
 @import "~bootstrap/scss/functions"
 @import "~bootstrap/scss/variables"
+/* Set the height of the Site Logo & Title */
+$logo-height: 120px
+
+
+/** Bootstrap Overrides **/
+/* Colors */
+$dark-green: #158312
+$dark-brown: #4a2604
+$light-pale-tan: #EADBC8
+$pale-tan: #E0C39F
+$pale-tan-accent: lighten($pale-tan, 18%)
+$yellow: #FFCC44
+$blue: #245B9F
+$red: #C20000
+$brown: #A32E2E
+
+
+$body-bg: lighten($light-pale-tan, 14.5%)
+$body-color: $dark-brown
+$link-color: $dark-green
+
+$brand-primary: $blue
+$brand-success: $dark-green
+$brand-warning: darken(#FFCC44, 5%)
+
+$theme-colors: (primary: $brand-primary, secondary: $gray-600, success: $brand-success, info: $cyan, warning: $brand-warning, danger: $red, light: $gray-100, dark: $gray-800)
+
+$navbar-padding-y: 0px
+$navbar-padding-x: 10px
+
+$navbar-light-color: lighten($light-pale-tan, 10%)
+$navbar-light-active-color: white
+$navbar-light-active-bg: darken($dark-green, 7.5%)
+$navbar-light-hover-color: $yellow
+$navbar-light-hover-bg: $dark-green
+$navbar-light-toggler-border-color: $light-pale-tan
+$navbar-light-toggler-icon-bg: str-replace(url("data:image/svg+xml;charset=utf8,%3Csvg viewBox='0 0 30 30' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath stroke='#{$navbar-light-color}' stroke-width='2' stroke-linecap='round' stroke-miterlimit='10' d='M4 7h22M4 15h22M4 23h22'/%3E%3C/svg%3E"), "#", "%23")
+
+$panel-default-heading-bg: $breadcrumb-bg
+
+$input-color: #333
+
+$hr-border: #C0C0C0
+
+
+
 @import "~bootstrap/scss/bootstrap"
+
+/** Fonts **/
+@font-face
+  font-family: 'Poor Richard'
+  font-style: normal
+  font-weight: 400
+  src: local('Poor Richard'), url('./static/fonts/PoorRichard.ttf') format('truetype')
+
+/* Set the Site Title to the stylized serif font */
+div#site-title h1.media-heading
+  font-family: 'Poor Richard', 'Glass Antiqua', Helvetica, Arial, sans-serif
+  font-weight: normal
+
+/* Set Header & Nav text to a Serif font */
+h1, h2, h3, h4, h5, h6, .h1, .h2, .h3, .h4, .h5, .h6, #category-navbar, legend, .nav-pills
+  font-family: 'Crimson Text', Georgia, serif
+  font-weight: 600
+
+
+/** Site Layout **/
+/* Set our background image */
+body
+  background-color: $body-color
+  background-image: linear-gradient(rgba(0,0,0,0.25), rgba(0,0,0,0.25)), url('./static/img/sese_background.jpg')
+  background-attachment: fixed
+  background-size: contain
+
+/* Set the background color of the body content */
+body > div#main > div > div.container
+  background: $body-bg
+
+/* Set logo height & spacing */
+#site-logo
+  height: $logo-height - 10px
+  margin-top: 5px
+  margin-bottom: 5px
+
+/* Don't color or decorate the site title link */
+#site-title a, #site-title a:hover
+  color: $body-color
+  text-decoration: none
+
+#category-navbar
+  /* Increase size & reduce emphasize of the navbar text */
+  &, .dropdown-menu
+    font-size: 18px
+    font-weight: normal
+  /* Space Out Navbar Links */
+  .nav-link
+    padding: 0.75rem 1rem
+  /* Darken the Background of Active Nav Items */
+  .active
+    background-color: $navbar-light-active-bg
+
+#navigation
+  /* Decrease Spacing & Close Gap Below Navbar */
+  padding-bottom: 10px
+  /* Round the Corners of the Navbar */
+  nav
+    border-radius: 4px
+
+/* The entire footer background should match the color of the table stripes */
+#footer
+  padding: 0
+footer
+  padding: 0 15px
+  background-color:  $light-pale-tan
+
+// TODO: Modify if necessary when we implement full navigation
+/* Properly space multi-column Nav dropdown menus */
+.multi-column .row
+  margin: 0
+.dropdown-menu.columns-2
+  min-width: 400px
+  .col-sm-6
+    padding: 0
+.dropdown-menu.columns-3
+  min-width: 600px
+  .col-sm-4
+    padding: 0
+
+/* Style the multi-column Nav dropdown menus like the normal Nav dropdown menus */
+.multi-column-dropdown
+  list-style: none
+  padding: 0
+  font-size: 17px
+  li a
+    display: block
+    padding: 3px 25px
+    clear: both
+    font-weight: normal
+    line-height: $line-height-base
+    color: $gray-800
+    white-space: normal
+    &:hover, &:focus
+      text-decoration: none
+      color: $navbar-light-active-color
+      background-color: $navbar-light-hover-bg
+  .active a
+    &, &:hover, &:focus
+      color: $component-active-color
+      text-decoration: none
+      outline: 0
+      background-color: $component-active-bg
+  @include media-breakpoint-only(xs) // {}
+    min-width: 240px !important
+    overflow-x: hidden
+    li a
+      color: $navbar-light-color
+      &:hover, &:focus
+        color: $navbar-light-hover-color
+    .active a
+      &, &:hover, &:focus
+        color: $navbar-light-active-color
+        background-color: $navbar-light-active-bg
