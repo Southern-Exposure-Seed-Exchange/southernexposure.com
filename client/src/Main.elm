@@ -287,7 +287,7 @@ view { pageData } =
                     , div []
                         [ div [ class "clearfix" ]
                             [ div [ class "float-left col-sm-4 col-md-5 col-lg-4" ]
-                                [ text "PRODUCT IMAGE" ]
+                                [ img [ src <| "/media/products/" ++ product.imageURL, class "img-fluid" ] [] ]
                             , div [ class "float-right col-sm-4 col-md-3 col-lg-3" ]
                                 [ div [ class "card" ]
                                     [ div [ class "card-body text-center p-2" ]
