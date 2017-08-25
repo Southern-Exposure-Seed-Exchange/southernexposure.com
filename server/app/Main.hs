@@ -5,6 +5,7 @@ import Control.Monad.Logger (runStderrLoggingT)
 import Database.Persist.Postgresql
 import Network.Wai.Handler.Warp (run)
 import Network.Wai.Middleware.RequestLogger (logStdoutDev, logStdout)
+import System.Directory (getCurrentDirectory, createDirectoryIfMissing)
 import System.Environment (lookupEnv)
 
 import Api
@@ -16,8 +17,10 @@ main :: IO ()
 main = do
     env <- lookupSetting "ENV" Development
     port <- lookupSetting "PORT" 3000
+    mediaDir <- lookupSetting "MEDIA" =<< (++ "/media/") <$> getCurrentDirectory
+    createDirectoryIfMissing True mediaDir
     pool <- makePool env
-    let cfg = defaultConfig { getPool = pool, getEnv = env }
+    let cfg = defaultConfig { getPool = pool, getEnv = env, getMediaDirectory = mediaDir }
     run port . logger env $ app cfg
     where lookupSetting env def =
             maybe def read <$> lookupEnv env

@@ -112,11 +112,16 @@ module.exports = {
         changeOrigin: true,
         pathRewrite: { "^/api/": "" },
       },
+      '/media/*': {
+        target: 'http://localhost:3000',
+        changeOrigin: true,
+      }
     },
   },
 
 }
 
+/* Returns true if the module is an NPM dependency. */
 function isExternal(module) {
   var context = module.context;
 

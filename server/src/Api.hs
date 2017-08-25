@@ -1,3 +1,4 @@
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeOperators #-}
 module Api
@@ -23,11 +24,12 @@ app cfg =
         readerToHandler =
             NT $ \x -> runReaderT x cfg
     in
-        serve api readerServer
+        serve api $
+                 readerServer
+            :<|> serveDirectoryWebApp (getMediaDirectory cfg)
 
-api :: Proxy API
-api =
-    Proxy
+api :: Proxy (API :<|> "media" :> Raw)
+api = Proxy
 
 
 -- | The `API` type describes the API schema of the entire Application.
