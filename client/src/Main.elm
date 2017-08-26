@@ -6,17 +6,39 @@ import Html.Attributes exposing (attribute, id, class, href, src, type_, target)
 import Html.Attributes.Extra exposing (innerHtml)
 import Http
 import Json.Decode as Decode
+import Navigation
 import RemoteData exposing (WebData)
+import UrlParser as Url exposing ((</>))
 
 
 main : Program Never Model Msg
 main =
-    Html.program
+    Navigation.program (parseRoute >> UrlUpdate)
         { init = init
         , update = update
         , subscriptions = always Sub.none
         , view = view
         }
+
+
+
+-- ROUTING
+
+
+type Route
+    = ProductDetails String
+
+
+parseRoute : Navigation.Location -> Route
+parseRoute =
+    let
+        routeParser =
+            Url.oneOf
+                [ Url.map ProductDetails (Url.s "products" </> Url.string)
+                ]
+    in
+        Url.parsePath routeParser
+            >> Maybe.withDefault (ProductDetails "green-pod-red-seed-asparagus-yardlong-bean-7-g")
 
 
 
@@ -26,17 +48,25 @@ main =
 type alias Model =
     { pageData : WebData ProductDetailsData
     , navData : WebData CategoryNavData
+    , route : Route
     }
 
 
-init : ( Model, Cmd Msg )
-init =
-    ( { pageData = RemoteData.Loading, navData = RemoteData.Loading }
-    , Cmd.batch
-        [ getProductDetailsData "green-pod-red-seed-asparagus-yardlong-bean-7-g"
-        , getCategoryNavData
-        ]
-    )
+init : Navigation.Location -> ( Model, Cmd Msg )
+init location =
+    let
+        route =
+            parseRoute location
+    in
+        ( { pageData = RemoteData.Loading
+          , navData = RemoteData.Loading
+          , route = route
+          }
+        , Cmd.batch
+            [ commandForRoute route
+            , getCategoryNavData
+            ]
+        )
 
 
 type Cents
@@ -124,9 +154,16 @@ type alias CategoryNavData =
 -- COMMANDS
 
 
+commandForRoute : Route -> Cmd Msg
+commandForRoute route =
+    case route of
+        ProductDetails slug ->
+            getProductDetailsData slug
+
+
 getProductDetailsData : String -> Cmd Msg
 getProductDetailsData slug =
-    Http.get ("/api/products/" ++ slug) productDetailsDecoder
+    Http.get ("/api/products/" ++ slug ++ "/") productDetailsDecoder
         |> RemoteData.sendRequest
         |> Cmd.map GetProductDetailsData
 
@@ -224,13 +261,26 @@ seedAttributeDecoder =
 
 
 type Msg
-    = GetProductDetailsData (WebData ProductDetailsData)
+    = UrlUpdate Route
+    | GetProductDetailsData (WebData ProductDetailsData)
     | GetCategoryNavData (WebData CategoryNavData)
 
 
-update : Msg -> Model -> ( Model, Cmd msg )
+urlUpdate : Route -> Model -> ( Model, Cmd Msg )
+urlUpdate newRoute model =
+    ( model, commandForRoute newRoute )
+
+
+update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
+        UrlUpdate route ->
+            let
+                ( model_, cmd ) =
+                    urlUpdate route model
+            in
+                ( { model_ | route = route }, cmd )
+
         GetProductDetailsData response ->
             case response of
                 RemoteData.Success data ->

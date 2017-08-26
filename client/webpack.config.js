@@ -80,6 +80,7 @@ module.exports = {
       links: ['https://fonts.googleapis.com/css?family=Crimson+Text|Glass+Antiqua'],
       xhtml: true,
       hash: false,
+      baseHref: '/',
     }),
     new CopyWebpackPlugin([
       { from: 'src/static', to: 'static' }
@@ -102,6 +103,7 @@ module.exports = {
     inline: true,
     host: '0.0.0.0',
     disableHostCheck: true,
+    historyApiFallback: true,
     stats: {
       colors: true,
       chunks: false,
