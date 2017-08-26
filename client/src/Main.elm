@@ -1,6 +1,6 @@
 module Main exposing (main)
 
-import Html exposing (Html, text, div, h1, h4, hr, node, br, a, img, span, button, ul, li, small)
+import Html exposing (Html, text, div, h1, h3, h4, hr, node, br, a, img, span, button, ul, li, small)
 import Html.Attributes exposing (attribute, id, class, href, src, type_, target)
 import Html.Attributes.Extra exposing (innerHtml)
 import Http
@@ -40,6 +40,21 @@ type Cents
 
 type Milligrams
     = Milligrams Int
+
+
+type CategoryId
+    = CategoryId Int
+
+
+type alias Category =
+    { id : CategoryId
+    , name : String
+    , slug : String
+    , parentId : Maybe CategoryId
+    , description : String
+    , imageUrl : String
+    , order : Int
+    }
 
 
 type ProductId
@@ -90,6 +105,7 @@ type alias ProductDetailsData =
     { product : Product
     , variants : List ProductVariant
     , maybeSeedAttribute : Maybe SeedAttribute
+    , categories : List Category
     }
 
 
@@ -106,10 +122,23 @@ getProductDetailsData slug =
 
 productDetailsDecoder : Decode.Decoder ProductDetailsData
 productDetailsDecoder =
-    Decode.map3 ProductDetailsData
+    Decode.map4 ProductDetailsData
         (Decode.field "product" productDecoder)
         (Decode.field "variants" <| Decode.list productVariantDecoder)
         (Decode.field "seedAttribute" <| Decode.nullable seedAttributeDecoder)
+        (Decode.field "categories" <| Decode.list categoryDecoder)
+
+
+categoryDecoder : Decode.Decoder Category
+categoryDecoder =
+    Decode.map7 Category
+        (Decode.field "id" <| Decode.map CategoryId Decode.int)
+        (Decode.field "name" Decode.string)
+        (Decode.field "slug" Decode.string)
+        (Decode.field "parentId" << Decode.nullable <| Decode.map CategoryId Decode.int)
+        (Decode.field "description" Decode.string)
+        (Decode.field "imageUrl" Decode.string)
+        (Decode.field "order" Decode.int)
 
 
 productDecoder : Decode.Decoder Product
@@ -294,7 +323,7 @@ view { pageData } =
                 RemoteData.Loading ->
                     [ text "Loading..." ]
 
-                RemoteData.Success { product, variants, maybeSeedAttribute } ->
+                RemoteData.Success { product, variants, maybeSeedAttribute, categories } ->
                     [ h1 []
                         [ text product.name
                         , htmlOrBlank seedAttributeIcons maybeSeedAttribute
@@ -326,14 +355,25 @@ view { pageData } =
                                     ]
                                 ]
                             , div [ class "col" ]
-                                [ div [ innerHtml product.longDescription ] []
-                                ]
+                                [ div [ innerHtml product.longDescription ] [] ]
+                            , div [ class "col-12" ] <| categoryBlocks categories
                             ]
                         ]
                     ]
 
                 e ->
                     [ text <| toString e ]
+
+        categoryBlocks : List Category -> List (Html msg)
+        categoryBlocks =
+            List.filter (\c -> c.description /= "")
+                >> List.map
+                    (\category ->
+                        div []
+                            [ h3 [ class "mt-3" ] [ text category.name ]
+                            , div [ innerHtml category.description ] []
+                            ]
+                    )
     in
         div []
             [ siteHeader
