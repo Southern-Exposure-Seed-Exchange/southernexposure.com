@@ -1,5 +1,6 @@
 module Main exposing (main)
 
+import Dict exposing (Dict)
 import Html exposing (Html, text, div, h1, h3, h4, hr, node, br, a, img, span, button, ul, li, small)
 import Html.Attributes exposing (attribute, id, class, href, src, type_, target)
 import Html.Attributes.Extra exposing (innerHtml)
@@ -24,13 +25,17 @@ main =
 
 type alias Model =
     { pageData : WebData ProductDetailsData
+    , navData : WebData CategoryNavData
     }
 
 
 init : ( Model, Cmd Msg )
 init =
-    ( { pageData = RemoteData.Loading }
-    , getProductDetailsData "green-pod-red-seed-asparagus-yardlong-bean-7-g"
+    ( { pageData = RemoteData.Loading, navData = RemoteData.Loading }
+    , Cmd.batch
+        [ getProductDetailsData "green-pod-red-seed-asparagus-yardlong-bean-7-g"
+        , getCategoryNavData
+        ]
     )
 
 
@@ -109,15 +114,28 @@ type alias ProductDetailsData =
     }
 
 
+type alias CategoryNavData =
+    { roots : List Category
+    , children : Dict Int (List Category)
+    }
+
+
 
 -- COMMANDS
 
 
 getProductDetailsData : String -> Cmd Msg
 getProductDetailsData slug =
-    Http.get ("/api/" ++ slug) productDetailsDecoder
+    Http.get ("/api/products/" ++ slug) productDetailsDecoder
         |> RemoteData.sendRequest
         |> Cmd.map GetProductDetailsData
+
+
+getCategoryNavData : Cmd Msg
+getCategoryNavData =
+    Http.get "/api/categories/nav/" categoryNavDecoder
+        |> RemoteData.sendRequest
+        |> Cmd.map GetCategoryNavData
 
 
 productDetailsDecoder : Decode.Decoder ProductDetailsData
@@ -127,6 +145,31 @@ productDetailsDecoder =
         (Decode.field "variants" <| Decode.list productVariantDecoder)
         (Decode.field "seedAttribute" <| Decode.nullable seedAttributeDecoder)
         (Decode.field "categories" <| Decode.list categoryDecoder)
+
+
+stringToIntKeys : Dict String v -> Dict Int v
+stringToIntKeys =
+    Dict.foldl
+        (\key value newDict ->
+            case String.toInt key of
+                Err _ ->
+                    newDict
+
+                Ok newKey ->
+                    Dict.insert newKey value newDict
+        )
+        Dict.empty
+
+
+categoryNavDecoder : Decode.Decoder CategoryNavData
+categoryNavDecoder =
+    Decode.map2 CategoryNavData
+        (Decode.field "rootCategories" <| Decode.list categoryDecoder)
+        (Decode.field "childrenCategories" <|
+            Decode.map stringToIntKeys <|
+                Decode.dict <|
+                    Decode.list categoryDecoder
+        )
 
 
 categoryDecoder : Decode.Decoder Category
@@ -181,7 +224,8 @@ seedAttributeDecoder =
 
 
 type Msg
-    = GetProductDetailsData (RemoteData.WebData ProductDetailsData)
+    = GetProductDetailsData (WebData ProductDetailsData)
+    | GetCategoryNavData (WebData CategoryNavData)
 
 
 update : Msg -> Model -> ( Model, Cmd msg )
@@ -199,13 +243,25 @@ update msg model =
                     in
                         ( { model | pageData = response }, Cmd.none )
 
+        GetCategoryNavData response ->
+            case response of
+                RemoteData.Success data ->
+                    ( { model | navData = response }, Cmd.none )
+
+                resp ->
+                    let
+                        _ =
+                            Debug.log "Non Success Returned" resp
+                    in
+                        ( { model | navData = response }, Cmd.none )
+
 
 
 -- VIEW
 
 
 view : Model -> Html msg
-view { pageData } =
+view { pageData, navData } =
     let
         siteHeader =
             div [ class "container" ]
@@ -236,6 +292,62 @@ view { pageData } =
                     ]
                 ]
 
+        categoryNavigation =
+            RemoteData.toMaybe navData
+                |> Maybe.map (\data -> List.map (rootCategory data.children) data.roots)
+                |> Maybe.withDefault []
+
+        rootCategory children category =
+            let
+                (CategoryId categoryId) =
+                    category.id
+
+                dropdownCategories children =
+                    let
+                        childItems =
+                            List.map childCategory children
+
+                        itemsPerColumn =
+                            ceiling <| (toFloat <| List.length childItems) / 3.0
+
+                        splitItems items =
+                            [ List.take itemsPerColumn items
+                            , List.drop itemsPerColumn items |> List.take itemsPerColumn
+                            , List.drop (itemsPerColumn * 2) items
+                            ]
+                    in
+                        if List.length childItems < 15 then
+                            childItems
+                        else
+                            [ div [ class "row no-gutters multi-column-dropdown" ] <|
+                                List.map (\i -> div [ class "col" ] i)
+                                    (splitItems childItems)
+                            ]
+            in
+                case Dict.get categoryId children of
+                    Nothing ->
+                        li [ class "nav-item" ]
+                            [ a [ class "nav-link", href <| "/category/" ++ category.slug ++ "/" ]
+                                [ text category.name ]
+                            ]
+
+                    Just children ->
+                        li [ class "nav-item dropdown" ]
+                            [ a
+                                [ class "nav-link dropdown-toggle"
+                                , href <| "/category/" ++ category.slug ++ "/"
+                                , attribute "data-toggle" "dropdown"
+                                , attribute "aria-haspopup" "true"
+                                , attribute "aria-expanded" "false"
+                                ]
+                                [ text category.name ]
+                            , div [ class "dropdown-menu mt-0" ] <| dropdownCategories children
+                            ]
+
+        childCategory category =
+            a [ class "dropdown-item", href <| "/category/" ++ category.slug ++ "/" ]
+                [ text category.name ]
+
         navigation =
             div [ id "navigation", class "container" ]
                 [ node "nav"
@@ -252,13 +364,7 @@ view { pageData } =
                         [ span [ class "navbar-toggler-icon" ] [] ]
                     , div [ id "category-navbar", class "collapse navbar-collapse" ]
                         [ ul [ class "navbar-nav mx-auto d-flex text-left" ]
-                            [ li [ class "nav-item" ]
-                                [ a [ class "nav-link", href "#" ] [ text "Vegetables" ]
-                                ]
-                            , li [ class "nav-item active" ]
-                                [ a [ class "nav-link", href "#" ] [ text "Flowers" ]
-                                ]
-                            ]
+                            categoryNavigation
                         ]
                     ]
                 ]

@@ -87,7 +87,7 @@ module.exports = {
     new webpack.ProvidePlugin({
       $: 'jquery',
       jQuery: 'jquery',
-      Popper: 'popper.js',
+      Popper: 'popper.js/dist/umd/popper.js',
     }),
     new webpack.optimize.CommonsChunkPlugin({
       name: 'vendor',
