@@ -1,6 +1,6 @@
 module Main exposing (main)
 
-import Html exposing (Html, text, div, h1, h4, hr, node, br, a, img, span, button, ul, li)
+import Html exposing (Html, text, div, h1, h4, hr, node, br, a, img, span, button, ul, li, small)
 import Html.Attributes exposing (attribute, id, class, href, src, type_, target)
 import Html.Attributes.Extra exposing (innerHtml)
 import Http
@@ -303,22 +303,31 @@ view { pageData } =
                     , div []
                         [ div [ class "clearfix" ]
                             [ div [ class "float-left col-sm-4 col-md-5 col-lg-4" ]
-                                [ img
-                                    [ src << mediaImage <| "products/" ++ product.imageURL
-                                    , class "img-fluid"
+                                [ div
+                                    [ class "card" ]
+                                    [ div [ class "card-body text-center p-1" ]
+                                        [ img
+                                            [ src << mediaImage <| "products/" ++ product.imageURL
+                                            , class "img-fluid"
+                                            ]
+                                            []
+                                        ]
                                     ]
-                                    []
                                 ]
                             , div [ class "float-right col-sm-4 col-md-3 col-lg-3" ]
                                 [ div [ class "card" ]
                                     [ div [ class "card-body text-center p-2" ]
                                         [ h4 [] [ text "$16.95" ]
                                         , text "ADD TO CART BUTTON"
+                                        , small [ class "text-muted d-block" ]
+                                            [ text <| "Item #" ++ product.baseSKU
+                                            ]
                                         ]
                                     ]
                                 ]
-                            , div [ innerHtml product.longDescription ] []
-                            , div [] [ text <| "Item #" ++ product.baseSKU ]
+                            , div [ class "col" ]
+                                [ div [ innerHtml product.longDescription ] []
+                                ]
                             ]
                         ]
                     ]
