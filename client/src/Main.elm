@@ -30,7 +30,7 @@ type alias Model =
 init : ( Model, Cmd Msg )
 init =
     ( { pageData = RemoteData.Loading }
-    , getProductDetailsData "growing-great-garlic"
+    , getProductDetailsData "green-pod-red-seed-asparagus-yardlong-bean-7-g"
     )
 
 
@@ -274,6 +274,21 @@ view { pageData } =
                     ]
                 ]
 
+        seedAttributeIcons { isOrganic, isHeirloom, isRegional, isEcological } =
+            List.filter Tuple.first
+                [ ( isOrganic, "icons/organic-certified.png" )
+                , ( isHeirloom, "icons/heirloom.png" )
+                , ( isRegional, "icons/southeast.png" )
+                , ( isEcological, "icons/ecologically-grown.png" )
+                ]
+                |> List.map
+                    (Tuple.second
+                        >> (\url ->
+                                img [ class "my-auto", src <| staticImage url ] []
+                           )
+                    )
+                |> span [ class "d-inline-block ml-3" ]
+
         pageContent =
             case pageData of
                 RemoteData.Loading ->
@@ -282,6 +297,7 @@ view { pageData } =
                 RemoteData.Success { product, variants, maybeSeedAttribute } ->
                     [ h1 []
                         [ text product.name
+                        , htmlOrBlank seedAttributeIcons maybeSeedAttribute
                         ]
                     , hr [] []
                     , div []
@@ -326,3 +342,9 @@ staticImage path =
 mediaImage : String -> String
 mediaImage path =
     "/media/" ++ path
+
+
+htmlOrBlank : (a -> Html msg) -> Maybe a -> Html msg
+htmlOrBlank renderFunction =
+    Maybe.map renderFunction
+        >> Maybe.withDefault (text "")
