@@ -34,9 +34,11 @@ api = Proxy
 
 -- | The `API` type describes the API schema of the entire Application.
 type API =
-    ProductDetailsRoute
+         "categories" :> "nav" :> CategoryNavbarRoute
+    :<|> "products" :> ProductDetailsRoute
 
 -- | Return the Handler functions for the `API` type.
 server :: ServerT API App
 server =
-    productDetailsRoute
+         categoryNavbarRoute
+    :<|> productDetailsRoute
