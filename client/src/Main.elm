@@ -262,14 +262,14 @@ view { pageData } =
                 [ div [ class "card mb-3" ]
                     [ div [ class "card-body text-center" ]
                         [ a [ target "_blank", href "http://www.facebook.com/pages/Southern-Exposure-Seed-Exchange/353814746253?ref=ts" ]
-                            [ img [ class "img-fluid", src "/static/img/logos/facebook-big-icon.png" ] [] ]
+                            [ img [ class "img-fluid", src <| staticImage "logos/facebook-big-icon.png" ] [] ]
                         , hr [] []
                         , div [ class "text-center font-weight-bold" ] [ text "Our Partners" ]
                         , a [ target "_blank", href "http://www.smartgardener.com/" ]
-                            [ img [ class "mb-3 img-fluid", src "/static/img/logos/smart-gardener.jpg" ] [] ]
+                            [ img [ class "mb-3 img-fluid", src <| staticImage "logos/smart-gardener.jpg" ] [] ]
                         , br [] []
                         , a [ target "_blank", href "http://www.localharvest.org/" ]
-                            [ img [ class "img-fluid", src "/static/img/logos/local-harvest.jpg" ] [] ]
+                            [ img [ class "img-fluid", src <| staticImage "logos/local-harvest.jpg" ] [] ]
                         ]
                     ]
                 ]
@@ -287,7 +287,12 @@ view { pageData } =
                     , div []
                         [ div [ class "clearfix" ]
                             [ div [ class "float-left col-sm-4 col-md-5 col-lg-4" ]
-                                [ img [ src <| "/media/products/" ++ product.imageURL, class "img-fluid" ] [] ]
+                                [ img
+                                    [ src << mediaImage <| "products/" ++ product.imageURL
+                                    , class "img-fluid"
+                                    ]
+                                    []
+                                ]
                             , div [ class "float-right col-sm-4 col-md-3 col-lg-3" ]
                                 [ div [ class "card" ]
                                     [ div [ class "card-body text-center p-2" ]
@@ -311,3 +316,13 @@ view { pageData } =
             , middleContent
             , footer
             ]
+
+
+staticImage : String -> String
+staticImage path =
+    "/static/img/" ++ path
+
+
+mediaImage : String -> String
+mediaImage path =
+    "/media/" ++ path
