@@ -16,9 +16,20 @@ import qualified Data.Text as T
 
 
 share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistLowerCase|
+Category json
+    name T.Text
+    slug T.Text
+    parentId CategoryId Maybe
+    description T.Text
+    imageUrl T.Text
+    order Int
+    UniqueCategorySlug slug
+    deriving Show
+
 Product json
     name T.Text
     slug T.Text
+    categoryIds [CategoryId]
     baseSku T.Text
     shortDescription T.Text
     longDescription T.Text

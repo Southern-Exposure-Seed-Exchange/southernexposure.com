@@ -62,6 +62,7 @@ executable data-migration
   build-depends:       base
                      , sese-website
                      , bytestring
+                     , containers
                      , io-streams
                      , monad-logger
                      , mysql-haskell

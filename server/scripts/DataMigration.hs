@@ -2,20 +2,22 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE TypeFamilies #-}
-import Control.Monad (forM, void)
+import Control.Monad (forM, foldM, void)
 import Control.Monad.Trans.Class (lift)
 import Control.Monad.Logger (runNoLoggingT)
 import Data.Char (isAlpha)
 import Data.Int (Int32)
 import Data.List (nubBy)
+import Data.Maybe (maybeToList)
+import Data.Monoid ((<>))
 import Data.Pool (destroyAllResources)
 import Data.Scientific (Scientific)
 import Database.MySQL.Base
-    ( MySQLConn, ConnectInfo(..), connect, defaultConnectInfo, query_, close, MySQLValue(..)
+    ( MySQLConn, ConnectInfo(..), Query(..), connect, defaultConnectInfo, query_, close, MySQLValue(..)
     , prepareStmt, queryStmt
     )
 import Database.Persist
-    (Entity(..), Filter, getBy, insert, insertMany_, deleteWhere)
+    (Entity(..), Filter, getBy, insert, deleteWhere)
 import Database.Persist.Postgresql
     (ConnectionPool, SqlWriteT, createPostgresqlPool, toSqlKey, runSqlPool)
 import System.Environment (lookupEnv)
@@ -24,6 +26,7 @@ import Models
 import Models.Fields
 
 import qualified Data.ByteString.Char8 as BS
+import qualified Data.IntMap as IntMap
 import qualified Data.Text as T
 import qualified System.IO.Streams as Streams
 
@@ -33,18 +36,22 @@ main = do
     mysqlConn <- connectToMysql
     psqlConn <- connectToPostgres
     mysqlProducts <- makeProducts mysqlConn
-    let products = nubBy (\p1 p2 -> productBaseSku p1 == productBaseSku p2)
-            $ map (\(_, _, _, _, _, p) -> p) mysqlProducts
+    categories <- makeCategories mysqlConn
+    let products = nubBy (\(_, p1) (_, p2) -> productBaseSku p1 == productBaseSku p2)
+            $ map (\(_, catId, _, _, _, _, p) -> (catId, p)) mysqlProducts
         variants = makeVariants mysqlProducts
     attributes <- makeSeedAttributes mysqlConn
     flip runSqlPool psqlConn
         $ dropNewDatabaseRows
-        >> insertMany_ products
+        >> insertCategories categories
+        >>= insertProducts products
         >> insertVariants variants
         >> insertAttributes attributes
     close mysqlConn
     destroyAllResources psqlConn
 
+
+-- DB Utility Functions
 
 connectToMysql :: IO MySQLConn
 connectToMysql = do
@@ -66,14 +73,49 @@ dropNewDatabaseRows =
         deleteWhere ([] :: [Filter SeedAttribute])
         >> deleteWhere ([] :: [Filter ProductVariant])
         >> deleteWhere ([] :: [Filter Product])
+        >> deleteWhere ([] :: [Filter Category])
 
-makeProducts :: MySQLConn -> IO [(Int32, T.Text, Scientific, Float, Float, Product)]
+
+-- MySQL -> Persistent Functions
+
+makeCategories :: MySQLConn -> IO [(Int, Int, Category)]
+makeCategories mysql = do
+    (_, categoryStream) <- query_ mysql . Query $
+        "SELECT c.categories_id, categories_image, parent_id, sort_order,"
+        <> "    categories_name, categories_description "
+        <> "FROM categories as c "
+        <> "LEFT JOIN categories_description as cd ON c.categories_id=cd.categories_id "
+        <> "WHERE categories_status=1 "
+        <> "ORDER BY parent_id ASC"
+    cs <- Streams.toList categoryStream
+    mapM toData cs
+    where toData [ MySQLInt32 catId, nullableImageUrl
+                 , MySQLInt32 parentId, MySQLInt32 catOrder
+                 , MySQLText name, MySQLText description
+                 ] =
+            let
+                imgUrl =
+                    case nullableImageUrl of
+                        MySQLText str ->
+                            str
+                        _ ->
+                            ""
+            in
+                return
+                    ( fromIntegral catId
+                    , fromIntegral parentId
+                    , Category name (slugify name) Nothing description imgUrl (fromIntegral catOrder)
+                    )
+          toData r = print r >> error "Category Lambda Did Not Match"
+
+
+makeProducts :: MySQLConn -> IO [(Int32, Int, T.Text, Scientific, Float, Float, Product)]
 makeProducts mysql = do
     (_, productStream) <- query_ mysql
-        "SELECT products_id, products_price, products_quantity, products_weight, products_model, products_image, products_status FROM products WHERE products_status=1"
+        "SELECT products_id, master_categories_id, products_price, products_quantity, products_weight, products_model, products_image, products_status FROM products WHERE products_status=1"
     ps <- Streams.toList productStream
     forM ps $
-        \[MySQLInt32 prodId, MySQLDecimal prodPrice, MySQLFloat prodQty, MySQLFloat prodWeight, MySQLText prodSKU, MySQLText prodImg, _] -> do
+        \[MySQLInt32 prodId, MySQLInt32 catId, MySQLDecimal prodPrice, MySQLFloat prodQty, MySQLFloat prodWeight, MySQLText prodSKU, MySQLText prodImg, _] -> do
             queryString <- prepareStmt mysql
                 "SELECT products_id, products_name, products_description FROM products_description WHERE products_id=?"
             (_, descriptionStream) <- queryStmt mysql queryString [MySQLInt32 prodId]
@@ -81,13 +123,13 @@ makeProducts mysql = do
             _ <- return prodId
             _ <- return prodQty
             let (baseSku, skuSuffix) = splitSku prodSKU
-            return (prodId, skuSuffix, prodPrice, prodQty, prodWeight, Product name (slugify name) baseSku "" description prodImg)
+            return (prodId, fromIntegral catId, skuSuffix, prodPrice, prodQty, prodWeight, Product name (slugify name) [] baseSku "" description prodImg)
 
 
-makeVariants :: [(Int32, T.Text, Scientific, Float, Float, Product)] -> [(T.Text, ProductVariant)]
+makeVariants :: [(Int32, Int, T.Text, Scientific, Float, Float, Product)] -> [(T.Text, ProductVariant)]
 makeVariants =
     map makeVariant
-    where makeVariant (_, suffix, price, qty, weight, prod) =
+    where makeVariant (_, _, suffix, price, qty, weight, prod) =
             (,) (productBaseSku prod) $
             ProductVariant
                 (toSqlKey 0)
@@ -126,6 +168,29 @@ splitSku fullSku =
                     (fullSku, "")
          _ ->
             (fullSku, "")
+
+
+-- Persistent Model Saving Functions
+insertCategories :: [(Int, Int, Category)] -> SqlWriteT IO (IntMap.IntMap (Key Category))
+insertCategories =
+    foldM insertCategory IntMap.empty
+    where insertCategory intMap (mysqlId, mysqlParentId, category) = do
+            let maybeParentId =
+                    IntMap.lookup mysqlParentId intMap
+                category' =
+                    category { categoryParentId = maybeParentId }
+            categoryId <- insert category'
+            return $ IntMap.insert mysqlId categoryId intMap
+
+
+insertProducts :: [(Int, Product)] -> IntMap.IntMap (Key Category) -> SqlWriteT IO ()
+insertProducts products categoryIdMap =
+    mapM_ insertProduct products
+    where insertProduct (mysqlCategoryId, prod) = do
+            let categoryIds =
+                    maybeToList $ IntMap.lookup mysqlCategoryId categoryIdMap
+                product' = prod { productCategoryIds = categoryIds }
+            insert product'
 
 insertVariants :: [(T.Text, ProductVariant)] -> SqlWriteT IO ()
 insertVariants =

@@ -41,5 +41,6 @@ productDetailsRoute slug = do
                 throwError err404
             Just prod@(Entity productId _) -> do
                 (variants, maybeAttribute) <- runDB $
-                    (,) <$> selectList [ProductVariantProductId ==. productId] [] <*> getBy (UniqueAttribute productId)
+                    (,) <$> selectList [ProductVariantProductId ==. productId] []
+                        <*> getBy (UniqueAttribute productId)
                 return $ ProductDetailsData prod variants maybeAttribute
