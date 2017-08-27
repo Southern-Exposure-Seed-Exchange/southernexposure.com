@@ -2,7 +2,7 @@ module Main exposing (main)
 
 import Dict exposing (Dict)
 import Html exposing (Html, text, div, h1, h3, h4, hr, node, br, a, img, span, button, ul, li, small, table, tbody, tr, td, b)
-import Html.Attributes exposing (attribute, id, class, href, src, type_, target, tabindex)
+import Html.Attributes exposing (attribute, id, class, href, src, type_, target, tabindex, title)
 import Html.Attributes.Extra exposing (innerHtml)
 import Html.Events.Extra exposing (onClickPreventDefault)
 import Http
@@ -652,15 +652,15 @@ htmlOrBlank renderFunction =
 seedAttributeIcons : SeedAttribute -> Html msg
 seedAttributeIcons { isOrganic, isHeirloom, isRegional, isEcological } =
     List.filter Tuple.first
-        [ ( isOrganic, "icons/organic-certified.png" )
-        , ( isHeirloom, "icons/heirloom.png" )
-        , ( isRegional, "icons/southeast.png" )
-        , ( isEcological, "icons/ecologically-grown.png" )
+        [ ( isOrganic, ( "Certified Organic", "icons/organic-certified.png" ) )
+        , ( isHeirloom, ( "Heirloom", "icons/heirloom.png" ) )
+        , ( isRegional, ( "Especially well-suited to the Southeast", "icons/southeast.png" ) )
+        , ( isEcological, ( "Ecologically Grown", "icons/ecologically-grown.png" ) )
         ]
         |> List.map
             (Tuple.second
-                >> (\url ->
-                        img [ class "my-auto", src <| staticImage url ] []
+                >> (\( iconTitle, url ) ->
+                        img [ class "my-auto", title iconTitle, src <| staticImage url ] []
                    )
             )
         |> span [ class "d-inline-block ml-2" ]
