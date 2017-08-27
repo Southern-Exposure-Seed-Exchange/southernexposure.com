@@ -1,15 +1,16 @@
 module Main exposing (main)
 
 import Dict exposing (Dict)
-import Html exposing (Html, text, div, h1, h3, h4, hr, node, br, a, img, span, button, ul, li, small, table, tbody, tr, td)
-import Html.Attributes exposing (attribute, id, class, href, src, type_, target)
+import Html exposing (Html, text, div, h1, h3, h4, hr, node, br, a, img, span, button, ul, li, small, table, tbody, tr, td, b)
+import Html.Attributes exposing (attribute, id, class, href, src, type_, target, tabindex)
 import Html.Attributes.Extra exposing (innerHtml)
 import Html.Events.Extra exposing (onClickPreventDefault)
 import Http
 import Json.Decode as Decode
 import Navigation
+import Paginate exposing (PaginatedList)
 import RemoteData exposing (WebData)
-import UrlParser as Url exposing ((</>))
+import UrlParser as Url exposing ((</>), (<?>))
 
 
 main : Program Never Model Msg
@@ -26,53 +27,85 @@ main =
 -- ROUTING
 
 
+type alias PaginationData =
+    { page : Int
+    , perPage : Int
+    }
+
+
+paginationToQueryString : PaginationData -> String
+paginationToQueryString { page, perPage } =
+    [ ( .page, page, "page" )
+    , ( .perPage, perPage, "perPage" )
+    ]
+        |> List.map
+            (\( selector, value, param ) ->
+                ( selector defaultPagination /= value
+                , param ++ "=" ++ toString value
+                )
+            )
+        |> List.filter Tuple.first
+        |> List.map Tuple.second
+        |> String.join "&"
+        |> (\s ->
+                if String.isEmpty s then
+                    ""
+                else
+                    "?" ++ s
+           )
+
+
+defaultPagination : PaginationData
+defaultPagination =
+    PaginationData 1 25
+
+
 type Route
-    = ProductDetails String (WebData ProductDetailsData)
-    | CategoryDetails String (WebData CategoryDetailsData)
+    = ProductDetails String
+    | CategoryDetails String PaginationData
 
 
 parseRoute : Navigation.Location -> Route
 parseRoute =
     let
+        optionalIntParam param default =
+            Url.customParam param
+                (Maybe.andThen (String.toInt >> Result.toMaybe)
+                    >> Maybe.withDefault default
+                )
+
+        parsePaginationParams pathParser =
+            Url.map (\constructor page -> constructor << PaginationData page)
+                (pathParser
+                    <?> optionalIntParam "page" (defaultPagination.page)
+                    <?> optionalIntParam "perPage" (defaultPagination.perPage)
+                )
+
         routeParser =
             Url.oneOf
-                [ Url.map (flip ProductDetails RemoteData.Loading) (Url.s "products" </> Url.string)
-                , Url.map (flip CategoryDetails RemoteData.Loading) (Url.s "categories" </> Url.string)
+                [ Url.map ProductDetails (Url.s "products" </> Url.string)
+                , parsePaginationParams <| Url.map CategoryDetails (Url.s "categories" </> Url.string)
                 ]
     in
         Url.parsePath routeParser
-            >> Maybe.withDefault (ProductDetails "green-pod-red-seed-asparagus-yardlong-bean-7-g" RemoteData.Loading)
-
-
-withLoading : (WebData a -> Route) -> Route
-withLoading routeConstructor =
-    routeConstructor RemoteData.Loading
+            >> Maybe.withDefault (ProductDetails "green-pod-red-seed-asparagus-yardlong-bean-7-g")
 
 
 reverse : Route -> String
 reverse route =
     case route of
-        ProductDetails slug _ ->
+        ProductDetails slug ->
             "/products/" ++ slug ++ "/"
 
-        CategoryDetails slug _ ->
-            "/categories/" ++ slug ++ "/"
+        CategoryDetails slug pagination ->
+            "/categories/" ++ slug ++ "/" ++ paginationToQueryString pagination
 
 
-reverseWithLoading : (WebData a -> Route) -> String
-reverseWithLoading routeConstructor =
-    routeConstructor RemoteData.Loading |> reverse
-
-
-dataRouteLinkAttributes : (WebData a -> Route) -> List (Html.Attribute Msg)
-dataRouteLinkAttributes routeConstructor =
-    let
-        route =
-            routeConstructor RemoteData.Loading
-    in
-        [ onClickPreventDefault <| NavigateTo route
-        , href <| reverse route
-        ]
+routeLinkAttributes : Route -> List (Html.Attribute Msg)
+routeLinkAttributes route =
+    [ onClickPreventDefault <| NavigateTo route
+    , href <| reverse route
+    ]
 
 
 
@@ -82,6 +115,13 @@ dataRouteLinkAttributes routeConstructor =
 type alias Model =
     { navData : WebData CategoryNavData
     , route : Route
+    , routeData : RouteData
+    }
+
+
+type alias RouteData =
+    { categoryDetails : WebData CategoryDetailsData
+    , productDetails : WebData ProductDetailsData
     }
 
 
@@ -90,12 +130,20 @@ init location =
     let
         route =
             parseRoute location
+
+        ( model, cmd ) =
+            fetchDataForRoute
+                { navData = RemoteData.Loading
+                , route = route
+                , routeData =
+                    { categoryDetails = RemoteData.NotAsked
+                    , productDetails = RemoteData.NotAsked
+                    }
+                }
     in
-        ( { navData = RemoteData.Loading
-          , route = route
-          }
+        ( model
         , Cmd.batch
-            [ commandForRoute route
+            [ cmd
             , getCategoryNavData
             ]
         )
@@ -179,7 +227,7 @@ type alias ProductDetailsData =
 type alias CategoryDetailsData =
     { category : Category
     , subCategories : List Category
-    , products : List ( Product, List ProductVariant, Maybe SeedAttribute )
+    , products : PaginatedList ( Product, List ProductVariant, Maybe SeedAttribute )
     }
 
 
@@ -193,14 +241,22 @@ type alias CategoryNavData =
 -- COMMANDS
 
 
-commandForRoute : Route -> Cmd Msg
-commandForRoute route =
-    case route of
-        ProductDetails slug _ ->
-            getProductDetailsData slug
+fetchDataForRoute : Model -> ( Model, Cmd Msg )
+fetchDataForRoute ({ route, routeData } as model) =
+    let
+        ( data, cmd ) =
+            case route of
+                ProductDetails slug ->
+                    ( { routeData | productDetails = RemoteData.Loading }
+                    , getProductDetailsData slug
+                    )
 
-        CategoryDetails slug _ ->
-            getCategoryDetailsData slug
+                CategoryDetails slug _ ->
+                    ( { routeData | categoryDetails = RemoteData.Loading }
+                    , getCategoryDetailsData slug
+                    )
+    in
+        ( { model | routeData = data }, cmd )
 
 
 getProductDetailsData : String -> Cmd Msg
@@ -237,11 +293,12 @@ categoryDetailsDecoder : Decode.Decoder CategoryDetailsData
 categoryDetailsDecoder =
     let
         productDataDecoder =
-            Decode.list <|
-                Decode.map3 (,,)
-                    (Decode.field "product" productDecoder)
-                    (Decode.field "variants" <| Decode.list productVariantDecoder)
-                    (Decode.field "seedAttribute" <| Decode.nullable seedAttributeDecoder)
+            Decode.map (Paginate.fromList defaultPagination.perPage) <|
+                Decode.list <|
+                    Decode.map3 (,,)
+                        (Decode.field "product" productDecoder)
+                        (Decode.field "variants" <| Decode.list productVariantDecoder)
+                        (Decode.field "seedAttribute" <| Decode.nullable seedAttributeDecoder)
     in
         Decode.map3 CategoryDetailsData
             (Decode.field "category" categoryDecoder)
@@ -334,54 +391,61 @@ type Msg
 
 
 urlUpdate : Route -> Model -> ( Model, Cmd Msg )
-urlUpdate newRoute model =
-    ( model, commandForRoute newRoute )
+urlUpdate newRoute ({ routeData } as model) =
+    let
+        modelWithNewRoute =
+            { model | route = newRoute }
+
+        updateCategoryProductsPagination pagination ({ products } as data) =
+            { data | products = updatePagination pagination products }
+
+        updatePagination { page, perPage } =
+            Paginate.changeItemsPerPage perPage
+                >> Paginate.goTo page
+    in
+        case ( newRoute, model.route ) of
+            ( CategoryDetails newSlug newPagination, CategoryDetails oldSlug oldPagination ) ->
+                let
+                    categoryDetails =
+                        RemoteData.map (updateCategoryProductsPagination newPagination) routeData.categoryDetails
+
+                    updatedRouteData () =
+                        { routeData | categoryDetails = categoryDetails }
+                in
+                    if newSlug /= oldSlug then
+                        fetchDataForRoute modelWithNewRoute
+                    else
+                        ( { modelWithNewRoute | routeData = updatedRouteData () }, Cmd.none )
+
+            _ ->
+                fetchDataForRoute modelWithNewRoute
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
-update msg model =
+update msg ({ routeData } as model) =
     case msg of
         UrlUpdate route ->
-            let
-                ( model_, cmd ) =
-                    urlUpdate route model
-            in
-                ( { model_ | route = route }, cmd )
+            urlUpdate route model
 
         NavigateTo route ->
             ( model, Navigation.newUrl <| reverse route )
 
         GetProductDetailsData response ->
             let
-                newRoute data =
-                    case model.route of
-                        ProductDetails slug _ ->
-                            ProductDetails slug response
-
-                        _ ->
-                            model.route
+                updatedRouteData =
+                    { routeData | productDetails = response }
             in
-                ( { model | route = updateRoute newRoute response }, Cmd.none )
+                ( { model | routeData = updatedRouteData }, Cmd.none )
 
         GetCategoryDetailsData response ->
             let
-                newRoute data =
-                    case model.route of
-                        CategoryDetails slug _ ->
-                            CategoryDetails slug data
-
-                        _ ->
-                            model.route
+                updatedRouteData =
+                    { routeData | categoryDetails = response }
             in
-                ( { model | route = updateRoute newRoute response }, Cmd.none )
+                ( { model | routeData = updatedRouteData }, Cmd.none )
 
         GetCategoryNavData response ->
             ( { model | navData = logUnsuccessfulRequest response }, Cmd.none )
-
-
-updateRoute : (WebData a -> Route) -> WebData a -> Route
-updateRoute routeUpdate response =
-    routeUpdate <| logUnsuccessfulRequest response
 
 
 logUnsuccessfulRequest : WebData a -> WebData a
@@ -399,7 +463,7 @@ logUnsuccessfulRequest response =
 
 
 view : Model -> Html Msg
-view { route, navData } =
+view { route, routeData, navData } =
     let
         siteHeader =
             div [ class "container" ]
@@ -467,7 +531,7 @@ view { route, navData } =
                         li [ class "nav-item" ]
                             [ a
                                 ([ class "nav-link" ]
-                                    ++ (dataRouteLinkAttributes <| CategoryDetails category.slug)
+                                    ++ (routeLinkAttributes <| CategoryDetails category.slug defaultPagination)
                                 )
                                 [ text category.name ]
                             ]
@@ -476,7 +540,7 @@ view { route, navData } =
                         li [ class "nav-item dropdown" ]
                             [ a
                                 [ class "nav-link dropdown-toggle"
-                                , href <| reverseWithLoading <| CategoryDetails category.slug
+                                , href <| reverse <| CategoryDetails category.slug defaultPagination
                                 , attribute "data-toggle" "dropdown"
                                 , attribute "aria-haspopup" "true"
                                 , attribute "aria-expanded" "false"
@@ -488,7 +552,7 @@ view { route, navData } =
         childCategory category =
             a
                 ([ class "dropdown-item" ]
-                    ++ (dataRouteLinkAttributes <| CategoryDetails category.slug)
+                    ++ (routeLinkAttributes <| CategoryDetails category.slug defaultPagination)
                 )
                 [ text category.name ]
 
@@ -555,11 +619,11 @@ view { route, navData } =
 
         pageContent =
             case route of
-                ProductDetails _ data ->
-                    withIntermediateText productDetailsView data
+                ProductDetails _ ->
+                    withIntermediateText productDetailsView routeData.productDetails
 
-                CategoryDetails _ data ->
-                    withIntermediateText categoryDetailsView data
+                CategoryDetails _ pagination ->
+                    withIntermediateText (categoryDetailsView pagination) routeData.categoryDetails
     in
         div []
             [ siteHeader
@@ -624,7 +688,7 @@ productDetailsView { product, variants, maybeSeedAttribute, categories } =
                     (\category ->
                         div [ class "product-category" ]
                             [ h3 [ class "mt-3" ]
-                                [ a (dataRouteLinkAttributes <| CategoryDetails category.slug)
+                                [ a (routeLinkAttributes <| CategoryDetails category.slug defaultPagination)
                                     [ text category.name ]
                                 ]
                             , div [ innerHtml category.description ] []
@@ -669,8 +733,8 @@ productDetailsView { product, variants, maybeSeedAttribute, categories } =
         ]
 
 
-categoryDetailsView : CategoryDetailsData -> List (Html Msg)
-categoryDetailsView { category, subCategories, products } =
+categoryDetailsView : PaginationData -> CategoryDetailsData -> List (Html Msg)
+categoryDetailsView pagination { category, subCategories, products } =
     let
         subCategoryCards =
             if List.length subCategories > 0 then
@@ -681,7 +745,7 @@ categoryDetailsView { category, subCategories, products } =
 
         subCategoryCard category =
             div [ class "col-6 col-sm-4 col-md-3 mb-2" ]
-                [ a (dataRouteLinkAttributes <| CategoryDetails category.slug)
+                [ a (routeLinkAttributes <| CategoryDetails category.slug defaultPagination)
                     [ div [ class "h-100 text-center" ]
                         [ img [ class "img-fluid mx-auto", src <| mediaImage category.imageURL ] []
                         , div [ class "my-auto" ] [ text category.name ]
@@ -689,12 +753,106 @@ categoryDetailsView { category, subCategories, products } =
                     ]
                 ]
 
+        paginationHtml =
+            div [ class "d-flex mb-2 justify-content-between align-items-center" ] [ pagingText, pager ]
+
+        pagingText =
+            if Paginate.length products == 0 then
+                text ""
+            else
+                span []
+                    [ text "Displaying "
+                    , b [] [ text <| pagingStart () ]
+                    , text " to "
+                    , b [] [ text <| pagingEnd () ]
+                    , text " (of "
+                    , b [] [ text <| toString <| Paginate.length products ]
+                    , text " products)"
+                    ]
+
+        pagingStart _ =
+            toString <|
+                (Paginate.currentPage products - 1)
+                    * pagination.perPage
+                    + 1
+
+        pagingEnd _ =
+            toString <|
+                if Paginate.isLast products || Paginate.length products < pagination.perPage then
+                    Paginate.length products
+                else
+                    (Paginate.currentPage products * pagination.perPage)
+
+        pager =
+            if Paginate.totalPages products <= 1 then
+                text ""
+            else
+                node "nav"
+                    [ attribute "aria-label" "Category Product Pages" ]
+                    [ ul [ class "pagination pagination-sm mb-0" ] <|
+                        previousLink ()
+                            :: Paginate.pager renderPager products
+                            ++ [ nextLink () ]
+                    ]
+
+        previousLink _ =
+            let
+                previousPage =
+                    max 1 (pagination.page - 1)
+
+                previousRoute =
+                    CategoryDetails category.slug { pagination | page = previousPage }
+            in
+                prevNextLink Paginate.isFirst previousRoute "« Prev"
+
+        nextLink _ =
+            let
+                nextPage =
+                    min (Paginate.totalPages products) (pagination.page + 1)
+
+                nextRoute =
+                    CategoryDetails category.slug { pagination | page = nextPage }
+            in
+                prevNextLink Paginate.isLast nextRoute "Next »"
+
+        prevNextLink isDisabled route content =
+            let
+                ( itemClass, linkAttrs ) =
+                    if isDisabled products then
+                        ( " disabled", [ tabindex -1 ] )
+                    else
+                        ( "", [] )
+            in
+                li [ class <| "page-item" ++ itemClass ]
+                    [ a (class "page-link" :: linkAttrs ++ routeLinkAttributes route)
+                        [ text content ]
+                    ]
+
+        renderPager page isCurrent =
+            let
+                itemClass =
+                    if isCurrent then
+                        "page-item active"
+                    else
+                        "page-item"
+            in
+                li [ class itemClass ]
+                    [ a
+                        ([ class "page-link" ]
+                            ++ routeLinkAttributes
+                                (CategoryDetails category.slug
+                                    { pagination | page = page }
+                                )
+                        )
+                        [ text <| toString page ]
+                    ]
+
         productRows =
-            flip List.map products <|
+            flip List.map (Paginate.page products) <|
                 \( product, variants, maybeSeedAttribute ) ->
                     tr []
-                        [ td [ class "text-center align-middle category-product-image" ]
-                            [ a (dataRouteLinkAttributes <| ProductDetails product.slug)
+                        [ td [ class "category-product-image text-center align-middle" ]
+                            [ a (routeLinkAttributes <| ProductDetails product.slug)
                                 [ img
                                     [ src <| mediaImage <| "products/" ++ product.imageURL
                                     ]
@@ -705,7 +863,7 @@ categoryDetailsView { category, subCategories, products } =
                             [ h3 [ class "mb-0" ]
                                 [ a
                                     ([ innerHtml product.name ]
-                                        ++ (dataRouteLinkAttributes <| ProductDetails product.slug)
+                                        ++ (routeLinkAttributes <| ProductDetails product.slug)
                                     )
                                     []
                                 , htmlOrBlank seedAttributeIcons maybeSeedAttribute
@@ -728,7 +886,8 @@ categoryDetailsView { category, subCategories, products } =
         , hr [ class "mt-2" ] []
         , div [ innerHtml category.description ] []
         , subCategoryCards
-        , table [ class "table table-striped table-sm category-products" ]
-            [ tbody [] <| productRows
-            ]
+        , paginationHtml
+        , table [ class "category-products table table-striped table-sm mb-2" ]
+            [ tbody [] <| productRows ]
+        , paginationHtml
         ]
