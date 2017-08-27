@@ -21,7 +21,7 @@ main = do
     createDirectoryIfMissing True mediaDir
     pool <- makePool env
     let cfg = defaultConfig { getPool = pool, getEnv = env, getMediaDirectory = mediaDir }
-    run port . logger env $ app cfg
+    run port . httpLogger env $ app cfg
     where lookupSetting env def =
             maybe def read <$> lookupEnv env
           makePool :: Environment -> IO ConnectionPool
@@ -36,7 +36,7 @@ main = do
                     8
                 Development ->
                     1
-          logger env =
+          httpLogger env =
               case env of
                 Production ->
                     logStdout

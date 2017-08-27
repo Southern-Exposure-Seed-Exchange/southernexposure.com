@@ -15,7 +15,7 @@ slugify =
     where replaceBy predicate text =
             flip T.map text $ \c -> if predicate c then c else ' '
           isValidChar =
-            isAny [ isAlphaNum, (==) '-', (==) '_', (==) '.' ]
+            isAny [ isAlphaNum, (==) '-', (==) '_' ]
           isAny preds value =
               case preds of
                 predicate:ps ->
