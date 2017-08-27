@@ -40,6 +40,9 @@ $navbar-light-toggler-icon-bg: str-replace(url("data:image/svg+xml;charset=utf8,
 
 $panel-default-heading-bg: $breadcrumb-bg
 
+$table-bg: lighten($light-pale-tan, 12.5%)
+$table-accent-bg: $pale-tan-accent
+
 $input-color: #333
 
 $hr-border: #C0C0C0
@@ -135,3 +138,20 @@ body > div#main > div > div.container
   footer
     padding: 0 15px
     background-color:  $light-pale-tan
+
+
+.product-details
+  /* Don't color the Category links */
+  .product-category h3 a
+      &, &:hover, &:active
+        color: $body-color
+
+.category-products
+  /* Don't color the Product links */
+  a
+    &, &:hover, &:active
+      color: $body-color
+  h3 img
+    height: 1.25rem
+  .category-product-image img
+    max-width: 100px

@@ -1,9 +1,10 @@
 module Main exposing (main)
 
 import Dict exposing (Dict)
-import Html exposing (Html, text, div, h1, h3, h4, hr, node, br, a, img, span, button, ul, li, small)
+import Html exposing (Html, text, div, h1, h3, h4, hr, node, br, a, img, span, button, ul, li, small, table, tbody, tr, td)
 import Html.Attributes exposing (attribute, id, class, href, src, type_, target)
 import Html.Attributes.Extra exposing (innerHtml)
+import Html.Events.Extra exposing (onClickPreventDefault)
 import Http
 import Json.Decode as Decode
 import Navigation
@@ -26,7 +27,8 @@ main =
 
 
 type Route
-    = ProductDetails String
+    = ProductDetails String (WebData ProductDetailsData)
+    | CategoryDetails String (WebData CategoryDetailsData)
 
 
 parseRoute : Navigation.Location -> Route
@@ -34,11 +36,43 @@ parseRoute =
     let
         routeParser =
             Url.oneOf
-                [ Url.map ProductDetails (Url.s "products" </> Url.string)
+                [ Url.map (flip ProductDetails RemoteData.Loading) (Url.s "products" </> Url.string)
+                , Url.map (flip CategoryDetails RemoteData.Loading) (Url.s "categories" </> Url.string)
                 ]
     in
         Url.parsePath routeParser
-            >> Maybe.withDefault (ProductDetails "green-pod-red-seed-asparagus-yardlong-bean-7-g")
+            >> Maybe.withDefault (ProductDetails "green-pod-red-seed-asparagus-yardlong-bean-7-g" RemoteData.Loading)
+
+
+withLoading : (WebData a -> Route) -> Route
+withLoading routeConstructor =
+    routeConstructor RemoteData.Loading
+
+
+reverse : Route -> String
+reverse route =
+    case route of
+        ProductDetails slug _ ->
+            "/products/" ++ slug ++ "/"
+
+        CategoryDetails slug _ ->
+            "/categories/" ++ slug ++ "/"
+
+
+reverseWithLoading : (WebData a -> Route) -> String
+reverseWithLoading routeConstructor =
+    routeConstructor RemoteData.Loading |> reverse
+
+
+dataRouteLinkAttributes : (WebData a -> Route) -> List (Html.Attribute Msg)
+dataRouteLinkAttributes routeConstructor =
+    let
+        route =
+            routeConstructor RemoteData.Loading
+    in
+        [ onClickPreventDefault <| NavigateTo route
+        , href <| reverse route
+        ]
 
 
 
@@ -46,8 +80,7 @@ parseRoute =
 
 
 type alias Model =
-    { pageData : WebData ProductDetailsData
-    , navData : WebData CategoryNavData
+    { navData : WebData CategoryNavData
     , route : Route
     }
 
@@ -58,8 +91,7 @@ init location =
         route =
             parseRoute location
     in
-        ( { pageData = RemoteData.Loading
-          , navData = RemoteData.Loading
+        ( { navData = RemoteData.Loading
           , route = route
           }
         , Cmd.batch
@@ -87,7 +119,7 @@ type alias Category =
     , slug : String
     , parentId : Maybe CategoryId
     , description : String
-    , imageUrl : String
+    , imageURL : String
     , order : Int
     }
 
@@ -144,6 +176,13 @@ type alias ProductDetailsData =
     }
 
 
+type alias CategoryDetailsData =
+    { category : Category
+    , subCategories : List Category
+    , products : List ( Product, List ProductVariant, Maybe SeedAttribute )
+    }
+
+
 type alias CategoryNavData =
     { roots : List Category
     , children : Dict Int (List Category)
@@ -157,8 +196,11 @@ type alias CategoryNavData =
 commandForRoute : Route -> Cmd Msg
 commandForRoute route =
     case route of
-        ProductDetails slug ->
+        ProductDetails slug _ ->
             getProductDetailsData slug
+
+        CategoryDetails slug _ ->
+            getCategoryDetailsData slug
 
 
 getProductDetailsData : String -> Cmd Msg
@@ -166,6 +208,13 @@ getProductDetailsData slug =
     Http.get ("/api/products/" ++ slug ++ "/") productDetailsDecoder
         |> RemoteData.sendRequest
         |> Cmd.map GetProductDetailsData
+
+
+getCategoryDetailsData : String -> Cmd Msg
+getCategoryDetailsData slug =
+    Http.get ("/api/categories/details/" ++ slug ++ "/") categoryDetailsDecoder
+        |> RemoteData.sendRequest
+        |> Cmd.map GetCategoryDetailsData
 
 
 getCategoryNavData : Cmd Msg
@@ -182,6 +231,22 @@ productDetailsDecoder =
         (Decode.field "variants" <| Decode.list productVariantDecoder)
         (Decode.field "seedAttribute" <| Decode.nullable seedAttributeDecoder)
         (Decode.field "categories" <| Decode.list categoryDecoder)
+
+
+categoryDetailsDecoder : Decode.Decoder CategoryDetailsData
+categoryDetailsDecoder =
+    let
+        productDataDecoder =
+            Decode.list <|
+                Decode.map3 (,,)
+                    (Decode.field "product" productDecoder)
+                    (Decode.field "variants" <| Decode.list productVariantDecoder)
+                    (Decode.field "seedAttribute" <| Decode.nullable seedAttributeDecoder)
+    in
+        Decode.map3 CategoryDetailsData
+            (Decode.field "category" categoryDecoder)
+            (Decode.field "subCategories" <| Decode.list categoryDecoder)
+            (Decode.field "products" productDataDecoder)
 
 
 stringToIntKeys : Dict String v -> Dict Int v
@@ -262,7 +327,9 @@ seedAttributeDecoder =
 
 type Msg
     = UrlUpdate Route
+    | NavigateTo Route
     | GetProductDetailsData (WebData ProductDetailsData)
+    | GetCategoryDetailsData (WebData CategoryDetailsData)
     | GetCategoryNavData (WebData CategoryNavData)
 
 
@@ -281,37 +348,58 @@ update msg model =
             in
                 ( { model_ | route = route }, cmd )
 
-        GetProductDetailsData response ->
-            case response of
-                RemoteData.Success data ->
-                    ( { model | pageData = response }, Cmd.none )
+        NavigateTo route ->
+            ( model, Navigation.newUrl <| reverse route )
 
-                resp ->
-                    let
-                        _ =
-                            Debug.log "Non Success Returned" resp
-                    in
-                        ( { model | pageData = response }, Cmd.none )
+        GetProductDetailsData response ->
+            let
+                newRoute data =
+                    case model.route of
+                        ProductDetails slug _ ->
+                            ProductDetails slug response
+
+                        _ ->
+                            model.route
+            in
+                ( { model | route = updateRoute newRoute response }, Cmd.none )
+
+        GetCategoryDetailsData response ->
+            let
+                newRoute data =
+                    case model.route of
+                        CategoryDetails slug _ ->
+                            CategoryDetails slug data
+
+                        _ ->
+                            model.route
+            in
+                ( { model | route = updateRoute newRoute response }, Cmd.none )
 
         GetCategoryNavData response ->
-            case response of
-                RemoteData.Success data ->
-                    ( { model | navData = response }, Cmd.none )
+            ( { model | navData = logUnsuccessfulRequest response }, Cmd.none )
 
-                resp ->
-                    let
-                        _ =
-                            Debug.log "Non Success Returned" resp
-                    in
-                        ( { model | navData = response }, Cmd.none )
+
+updateRoute : (WebData a -> Route) -> WebData a -> Route
+updateRoute routeUpdate response =
+    routeUpdate <| logUnsuccessfulRequest response
+
+
+logUnsuccessfulRequest : WebData a -> WebData a
+logUnsuccessfulRequest response =
+    case response of
+        RemoteData.Success _ ->
+            response
+
+        _ ->
+            Debug.log "Unsuccessful Request Returned" response
 
 
 
 -- VIEW
 
 
-view : Model -> Html msg
-view { pageData, navData } =
+view : Model -> Html Msg
+view { route, navData } =
     let
         siteHeader =
             div [ class "container" ]
@@ -377,7 +465,10 @@ view { pageData, navData } =
                 case Dict.get categoryId children of
                     Nothing ->
                         li [ class "nav-item" ]
-                            [ a [ class "nav-link", href <| "/category/" ++ category.slug ++ "/" ]
+                            [ a
+                                ([ class "nav-link" ]
+                                    ++ (dataRouteLinkAttributes <| CategoryDetails category.slug)
+                                )
                                 [ text category.name ]
                             ]
 
@@ -385,7 +476,7 @@ view { pageData, navData } =
                         li [ class "nav-item dropdown" ]
                             [ a
                                 [ class "nav-link dropdown-toggle"
-                                , href <| "/category/" ++ category.slug ++ "/"
+                                , href <| reverseWithLoading <| CategoryDetails category.slug
                                 , attribute "data-toggle" "dropdown"
                                 , attribute "aria-haspopup" "true"
                                 , attribute "aria-expanded" "false"
@@ -395,7 +486,10 @@ view { pageData, navData } =
                             ]
 
         childCategory category =
-            a [ class "dropdown-item", href <| "/category/" ++ category.slug ++ "/" ]
+            a
+                ([ class "dropdown-item" ]
+                    ++ (dataRouteLinkAttributes <| CategoryDetails category.slug)
+                )
                 [ text category.name ]
 
         navigation =
@@ -422,7 +516,7 @@ view { pageData, navData } =
         middleContent =
             div [ class "container" ]
                 [ div [ class "row" ]
-                    [ div [ class "col order-2" ] pageContent
+                    [ div [ class "col order-md-2" ] pageContent
                     , sidebar
                     ]
                 ]
@@ -443,7 +537,7 @@ view { pageData, navData } =
                 ]
 
         sidebar =
-            div [ id "sidebar", class "col-sm-3 col-lg-3 col-xl-3 order-1" ]
+            div [ id "sidebar", class "col-12 col-md-3 col-lg-3 col-xl-2 order-md-1" ]
                 [ div [ class "card mb-3" ]
                     [ div [ class "card-body text-center" ]
                         [ a [ target "_blank", href "http://www.facebook.com/pages/Southern-Exposure-Seed-Exchange/353814746253?ref=ts" ]
@@ -459,77 +553,13 @@ view { pageData, navData } =
                     ]
                 ]
 
-        seedAttributeIcons { isOrganic, isHeirloom, isRegional, isEcological } =
-            List.filter Tuple.first
-                [ ( isOrganic, "icons/organic-certified.png" )
-                , ( isHeirloom, "icons/heirloom.png" )
-                , ( isRegional, "icons/southeast.png" )
-                , ( isEcological, "icons/ecologically-grown.png" )
-                ]
-                |> List.map
-                    (Tuple.second
-                        >> (\url ->
-                                img [ class "my-auto", src <| staticImage url ] []
-                           )
-                    )
-                |> span [ class "d-inline-block ml-3" ]
-
         pageContent =
-            case pageData of
-                RemoteData.Loading ->
-                    [ text "Loading..." ]
+            case route of
+                ProductDetails _ data ->
+                    withIntermediateText productDetailsView data
 
-                RemoteData.Success { product, variants, maybeSeedAttribute, categories } ->
-                    [ h1 []
-                        [ text product.name
-                        , htmlOrBlank seedAttributeIcons maybeSeedAttribute
-                        ]
-                    , hr [] []
-                    , div []
-                        [ div [ class "clearfix" ]
-                            [ div [ class "float-left col-sm-4 col-md-5 col-lg-4" ]
-                                [ div
-                                    [ class "card" ]
-                                    [ div [ class "card-body text-center p-1" ]
-                                        [ img
-                                            [ src << mediaImage <| "products/" ++ product.imageURL
-                                            , class "img-fluid"
-                                            ]
-                                            []
-                                        ]
-                                    ]
-                                ]
-                            , div [ class "float-right col-sm-4 col-md-3 col-lg-3" ]
-                                [ div [ class "card" ]
-                                    [ div [ class "card-body text-center p-2" ]
-                                        [ h4 [] [ text "$16.95" ]
-                                        , text "ADD TO CART BUTTON"
-                                        , small [ class "text-muted d-block" ]
-                                            [ text <| "Item #" ++ product.baseSKU
-                                            ]
-                                        ]
-                                    ]
-                                ]
-                            , div [ class "col" ]
-                                [ div [ innerHtml product.longDescription ] [] ]
-                            , div [ class "col-12" ] <| categoryBlocks categories
-                            ]
-                        ]
-                    ]
-
-                e ->
-                    [ text <| toString e ]
-
-        categoryBlocks : List Category -> List (Html msg)
-        categoryBlocks =
-            List.filter (\c -> c.description /= "")
-                >> List.map
-                    (\category ->
-                        div []
-                            [ h3 [ class "mt-3" ] [ text category.name ]
-                            , div [ innerHtml category.description ] []
-                            ]
-                    )
+                CategoryDetails _ data ->
+                    withIntermediateText categoryDetailsView data
     in
         div []
             [ siteHeader
@@ -553,3 +583,152 @@ htmlOrBlank : (a -> Html msg) -> Maybe a -> Html msg
 htmlOrBlank renderFunction =
     Maybe.map renderFunction
         >> Maybe.withDefault (text "")
+
+
+seedAttributeIcons : SeedAttribute -> Html msg
+seedAttributeIcons { isOrganic, isHeirloom, isRegional, isEcological } =
+    List.filter Tuple.first
+        [ ( isOrganic, "icons/organic-certified.png" )
+        , ( isHeirloom, "icons/heirloom.png" )
+        , ( isRegional, "icons/southeast.png" )
+        , ( isEcological, "icons/ecologically-grown.png" )
+        ]
+        |> List.map
+            (Tuple.second
+                >> (\url ->
+                        img [ class "my-auto", src <| staticImage url ] []
+                   )
+            )
+        |> span [ class "d-inline-block ml-2" ]
+
+
+withIntermediateText : (a -> List (Html msg)) -> WebData a -> List (Html msg)
+withIntermediateText view data =
+    case data of
+        RemoteData.Loading ->
+            [ text "Loading..." ]
+
+        RemoteData.Success d ->
+            view d
+
+        e ->
+            [ text <| toString e ]
+
+
+productDetailsView : ProductDetailsData -> List (Html Msg)
+productDetailsView { product, variants, maybeSeedAttribute, categories } =
+    let
+        categoryBlocks =
+            List.filter (not << String.isEmpty << .description) categories
+                |> List.map
+                    (\category ->
+                        div [ class "product-category" ]
+                            [ h3 [ class "mt-3" ]
+                                [ a (dataRouteLinkAttributes <| CategoryDetails category.slug)
+                                    [ text category.name ]
+                                ]
+                            , div [ innerHtml category.description ] []
+                            ]
+                    )
+    in
+        [ h1 []
+            [ text product.name
+            , htmlOrBlank seedAttributeIcons maybeSeedAttribute
+            ]
+        , hr [] []
+        , div [ class "product-details" ]
+            [ div [ class "clearfix" ]
+                [ div [ class "float-left col-sm-4 col-md-5 col-lg-4" ]
+                    [ div
+                        [ class "card" ]
+                        [ div [ class "card-body text-center p-1" ]
+                            [ img
+                                [ src << mediaImage <| "products/" ++ product.imageURL
+                                , class "img-fluid"
+                                ]
+                                []
+                            ]
+                        ]
+                    ]
+                , div [ class "float-right col-sm-4 col-md-3 col-lg-3" ]
+                    [ div [ class "card" ]
+                        [ div [ class "card-body text-center p-2" ]
+                            [ h4 [] [ text "$999.99" ]
+                            , text "ADD TO CART BUTTON"
+                            , small [ class "text-muted d-block" ]
+                                [ text <| "Item #" ++ product.baseSKU
+                                ]
+                            ]
+                        ]
+                    ]
+                , div [ class "col" ]
+                    [ div [ innerHtml product.longDescription ] [] ]
+                , div [ class "col-12" ] categoryBlocks
+                ]
+            ]
+        ]
+
+
+categoryDetailsView : CategoryDetailsData -> List (Html Msg)
+categoryDetailsView { category, subCategories, products } =
+    let
+        subCategoryCards =
+            if List.length subCategories > 0 then
+                List.map subCategoryCard subCategories
+                    |> div [ class "row" ]
+            else
+                text ""
+
+        subCategoryCard category =
+            div [ class "col-6 col-sm-4 col-md-3 mb-2" ]
+                [ a (dataRouteLinkAttributes <| CategoryDetails category.slug)
+                    [ div [ class "h-100 text-center" ]
+                        [ img [ class "img-fluid mx-auto", src <| mediaImage category.imageURL ] []
+                        , div [ class "my-auto" ] [ text category.name ]
+                        ]
+                    ]
+                ]
+
+        productRows =
+            flip List.map products <|
+                \( product, variants, maybeSeedAttribute ) ->
+                    tr []
+                        [ td [ class "text-center align-middle category-product-image" ]
+                            [ a (dataRouteLinkAttributes <| ProductDetails product.slug)
+                                [ img
+                                    [ src <| mediaImage <| "products/" ++ product.imageURL
+                                    ]
+                                    []
+                                ]
+                            ]
+                        , td []
+                            [ h3 [ class "mb-0" ]
+                                [ a
+                                    ([ innerHtml product.name ]
+                                        ++ (dataRouteLinkAttributes <| ProductDetails product.slug)
+                                    )
+                                    []
+                                , htmlOrBlank seedAttributeIcons maybeSeedAttribute
+                                ]
+                            , div [ innerHtml product.longDescription ] []
+                            ]
+                        , td [ class "text-center align-middle" ]
+                            [ div []
+                                [ div [ class "font-weight-bold" ] [ text "$999.99" ]
+                                , div [] [ text "CART_INPUT" ]
+                                , small [ class "text-muted" ] [ text <| "Item # " ++ product.baseSKU ]
+                                ]
+                            ]
+                        ]
+    in
+        [ div [ class "d-flex align-items-center" ]
+            [ img [ class "img-fluid", src <| mediaImage category.imageURL ] []
+            , h1 [ class "mb-0 pl-2" ] [ text category.name ]
+            ]
+        , hr [ class "mt-2" ] []
+        , div [ innerHtml category.description ] []
+        , subCategoryCards
+        , table [ class "table table-striped table-sm category-products" ]
+            [ tbody [] <| productRows
+            ]
+        ]
