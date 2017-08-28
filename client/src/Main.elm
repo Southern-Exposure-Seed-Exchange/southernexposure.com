@@ -1,9 +1,10 @@
 module Main exposing (main)
 
 import Dict exposing (Dict)
-import Html exposing (Html, text, div, h1, h3, h4, hr, node, br, a, img, span, button, ul, li, small, table, tbody, tr, td, b)
-import Html.Attributes exposing (attribute, id, class, href, src, type_, target, tabindex, title)
+import Html exposing (Html, text, div, h1, h3, h4, hr, node, br, a, img, span, button, ul, li, small, table, tbody, tr, td, b, label, select, option)
+import Html.Attributes exposing (attribute, id, class, href, src, type_, target, tabindex, title, value, for, selected)
 import Html.Attributes.Extra exposing (innerHtml)
+import Html.Events exposing (on, targetValue)
 import Html.Events.Extra exposing (onClickPreventDefault)
 import Http
 import Json.Decode as Decode
@@ -33,6 +34,11 @@ type alias PaginationData =
     }
 
 
+defaultPagination : PaginationData
+defaultPagination =
+    PaginationData 1 25
+
+
 paginationToQueryString : PaginationData -> String
 paginationToQueryString { page, perPage } =
     [ ( .page, page, "page" )
@@ -47,22 +53,135 @@ paginationToQueryString { page, perPage } =
         |> List.filter Tuple.first
         |> List.map Tuple.second
         |> String.join "&"
-        |> (\s ->
-                if String.isEmpty s then
-                    ""
-                else
-                    "?" ++ s
-           )
 
 
-defaultPagination : PaginationData
-defaultPagination =
-    PaginationData 1 25
+type CategorySortData
+    = ProductNameAsc
+    | ProductNameDesc
+    | PriceAsc
+    | PriceDesc
+    | ItemNumberAsc
+
+
+allCategorySortOptions : List CategorySortData
+allCategorySortOptions =
+    [ ProductNameAsc, ProductNameDesc, PriceAsc, PriceDesc, ItemNumberAsc ]
+
+
+defaultCategorySortData : CategorySortData
+defaultCategorySortData =
+    ProductNameAsc
+
+
+categorySortDataToString : CategorySortData -> String
+categorySortDataToString data =
+    case data of
+        ProductNameAsc ->
+            "name-asc"
+
+        ProductNameDesc ->
+            "name-desc"
+
+        PriceAsc ->
+            "price-asc"
+
+        PriceDesc ->
+            "price-desc"
+
+        ItemNumberAsc ->
+            "number-asc"
+
+
+categorySortDataToDescription : CategorySortData -> String
+categorySortDataToDescription data =
+    case data of
+        ProductNameAsc ->
+            "Product Name - A to Z"
+
+        ProductNameDesc ->
+            "Product Name - Z to A"
+
+        PriceAsc ->
+            "Lowest Price"
+
+        PriceDesc ->
+            "Highest Price"
+
+        ItemNumberAsc ->
+            "Item Number"
+
+
+categorySortDataToQueryString : CategorySortData -> String
+categorySortDataToQueryString data =
+    let
+        dataString =
+            categorySortDataToString data
+
+        defaultDataString =
+            categorySortDataToString defaultCategorySortData
+    in
+        if dataString == defaultDataString then
+            ""
+        else
+            "sortBy=" ++ dataString
+
+
+parseCategorySortData : String -> CategorySortData
+parseCategorySortData data =
+    case data of
+        "name-asc" ->
+            ProductNameAsc
+
+        "name-desc" ->
+            ProductNameDesc
+
+        "price-asc" ->
+            PriceAsc
+
+        "price-desc" ->
+            PriceDesc
+
+        "number-asc" ->
+            ItemNumberAsc
+
+        _ ->
+            defaultCategorySortData
+
+
+sortCategoryProducts : CategorySortData -> List ( Product, List ProductVariant, c ) -> List ( Product, List ProductVariant, c )
+sortCategoryProducts sortData =
+    let
+        getPriceFromVariants priceCollector default list =
+            priceCollector (List.map (.price >> (\(Cents c) -> c)) list)
+                |> Maybe.withDefault default
+
+        compareVariantPrices vs1 vs2 =
+            compare (getPriceFromVariants List.minimum 0 vs1)
+                (getPriceFromVariants List.minimum 0 vs2)
+    in
+        List.sortWith
+            (\( p1, vs1, _ ) ( p2, vs2, _ ) ->
+                case sortData of
+                    ProductNameAsc ->
+                        compare (p1.name) (p2.name)
+
+                    ProductNameDesc ->
+                        compare (p2.name) (p1.name)
+
+                    PriceAsc ->
+                        compareVariantPrices vs1 vs2
+
+                    PriceDesc ->
+                        compareVariantPrices vs2 vs1
+
+                    ItemNumberAsc ->
+                        compare (p1.baseSKU) (p2.baseSKU)
+            )
 
 
 type Route
     = ProductDetails String
-    | CategoryDetails String PaginationData
+    | CategoryDetails String PaginationData CategorySortData
 
 
 parseRoute : Navigation.Location -> Route
@@ -81,10 +200,16 @@ parseRoute =
                     <?> optionalIntParam "perPage" (defaultPagination.perPage)
                 )
 
+        parseSortParam pathParser =
+            Url.map (<|)
+                (pathParser
+                    <?> Url.customParam "sortBy" (Maybe.withDefault "" >> parseCategorySortData)
+                )
+
         routeParser =
             Url.oneOf
                 [ Url.map ProductDetails (Url.s "products" </> Url.string)
-                , parsePaginationParams <| Url.map CategoryDetails (Url.s "categories" </> Url.string)
+                , parseSortParam <| parsePaginationParams <| Url.map CategoryDetails (Url.s "categories" </> Url.string)
                 ]
     in
         Url.parsePath routeParser
@@ -93,12 +218,30 @@ parseRoute =
 
 reverse : Route -> String
 reverse route =
-    case route of
-        ProductDetails slug ->
-            "/products/" ++ slug ++ "/"
+    let
+        joinPath paths =
+            String.join "/" <| "" :: paths ++ [ "" ]
 
-        CategoryDetails slug pagination ->
-            "/categories/" ++ slug ++ "/" ++ paginationToQueryString pagination
+        joinQueryStrings =
+            List.filter (not << String.isEmpty)
+                >> String.join "&"
+                >> (\s ->
+                        if String.isEmpty s then
+                            ""
+                        else
+                            "?" ++ s
+                   )
+    in
+        case route of
+            ProductDetails slug ->
+                joinPath [ "products", slug ]
+
+            CategoryDetails slug pagination sortData ->
+                joinPath [ "categories", slug ]
+                    ++ joinQueryStrings
+                        [ paginationToQueryString pagination
+                        , categorySortDataToQueryString sortData
+                        ]
 
 
 routeLinkAttributes : Route -> List (Html.Attribute Msg)
@@ -251,7 +394,7 @@ fetchDataForRoute ({ route, routeData } as model) =
                     , getProductDetailsData slug
                     )
 
-                CategoryDetails slug _ ->
+                CategoryDetails slug _ _ ->
                     ( { routeData | categoryDetails = RemoteData.Loading }
                     , getCategoryDetailsData slug
                     )
@@ -395,30 +538,62 @@ urlUpdate newRoute ({ routeData } as model) =
     let
         modelWithNewRoute =
             { model | route = newRoute }
-
-        updateCategoryProductsPagination pagination ({ products } as data) =
-            { data | products = updatePagination pagination products }
-
-        updatePagination { page, perPage } =
-            Paginate.changeItemsPerPage perPage
-                >> Paginate.goTo page
     in
         case ( newRoute, model.route ) of
-            ( CategoryDetails newSlug newPagination, CategoryDetails oldSlug oldPagination ) ->
-                let
-                    categoryDetails =
-                        RemoteData.map (updateCategoryProductsPagination newPagination) routeData.categoryDetails
-
-                    updatedRouteData () =
-                        { routeData | categoryDetails = categoryDetails }
-                in
-                    if newSlug /= oldSlug then
-                        fetchDataForRoute modelWithNewRoute
-                    else
-                        ( { modelWithNewRoute | routeData = updatedRouteData () }, Cmd.none )
+            ( CategoryDetails newSlug newPagination newSort, CategoryDetails oldSlug _ _ ) ->
+                if newSlug /= oldSlug then
+                    fetchDataForRoute modelWithNewRoute
+                else
+                    ( { modelWithNewRoute | routeData = updateRouteData newRoute routeData }
+                    , Cmd.none
+                    )
 
             _ ->
                 fetchDataForRoute modelWithNewRoute
+
+
+updateRouteData : Route -> RouteData -> RouteData
+updateRouteData route data =
+    let
+        modifyCategoryProductsByParams pagination sortData webData =
+            sortAndSetPaginatedList pagination
+                (sortCategoryProducts sortData)
+                (\d ps -> { d | products = ps })
+                .products
+                webData
+    in
+        case route of
+            ProductDetails _ ->
+                data
+
+            CategoryDetails _ pagination sortData ->
+                { data | categoryDetails = modifyCategoryProductsByParams pagination sortData data.categoryDetails }
+
+
+sortAndSetPaginatedList :
+    PaginationData
+    -> (List a -> List a)
+    -> (b -> PaginatedList a -> b)
+    -> (b -> PaginatedList a)
+    -> WebData b
+    -> WebData b
+sortAndSetPaginatedList { page, perPage } sortFunction updateFunction selector data =
+    let
+        setPaginatedListConstraints =
+            Paginate.changeItemsPerPage perPage
+                >> Paginate.goTo page
+
+        sortPaginatedList =
+            Paginate.map sortFunction
+    in
+        RemoteData.map
+            (\d ->
+                selector d
+                    |> setPaginatedListConstraints
+                    |> sortPaginatedList
+                    |> updateFunction d
+            )
+            data
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -441,6 +616,7 @@ update msg ({ routeData } as model) =
             let
                 updatedRouteData =
                     { routeData | categoryDetails = response }
+                        |> updateRouteData model.route
             in
                 ( { model | routeData = updatedRouteData }, Cmd.none )
 
@@ -531,7 +707,11 @@ view { route, routeData, navData } =
                         li [ class "nav-item" ]
                             [ a
                                 ([ class "nav-link" ]
-                                    ++ (routeLinkAttributes <| CategoryDetails category.slug defaultPagination)
+                                    ++ (routeLinkAttributes <|
+                                            CategoryDetails category.slug
+                                                defaultPagination
+                                                defaultCategorySortData
+                                       )
                                 )
                                 [ text category.name ]
                             ]
@@ -540,7 +720,11 @@ view { route, routeData, navData } =
                         li [ class "nav-item dropdown" ]
                             [ a
                                 [ class "nav-link dropdown-toggle"
-                                , href <| reverse <| CategoryDetails category.slug defaultPagination
+                                , href <|
+                                    reverse <|
+                                        CategoryDetails category.slug
+                                            defaultPagination
+                                            defaultCategorySortData
                                 , attribute "data-toggle" "dropdown"
                                 , attribute "aria-haspopup" "true"
                                 , attribute "aria-expanded" "false"
@@ -552,7 +736,12 @@ view { route, routeData, navData } =
         childCategory category =
             a
                 ([ class "dropdown-item" ]
-                    ++ (routeLinkAttributes <| CategoryDetails category.slug defaultPagination)
+                    ++ (routeLinkAttributes <|
+                            CategoryDetails
+                                category.slug
+                                defaultPagination
+                                defaultCategorySortData
+                       )
                 )
                 [ text category.name ]
 
@@ -622,8 +811,8 @@ view { route, routeData, navData } =
                 ProductDetails _ ->
                     withIntermediateText productDetailsView routeData.productDetails
 
-                CategoryDetails _ pagination ->
-                    withIntermediateText (categoryDetailsView pagination) routeData.categoryDetails
+                CategoryDetails _ pagination sortData ->
+                    withIntermediateText (categoryDetailsView pagination sortData) routeData.categoryDetails
     in
         div []
             [ siteHeader
@@ -688,7 +877,7 @@ productDetailsView { product, variants, maybeSeedAttribute, categories } =
                     (\category ->
                         div [ class "product-category" ]
                             [ h3 [ class "mt-3" ]
-                                [ a (routeLinkAttributes <| CategoryDetails category.slug defaultPagination)
+                                [ a (routeLinkAttributes <| CategoryDetails category.slug defaultPagination defaultCategorySortData)
                                     [ text category.name ]
                                 ]
                             , div [ innerHtml category.description ] []
@@ -733,8 +922,8 @@ productDetailsView { product, variants, maybeSeedAttribute, categories } =
         ]
 
 
-categoryDetailsView : PaginationData -> CategoryDetailsData -> List (Html Msg)
-categoryDetailsView pagination { category, subCategories, products } =
+categoryDetailsView : PaginationData -> CategorySortData -> CategoryDetailsData -> List (Html Msg)
+categoryDetailsView pagination sortData { category, subCategories, products } =
     let
         subCategoryCards =
             if List.length subCategories > 0 then
@@ -745,13 +934,45 @@ categoryDetailsView pagination { category, subCategories, products } =
 
         subCategoryCard category =
             div [ class "col-6 col-sm-4 col-md-3 mb-2" ]
-                [ a (routeLinkAttributes <| CategoryDetails category.slug defaultPagination)
+                [ a (routeLinkAttributes <| CategoryDetails category.slug defaultPagination defaultCategorySortData)
                     [ div [ class "h-100 text-center" ]
                         [ img [ class "img-fluid mx-auto", src <| mediaImage category.imageURL ] []
                         , div [ class "my-auto" ] [ text category.name ]
                         ]
                     ]
                 ]
+
+        sortHtml =
+            if Paginate.length products > 1 then
+                div [ class "d-flex mb-2 justify-content-between align-items-center" ] [ sortingInput ]
+            else
+                text ""
+
+        sortingInput : Html Msg
+        sortingInput =
+            div [ class "form-inline" ]
+                [ label [ class "col-form-label font-weight-bold", for "product-sort-select" ]
+                    [ text "Sort by:" ]
+                , text " "
+                , select
+                    [ id "product-sort-select"
+                    , class "form-control form-control-sm ml-2"
+                    , onProductsSortSelect (NavigateTo << CategoryDetails category.slug pagination)
+                    ]
+                  <|
+                    List.map
+                        (\data ->
+                            option [ value <| categorySortDataToString data, selected (data == sortData) ]
+                                [ text <| categorySortDataToDescription data ]
+                        )
+                        allCategorySortOptions
+                ]
+
+        onProductsSortSelect : (CategorySortData -> Msg) -> Html.Attribute Msg
+        onProductsSortSelect msg =
+            targetValue
+                |> Decode.map (parseCategorySortData >> msg)
+                |> on "change"
 
         paginationHtml =
             div [ class "d-flex mb-2 justify-content-between align-items-center" ] [ pagingText, pager ]
@@ -801,7 +1022,7 @@ categoryDetailsView pagination { category, subCategories, products } =
                     max 1 (pagination.page - 1)
 
                 previousRoute =
-                    CategoryDetails category.slug { pagination | page = previousPage }
+                    CategoryDetails category.slug { pagination | page = previousPage } sortData
             in
                 prevNextLink Paginate.isFirst previousRoute "« Prev"
 
@@ -811,7 +1032,7 @@ categoryDetailsView pagination { category, subCategories, products } =
                     min (Paginate.totalPages products) (pagination.page + 1)
 
                 nextRoute =
-                    CategoryDetails category.slug { pagination | page = nextPage }
+                    CategoryDetails category.slug { pagination | page = nextPage } sortData
             in
                 prevNextLink Paginate.isLast nextRoute "Next »"
 
@@ -842,6 +1063,7 @@ categoryDetailsView pagination { category, subCategories, products } =
                             ++ routeLinkAttributes
                                 (CategoryDetails category.slug
                                     { pagination | page = page }
+                                    sortData
                                 )
                         )
                         [ text <| toString page ]
@@ -886,6 +1108,7 @@ categoryDetailsView pagination { category, subCategories, products } =
         , hr [ class "mt-2" ] []
         , div [ innerHtml category.description ] []
         , subCategoryCards
+        , sortHtml
         , paginationHtml
         , table [ class "category-products table table-striped table-sm mb-2" ]
             [ tbody [] <| productRows ]
