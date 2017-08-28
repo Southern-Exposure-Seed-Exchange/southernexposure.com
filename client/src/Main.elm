@@ -12,6 +12,9 @@ import Navigation
 import Paginate exposing (PaginatedList)
 import RemoteData exposing (WebData)
 import UrlParser as Url exposing ((</>), (<?>))
+import Models.Fields exposing (Cents(..), Milligrams(..))
+import Products.Pagination as Pagination
+import Products.Sorting as Sorting
 
 
 main : Program Never Model Msg
@@ -28,188 +31,20 @@ main =
 -- ROUTING
 
 
-type alias PaginationData =
-    { page : Int
-    , perPage : Int
-    }
-
-
-defaultPagination : PaginationData
-defaultPagination =
-    PaginationData 1 25
-
-
-paginationToQueryString : PaginationData -> String
-paginationToQueryString { page, perPage } =
-    [ ( .page, page, "page" )
-    , ( .perPage, perPage, "perPage" )
-    ]
-        |> List.map
-            (\( selector, value, param ) ->
-                ( selector defaultPagination /= value
-                , param ++ "=" ++ toString value
-                )
-            )
-        |> List.filter Tuple.first
-        |> List.map Tuple.second
-        |> String.join "&"
-
-
-type CategorySortData
-    = ProductNameAsc
-    | ProductNameDesc
-    | PriceAsc
-    | PriceDesc
-    | ItemNumberAsc
-
-
-allCategorySortOptions : List CategorySortData
-allCategorySortOptions =
-    [ ProductNameAsc, ProductNameDesc, PriceAsc, PriceDesc, ItemNumberAsc ]
-
-
-defaultCategorySortData : CategorySortData
-defaultCategorySortData =
-    ProductNameAsc
-
-
-categorySortDataToString : CategorySortData -> String
-categorySortDataToString data =
-    case data of
-        ProductNameAsc ->
-            "name-asc"
-
-        ProductNameDesc ->
-            "name-desc"
-
-        PriceAsc ->
-            "price-asc"
-
-        PriceDesc ->
-            "price-desc"
-
-        ItemNumberAsc ->
-            "number-asc"
-
-
-categorySortDataToDescription : CategorySortData -> String
-categorySortDataToDescription data =
-    case data of
-        ProductNameAsc ->
-            "Product Name - A to Z"
-
-        ProductNameDesc ->
-            "Product Name - Z to A"
-
-        PriceAsc ->
-            "Lowest Price"
-
-        PriceDesc ->
-            "Highest Price"
-
-        ItemNumberAsc ->
-            "Item Number"
-
-
-categorySortDataToQueryString : CategorySortData -> String
-categorySortDataToQueryString data =
-    let
-        dataString =
-            categorySortDataToString data
-
-        defaultDataString =
-            categorySortDataToString defaultCategorySortData
-    in
-        if dataString == defaultDataString then
-            ""
-        else
-            "sortBy=" ++ dataString
-
-
-parseCategorySortData : String -> CategorySortData
-parseCategorySortData data =
-    case data of
-        "name-asc" ->
-            ProductNameAsc
-
-        "name-desc" ->
-            ProductNameDesc
-
-        "price-asc" ->
-            PriceAsc
-
-        "price-desc" ->
-            PriceDesc
-
-        "number-asc" ->
-            ItemNumberAsc
-
-        _ ->
-            defaultCategorySortData
-
-
-sortCategoryProducts : CategorySortData -> List ( Product, List ProductVariant, c ) -> List ( Product, List ProductVariant, c )
-sortCategoryProducts sortData =
-    let
-        getPriceFromVariants priceCollector default list =
-            priceCollector (List.map (.price >> (\(Cents c) -> c)) list)
-                |> Maybe.withDefault default
-
-        compareVariantPrices vs1 vs2 =
-            compare (getPriceFromVariants List.minimum 0 vs1)
-                (getPriceFromVariants List.minimum 0 vs2)
-    in
-        List.sortWith
-            (\( p1, vs1, _ ) ( p2, vs2, _ ) ->
-                case sortData of
-                    ProductNameAsc ->
-                        compare (p1.name) (p2.name)
-
-                    ProductNameDesc ->
-                        compare (p2.name) (p1.name)
-
-                    PriceAsc ->
-                        compareVariantPrices vs1 vs2
-
-                    PriceDesc ->
-                        compareVariantPrices vs2 vs1
-
-                    ItemNumberAsc ->
-                        compare (p1.baseSKU) (p2.baseSKU)
-            )
-
-
 type Route
     = ProductDetails String
-    | CategoryDetails String PaginationData CategorySortData
+    | CategoryDetails String Pagination.Data Sorting.Option
 
 
 parseRoute : Navigation.Location -> Route
 parseRoute =
     let
-        optionalIntParam param default =
-            Url.customParam param
-                (Maybe.andThen (String.toInt >> Result.toMaybe)
-                    >> Maybe.withDefault default
-                )
-
-        parsePaginationParams pathParser =
-            Url.map (\constructor page -> constructor << PaginationData page)
-                (pathParser
-                    <?> optionalIntParam "page" (defaultPagination.page)
-                    <?> optionalIntParam "perPage" (defaultPagination.perPage)
-                )
-
-        parseSortParam pathParser =
-            Url.map (<|)
-                (pathParser
-                    <?> Url.customParam "sortBy" (Maybe.withDefault "" >> parseCategorySortData)
-                )
-
         routeParser =
             Url.oneOf
                 [ Url.map ProductDetails (Url.s "products" </> Url.string)
-                , parseSortParam <| parsePaginationParams <| Url.map CategoryDetails (Url.s "categories" </> Url.string)
+                , Sorting.fromQueryString <|
+                    Pagination.fromQueryString <|
+                        Url.map CategoryDetails (Url.s "categories" </> Url.string)
                 ]
     in
         Url.parsePath routeParser
@@ -239,8 +74,8 @@ reverse route =
             CategoryDetails slug pagination sortData ->
                 joinPath [ "categories", slug ]
                     ++ joinQueryStrings
-                        [ paginationToQueryString pagination
-                        , categorySortDataToQueryString sortData
+                        [ Pagination.toQueryString pagination
+                        , Sorting.toQueryString sortData
                         ]
 
 
@@ -290,14 +125,6 @@ init location =
             , getCategoryNavData
             ]
         )
-
-
-type Cents
-    = Cents Int
-
-
-type Milligrams
-    = Milligrams Int
 
 
 type CategoryId
@@ -436,7 +263,7 @@ categoryDetailsDecoder : Decode.Decoder CategoryDetailsData
 categoryDetailsDecoder =
     let
         productDataDecoder =
-            Decode.map (Paginate.fromList defaultPagination.perPage) <|
+            Decode.map (Paginate.fromList (.perPage Pagination.default)) <|
                 Decode.list <|
                     Decode.map3 (,,)
                         (Decode.field "product" productDecoder)
@@ -557,7 +384,7 @@ updateRouteData route data =
     let
         modifyCategoryProductsByParams pagination sortData webData =
             sortAndSetPaginatedList pagination
-                (sortCategoryProducts sortData)
+                (Sorting.apply sortData)
                 (\d ps -> { d | products = ps })
                 .products
                 webData
@@ -571,7 +398,7 @@ updateRouteData route data =
 
 
 sortAndSetPaginatedList :
-    PaginationData
+    Pagination.Data
     -> (List a -> List a)
     -> (b -> PaginatedList a -> b)
     -> (b -> PaginatedList a)
@@ -709,8 +536,8 @@ view { route, routeData, navData } =
                                 ([ class "nav-link" ]
                                     ++ (routeLinkAttributes <|
                                             CategoryDetails category.slug
-                                                defaultPagination
-                                                defaultCategorySortData
+                                                Pagination.default
+                                                Sorting.default
                                        )
                                 )
                                 [ text category.name ]
@@ -723,8 +550,8 @@ view { route, routeData, navData } =
                                 , href <|
                                     reverse <|
                                         CategoryDetails category.slug
-                                            defaultPagination
-                                            defaultCategorySortData
+                                            Pagination.default
+                                            Sorting.default
                                 , attribute "data-toggle" "dropdown"
                                 , attribute "aria-haspopup" "true"
                                 , attribute "aria-expanded" "false"
@@ -739,8 +566,8 @@ view { route, routeData, navData } =
                     ++ (routeLinkAttributes <|
                             CategoryDetails
                                 category.slug
-                                defaultPagination
-                                defaultCategorySortData
+                                Pagination.default
+                                Sorting.default
                        )
                 )
                 [ text category.name ]
@@ -877,7 +704,7 @@ productDetailsView { product, variants, maybeSeedAttribute, categories } =
                     (\category ->
                         div [ class "product-category" ]
                             [ h3 [ class "mt-3" ]
-                                [ a (routeLinkAttributes <| CategoryDetails category.slug defaultPagination defaultCategorySortData)
+                                [ a (routeLinkAttributes <| CategoryDetails category.slug Pagination.default Sorting.default)
                                     [ text category.name ]
                                 ]
                             , div [ innerHtml category.description ] []
@@ -922,7 +749,7 @@ productDetailsView { product, variants, maybeSeedAttribute, categories } =
         ]
 
 
-categoryDetailsView : PaginationData -> CategorySortData -> CategoryDetailsData -> List (Html Msg)
+categoryDetailsView : Pagination.Data -> Sorting.Option -> CategoryDetailsData -> List (Html Msg)
 categoryDetailsView pagination sortData { category, subCategories, products } =
     let
         subCategoryCards =
@@ -934,7 +761,7 @@ categoryDetailsView pagination sortData { category, subCategories, products } =
 
         subCategoryCard category =
             div [ class "col-6 col-sm-4 col-md-3 mb-2" ]
-                [ a (routeLinkAttributes <| CategoryDetails category.slug defaultPagination defaultCategorySortData)
+                [ a (routeLinkAttributes <| CategoryDetails category.slug Pagination.default Sorting.default)
                     [ div [ class "h-100 text-center" ]
                         [ img [ class "img-fluid mx-auto", src <| mediaImage category.imageURL ] []
                         , div [ class "my-auto" ] [ text category.name ]
@@ -962,16 +789,19 @@ categoryDetailsView pagination sortData { category, subCategories, products } =
                   <|
                     List.map
                         (\data ->
-                            option [ value <| categorySortDataToString data, selected (data == sortData) ]
-                                [ text <| categorySortDataToDescription data ]
+                            option
+                                [ value <| Sorting.toQueryValue data
+                                , selected (data == sortData)
+                                ]
+                                [ text <| Sorting.toDescription data ]
                         )
-                        allCategorySortOptions
+                        Sorting.all
                 ]
 
-        onProductsSortSelect : (CategorySortData -> Msg) -> Html.Attribute Msg
+        onProductsSortSelect : (Sorting.Option -> msg) -> Html.Attribute msg
         onProductsSortSelect msg =
             targetValue
-                |> Decode.map (parseCategorySortData >> msg)
+                |> Decode.map (Sorting.fromQueryValue >> msg)
                 |> on "change"
 
         paginationHtml =
