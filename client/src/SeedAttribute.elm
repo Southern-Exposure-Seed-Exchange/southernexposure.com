@@ -139,7 +139,7 @@ icons { isOrganic, isHeirloom, isRegional, isEcological } =
                             [ class "my-auto"
                             , title <| toDescription attribute
                             , alt <| toString attribute
-                            , src << Images.static <| iconUrl attribute
+                            , src <| iconUrl attribute
                             ]
                             []
                    )
