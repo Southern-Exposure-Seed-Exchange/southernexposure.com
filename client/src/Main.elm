@@ -12,6 +12,7 @@ import Navigation
 import Paginate exposing (PaginatedList)
 import RemoteData exposing (WebData)
 import Category exposing (CategoryId(..), Category)
+import PageData exposing (PageData)
 import Product exposing (Product, ProductVariant, SeedAttribute)
 import Products.Pagination as Pagination
 import Products.Sorting as Sorting
@@ -46,13 +47,7 @@ routeLinkAttributes route =
 type alias Model =
     { navData : WebData CategoryNavData
     , route : Route
-    , routeData : RouteData
-    }
-
-
-type alias RouteData =
-    { categoryDetails : WebData CategoryDetailsData
-    , productDetails : WebData ProductDetailsData
+    , pageData : PageData
     }
 
 
@@ -66,10 +61,7 @@ init location =
             fetchDataForRoute
                 { navData = RemoteData.Loading
                 , route = route
-                , routeData =
-                    { categoryDetails = RemoteData.NotAsked
-                    , productDetails = RemoteData.NotAsked
-                    }
+                , pageData = PageData.initial
                 }
     in
         ( model
@@ -78,21 +70,6 @@ init location =
             , getCategoryNavData
             ]
         )
-
-
-type alias ProductDetailsData =
-    { product : Product
-    , variants : List ProductVariant
-    , maybeSeedAttribute : Maybe SeedAttribute
-    , categories : List Category
-    }
-
-
-type alias CategoryDetailsData =
-    { category : Category
-    , subCategories : List Category
-    , products : PaginatedList ( Product, List ProductVariant, Maybe SeedAttribute )
-    }
 
 
 type alias CategoryNavData =
@@ -106,33 +83,35 @@ type alias CategoryNavData =
 
 
 fetchDataForRoute : Model -> ( Model, Cmd Msg )
-fetchDataForRoute ({ route, routeData } as model) =
+fetchDataForRoute ({ route, pageData } as model) =
     let
         ( data, cmd ) =
             case route of
                 ProductDetails slug ->
-                    ( { routeData | productDetails = RemoteData.Loading }
+                    ( { pageData | productDetails = RemoteData.Loading }
                     , getProductDetailsData slug
                     )
 
                 CategoryDetails slug _ _ ->
-                    ( { routeData | categoryDetails = RemoteData.Loading }
+                    ( { pageData | categoryDetails = RemoteData.Loading }
                     , getCategoryDetailsData slug
                     )
     in
-        ( { model | routeData = data }, cmd )
+        ( { model | pageData = data }, cmd )
 
 
 getProductDetailsData : String -> Cmd Msg
 getProductDetailsData slug =
-    Http.get ("/api/products/" ++ slug ++ "/") productDetailsDecoder
+    Http.get ("/api/products/" ++ slug ++ "/")
+        PageData.productDetailsDecoder
         |> RemoteData.sendRequest
         |> Cmd.map GetProductDetailsData
 
 
 getCategoryDetailsData : String -> Cmd Msg
 getCategoryDetailsData slug =
-    Http.get ("/api/categories/details/" ++ slug ++ "/") categoryDetailsDecoder
+    Http.get ("/api/categories/details/" ++ slug ++ "/")
+        PageData.categoryDetailsDecoder
         |> RemoteData.sendRequest
         |> Cmd.map GetCategoryDetailsData
 
@@ -142,32 +121,6 @@ getCategoryNavData =
     Http.get "/api/categories/nav/" categoryNavDecoder
         |> RemoteData.sendRequest
         |> Cmd.map GetCategoryNavData
-
-
-productDetailsDecoder : Decode.Decoder ProductDetailsData
-productDetailsDecoder =
-    Decode.map4 ProductDetailsData
-        (Decode.field "product" Product.decoder)
-        (Decode.field "variants" <| Decode.list Product.variantDecoder)
-        (Decode.field "seedAttribute" <| Decode.nullable Product.seedAttributeDecoder)
-        (Decode.field "categories" <| Decode.list Category.decoder)
-
-
-categoryDetailsDecoder : Decode.Decoder CategoryDetailsData
-categoryDetailsDecoder =
-    let
-        productDataDecoder =
-            Decode.map (Paginate.fromList (.perPage Pagination.default)) <|
-                Decode.list <|
-                    Decode.map3 (,,)
-                        (Decode.field "product" Product.decoder)
-                        (Decode.field "variants" <| Decode.list Product.variantDecoder)
-                        (Decode.field "seedAttribute" <| Decode.nullable Product.seedAttributeDecoder)
-    in
-        Decode.map3 CategoryDetailsData
-            (Decode.field "category" Category.decoder)
-            (Decode.field "subCategories" <| Decode.list Category.decoder)
-            (Decode.field "products" productDataDecoder)
 
 
 stringToIntKeys : Dict String v -> Dict Int v
@@ -202,13 +155,13 @@ categoryNavDecoder =
 type Msg
     = UrlUpdate Route
     | NavigateTo Route
-    | GetProductDetailsData (WebData ProductDetailsData)
-    | GetCategoryDetailsData (WebData CategoryDetailsData)
+    | GetProductDetailsData (WebData PageData.ProductDetails)
+    | GetCategoryDetailsData (WebData PageData.CategoryDetails)
     | GetCategoryNavData (WebData CategoryNavData)
 
 
 urlUpdate : Route -> Model -> ( Model, Cmd Msg )
-urlUpdate newRoute ({ routeData } as model) =
+urlUpdate newRoute ({ pageData } as model) =
     let
         modelWithNewRoute =
             { model | route = newRoute }
@@ -218,7 +171,7 @@ urlUpdate newRoute ({ routeData } as model) =
                 if newSlug /= oldSlug then
                     fetchDataForRoute modelWithNewRoute
                 else
-                    ( { modelWithNewRoute | routeData = updateRouteData newRoute routeData }
+                    ( { modelWithNewRoute | pageData = PageData.update newRoute pageData }
                     , Cmd.none
                     )
 
@@ -226,26 +179,8 @@ urlUpdate newRoute ({ routeData } as model) =
                 fetchDataForRoute modelWithNewRoute
 
 
-updateRouteData : Route -> RouteData -> RouteData
-updateRouteData route data =
-    let
-        modifyCategoryProductsByParams pagination sortData webData =
-            Pagination.sortAndSetData pagination
-                (Sorting.apply sortData)
-                (\d ps -> { d | products = ps })
-                .products
-                webData
-    in
-        case route of
-            ProductDetails _ ->
-                data
-
-            CategoryDetails _ pagination sortData ->
-                { data | categoryDetails = modifyCategoryProductsByParams pagination sortData data.categoryDetails }
-
-
 update : Msg -> Model -> ( Model, Cmd Msg )
-update msg ({ routeData } as model) =
+update msg ({ pageData } as model) =
     case msg of
         UrlUpdate route ->
             urlUpdate route model
@@ -255,18 +190,18 @@ update msg ({ routeData } as model) =
 
         GetProductDetailsData response ->
             let
-                updatedRouteData =
-                    { routeData | productDetails = response }
+                updatedPageData =
+                    { pageData | productDetails = response }
             in
-                ( { model | routeData = updatedRouteData }, Cmd.none )
+                ( { model | pageData = updatedPageData }, Cmd.none )
 
         GetCategoryDetailsData response ->
             let
-                updatedRouteData =
-                    { routeData | categoryDetails = response }
-                        |> updateRouteData model.route
+                updatedPageData =
+                    { pageData | categoryDetails = response }
+                        |> PageData.update model.route
             in
-                ( { model | routeData = updatedRouteData }, Cmd.none )
+                ( { model | pageData = updatedPageData }, Cmd.none )
 
         GetCategoryNavData response ->
             ( { model | navData = logUnsuccessfulRequest response }, Cmd.none )
@@ -287,7 +222,7 @@ logUnsuccessfulRequest response =
 
 
 view : Model -> Html Msg
-view { route, routeData, navData } =
+view { route, pageData, navData } =
     let
         siteHeader =
             div [ class "container" ]
@@ -457,10 +392,10 @@ view { route, routeData, navData } =
         pageContent =
             case route of
                 ProductDetails _ ->
-                    withIntermediateText productDetailsView routeData.productDetails
+                    withIntermediateText productDetailsView pageData.productDetails
 
                 CategoryDetails _ pagination sortData ->
-                    withIntermediateText (categoryDetailsView pagination sortData) routeData.categoryDetails
+                    withIntermediateText (categoryDetailsView pagination sortData) pageData.categoryDetails
     in
         div []
             [ siteHeader
@@ -516,7 +451,7 @@ withIntermediateText view data =
             [ text <| toString e ]
 
 
-productDetailsView : ProductDetailsData -> List (Html Msg)
+productDetailsView : PageData.ProductDetails -> List (Html Msg)
 productDetailsView { product, variants, maybeSeedAttribute, categories } =
     let
         categoryBlocks =
@@ -570,7 +505,7 @@ productDetailsView { product, variants, maybeSeedAttribute, categories } =
         ]
 
 
-categoryDetailsView : Pagination.Data -> Sorting.Option -> CategoryDetailsData -> List (Html Msg)
+categoryDetailsView : Pagination.Data -> Sorting.Option -> PageData.CategoryDetails -> List (Html Msg)
 categoryDetailsView pagination sortData { category, subCategories, products } =
     let
         subCategoryCards =
