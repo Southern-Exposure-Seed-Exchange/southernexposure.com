@@ -12,7 +12,8 @@ import Navigation
 import Paginate exposing (PaginatedList)
 import RemoteData exposing (WebData)
 import UrlParser as Url exposing ((</>), (<?>))
-import Models.Fields exposing (Cents(..), Milligrams(..))
+import Category exposing (CategoryId(..), Category)
+import Product exposing (Product, ProductVariant, SeedAttribute)
 import Products.Pagination as Pagination
 import Products.Sorting as Sorting
 
@@ -127,65 +128,6 @@ init location =
         )
 
 
-type CategoryId
-    = CategoryId Int
-
-
-type alias Category =
-    { id : CategoryId
-    , name : String
-    , slug : String
-    , parentId : Maybe CategoryId
-    , description : String
-    , imageURL : String
-    , order : Int
-    }
-
-
-type ProductId
-    = ProductId Int
-
-
-type alias Product =
-    { id : ProductId
-    , name : String
-    , slug : String
-    , baseSKU : String
-    , shortDescription : String
-    , longDescription : String
-    , imageURL : String
-    }
-
-
-type ProductVariantId
-    = ProductVariantId Int
-
-
-type alias ProductVariant =
-    { id : ProductVariantId
-    , product : ProductId
-    , skuSuffix : String
-    , price : Cents
-    , quantity : Int
-    , weight : Milligrams
-    , isActive : Bool
-    }
-
-
-type SeedAttributeId
-    = SeedAttributeId Int
-
-
-type alias SeedAttribute =
-    { id : SeedAttributeId
-    , product : ProductId
-    , isOrganic : Bool
-    , isHeirloom : Bool
-    , isEcological : Bool
-    , isRegional : Bool
-    }
-
-
 type alias ProductDetailsData =
     { product : Product
     , variants : List ProductVariant
@@ -253,10 +195,10 @@ getCategoryNavData =
 productDetailsDecoder : Decode.Decoder ProductDetailsData
 productDetailsDecoder =
     Decode.map4 ProductDetailsData
-        (Decode.field "product" productDecoder)
-        (Decode.field "variants" <| Decode.list productVariantDecoder)
-        (Decode.field "seedAttribute" <| Decode.nullable seedAttributeDecoder)
-        (Decode.field "categories" <| Decode.list categoryDecoder)
+        (Decode.field "product" Product.decoder)
+        (Decode.field "variants" <| Decode.list Product.variantDecoder)
+        (Decode.field "seedAttribute" <| Decode.nullable Product.seedAttributeDecoder)
+        (Decode.field "categories" <| Decode.list Category.decoder)
 
 
 categoryDetailsDecoder : Decode.Decoder CategoryDetailsData
@@ -266,13 +208,13 @@ categoryDetailsDecoder =
             Decode.map (Paginate.fromList (.perPage Pagination.default)) <|
                 Decode.list <|
                     Decode.map3 (,,)
-                        (Decode.field "product" productDecoder)
-                        (Decode.field "variants" <| Decode.list productVariantDecoder)
-                        (Decode.field "seedAttribute" <| Decode.nullable seedAttributeDecoder)
+                        (Decode.field "product" Product.decoder)
+                        (Decode.field "variants" <| Decode.list Product.variantDecoder)
+                        (Decode.field "seedAttribute" <| Decode.nullable Product.seedAttributeDecoder)
     in
         Decode.map3 CategoryDetailsData
-            (Decode.field "category" categoryDecoder)
-            (Decode.field "subCategories" <| Decode.list categoryDecoder)
+            (Decode.field "category" Category.decoder)
+            (Decode.field "subCategories" <| Decode.list Category.decoder)
             (Decode.field "products" productDataDecoder)
 
 
@@ -293,59 +235,12 @@ stringToIntKeys =
 categoryNavDecoder : Decode.Decoder CategoryNavData
 categoryNavDecoder =
     Decode.map2 CategoryNavData
-        (Decode.field "rootCategories" <| Decode.list categoryDecoder)
+        (Decode.field "rootCategories" <| Decode.list Category.decoder)
         (Decode.field "childrenCategories" <|
             Decode.map stringToIntKeys <|
                 Decode.dict <|
-                    Decode.list categoryDecoder
+                    Decode.list Category.decoder
         )
-
-
-categoryDecoder : Decode.Decoder Category
-categoryDecoder =
-    Decode.map7 Category
-        (Decode.field "id" <| Decode.map CategoryId Decode.int)
-        (Decode.field "name" Decode.string)
-        (Decode.field "slug" Decode.string)
-        (Decode.field "parentId" << Decode.nullable <| Decode.map CategoryId Decode.int)
-        (Decode.field "description" Decode.string)
-        (Decode.field "imageUrl" Decode.string)
-        (Decode.field "order" Decode.int)
-
-
-productDecoder : Decode.Decoder Product
-productDecoder =
-    Decode.map7 Product
-        (Decode.field "id" <| Decode.map ProductId Decode.int)
-        (Decode.field "name" Decode.string)
-        (Decode.field "slug" Decode.string)
-        (Decode.field "baseSku" Decode.string)
-        (Decode.field "shortDescription" Decode.string)
-        (Decode.field "longDescription" Decode.string)
-        (Decode.field "imageUrl" Decode.string)
-
-
-productVariantDecoder : Decode.Decoder ProductVariant
-productVariantDecoder =
-    Decode.map7 ProductVariant
-        (Decode.field "id" <| Decode.map ProductVariantId Decode.int)
-        (Decode.field "productId" <| Decode.map ProductId Decode.int)
-        (Decode.field "skuSuffix" Decode.string)
-        (Decode.field "price" <| Decode.map Cents Decode.int)
-        (Decode.field "quantity" Decode.int)
-        (Decode.field "weight" <| Decode.map Milligrams Decode.int)
-        (Decode.field "isActive" Decode.bool)
-
-
-seedAttributeDecoder : Decode.Decoder SeedAttribute
-seedAttributeDecoder =
-    Decode.map6 SeedAttribute
-        (Decode.field "id" <| Decode.map SeedAttributeId Decode.int)
-        (Decode.field "productId" <| Decode.map ProductId Decode.int)
-        (Decode.field "isOrganic" Decode.bool)
-        (Decode.field "isHeirloom" Decode.bool)
-        (Decode.field "isEcological" Decode.bool)
-        (Decode.field "isRegional" Decode.bool)
 
 
 
