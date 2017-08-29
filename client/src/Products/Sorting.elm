@@ -13,6 +13,7 @@ module Products.Sorting
 
 import UrlParser as Url exposing ((<?>))
 import Models.Fields exposing (Cents(..))
+import Product exposing (Product, ProductVariant, SeedAttribute)
 
 
 -- MODEL
@@ -40,6 +41,10 @@ default =
 -- APPLICATION
 
 
+apply :
+    Option
+    -> List ( Product, List ProductVariant, Maybe SeedAttribute )
+    -> List ( Product, List ProductVariant, Maybe SeedAttribute )
 apply option =
     let
         getPriceFromVariants priceCollector default list =

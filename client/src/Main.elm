@@ -1,22 +1,26 @@
 module Main exposing (main)
 
-import Dict exposing (Dict)
 import Html exposing (Html, text, div, h1, h3, h4, hr, node, br, a, img, span, button, ul, li, small, table, tbody, tr, td, b, label, select, option)
 import Html.Attributes exposing (attribute, id, class, href, src, type_, target, tabindex, title, value, for, selected)
 import Html.Attributes.Extra exposing (innerHtml)
 import Html.Events exposing (on, targetValue)
-import Html.Events.Extra exposing (onClickPreventDefault)
 import Http
 import Json.Decode as Decode
 import Navigation
 import Paginate exposing (PaginatedList)
 import RemoteData exposing (WebData)
-import Category exposing (CategoryId(..), Category)
+import Messages exposing (Msg(..))
 import PageData exposing (PageData)
 import Product exposing (Product, ProductVariant, SeedAttribute)
 import Products.Pagination as Pagination
 import Products.Sorting as Sorting
 import Routing exposing (Route(..), reverse, parseRoute)
+import SiteUI exposing (NavigationData)
+import SiteUI.Footer as SiteFooter
+import SiteUI.Header as SiteHeader
+import SiteUI.Navigation as SiteNavigation
+import SiteUI.Sidebar as SiteSidebar
+import Views.Utils exposing (routeLinkAttributes, staticImage, mediaImage, htmlOrBlank)
 
 
 main : Program Never Model Msg
@@ -30,22 +34,11 @@ main =
 
 
 
--- ROUTING
-
-
-routeLinkAttributes : Route -> List (Html.Attribute Msg)
-routeLinkAttributes route =
-    [ onClickPreventDefault <| NavigateTo route
-    , href <| reverse route
-    ]
-
-
-
 -- MODEL
 
 
 type alias Model =
-    { navData : WebData CategoryNavData
+    { navigationData : WebData NavigationData
     , route : Route
     , pageData : PageData
     }
@@ -59,7 +52,7 @@ init location =
 
         ( model, cmd ) =
             fetchDataForRoute
-                { navData = RemoteData.Loading
+                { navigationData = RemoteData.Loading
                 , route = route
                 , pageData = PageData.initial
                 }
@@ -67,15 +60,9 @@ init location =
         ( model
         , Cmd.batch
             [ cmd
-            , getCategoryNavData
+            , getNavigationData
             ]
         )
-
-
-type alias CategoryNavData =
-    { roots : List Category
-    , children : Dict Int (List Category)
-    }
 
 
 
@@ -116,48 +103,15 @@ getCategoryDetailsData slug =
         |> Cmd.map GetCategoryDetailsData
 
 
-getCategoryNavData : Cmd Msg
-getCategoryNavData =
-    Http.get "/api/categories/nav/" categoryNavDecoder
+getNavigationData : Cmd Msg
+getNavigationData =
+    Http.get "/api/categories/nav/" SiteUI.navigationDecoder
         |> RemoteData.sendRequest
-        |> Cmd.map GetCategoryNavData
-
-
-stringToIntKeys : Dict String v -> Dict Int v
-stringToIntKeys =
-    Dict.foldl
-        (\key value newDict ->
-            case String.toInt key of
-                Err _ ->
-                    newDict
-
-                Ok newKey ->
-                    Dict.insert newKey value newDict
-        )
-        Dict.empty
-
-
-categoryNavDecoder : Decode.Decoder CategoryNavData
-categoryNavDecoder =
-    Decode.map2 CategoryNavData
-        (Decode.field "rootCategories" <| Decode.list Category.decoder)
-        (Decode.field "childrenCategories" <|
-            Decode.map stringToIntKeys <|
-                Decode.dict <|
-                    Decode.list Category.decoder
-        )
+        |> Cmd.map GetNavigationData
 
 
 
 -- UPDATE
-
-
-type Msg
-    = UrlUpdate Route
-    | NavigateTo Route
-    | GetProductDetailsData (WebData PageData.ProductDetails)
-    | GetCategoryDetailsData (WebData PageData.CategoryDetails)
-    | GetCategoryNavData (WebData CategoryNavData)
 
 
 urlUpdate : Route -> Model -> ( Model, Cmd Msg )
@@ -203,8 +157,8 @@ update msg ({ pageData } as model) =
             in
                 ( { model | pageData = updatedPageData }, Cmd.none )
 
-        GetCategoryNavData response ->
-            ( { model | navData = logUnsuccessfulRequest response }, Cmd.none )
+        GetNavigationData response ->
+            ( { model | navigationData = logUnsuccessfulRequest response }, Cmd.none )
 
 
 logUnsuccessfulRequest : WebData a -> WebData a
@@ -222,170 +176,13 @@ logUnsuccessfulRequest response =
 
 
 view : Model -> Html Msg
-view { route, pageData, navData } =
+view { route, pageData, navigationData } =
     let
-        siteHeader =
-            div [ class "container" ]
-                [ div [ id "site-header", class "row clearfix" ]
-                    [ div [ class "col-sm-7 col-lg-6" ]
-                        [ div [ class "media" ]
-                            [ a [ href "/" ]
-                                [ img
-                                    [ id "site-logo"
-                                    , class "float-left mx-3"
-                                    , src "/static/img/logos/sese.png"
-                                    ]
-                                    []
-                                ]
-                            , div [ id "site-title", class "media-body my-auto" ]
-                                [ h1 [ class "media-heading m-0" ]
-                                    [ a [ href "/" ]
-                                        [ text "Southern Exposure"
-                                        , br [] []
-                                        , text "Seed Exchange"
-                                        ]
-                                    ]
-                                ]
-                            ]
-                        ]
-                    , div [ class "col-sm-5 col-lg-6 d-none d-sm-block text-right" ]
-                        [ text "LINKS / SEARCH" ]
-                    ]
-                ]
-
-        categoryNavigation =
-            RemoteData.toMaybe navData
-                |> Maybe.map (\data -> List.map (rootCategory data.children) data.roots)
-                |> Maybe.withDefault []
-
-        rootCategory children category =
-            let
-                (CategoryId categoryId) =
-                    category.id
-
-                dropdownCategories children =
-                    let
-                        childItems =
-                            List.map childCategory children
-
-                        itemsPerColumn =
-                            ceiling <| (toFloat <| List.length childItems) / 3.0
-
-                        splitItems items =
-                            [ List.take itemsPerColumn items
-                            , List.drop itemsPerColumn items |> List.take itemsPerColumn
-                            , List.drop (itemsPerColumn * 2) items
-                            ]
-                    in
-                        if List.length childItems < 15 then
-                            childItems
-                        else
-                            [ div [ class "row no-gutters multi-column-dropdown" ] <|
-                                List.map (\i -> div [ class "col" ] i)
-                                    (splitItems childItems)
-                            ]
-            in
-                case Dict.get categoryId children of
-                    Nothing ->
-                        li [ class "nav-item" ]
-                            [ a
-                                ([ class "nav-link" ]
-                                    ++ (routeLinkAttributes <|
-                                            CategoryDetails category.slug
-                                                Pagination.default
-                                                Sorting.default
-                                       )
-                                )
-                                [ text category.name ]
-                            ]
-
-                    Just children ->
-                        li [ class "nav-item dropdown" ]
-                            [ a
-                                [ class "nav-link dropdown-toggle"
-                                , href <|
-                                    reverse <|
-                                        CategoryDetails category.slug
-                                            Pagination.default
-                                            Sorting.default
-                                , attribute "data-toggle" "dropdown"
-                                , attribute "aria-haspopup" "true"
-                                , attribute "aria-expanded" "false"
-                                ]
-                                [ text category.name ]
-                            , div [ class "dropdown-menu mt-0" ] <| dropdownCategories children
-                            ]
-
-        childCategory category =
-            a
-                ([ class "dropdown-item" ]
-                    ++ (routeLinkAttributes <|
-                            CategoryDetails
-                                category.slug
-                                Pagination.default
-                                Sorting.default
-                       )
-                )
-                [ text category.name ]
-
-        navigation =
-            div [ id "navigation", class "container" ]
-                [ node "nav"
-                    [ class "navbar navbar-expand-md navbar-light bg-success" ]
-                    [ button
-                        [ class "navbar-toggler"
-                        , type_ "button"
-                        , attribute "data-toggle" "collapse"
-                        , attribute "data-target" "#category-navbar"
-                        , attribute "aria-controls" "navbarSupportedContent"
-                        , attribute "aria-expanded" "false"
-                        , attribute "aria-label" "Toggle navigation"
-                        ]
-                        [ span [ class "navbar-toggler-icon" ] [] ]
-                    , div [ id "category-navbar", class "collapse navbar-collapse" ]
-                        [ ul [ class "navbar-nav mx-auto d-flex text-left" ]
-                            categoryNavigation
-                        ]
-                    ]
-                ]
-
         middleContent =
             div [ class "container" ]
                 [ div [ class "row" ]
                     [ div [ class "col order-md-2" ] pageContent
-                    , sidebar
-                    ]
-                ]
-
-        footer =
-            div [ id "footer", class "container" ]
-                [ node "footer"
-                    []
-                    [ div [ class "row" ]
-                        [ div [ class "col-sm-4" ] [ h4 [ class "mt-3" ] [ text "Information" ] ]
-                        , div [ class "col-sm-4" ] [ h4 [ class "mt-3" ] [ text "Important Links" ] ]
-                        , div [ class "col-sm-4" ] [ h4 [ class "mt-3" ] [ text "Contact Us" ] ]
-                        , div [ class "col-sm-12 text-center" ]
-                            [ text "Copyright © 2017 Southern Exposure Seed Exchange"
-                            ]
-                        ]
-                    ]
-                ]
-
-        sidebar =
-            div [ id "sidebar", class "col-12 col-md-3 col-lg-3 col-xl-2 order-md-1" ]
-                [ div [ class "card mb-3" ]
-                    [ div [ class "card-body text-center" ]
-                        [ a [ target "_blank", href "http://www.facebook.com/pages/Southern-Exposure-Seed-Exchange/353814746253?ref=ts" ]
-                            [ img [ class "img-fluid", src <| staticImage "logos/facebook-big-icon.png" ] [] ]
-                        , hr [] []
-                        , div [ class "text-center font-weight-bold" ] [ text "Our Partners" ]
-                        , a [ target "_blank", href "http://www.smartgardener.com/" ]
-                            [ img [ class "mb-3 img-fluid", src <| staticImage "logos/smart-gardener.jpg" ] [] ]
-                        , br [] []
-                        , a [ target "_blank", href "http://www.localharvest.org/" ]
-                            [ img [ class "img-fluid", src <| staticImage "logos/local-harvest.jpg" ] [] ]
-                        ]
+                    , SiteSidebar.view
                     ]
                 ]
 
@@ -398,27 +195,11 @@ view { route, pageData, navData } =
                     withIntermediateText (categoryDetailsView pagination sortData) pageData.categoryDetails
     in
         div []
-            [ siteHeader
-            , navigation
+            [ SiteHeader.view
+            , SiteNavigation.view navigationData
             , middleContent
-            , footer
+            , SiteFooter.view
             ]
-
-
-staticImage : String -> String
-staticImage path =
-    "/static/img/" ++ path
-
-
-mediaImage : String -> String
-mediaImage path =
-    "/media/" ++ path
-
-
-htmlOrBlank : (a -> Html msg) -> Maybe a -> Html msg
-htmlOrBlank renderFunction =
-    Maybe.map renderFunction
-        >> Maybe.withDefault (text "")
 
 
 seedAttributeIcons : SeedAttribute -> Html msg
