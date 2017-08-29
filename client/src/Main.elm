@@ -291,10 +291,13 @@ categoryDetailsView pagination sortData { category, subCategories, products } =
                 ]
 
         sortHtml =
-            if Paginate.length products > 1 then
+            if productsCount > 1 then
                 div [ class "d-flex mb-2 justify-content-between align-items-center" ] [ sortingInput ]
             else
                 text ""
+
+        productsCount =
+            Paginate.length products
 
         sortingInput : Html Msg
         sortingInput =
@@ -329,7 +332,7 @@ categoryDetailsView pagination sortData { category, subCategories, products } =
             div [ class "d-flex mb-2 justify-content-between align-items-center" ] [ pagingText, pager ]
 
         pagingText =
-            if Paginate.length products == 0 then
+            if productsCount == 0 then
                 text ""
             else
                 span []
@@ -338,7 +341,7 @@ categoryDetailsView pagination sortData { category, subCategories, products } =
                     , text " to "
                     , b [] [ text <| pagingEnd () ]
                     , text " (of "
-                    , b [] [ text <| toString <| Paginate.length products ]
+                    , b [] [ text <| toString productsCount ]
                     , text " products)"
                     ]
 
@@ -350,8 +353,8 @@ categoryDetailsView pagination sortData { category, subCategories, products } =
 
         pagingEnd _ =
             toString <|
-                if Paginate.isLast products || Paginate.length products < pagination.perPage then
-                    Paginate.length products
+                if Paginate.isLast products || productsCount < pagination.perPage then
+                    productsCount
                 else
                     (Paginate.currentPage products * pagination.perPage)
 
@@ -460,10 +463,14 @@ categoryDetailsView pagination sortData { category, subCategories, products } =
         , hr [ class "mt-2" ] []
         , div [ innerHtml category.description ] []
         , subCategoryCards
-        , sortHtml
-        , paginationHtml
-        , table [ class "category-products table table-striped table-sm mb-2" ]
-            [ tbody [] <| productRows ]
-        , paginationHtml
-        , SeedAttribute.legend
         ]
+            ++ if productsCount /= 0 then
+                [ sortHtml
+                , paginationHtml
+                , table [ class "category-products table table-striped table-sm mb-2" ]
+                    [ tbody [] <| productRows ]
+                , paginationHtml
+                , SeedAttribute.legend
+                ]
+               else
+                []
