@@ -6,9 +6,6 @@ module Product
         , ProductVariantId(..)
         , ProductVariant
         , variantDecoder
-        , SeedAttributeId(..)
-        , SeedAttribute
-        , seedAttributeDecoder
         )
 
 import Json.Decode as Decode exposing (Decoder)
@@ -67,28 +64,3 @@ variantDecoder =
         (Decode.field "quantity" Decode.int)
         (Decode.field "weight" <| Decode.map Milligrams Decode.int)
         (Decode.field "isActive" Decode.bool)
-
-
-type SeedAttributeId
-    = SeedAttributeId Int
-
-
-type alias SeedAttribute =
-    { id : SeedAttributeId
-    , product : ProductId
-    , isOrganic : Bool
-    , isHeirloom : Bool
-    , isEcological : Bool
-    , isRegional : Bool
-    }
-
-
-seedAttributeDecoder : Decoder SeedAttribute
-seedAttributeDecoder =
-    Decode.map6 SeedAttribute
-        (Decode.field "id" <| Decode.map SeedAttributeId Decode.int)
-        (Decode.field "productId" <| Decode.map ProductId Decode.int)
-        (Decode.field "isOrganic" Decode.bool)
-        (Decode.field "isHeirloom" Decode.bool)
-        (Decode.field "isEcological" Decode.bool)
-        (Decode.field "isRegional" Decode.bool)

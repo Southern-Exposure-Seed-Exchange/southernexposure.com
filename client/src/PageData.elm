@@ -13,10 +13,11 @@ import Json.Decode as Decode exposing (Decoder)
 import Paginate exposing (PaginatedList)
 import RemoteData exposing (WebData)
 import Category exposing (Category)
-import Product exposing (Product, ProductVariant, SeedAttribute)
+import Product exposing (Product, ProductVariant)
 import Products.Pagination as Pagination
 import Products.Sorting as Sorting
 import Routing exposing (Route(..))
+import SeedAttribute exposing (SeedAttribute)
 
 
 -- MODEL
@@ -51,7 +52,7 @@ categoryDetailsDecoder =
                     Decode.map3 (,,)
                         (Decode.field "product" Product.decoder)
                         (Decode.field "variants" <| Decode.list Product.variantDecoder)
-                        (Decode.field "seedAttribute" <| Decode.nullable Product.seedAttributeDecoder)
+                        (Decode.field "seedAttribute" <| Decode.nullable SeedAttribute.decoder)
     in
         Decode.map3 CategoryDetails
             (Decode.field "category" Category.decoder)
@@ -72,7 +73,7 @@ productDetailsDecoder =
     Decode.map4 ProductDetails
         (Decode.field "product" Product.decoder)
         (Decode.field "variants" <| Decode.list Product.variantDecoder)
-        (Decode.field "seedAttribute" <| Decode.nullable Product.seedAttributeDecoder)
+        (Decode.field "seedAttribute" <| Decode.nullable SeedAttribute.decoder)
         (Decode.field "categories" <| Decode.list Category.decoder)
 
 

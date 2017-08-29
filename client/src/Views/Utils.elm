@@ -1,8 +1,6 @@
 module Views.Utils
     exposing
         ( routeLinkAttributes
-        , staticImage
-        , mediaImage
         , htmlOrBlank
         )
 
@@ -18,16 +16,6 @@ routeLinkAttributes route =
     [ onClickPreventDefault <| NavigateTo route
     , href <| reverse route
     ]
-
-
-staticImage : String -> String
-staticImage path =
-    "/static/img/" ++ path
-
-
-mediaImage : String -> String
-mediaImage path =
-    "/media/" ++ path
 
 
 htmlOrBlank : (a -> Html msg) -> Maybe a -> Html msg

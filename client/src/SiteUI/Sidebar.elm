@@ -2,7 +2,7 @@ module SiteUI.Sidebar exposing (view)
 
 import Html exposing (Html, div, a, img, hr, br, text)
 import Html.Attributes exposing (id, class, href, target, src)
-import Views.Utils exposing (staticImage)
+import Views.Images as Images
 
 
 view : Html msg
@@ -11,14 +11,14 @@ view =
         [ div [ class "card mb-3" ]
             [ div [ class "card-body text-center" ]
                 [ a [ target "_blank", href "http://www.facebook.com/pages/Southern-Exposure-Seed-Exchange/353814746253?ref=ts" ]
-                    [ img [ class "img-fluid", src <| staticImage "logos/facebook-big-icon.png" ] [] ]
+                    [ img [ class "img-fluid", src <| Images.static "logos/facebook-big-icon.png" ] [] ]
                 , hr [] []
                 , div [ class "text-center font-weight-bold" ] [ text "Our Partners" ]
                 , a [ target "_blank", href "http://www.smartgardener.com/" ]
-                    [ img [ class "mb-3 img-fluid", src <| staticImage "logos/smart-gardener.jpg" ] [] ]
+                    [ img [ class "mb-3 img-fluid", src <| Images.static "logos/smart-gardener.jpg" ] [] ]
                 , br [] []
                 , a [ target "_blank", href "http://www.localharvest.org/" ]
-                    [ img [ class "img-fluid", src <| staticImage "logos/local-harvest.jpg" ] [] ]
+                    [ img [ class "img-fluid", src <| Images.static "logos/local-harvest.jpg" ] [] ]
                 ]
             ]
         ]

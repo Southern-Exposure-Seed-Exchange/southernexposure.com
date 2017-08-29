@@ -13,7 +13,8 @@ module Products.Sorting
 
 import UrlParser as Url exposing ((<?>))
 import Models.Fields exposing (Cents(..))
-import Product exposing (Product, ProductVariant, SeedAttribute)
+import Product exposing (Product, ProductVariant)
+import SeedAttribute exposing (SeedAttribute)
 
 
 -- MODEL

@@ -11,16 +11,17 @@ import Paginate exposing (PaginatedList)
 import RemoteData exposing (WebData)
 import Messages exposing (Msg(..))
 import PageData exposing (PageData)
-import Product exposing (Product, ProductVariant, SeedAttribute)
 import Products.Pagination as Pagination
 import Products.Sorting as Sorting
 import Routing exposing (Route(..), reverse, parseRoute)
+import SeedAttribute exposing (SeedAttribute)
 import SiteUI exposing (NavigationData)
 import SiteUI.Footer as SiteFooter
 import SiteUI.Header as SiteHeader
 import SiteUI.Navigation as SiteNavigation
 import SiteUI.Sidebar as SiteSidebar
-import Views.Utils exposing (routeLinkAttributes, staticImage, mediaImage, htmlOrBlank)
+import Views.Images as Images
+import Views.Utils exposing (routeLinkAttributes, htmlOrBlank)
 
 
 main : Program Never Model Msg
@@ -202,23 +203,6 @@ view { route, pageData, navigationData } =
             ]
 
 
-seedAttributeIcons : SeedAttribute -> Html msg
-seedAttributeIcons { isOrganic, isHeirloom, isRegional, isEcological } =
-    List.filter Tuple.first
-        [ ( isOrganic, ( "Certified Organic", "icons/organic-certified.png" ) )
-        , ( isHeirloom, ( "Heirloom", "icons/heirloom.png" ) )
-        , ( isRegional, ( "Especially well-suited to the Southeast", "icons/southeast.png" ) )
-        , ( isEcological, ( "Ecologically Grown", "icons/ecologically-grown.png" ) )
-        ]
-        |> List.map
-            (Tuple.second
-                >> (\( iconTitle, url ) ->
-                        img [ class "my-auto", title iconTitle, src <| staticImage url ] []
-                   )
-            )
-        |> span [ class "d-inline-block ml-2" ]
-
-
 withIntermediateText : (a -> List (Html msg)) -> WebData a -> List (Html msg)
 withIntermediateText view data =
     case data of
@@ -250,7 +234,7 @@ productDetailsView { product, variants, maybeSeedAttribute, categories } =
     in
         [ h1 []
             [ text product.name
-            , htmlOrBlank seedAttributeIcons maybeSeedAttribute
+            , htmlOrBlank SeedAttribute.icons maybeSeedAttribute
             ]
         , hr [] []
         , div [ class "product-details" ]
@@ -260,7 +244,7 @@ productDetailsView { product, variants, maybeSeedAttribute, categories } =
                         [ class "card" ]
                         [ div [ class "card-body text-center p-1" ]
                             [ img
-                                [ src << mediaImage <| "products/" ++ product.imageURL
+                                [ src << Images.media <| "products/" ++ product.imageURL
                                 , class "img-fluid"
                                 ]
                                 []
@@ -300,7 +284,7 @@ categoryDetailsView pagination sortData { category, subCategories, products } =
             div [ class "col-6 col-sm-4 col-md-3 mb-2" ]
                 [ a (routeLinkAttributes <| CategoryDetails category.slug Pagination.default Sorting.default)
                     [ div [ class "h-100 text-center" ]
-                        [ img [ class "img-fluid mx-auto", src <| mediaImage category.imageURL ] []
+                        [ img [ class "img-fluid mx-auto", src <| Images.media category.imageURL ] []
                         , div [ class "my-auto" ] [ text category.name ]
                         ]
                     ]
@@ -443,7 +427,7 @@ categoryDetailsView pagination sortData { category, subCategories, products } =
                         [ td [ class "category-product-image text-center align-middle" ]
                             [ a (routeLinkAttributes <| ProductDetails product.slug)
                                 [ img
-                                    [ src <| mediaImage <| "products/" ++ product.imageURL
+                                    [ src << Images.media <| "products/" ++ product.imageURL
                                     ]
                                     []
                                 ]
@@ -455,7 +439,7 @@ categoryDetailsView pagination sortData { category, subCategories, products } =
                                         ++ (routeLinkAttributes <| ProductDetails product.slug)
                                     )
                                     []
-                                , htmlOrBlank seedAttributeIcons maybeSeedAttribute
+                                , htmlOrBlank SeedAttribute.icons maybeSeedAttribute
                                 ]
                             , div [ innerHtml product.longDescription ] []
                             ]
@@ -463,13 +447,14 @@ categoryDetailsView pagination sortData { category, subCategories, products } =
                             [ div []
                                 [ div [ class "font-weight-bold" ] [ text "$999.99" ]
                                 , div [] [ text "CART_INPUT" ]
-                                , small [ class "text-muted" ] [ text <| "Item # " ++ product.baseSKU ]
+                                , small [ class "text-muted" ]
+                                    [ text <| "Item # " ++ product.baseSKU ]
                                 ]
                             ]
                         ]
     in
         [ div [ class "d-flex align-items-center" ]
-            [ img [ class "img-fluid", src <| mediaImage category.imageURL ] []
+            [ img [ class "img-fluid", src <| Images.media category.imageURL ] []
             , h1 [ class "mb-0 pl-2" ] [ text category.name ]
             ]
         , hr [ class "mt-2" ] []
@@ -480,4 +465,5 @@ categoryDetailsView pagination sortData { category, subCategories, products } =
         , table [ class "category-products table table-striped table-sm mb-2" ]
             [ tbody [] <| productRows ]
         , paginationHtml
+        , SeedAttribute.legend
         ]
