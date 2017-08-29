@@ -4,10 +4,13 @@ module Products.Pagination
         , default
         , toQueryString
         , fromQueryString
+        , sortAndSetData
         )
 
-import Routing.Utils exposing (optionalIntParam)
+import Paginate exposing (PaginatedList)
+import RemoteData exposing (WebData)
 import UrlParser as Url exposing ((<?>))
+import Routing.Utils exposing (optionalIntParam)
 
 
 type alias Data =
@@ -46,3 +49,29 @@ fromQueryString pathParser =
             <?> optionalIntParam "page" (default.page)
             <?> optionalIntParam "perPage" (default.perPage)
         )
+
+
+sortAndSetData :
+    Data
+    -> (List a -> List a)
+    -> (b -> PaginatedList a -> b)
+    -> (b -> PaginatedList a)
+    -> WebData b
+    -> WebData b
+sortAndSetData { page, perPage } sortFunction updateFunction selector data =
+    let
+        setPaginatedListConstraints =
+            Paginate.changeItemsPerPage perPage
+                >> Paginate.goTo page
+
+        sortPaginatedList =
+            Paginate.map sortFunction
+    in
+        RemoteData.map
+            (\d ->
+                selector d
+                    |> setPaginatedListConstraints
+                    |> sortPaginatedList
+                    |> updateFunction d
+            )
+            data

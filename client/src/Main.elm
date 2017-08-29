@@ -230,7 +230,7 @@ updateRouteData : Route -> RouteData -> RouteData
 updateRouteData route data =
     let
         modifyCategoryProductsByParams pagination sortData webData =
-            sortAndSetPaginatedList pagination
+            Pagination.sortAndSetData pagination
                 (Sorting.apply sortData)
                 (\d ps -> { d | products = ps })
                 .products
@@ -242,32 +242,6 @@ updateRouteData route data =
 
             CategoryDetails _ pagination sortData ->
                 { data | categoryDetails = modifyCategoryProductsByParams pagination sortData data.categoryDetails }
-
-
-sortAndSetPaginatedList :
-    Pagination.Data
-    -> (List a -> List a)
-    -> (b -> PaginatedList a -> b)
-    -> (b -> PaginatedList a)
-    -> WebData b
-    -> WebData b
-sortAndSetPaginatedList { page, perPage } sortFunction updateFunction selector data =
-    let
-        setPaginatedListConstraints =
-            Paginate.changeItemsPerPage perPage
-                >> Paginate.goTo page
-
-        sortPaginatedList =
-            Paginate.map sortFunction
-    in
-        RemoteData.map
-            (\d ->
-                selector d
-                    |> setPaginatedListConstraints
-                    |> sortPaginatedList
-                    |> updateFunction d
-            )
-            data
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
