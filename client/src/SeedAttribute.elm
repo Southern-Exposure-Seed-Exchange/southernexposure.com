@@ -97,7 +97,7 @@ toDescription attribute =
             "Heirlooms introduced before 1940"
 
         Regional ->
-            "Varieties well-suited to the Mid-Atlantic & furthur South"
+            "Varieties well-suited to the Mid-Atlantic & further South"
 
         Ecological ->
             "Grown by small ecological farmers"
