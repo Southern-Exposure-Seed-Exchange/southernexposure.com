@@ -70,6 +70,8 @@ init location =
 -- COMMANDS
 
 
+{-| TODO: Move to PageData module?
+-}
 fetchDataForRoute : Model -> ( Model, Cmd Msg )
 fetchDataForRoute ({ route, pageData } as model) =
     let
@@ -88,27 +90,29 @@ fetchDataForRoute ({ route, pageData } as model) =
         ( { model | pageData = data }, cmd )
 
 
+sendRequest : (WebData a -> msg) -> Http.Request a -> Cmd msg
+sendRequest msg =
+    RemoteData.sendRequest >> Cmd.map msg
+
+
 getProductDetailsData : String -> Cmd Msg
 getProductDetailsData slug =
     Http.get ("/api/products/" ++ slug ++ "/")
         PageData.productDetailsDecoder
-        |> RemoteData.sendRequest
-        |> Cmd.map GetProductDetailsData
+        |> sendRequest GetProductDetailsData
 
 
 getCategoryDetailsData : String -> Cmd Msg
 getCategoryDetailsData slug =
     Http.get ("/api/categories/details/" ++ slug ++ "/")
         PageData.categoryDetailsDecoder
-        |> RemoteData.sendRequest
-        |> Cmd.map GetCategoryDetailsData
+        |> sendRequest GetCategoryDetailsData
 
 
 getNavigationData : Cmd Msg
 getNavigationData =
     Http.get "/api/categories/nav/" SiteUI.navigationDecoder
-        |> RemoteData.sendRequest
-        |> Cmd.map GetNavigationData
+        |> sendRequest GetNavigationData
 
 
 
