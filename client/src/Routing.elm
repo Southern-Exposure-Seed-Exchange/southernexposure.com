@@ -9,11 +9,13 @@ import Navigation
 import UrlParser as Url exposing ((</>))
 import Products.Pagination as Pagination
 import Products.Sorting as Sorting
+import Search
 
 
 type Route
     = ProductDetails String
     | CategoryDetails String Pagination.Data Sorting.Option
+    | SearchResults Search.Data Pagination.Data Sorting.Option
 
 
 parseRoute : Navigation.Location -> Route
@@ -22,9 +24,13 @@ parseRoute =
         routeParser =
             Url.oneOf
                 [ Url.map ProductDetails (Url.s "products" </> Url.string)
-                , Sorting.fromQueryString <|
-                    Pagination.fromQueryString <|
-                        Url.map CategoryDetails (Url.s "categories" </> Url.string)
+                , Url.map CategoryDetails (Url.s "categories" </> Url.string)
+                    |> Pagination.fromQueryString
+                    |> Sorting.fromQueryString
+                , Url.map SearchResults (Url.s "search")
+                    |> Search.fromQueryString
+                    |> Pagination.fromQueryString
+                    |> Sorting.fromQueryString
                 ]
     in
         Url.parsePath routeParser
@@ -55,5 +61,13 @@ reverse route =
                 joinPath [ "categories", slug ]
                     ++ joinQueryStrings
                         [ Pagination.toQueryString pagination
+                        , Sorting.toQueryString sortData
+                        ]
+
+            SearchResults data pagination sortData ->
+                joinPath [ "search" ]
+                    ++ joinQueryStrings
+                        [ Search.toQueryString data
+                        , Pagination.toQueryString pagination
                         , Sorting.toQueryString sortData
                         ]

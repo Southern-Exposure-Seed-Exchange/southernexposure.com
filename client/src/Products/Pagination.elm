@@ -42,7 +42,7 @@ toQueryString { page, perPage } =
 
 fromQueryString :
     Url.Parser ((Data -> a) -> Int -> Int -> a) (Int -> Int -> b)
-    -> Url.Parser (b -> a) a
+    -> Url.Parser (b -> c) c
 fromQueryString pathParser =
     Url.map (\constructor page -> constructor << Data page)
         (pathParser

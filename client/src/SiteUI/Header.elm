@@ -2,10 +2,11 @@ module SiteUI.Header exposing (view)
 
 import Html exposing (Html, div, a, img, h1, br, text)
 import Html.Attributes exposing (id, class, href, src)
+import SiteUI.Search as SiteSearch
 
 
-view : Html msg
-view =
+view : (SiteSearch.Msg -> msg) -> SiteSearch.Data -> Html msg
+view tagger searchQuery =
     div [ class "container" ]
         [ div [ id "site-header", class "row clearfix" ]
             [ div [ class "col-sm-7 col-lg-6" ]
@@ -29,7 +30,9 @@ view =
                         ]
                     ]
                 ]
-            , div [ class "col-sm-5 col-lg-6 d-none d-sm-block text-right" ]
-                [ text "LINKS / SEARCH" ]
+            , div [ class "col-auto ml-auto d-none d-sm-block text-right" ]
+                [ text "QUICK LINKS"
+                , SiteSearch.form tagger searchQuery
+                ]
             ]
         ]

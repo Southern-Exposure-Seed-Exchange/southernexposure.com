@@ -1,6 +1,6 @@
 module Main exposing (main)
 
-import Html exposing (Html, text, div, h1, h3, h4, hr, node, br, a, img, span, button, ul, li, small, table, tbody, tr, td, b, label, select, option)
+import Html exposing (Html, text, div, h1, h3, h4, hr, node, br, a, img, span, button, ul, li, small, table, tbody, tr, td, b, label, select, option, p)
 import Html.Attributes exposing (attribute, id, class, href, src, type_, target, tabindex, title, value, for, selected)
 import Html.Attributes.Extra exposing (innerHtml)
 import Html.Events exposing (on, targetValue)
@@ -10,15 +10,17 @@ import Navigation
 import Paginate exposing (PaginatedList)
 import RemoteData exposing (WebData)
 import Messages exposing (Msg(..))
-import PageData exposing (PageData)
+import PageData exposing (PageData, PaginatedProductData)
 import Products.Pagination as Pagination
 import Products.Sorting as Sorting
 import Routing exposing (Route(..), reverse, parseRoute)
+import Search
 import SeedAttribute exposing (SeedAttribute)
 import SiteUI exposing (NavigationData)
 import SiteUI.Footer as SiteFooter
 import SiteUI.Header as SiteHeader
 import SiteUI.Navigation as SiteNavigation
+import SiteUI.Search as SiteSearch
 import SiteUI.Sidebar as SiteSidebar
 import Views.Images as Images
 import Views.Utils exposing (routeLinkAttributes, htmlOrBlank)
@@ -42,6 +44,7 @@ type alias Model =
     { navigationData : WebData NavigationData
     , route : Route
     , pageData : PageData
+    , searchData : Search.Data
     }
 
 
@@ -56,6 +59,7 @@ init location =
                 { navigationData = RemoteData.Loading
                 , route = route
                 , pageData = PageData.initial
+                , searchData = Search.initial
                 }
     in
         ( model
@@ -86,6 +90,11 @@ fetchDataForRoute ({ route, pageData } as model) =
                     ( { pageData | categoryDetails = RemoteData.Loading }
                     , getCategoryDetailsData slug
                     )
+
+                SearchResults data _ _ ->
+                    ( { pageData | searchResults = RemoteData.Loading }
+                    , getSearchResultsData data
+                    )
     in
         ( { model | pageData = data }, cmd )
 
@@ -107,6 +116,14 @@ getCategoryDetailsData slug =
     Http.get ("/api/categories/details/" ++ slug ++ "/")
         PageData.categoryDetailsDecoder
         |> sendRequest GetCategoryDetailsData
+
+
+getSearchResultsData : Search.Data -> Cmd Msg
+getSearchResultsData data =
+    Http.post "/api/products/search/"
+        (Search.encode data |> Http.jsonBody)
+        PageData.searchResultsDecoder
+        |> sendRequest GetSearchResultsData
 
 
 getNavigationData : Cmd Msg
@@ -134,18 +151,34 @@ urlUpdate newRoute ({ pageData } as model) =
                     , Cmd.none
                     )
 
+            ( SearchResults newData newPagination newSort, SearchResults oldData _ _ ) ->
+                if newData /= oldData then
+                    fetchDataForRoute modelWithNewRoute
+                else
+                    ( { modelWithNewRoute | pageData = PageData.update newRoute pageData }, Cmd.none )
+
             _ ->
                 fetchDataForRoute modelWithNewRoute
 
 
+{-| TODO: Refactor pagedata messages into separate msg & update
+-}
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg ({ pageData } as model) =
     case msg of
         UrlUpdate route ->
             urlUpdate route model
+                |> clearSearchForm
 
         NavigateTo route ->
             ( model, Navigation.newUrl <| reverse route )
+
+        SearchMsg subMsg ->
+            let
+                ( searchData, cmd ) =
+                    SiteSearch.update subMsg model.searchData
+            in
+                ( { model | searchData = searchData }, cmd )
 
         GetProductDetailsData response ->
             let
@@ -162,8 +195,27 @@ update msg ({ pageData } as model) =
             in
                 ( { model | pageData = updatedPageData }, Cmd.none )
 
+        GetSearchResultsData response ->
+            let
+                updatedPageData =
+                    { pageData | searchResults = response }
+                        |> PageData.update model.route
+            in
+                ( { model | pageData = updatedPageData }, Cmd.none )
+
         GetNavigationData response ->
             ( { model | navigationData = logUnsuccessfulRequest response }, Cmd.none )
+
+
+clearSearchForm : ( Model, Cmd msg ) -> ( Model, Cmd msg )
+clearSearchForm ( model, cmd ) =
+    flip (,) cmd <|
+        case model.route of
+            SearchResults _ _ _ ->
+                model
+
+            _ ->
+                { model | searchData = Search.resetQuery model.searchData }
 
 
 logUnsuccessfulRequest : WebData a -> WebData a
@@ -181,7 +233,7 @@ logUnsuccessfulRequest response =
 
 
 view : Model -> Html Msg
-view { route, pageData, navigationData } =
+view { route, pageData, navigationData, searchData } =
     let
         middleContent =
             div [ class "container" ]
@@ -196,11 +248,14 @@ view { route, pageData, navigationData } =
                 ProductDetails _ ->
                     withIntermediateText productDetailsView pageData.productDetails
 
-                CategoryDetails _ pagination sortData ->
-                    withIntermediateText (categoryDetailsView pagination sortData) pageData.categoryDetails
+                CategoryDetails _ pagination sorting ->
+                    withIntermediateText (categoryDetailsView pagination sorting) pageData.categoryDetails
+
+                SearchResults data pagination sorting ->
+                    withIntermediateText (searchResultsView data pagination sorting) pageData.searchResults
     in
         div []
-            [ SiteHeader.view
+            [ SiteHeader.view SearchMsg searchData
             , SiteNavigation.view navigationData
             , middleContent
             , SiteFooter.view
@@ -275,7 +330,7 @@ productDetailsView { product, variants, maybeSeedAttribute, categories } =
 
 
 categoryDetailsView : Pagination.Data -> Sorting.Option -> PageData.CategoryDetails -> List (Html Msg)
-categoryDetailsView pagination sortData { category, subCategories, products } =
+categoryDetailsView pagination sorting { category, subCategories, products } =
     let
         subCategoryCards =
             if List.length subCategories > 0 then
@@ -293,7 +348,41 @@ categoryDetailsView pagination sortData { category, subCategories, products } =
                         ]
                     ]
                 ]
+    in
+        [ div [ class "d-flex align-items-center" ]
+            [ img [ class "img-fluid", src <| Images.media category.imageURL ] []
+            , h1 [ class "mb-0 pl-2" ] [ text category.name ]
+            ]
+        , hr [ class "mt-2" ] []
+        , div [ innerHtml category.description ] []
+        , subCategoryCards
+        ]
+            ++ productsList (CategoryDetails category.slug) pagination sorting products
 
+
+searchResultsView : Search.Data -> Pagination.Data -> Sorting.Option -> PageData.SearchResults -> List (Html Msg)
+searchResultsView ({ query } as data) pagination sorting { products } =
+    let
+        content =
+            text query
+    in
+        [ h1 [] [ text "Search Results" ]
+        , hr [] []
+        , p []
+            [ text <| "Found " ++ toString (Paginate.length products) ++ " results for “" ++ query ++ "”."
+            ]
+        ]
+            ++ productsList (SearchResults data) pagination sorting products
+
+
+productsList :
+    (Pagination.Data -> Sorting.Option -> Route)
+    -> Pagination.Data
+    -> Sorting.Option
+    -> PaginatedProductData
+    -> List (Html Msg)
+productsList routeConstructor pagination sorting products =
+    let
         sortHtml =
             if productsCount > 1 then
                 div [ class "d-flex mb-2 justify-content-between align-items-center" ] [ sortingInput ]
@@ -312,14 +401,14 @@ categoryDetailsView pagination sortData { category, subCategories, products } =
                 , select
                     [ id "product-sort-select"
                     , class "form-control form-control-sm ml-2"
-                    , onProductsSortSelect (NavigateTo << CategoryDetails category.slug pagination)
+                    , onProductsSortSelect (NavigateTo << routeConstructor pagination)
                     ]
                   <|
                     List.map
                         (\data ->
                             option
                                 [ value <| Sorting.toQueryValue data
-                                , selected (data == sortData)
+                                , selected (data == sorting)
                                 ]
                                 [ text <| Sorting.toDescription data ]
                         )
@@ -380,7 +469,7 @@ categoryDetailsView pagination sortData { category, subCategories, products } =
                     max 1 (pagination.page - 1)
 
                 previousRoute =
-                    CategoryDetails category.slug { pagination | page = previousPage } sortData
+                    routeConstructor { pagination | page = previousPage } sorting
             in
                 prevNextLink Paginate.isFirst previousRoute "« Prev"
 
@@ -390,7 +479,7 @@ categoryDetailsView pagination sortData { category, subCategories, products } =
                     min (Paginate.totalPages products) (pagination.page + 1)
 
                 nextRoute =
-                    CategoryDetails category.slug { pagination | page = nextPage } sortData
+                    routeConstructor { pagination | page = nextPage } sorting
             in
                 prevNextLink Paginate.isLast nextRoute "Next »"
 
@@ -419,9 +508,9 @@ categoryDetailsView pagination sortData { category, subCategories, products } =
                     [ a
                         ([ class "page-link" ]
                             ++ routeLinkAttributes
-                                (CategoryDetails category.slug
+                                (routeConstructor
                                     { pagination | page = page }
-                                    sortData
+                                    sorting
                                 )
                         )
                         [ text <| toString page ]
@@ -460,21 +549,13 @@ categoryDetailsView pagination sortData { category, subCategories, products } =
                             ]
                         ]
     in
-        [ div [ class "d-flex align-items-center" ]
-            [ img [ class "img-fluid", src <| Images.media category.imageURL ] []
-            , h1 [ class "mb-0 pl-2" ] [ text category.name ]
+        if productsCount /= 0 then
+            [ sortHtml
+            , paginationHtml
+            , table [ class "category-products table table-striped table-sm mb-2" ]
+                [ tbody [] <| productRows ]
+            , paginationHtml
+            , SeedAttribute.legend
             ]
-        , hr [ class "mt-2" ] []
-        , div [ innerHtml category.description ] []
-        , subCategoryCards
-        ]
-            ++ if productsCount /= 0 then
-                [ sortHtml
-                , paginationHtml
-                , table [ class "category-products table table-striped table-sm mb-2" ]
-                    [ tbody [] <| productRows ]
-                , paginationHtml
-                , SeedAttribute.legend
-                ]
-               else
-                []
+        else
+            []
