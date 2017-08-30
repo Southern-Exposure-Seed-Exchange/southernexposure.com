@@ -5,23 +5,45 @@
 module Routes
     ( CategoryAPI
     , categoryRoutes
-    , ProductDetailsRoute
-    , productDetailsRoute
+    , ProductAPI
+    , productRoutes
     ) where
 
-import Data.Aeson ((.=), ToJSON(..), object)
+import Data.Aeson ((.=), (.:), ToJSON(..), FromJSON(..), object, withObject)
 import Data.Int (Int64)
-import Data.Monoid ((<>))
-import Database.Persist ((==.), (<-.), Entity(..), SelectOpt(..), selectList, getBy)
-import Database.Persist.Sql (fromSqlKey)
-import Servant ((:>), (:<|>)(..), Capture, Get, JSON, throwError, err404)
-import Text.HTML.TagSoup (parseTags, innerText)
+import Database.Persist ((==.), (<-.), (||.), Entity(..), Filter(..), SelectOpt(..), selectList, getBy)
+import Database.Persist.Sql (fromSqlKey, PersistFilter(..))
+import Servant ((:>), (:<|>)(..), Capture, ReqBody, Get, Post, JSON, throwError, err404)
 
 import Models
 import Server
 
 import qualified Data.Map.Strict as Map
 import qualified Data.Text as T
+
+
+-- Common
+data ProductData =
+    ProductData
+        { pdProduct :: Entity Product
+        , pdVariants :: [Entity ProductVariant]
+        , pdSeedAttribute :: Maybe (Entity SeedAttribute)
+        } deriving (Show)
+
+instance ToJSON ProductData where
+    toJSON ProductData { pdProduct, pdVariants, pdSeedAttribute } =
+        object [ "product" .= toJSON pdProduct
+               , "variants" .= toJSON pdVariants
+               , "seedAttribute" .= toJSON pdSeedAttribute
+               ]
+
+getProductData :: Entity Product -> App ProductData
+getProductData e@(Entity productId _) =
+    runDB $ do
+        variants <- selectList [ProductVariantProductId ==. productId] []
+        maybeAttribute <- getBy $ UniqueAttribute productId
+        return $ ProductData e variants maybeAttribute
+
 
 
 -- Categories
@@ -76,13 +98,7 @@ data CategoryDetailsData =
     CategoryDetailsData
         { cddCategory :: Entity Category
         , cddSubCategories :: [Entity Category]
-        , cddProducts :: [CategoryDetailsProductData]
-        } deriving (Show)
-data CategoryDetailsProductData =
-    CategoryDetailsProductData
-        { cdpdProduct :: Entity Product
-        , cdpdVariants :: [Entity ProductVariant]
-        , cdpdSeedAttribute :: Maybe (Entity SeedAttribute)
+        , cddProducts :: [ProductData]
         } deriving (Show)
 
 instance ToJSON CategoryDetailsData where
@@ -92,12 +108,6 @@ instance ToJSON CategoryDetailsData where
                , "products" .= toJSON cddProducts
                ]
 
-instance ToJSON CategoryDetailsProductData where
-    toJSON CategoryDetailsProductData { cdpdProduct, cdpdVariants, cdpdSeedAttribute } =
-        object [ "product" .= toJSON cdpdProduct
-               , "variants" .= toJSON cdpdVariants
-               , "seedAttribute" .= toJSON cdpdSeedAttribute
-               ]
 
 type CategoryDetailsRoute =
     Capture "slug" T.Text :> Get '[JSON] CategoryDetailsData
@@ -113,27 +123,23 @@ categoryDetailsRoute slug = do
             products <- runDB $ selectList [ProductCategoryIds ==. [categoryId]] [Asc ProductName]
             productData <- mapM (getProductData . truncateDescription) products
             return $ CategoryDetailsData e subCategories productData
-    where truncateDescription (Entity pId p) =
-            let
-                strippedDescription =
-                    innerText . parseTags $ productLongDescription p
-                truncatedDescription =
-                    T.unwords . take 40 $ T.words strippedDescription
-                newDescription =
-                    if truncatedDescription /= strippedDescription then
-                        truncatedDescription <> "..."
-                    else
-                        truncatedDescription
-            in
-                Entity pId $ p { productLongDescription = newDescription }
-          getProductData e@(Entity productId _) = do
-                variants <- runDB $ selectList [ProductVariantProductId ==. productId] []
-                maybeAttribute <- runDB . getBy $ UniqueAttribute productId
-                return $ CategoryDetailsProductData e variants maybeAttribute
 
 
 
 -- Products
+type ProductAPI =
+         "search" :> ProductsSearchRoute
+    :<|> "details" :> ProductDetailsRoute
+
+type ProductRoutes =
+         (ProductsSearchParameters -> App ProductsSearchData)
+    :<|> (T.Text -> App ProductDetailsData)
+
+productRoutes :: ProductRoutes
+productRoutes =
+         productsSearchRoute
+    :<|> productDetailsRoute
+
 
 data ProductDetailsData =
     ProductDetailsData
@@ -167,3 +173,39 @@ productDetailsRoute slug = do
                         <*> getBy (UniqueAttribute productId)
                         <*> selectList [CategoryId <-. productCategoryIds prod] []
                 return $ ProductDetailsData e variants maybeAttribute categories
+
+
+newtype ProductsSearchParameters =
+    ProductsSearchParameters
+        { pspQuery :: T.Text
+        } deriving (Show)
+
+instance FromJSON ProductsSearchParameters where
+    parseJSON =
+        withObject "ProductsSearchParameters" $ \v ->
+            ProductsSearchParameters <$>
+                v .: "query"
+
+newtype ProductsSearchData =
+    ProductsSearchData
+        { psdProductData :: [ProductData]
+        } deriving (Show)
+
+instance ToJSON ProductsSearchData where
+    toJSON searchData =
+        object [ "products" .= toJSON (psdProductData searchData)
+               ]
+
+type ProductsSearchRoute =
+    ReqBody '[JSON] ProductsSearchParameters :> Post '[JSON] ProductsSearchData
+
+productsSearchRoute :: ProductsSearchParameters -> App ProductsSearchData
+productsSearchRoute ProductsSearchParameters { pspQuery } = do
+    products <- runDB $ selectList
+        ([ProductName `like` pspQuery] ||. [ProductLongDescription `like` pspQuery])
+        []
+    searchData <- mapM (getProductData . truncateDescription) products
+    return $ ProductsSearchData searchData
+    where like :: EntityField a T.Text -> T.Text -> Filter a
+          like field value =
+            Filter field (Left $ T.concat ["%", value, "%"]) (BackendSpecificFilter "like")

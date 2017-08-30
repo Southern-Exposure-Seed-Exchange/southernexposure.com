@@ -1,9 +1,15 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Models.Utils
     ( slugify
+    , truncateDescription
     ) where
 
 import Data.Char (isAlphaNum)
+import Data.Monoid ((<>))
+import Database.Persist (Entity(..))
+import Text.HTML.TagSoup (parseTags, innerText)
+
+import Models.DB (Product(productLongDescription))
 
 import qualified Data.Text as T
 
@@ -22,3 +28,20 @@ slugify =
                     predicate value || isAny ps value
                 [] ->
                     False
+
+
+-- | Trim a Product's Description.
+truncateDescription :: Entity Product -> Entity Product
+truncateDescription (Entity pId p) =
+            let
+                strippedDescription =
+                    innerText . parseTags $ productLongDescription p
+                truncatedDescription =
+                    T.unwords . take 40 $ T.words strippedDescription
+                newDescription =
+                    if truncatedDescription /= strippedDescription then
+                        truncatedDescription <> "..."
+                    else
+                        truncatedDescription
+            in
+                Entity pId $ p { productLongDescription = newDescription }

@@ -97,7 +97,7 @@ sendRequest msg =
 
 getProductDetailsData : String -> Cmd Msg
 getProductDetailsData slug =
-    Http.get ("/api/products/" ++ slug ++ "/")
+    Http.get ("/api/products/details/" ++ slug ++ "/")
         PageData.productDetailsDecoder
         |> sendRequest GetProductDetailsData
 
