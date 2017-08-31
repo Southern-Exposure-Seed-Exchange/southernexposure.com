@@ -1,7 +1,8 @@
 module Messages exposing (Msg(..))
 
+import Paginate
 import RemoteData exposing (WebData)
-import PageData
+import PageData exposing (ProductData)
 import Routing exposing (Route)
 import SiteUI exposing (NavigationData)
 import SiteUI.Search as SiteSearch
@@ -13,5 +14,6 @@ type Msg
     | SearchMsg SiteSearch.Msg
     | GetProductDetailsData (WebData PageData.ProductDetails)
     | GetCategoryDetailsData (WebData PageData.CategoryDetails)
-    | GetSearchResultsData (WebData PageData.SearchResults)
     | GetNavigationData (WebData NavigationData)
+    | CategoryPaginationMsg (Paginate.Msg ProductData)
+    | SearchPaginationMsg (Paginate.Msg ProductData)

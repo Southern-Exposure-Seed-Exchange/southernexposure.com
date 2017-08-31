@@ -7,10 +7,11 @@ import Html.Events exposing (on, targetValue)
 import Http
 import Json.Decode as Decode
 import Navigation
-import Paginate exposing (PaginatedList)
+import Paginate exposing (Paginated)
 import RemoteData exposing (WebData)
 import Messages exposing (Msg(..))
-import PageData exposing (PageData, PaginatedProductData)
+import Category exposing (Category)
+import PageData exposing (PageData, ProductData)
 import Products.Pagination as Pagination
 import Products.Sorting as Sorting
 import Routing exposing (Route(..), reverse, parseRoute)
@@ -79,6 +80,20 @@ init location =
 fetchDataForRoute : Model -> ( Model, Cmd Msg )
 fetchDataForRoute ({ route, pageData } as model) =
     let
+        discardCmd f ( a, _ ) =
+            f a
+
+        updateCategoryDetails slug pagination sorting ( category, products ) =
+            let
+                ( updatedProducts, cmd ) =
+                    Paginate.updateData
+                        PageData.categoryConfig
+                        products
+                        { slug = slug, sorting = sorting }
+                        |> discardCmd (Paginate.jumpTo PageData.categoryConfig pagination.page)
+            in
+                ( ( RemoteData.Loading, updatedProducts ), cmd )
+
         ( data, cmd ) =
             case route of
                 ProductDetails slug ->
@@ -86,15 +101,24 @@ fetchDataForRoute ({ route, pageData } as model) =
                     , getProductDetailsData slug
                     )
 
-                CategoryDetails slug _ _ ->
-                    ( { pageData | categoryDetails = RemoteData.Loading }
-                    , getCategoryDetailsData slug
-                    )
+                CategoryDetails slug pagination sorting ->
+                    updateCategoryDetails slug pagination sorting pageData.categoryDetails
+                        |> Tuple.mapFirst (\cd -> { pageData | categoryDetails = cd })
+                        |> Tuple.mapSecond
+                            (\cmd ->
+                                Cmd.batch
+                                    [ Cmd.map CategoryPaginationMsg cmd
+                                    , getCategoryDetailsData slug
+                                    ]
+                            )
 
-                SearchResults data _ _ ->
-                    ( { pageData | searchResults = RemoteData.Loading }
-                    , getSearchResultsData data
-                    )
+                SearchResults data pagination sorting ->
+                    Paginate.updateData PageData.searchConfig
+                        pageData.searchResults
+                        { data = data, sorting = sorting }
+                        |> discardCmd (Paginate.jumpTo PageData.searchConfig pagination.page)
+                        |> Tuple.mapFirst (\sr -> { pageData | searchResults = sr })
+                        |> Tuple.mapSecond (Cmd.map SearchPaginationMsg)
     in
         ( { model | pageData = data }, cmd )
 
@@ -118,14 +142,6 @@ getCategoryDetailsData slug =
         |> sendRequest GetCategoryDetailsData
 
 
-getSearchResultsData : Search.Data -> Cmd Msg
-getSearchResultsData data =
-    Http.post "/api/products/search/"
-        (Search.encode data |> Http.jsonBody)
-        PageData.searchResultsDecoder
-        |> sendRequest GetSearchResultsData
-
-
 getNavigationData : Cmd Msg
 getNavigationData =
     Http.get "/api/categories/nav/" SiteUI.navigationDecoder
@@ -136,38 +152,14 @@ getNavigationData =
 -- UPDATE
 
 
-urlUpdate : Route -> Model -> ( Model, Cmd Msg )
-urlUpdate newRoute ({ pageData } as model) =
-    let
-        modelWithNewRoute =
-            { model | route = newRoute }
-    in
-        case ( newRoute, model.route ) of
-            ( CategoryDetails newSlug newPagination newSort, CategoryDetails oldSlug _ _ ) ->
-                if newSlug /= oldSlug then
-                    fetchDataForRoute modelWithNewRoute
-                else
-                    ( { modelWithNewRoute | pageData = PageData.update newRoute pageData }
-                    , Cmd.none
-                    )
-
-            ( SearchResults newData newPagination newSort, SearchResults oldData _ _ ) ->
-                if newData /= oldData then
-                    fetchDataForRoute modelWithNewRoute
-                else
-                    ( { modelWithNewRoute | pageData = PageData.update newRoute pageData }, Cmd.none )
-
-            _ ->
-                fetchDataForRoute modelWithNewRoute
-
-
 {-| TODO: Refactor pagedata messages into separate msg & update
 -}
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg ({ pageData } as model) =
     case msg of
         UrlUpdate route ->
-            urlUpdate route model
+            { model | route = route }
+                |> fetchDataForRoute
                 |> clearSearchForm
 
         NavigateTo route ->
@@ -190,21 +182,29 @@ update msg ({ pageData } as model) =
         GetCategoryDetailsData response ->
             let
                 updatedPageData =
-                    { pageData | categoryDetails = response }
-                        |> PageData.update model.route
-            in
-                ( { model | pageData = updatedPageData }, Cmd.none )
-
-        GetSearchResultsData response ->
-            let
-                updatedPageData =
-                    { pageData | searchResults = response }
-                        |> PageData.update model.route
+                    { pageData
+                        | categoryDetails =
+                            Tuple.mapFirst (always response) pageData.categoryDetails
+                    }
             in
                 ( { model | pageData = updatedPageData }, Cmd.none )
 
         GetNavigationData response ->
             ( { model | navigationData = logUnsuccessfulRequest response }, Cmd.none )
+
+        CategoryPaginationMsg subMsg ->
+            pageData.categoryDetails
+                |> Tuple.mapSecond (Paginate.update PageData.categoryConfig subMsg)
+                |> (\( cd, ( ps, cmd ) ) -> ( ( cd, ps ), cmd ))
+                |> Tuple.mapSecond (Cmd.map CategoryPaginationMsg)
+                |> Tuple.mapFirst (\cd -> { pageData | categoryDetails = cd })
+                |> Tuple.mapFirst (\pd -> { model | pageData = pd })
+
+        SearchPaginationMsg subMsg ->
+            Paginate.update PageData.searchConfig subMsg pageData.searchResults
+                |> Tuple.mapSecond (Cmd.map SearchPaginationMsg)
+                |> Tuple.mapFirst (\sr -> { pageData | searchResults = sr })
+                |> Tuple.mapFirst (\pd -> { model | pageData = pd })
 
 
 clearSearchForm : ( Model, Cmd msg ) -> ( Model, Cmd msg )
@@ -249,10 +249,14 @@ view { route, pageData, navigationData, searchData } =
                     withIntermediateText productDetailsView pageData.productDetails
 
                 CategoryDetails _ pagination sorting ->
-                    withIntermediateText (categoryDetailsView pagination sorting) pageData.categoryDetails
+                    withIntermediateText (\data -> categoryDetailsView pagination sorting ( data, Tuple.second pageData.categoryDetails ))
+                        (Tuple.first pageData.categoryDetails)
 
                 SearchResults data pagination sorting ->
-                    withIntermediateText (searchResultsView data pagination sorting) pageData.searchResults
+                    if Paginate.isLoading pageData.searchResults then
+                        [ text "Loading..." ]
+                    else
+                        searchResultsView data pagination sorting pageData.searchResults
     in
         div []
             [ SiteHeader.view SearchMsg searchData
@@ -329,8 +333,12 @@ productDetailsView { product, variants, maybeSeedAttribute, categories } =
         ]
 
 
-categoryDetailsView : Pagination.Data -> Sorting.Option -> PageData.CategoryDetails -> List (Html Msg)
-categoryDetailsView pagination sorting { category, subCategories, products } =
+categoryDetailsView :
+    Pagination.Data
+    -> Sorting.Option
+    -> ( { category : Category, subCategories : List Category }, Paginated ProductData a )
+    -> List (Html Msg)
+categoryDetailsView pagination sorting ( { category, subCategories }, products ) =
     let
         subCategoryCards =
             if List.length subCategories > 0 then
@@ -361,7 +369,7 @@ categoryDetailsView pagination sorting { category, subCategories, products } =
 
 
 searchResultsView : Search.Data -> Pagination.Data -> Sorting.Option -> PageData.SearchResults -> List (Html Msg)
-searchResultsView ({ query } as data) pagination sorting { products } =
+searchResultsView ({ query } as data) pagination sorting products =
     let
         content =
             text query
@@ -369,7 +377,7 @@ searchResultsView ({ query } as data) pagination sorting { products } =
         [ h1 [] [ text "Search Results" ]
         , hr [] []
         , p []
-            [ text <| "Found " ++ toString (Paginate.length products) ++ " results for “" ++ query ++ "”."
+            [ text <| "Found " ++ toString (Paginate.getTotalItems products) ++ " results for “" ++ query ++ "”."
             ]
         ]
             ++ productsList (SearchResults data) pagination sorting products
@@ -379,7 +387,7 @@ productsList :
     (Pagination.Data -> Sorting.Option -> Route)
     -> Pagination.Data
     -> Sorting.Option
-    -> PaginatedProductData
+    -> Paginated ProductData a
     -> List (Html Msg)
 productsList routeConstructor pagination sorting products =
     let
@@ -390,7 +398,7 @@ productsList routeConstructor pagination sorting products =
                 text ""
 
         productsCount =
-            Paginate.length products
+            Paginate.getTotalItems products
 
         sortingInput : Html Msg
         sortingInput =
@@ -440,26 +448,28 @@ productsList routeConstructor pagination sorting products =
 
         pagingStart _ =
             toString <|
-                (Paginate.currentPage products - 1)
+                (Paginate.getPage products - 1)
                     * pagination.perPage
                     + 1
 
         pagingEnd _ =
             toString <|
-                if Paginate.isLast products || productsCount < pagination.perPage then
+                if (not << Paginate.hasNext) products || productsCount < pagination.perPage then
                     productsCount
                 else
-                    (Paginate.currentPage products * pagination.perPage)
+                    (Paginate.getPage products * pagination.perPage)
 
         pager =
-            if Paginate.totalPages products <= 1 then
+            if Paginate.getTotalPages products <= 1 then
                 text ""
             else
                 node "nav"
                     [ attribute "aria-label" "Category Product Pages" ]
                     [ ul [ class "pagination pagination-sm mb-0" ] <|
                         previousLink ()
-                            :: Paginate.pager renderPager products
+                            :: (List.range 1 (Paginate.getTotalPages products)
+                                    |> List.map (\i -> renderPager i (i == Paginate.getPage products))
+                               )
                             ++ [ nextLink () ]
                     ]
 
@@ -471,17 +481,17 @@ productsList routeConstructor pagination sorting products =
                 previousRoute =
                     routeConstructor { pagination | page = previousPage } sorting
             in
-                prevNextLink Paginate.isFirst previousRoute "« Prev"
+                prevNextLink (not << Paginate.hasPrevious) previousRoute "« Prev"
 
         nextLink _ =
             let
                 nextPage =
-                    min (Paginate.totalPages products) (pagination.page + 1)
+                    min (Paginate.getTotalPages products) (pagination.page + 1)
 
                 nextRoute =
                     routeConstructor { pagination | page = nextPage } sorting
             in
-                prevNextLink Paginate.isLast nextRoute "Next »"
+                prevNextLink (not << Paginate.hasNext) nextRoute "Next »"
 
         prevNextLink isDisabled route content =
             let
@@ -517,7 +527,7 @@ productsList routeConstructor pagination sorting products =
                     ]
 
         productRows =
-            flip List.map (Paginate.page products) <|
+            flip List.map (Paginate.getCurrent products) <|
                 \( product, variants, maybeSeedAttribute ) ->
                     tr []
                         [ td [ class "category-product-image text-center align-middle" ]
