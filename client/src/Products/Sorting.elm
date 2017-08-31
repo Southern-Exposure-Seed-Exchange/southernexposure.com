@@ -3,7 +3,6 @@ module Products.Sorting
         ( Option
         , all
         , default
-        , apply
         , toQueryString
         , fromQueryString
         , toQueryValue
@@ -39,44 +38,6 @@ default =
 
 
 
--- APPLICATION
-
-
-apply :
-    Option
-    -> List ( Product, List ProductVariant, Maybe SeedAttribute )
-    -> List ( Product, List ProductVariant, Maybe SeedAttribute )
-apply option =
-    let
-        getPriceFromVariants priceCollector default list =
-            priceCollector (List.map (.price >> (\(Cents c) -> c)) list)
-                |> Maybe.withDefault default
-
-        compareVariantPrices vs1 vs2 =
-            compare (getPriceFromVariants List.minimum 0 vs1)
-                (getPriceFromVariants List.minimum 0 vs2)
-    in
-        List.sortWith
-            (\( p1, vs1, _ ) ( p2, vs2, _ ) ->
-                case option of
-                    ProductNameAsc ->
-                        compare (p1.name) (p2.name)
-
-                    ProductNameDesc ->
-                        compare (p2.name) (p1.name)
-
-                    PriceAsc ->
-                        compareVariantPrices vs1 vs2
-
-                    PriceDesc ->
-                        compareVariantPrices vs2 vs1
-
-                    ItemNumberAsc ->
-                        compare (p1.baseSKU) (p2.baseSKU)
-            )
-
-
-
 -- CONVERSIONS
 
 
@@ -95,9 +56,6 @@ toQueryString data =
             "sortBy=" ++ value
 
 
-fromQueryString :
-    Url.Parser ((a -> d) -> a -> d) (Option -> b)
-    -> Url.Parser (b -> c) c
 fromQueryString pathParser =
     Url.map (<|)
         (pathParser

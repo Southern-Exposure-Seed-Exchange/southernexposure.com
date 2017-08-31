@@ -36,7 +36,7 @@ update msg data =
             ( { data | query = query }, Cmd.none )
 
         Submit ->
-            ( data, Navigation.newUrl << reverse <| SearchResults data Pagination.default Sorting.default )
+            ( data, Navigation.newUrl << reverse <| SearchResults data Pagination.default )
 
 
 

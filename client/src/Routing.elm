@@ -14,8 +14,8 @@ import Search
 
 type Route
     = ProductDetails String
-    | CategoryDetails String Pagination.Data Sorting.Option
-    | SearchResults Search.Data Pagination.Data Sorting.Option
+    | CategoryDetails String Pagination.Data
+    | SearchResults Search.Data Pagination.Data
 
 
 parseRoute : Navigation.Location -> Route
@@ -26,11 +26,9 @@ parseRoute =
                 [ Url.map ProductDetails (Url.s "products" </> Url.string)
                 , Url.map CategoryDetails (Url.s "categories" </> Url.string)
                     |> Pagination.fromQueryString
-                    |> Sorting.fromQueryString
                 , Url.map SearchResults (Url.s "search")
                     |> Search.fromQueryString
                     |> Pagination.fromQueryString
-                    |> Sorting.fromQueryString
                 ]
     in
         Url.parsePath routeParser
@@ -57,17 +55,14 @@ reverse route =
             ProductDetails slug ->
                 joinPath [ "products", slug ]
 
-            CategoryDetails slug pagination sortData ->
+            CategoryDetails slug pagination ->
                 joinPath [ "categories", slug ]
                     ++ joinQueryStrings
-                        [ Pagination.toQueryString pagination
-                        , Sorting.toQueryString sortData
-                        ]
+                        [ Pagination.toQueryString pagination ]
 
-            SearchResults data pagination sortData ->
+            SearchResults data pagination ->
                 joinPath [ "search" ]
                     ++ joinQueryStrings
                         [ Search.toQueryString data
                         , Pagination.toQueryString pagination
-                        , Sorting.toQueryString sortData
                         ]

@@ -83,13 +83,13 @@ fetchDataForRoute ({ route, pageData } as model) =
         discardCmd f ( a, _ ) =
             f a
 
-        updateCategoryDetails slug pagination sorting ( category, products ) =
+        updateCategoryDetails slug pagination ( category, products ) =
             let
                 ( updatedProducts, cmd ) =
                     Paginate.updateData
                         PageData.categoryConfig
                         products
-                        { slug = slug, sorting = sorting }
+                        { slug = slug, sorting = pagination.sorting }
                         |> discardCmd (Paginate.jumpTo PageData.categoryConfig pagination.page)
             in
                 ( ( RemoteData.Loading, updatedProducts ), cmd )
@@ -101,8 +101,8 @@ fetchDataForRoute ({ route, pageData } as model) =
                     , getProductDetailsData slug
                     )
 
-                CategoryDetails slug pagination sorting ->
-                    updateCategoryDetails slug pagination sorting pageData.categoryDetails
+                CategoryDetails slug pagination ->
+                    updateCategoryDetails slug pagination pageData.categoryDetails
                         |> Tuple.mapFirst (\cd -> { pageData | categoryDetails = cd })
                         |> Tuple.mapSecond
                             (\cmd ->
@@ -112,10 +112,10 @@ fetchDataForRoute ({ route, pageData } as model) =
                                     ]
                             )
 
-                SearchResults data pagination sorting ->
+                SearchResults data pagination ->
                     Paginate.updateData PageData.searchConfig
                         pageData.searchResults
-                        { data = data, sorting = sorting }
+                        { data = data, sorting = pagination.sorting }
                         |> discardCmd (Paginate.jumpTo PageData.searchConfig pagination.page)
                         |> Tuple.mapFirst (\sr -> { pageData | searchResults = sr })
                         |> Tuple.mapSecond (Cmd.map SearchPaginationMsg)
@@ -211,7 +211,7 @@ clearSearchForm : ( Model, Cmd msg ) -> ( Model, Cmd msg )
 clearSearchForm ( model, cmd ) =
     flip (,) cmd <|
         case model.route of
-            SearchResults _ _ _ ->
+            SearchResults _ _ ->
                 model
 
             _ ->
@@ -248,15 +248,15 @@ view { route, pageData, navigationData, searchData } =
                 ProductDetails _ ->
                     withIntermediateText productDetailsView pageData.productDetails
 
-                CategoryDetails _ pagination sorting ->
-                    withIntermediateText (\data -> categoryDetailsView pagination sorting ( data, Tuple.second pageData.categoryDetails ))
+                CategoryDetails _ pagination ->
+                    withIntermediateText (\data -> categoryDetailsView pagination ( data, Tuple.second pageData.categoryDetails ))
                         (Tuple.first pageData.categoryDetails)
 
-                SearchResults data pagination sorting ->
+                SearchResults data pagination ->
                     if Paginate.isLoading pageData.searchResults then
                         [ text "Loading..." ]
                     else
-                        searchResultsView data pagination sorting pageData.searchResults
+                        searchResultsView data pagination pageData.searchResults
     in
         div []
             [ SiteHeader.view SearchMsg searchData
@@ -288,7 +288,7 @@ productDetailsView { product, variants, maybeSeedAttribute, categories } =
                     (\category ->
                         div [ class "product-category" ]
                             [ h3 [ class "mt-3" ]
-                                [ a (routeLinkAttributes <| CategoryDetails category.slug Pagination.default Sorting.default)
+                                [ a (routeLinkAttributes <| CategoryDetails category.slug Pagination.default)
                                     [ text category.name ]
                                 ]
                             , div [ innerHtml category.description ] []
@@ -335,10 +335,9 @@ productDetailsView { product, variants, maybeSeedAttribute, categories } =
 
 categoryDetailsView :
     Pagination.Data
-    -> Sorting.Option
     -> ( { category : Category, subCategories : List Category }, Paginated ProductData a )
     -> List (Html Msg)
-categoryDetailsView pagination sorting ( { category, subCategories }, products ) =
+categoryDetailsView pagination ( { category, subCategories }, products ) =
     let
         subCategoryCards =
             if List.length subCategories > 0 then
@@ -349,7 +348,7 @@ categoryDetailsView pagination sorting ( { category, subCategories }, products )
 
         subCategoryCard category =
             div [ class "col-6 col-sm-4 col-md-3 mb-2" ]
-                [ a (routeLinkAttributes <| CategoryDetails category.slug Pagination.default Sorting.default)
+                [ a (routeLinkAttributes <| CategoryDetails category.slug Pagination.default)
                     [ div [ class "h-100 text-center" ]
                         [ img [ class "img-fluid mx-auto", src <| Images.media category.imageURL ] []
                         , div [ class "my-auto" ] [ text category.name ]
@@ -365,11 +364,11 @@ categoryDetailsView pagination sorting ( { category, subCategories }, products )
         , div [ innerHtml category.description ] []
         , subCategoryCards
         ]
-            ++ productsList (CategoryDetails category.slug) pagination sorting products
+            ++ productsList (CategoryDetails category.slug) pagination products
 
 
-searchResultsView : Search.Data -> Pagination.Data -> Sorting.Option -> PageData.SearchResults -> List (Html Msg)
-searchResultsView ({ query } as data) pagination sorting products =
+searchResultsView : Search.Data -> Pagination.Data -> PageData.SearchResults -> List (Html Msg)
+searchResultsView ({ query } as data) pagination products =
     let
         content =
             text query
@@ -380,16 +379,15 @@ searchResultsView ({ query } as data) pagination sorting products =
             [ text <| "Found " ++ toString (Paginate.getTotalItems products) ++ " results for “" ++ query ++ "”."
             ]
         ]
-            ++ productsList (SearchResults data) pagination sorting products
+            ++ productsList (SearchResults data) pagination products
 
 
 productsList :
-    (Pagination.Data -> Sorting.Option -> Route)
+    (Pagination.Data -> Route)
     -> Pagination.Data
-    -> Sorting.Option
     -> Paginated ProductData a
     -> List (Html Msg)
-productsList routeConstructor pagination sorting products =
+productsList routeConstructor pagination products =
     let
         sortHtml =
             if productsCount > 1 then
@@ -409,24 +407,24 @@ productsList routeConstructor pagination sorting products =
                 , select
                     [ id "product-sort-select"
                     , class "form-control form-control-sm ml-2"
-                    , onProductsSortSelect (NavigateTo << routeConstructor pagination)
+                    , onProductsSortSelect (NavigateTo << routeConstructor)
                     ]
                   <|
                     List.map
                         (\data ->
                             option
                                 [ value <| Sorting.toQueryValue data
-                                , selected (data == sorting)
+                                , selected (data == pagination.sorting)
                                 ]
                                 [ text <| Sorting.toDescription data ]
                         )
                         Sorting.all
                 ]
 
-        onProductsSortSelect : (Sorting.Option -> msg) -> Html.Attribute msg
+        onProductsSortSelect : (Pagination.Data -> msg) -> Html.Attribute msg
         onProductsSortSelect msg =
             targetValue
-                |> Decode.map (Sorting.fromQueryValue >> msg)
+                |> Decode.map (\str -> msg <| { pagination | sorting = Sorting.fromQueryValue str })
                 |> on "change"
 
         paginationHtml =
@@ -479,7 +477,7 @@ productsList routeConstructor pagination sorting products =
                     max 1 (pagination.page - 1)
 
                 previousRoute =
-                    routeConstructor { pagination | page = previousPage } sorting
+                    routeConstructor { pagination | page = previousPage }
             in
                 prevNextLink (not << Paginate.hasPrevious) previousRoute "« Prev"
 
@@ -489,7 +487,7 @@ productsList routeConstructor pagination sorting products =
                     min (Paginate.getTotalPages products) (pagination.page + 1)
 
                 nextRoute =
-                    routeConstructor { pagination | page = nextPage } sorting
+                    routeConstructor { pagination | page = nextPage }
             in
                 prevNextLink (not << Paginate.hasNext) nextRoute "Next »"
 
@@ -520,7 +518,6 @@ productsList routeConstructor pagination sorting products =
                             ++ routeLinkAttributes
                                 (routeConstructor
                                     { pagination | page = page }
-                                    sorting
                                 )
                         )
                         [ text <| toString page ]

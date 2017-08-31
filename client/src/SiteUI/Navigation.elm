@@ -7,7 +7,6 @@ import RemoteData exposing (WebData)
 import Category exposing (CategoryId(..))
 import Messages exposing (Msg)
 import Products.Pagination as Pagination
-import Products.Sorting as Sorting
 import Routing exposing (Route(..), reverse)
 import SiteUI exposing (NavigationData)
 import Views.Utils exposing (routeLinkAttributes)
@@ -54,9 +53,7 @@ view navigationData =
                             [ a
                                 ([ class "nav-link" ]
                                     ++ (routeLinkAttributes <|
-                                            CategoryDetails category.slug
-                                                Pagination.default
-                                                Sorting.default
+                                            CategoryDetails category.slug Pagination.default
                                        )
                                 )
                                 [ text category.name ]
@@ -68,9 +65,7 @@ view navigationData =
                                 [ class "nav-link dropdown-toggle"
                                 , href <|
                                     reverse <|
-                                        CategoryDetails category.slug
-                                            Pagination.default
-                                            Sorting.default
+                                        CategoryDetails category.slug Pagination.default
                                 , attribute "data-toggle" "dropdown"
                                 , attribute "aria-haspopup" "true"
                                 , attribute "aria-expanded" "false"
@@ -83,10 +78,7 @@ view navigationData =
             a
                 ([ class "dropdown-item" ]
                     ++ (routeLinkAttributes <|
-                            CategoryDetails
-                                category.slug
-                                Pagination.default
-                                Sorting.default
+                            CategoryDetails category.slug Pagination.default
                        )
                 )
                 [ text category.name ]
