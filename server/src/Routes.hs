@@ -11,9 +11,10 @@ module Routes
 
 import Data.Aeson ((.=), (.:), ToJSON(..), FromJSON(..), object, withObject)
 import Data.Int (Int64)
-import Database.Persist ((==.), (<-.), (||.), Entity(..), Filter(..), SelectOpt(..), selectList, getBy)
+import Data.Maybe (fromMaybe)
+import Database.Persist ((==.), (<-.), (||.), Entity(..), Filter(..), SelectOpt(..), selectList, count, getBy)
 import Database.Persist.Sql (fromSqlKey, PersistFilter(..))
-import Servant ((:>), (:<|>)(..), Capture, ReqBody, Get, Post, JSON, throwError, err404)
+import Servant ((:>), (:<|>)(..), Capture, QueryParam, ReqBody, Get, Post, JSON, throwError, err404)
 
 import Models
 import Server
@@ -53,7 +54,7 @@ type CategoryAPI =
 
 type CategoryRoutes =
          App CategoryNavbarData
-    :<|> (T.Text -> App CategoryDetailsData)
+    :<|> (T.Text -> Maybe T.Text -> Maybe Int -> Maybe Int -> App CategoryDetailsData)
 
 categoryRoutes :: CategoryRoutes
 categoryRoutes =
@@ -99,30 +100,38 @@ data CategoryDetailsData =
         { cddCategory :: Entity Category
         , cddSubCategories :: [Entity Category]
         , cddProducts :: [ProductData]
+        , cddTotalProducts :: Int
         } deriving (Show)
 
 instance ToJSON CategoryDetailsData where
-    toJSON CategoryDetailsData { cddCategory, cddSubCategories, cddProducts } =
+    toJSON CategoryDetailsData { cddCategory, cddSubCategories, cddProducts, cddTotalProducts } =
         object [ "category" .= toJSON cddCategory
                , "subCategories" .= toJSON cddSubCategories
                , "products" .= toJSON cddProducts
+               , "total" .= toJSON cddTotalProducts
                ]
 
 
 type CategoryDetailsRoute =
-    Capture "slug" T.Text :> Get '[JSON] CategoryDetailsData
+    Capture "slug" T.Text
+    :> QueryParam "sortBy" T.Text
+    :> QueryParam "page" Int
+    :> QueryParam "perPage" Int
+    :> Get '[JSON] CategoryDetailsData
 
-categoryDetailsRoute :: T.Text -> App CategoryDetailsData
-categoryDetailsRoute slug = do
+categoryDetailsRoute :: T.Text -> Maybe T.Text -> Maybe Int -> Maybe Int -> App CategoryDetailsData
+categoryDetailsRoute slug maybeSort maybePage maybePerPage = do
     maybeCategory <- runDB . getBy $ UniqueCategorySlug slug
     case maybeCategory of
         Nothing ->
             throwError err404
         Just e@(Entity categoryId _) -> do
             subCategories <- runDB $ selectList [CategoryParentId ==. Just categoryId] [Asc CategoryName]
-            products <- runDB $ selectList [ProductCategoryIds ==. [categoryId]] [Asc ProductName]
+            (products, productsCount) <- paginatedSelect
+                [ProductCategoryIds ==. [categoryId]] [parseProductsSorting maybeSort]
+                maybePage maybePerPage
             productData <- mapM (getProductData . truncateDescription) products
-            return $ CategoryDetailsData e subCategories productData
+            return $ CategoryDetailsData e subCategories productData productsCount
 
 
 
@@ -132,7 +141,7 @@ type ProductAPI =
     :<|> "details" :> ProductDetailsRoute
 
 type ProductRoutes =
-         (ProductsSearchParameters -> App ProductsSearchData)
+         (Maybe T.Text -> Maybe Int -> Maybe Int -> ProductsSearchParameters -> App ProductsSearchData)
     :<|> (T.Text -> App ProductDetailsData)
 
 productRoutes :: ProductRoutes
@@ -186,26 +195,63 @@ instance FromJSON ProductsSearchParameters where
             ProductsSearchParameters <$>
                 v .: "query"
 
-newtype ProductsSearchData =
+data ProductsSearchData =
     ProductsSearchData
         { psdProductData :: [ProductData]
+        , psdTotalProducts :: Int
         } deriving (Show)
 
 instance ToJSON ProductsSearchData where
     toJSON searchData =
         object [ "products" .= toJSON (psdProductData searchData)
+               , "total" .= toJSON (psdTotalProducts searchData)
                ]
 
 type ProductsSearchRoute =
-    ReqBody '[JSON] ProductsSearchParameters :> Post '[JSON] ProductsSearchData
+       QueryParam "sortBy" T.Text
+    :> QueryParam "page" Int
+    :> QueryParam "perPage" Int
+    :> ReqBody '[JSON] ProductsSearchParameters
+    :> Post '[JSON] ProductsSearchData
 
-productsSearchRoute :: ProductsSearchParameters -> App ProductsSearchData
-productsSearchRoute ProductsSearchParameters { pspQuery } = do
-    products <- runDB $ selectList
-        ([ProductName `like` pspQuery] ||. [ProductLongDescription `like` pspQuery])
-        []
+productsSearchRoute :: Maybe T.Text -> Maybe Int -> Maybe Int -> ProductsSearchParameters -> App ProductsSearchData
+productsSearchRoute maybeSort maybePage maybePerPage ProductsSearchParameters { pspQuery } = do
+    (products, productsCount) <- paginatedSelect
+        ([ProductName `ilike` pspQuery] ||. [ProductLongDescription `ilike` pspQuery])
+        [parseProductsSorting maybeSort] maybePage maybePerPage
     searchData <- mapM (getProductData . truncateDescription) products
-    return $ ProductsSearchData searchData
-    where like :: EntityField a T.Text -> T.Text -> Filter a
-          like field value =
-            Filter field (Left $ T.concat ["%", value, "%"]) (BackendSpecificFilter "like")
+    return $ ProductsSearchData searchData productsCount
+    where ilike :: EntityField a T.Text -> T.Text -> Filter a
+          ilike field value =
+            Filter field (Left $ T.concat ["%", value, "%"]) (BackendSpecificFilter "ILIKE")
+
+
+-- Utils
+paginatedSelect :: [Filter Product] -> [SelectOpt Product] -> Maybe Int -> Maybe Int -> App ([Entity Product], Int)
+paginatedSelect filters options maybePage maybePerPage =
+    let
+        perPage = fromMaybe 25 maybePerPage
+        page = fromMaybe 1 maybePage
+        offset = (page - 1) * perPage
+    in
+        runDB $ do
+            products <- selectList filters ([LimitTo perPage, OffsetBy offset] ++ options)
+            productsCount <- count filters
+            return (products, productsCount)
+
+-- TODO: Implement price sorting by ordering queries w/ esqueleto
+parseProductsSorting :: Maybe T.Text -> SelectOpt Product
+parseProductsSorting queryString =
+        case fromMaybe "" queryString of
+            "name-asc" ->
+                Asc ProductName
+            "name-desc" ->
+                Desc ProductName
+            "price-asc" ->
+                error "Not Implemented"
+            "price-desc" ->
+                error "Not Implemented"
+            "number-asc" ->
+                Asc ProductBaseSku
+            _ ->
+                Asc ProductName
