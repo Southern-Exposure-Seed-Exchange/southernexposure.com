@@ -55,7 +55,7 @@ form tagger { query } =
                 ]
                 []
             , span [ class "input-group-btn" ]
-                [ button [ class "btn btn-primary", type_ "button" ] [ text "Search" ]
+                [ button [ class "btn btn-primary", type_ "submit" ] [ text "Search" ]
                 ]
             ]
         ]
