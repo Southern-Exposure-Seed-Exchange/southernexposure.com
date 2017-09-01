@@ -1,6 +1,7 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeOperators #-}
 module Routes
     ( CategoryAPI
@@ -12,15 +13,17 @@ module Routes
 import Data.Aeson ((.=), (.:), ToJSON(..), FromJSON(..), object, withObject)
 import Data.Int (Int64)
 import Data.Maybe (fromMaybe)
-import Database.Persist ((==.), (<-.), (||.), Entity(..), Filter(..), SelectOpt(..), selectList, count, getBy)
-import Database.Persist.Sql (fromSqlKey, PersistFilter(..))
+import Database.Persist ((==.), (<-.), Entity(..), SelectOpt(..), selectList, getBy)
+import Database.Persist.Sql (fromSqlKey)
 import Servant ((:>), (:<|>)(..), Capture, QueryParam, ReqBody, Get, Post, JSON, throwError, err404)
 
 import Models
+import Models.Fields (Cents)
 import Server
 
 import qualified Data.Map.Strict as Map
 import qualified Data.Text as T
+import qualified Database.Esqueleto as E
 
 
 -- Common
@@ -128,8 +131,8 @@ categoryDetailsRoute slug maybeSort maybePage maybePerPage = do
         Just e@(Entity categoryId _) -> do
             subCategories <- runDB $ selectList [CategoryParentId ==. Just categoryId] [Asc CategoryName]
             (products, productsCount) <- paginatedSelect
-                [ProductCategoryIds ==. [categoryId]] [parseProductsSorting maybeSort]
-                maybePage maybePerPage
+                maybeSort maybePage maybePerPage
+                    (\p -> (p E.^. ProductCategoryIds) E.==. E.val [categoryId])
             productData <- mapM (getProductData . truncateDescription) products
             return $ CategoryDetailsData e subCategories productData productsCount
 
@@ -217,41 +220,68 @@ type ProductsSearchRoute =
 productsSearchRoute :: Maybe T.Text -> Maybe Int -> Maybe Int -> ProductsSearchParameters -> App ProductsSearchData
 productsSearchRoute maybeSort maybePage maybePerPage ProductsSearchParameters { pspQuery } = do
     (products, productsCount) <- paginatedSelect
-        ([ProductName `ilike` pspQuery] ||. [ProductLongDescription `ilike` pspQuery])
-        [parseProductsSorting maybeSort] maybePage maybePerPage
+        maybeSort maybePage maybePerPage
+        (\p -> ((p E.^. ProductName) `E.ilike` ((E.%) E.++. E.val pspQuery E.++. (E.%))) E.||.
+               ((p E.^. ProductLongDescription) `E.ilike` ((E.%) E.++. E.val pspQuery E.++. (E.%)))
+        )
     searchData <- mapM (getProductData . truncateDescription) products
     return $ ProductsSearchData searchData productsCount
-    where ilike :: EntityField a T.Text -> T.Text -> Filter a
-          ilike field value =
-            Filter field (Left $ T.concat ["%", value, "%"]) (BackendSpecificFilter "ILIKE")
 
 
 -- Utils
-paginatedSelect :: [Filter Product] -> [SelectOpt Product] -> Maybe Int -> Maybe Int -> App ([Entity Product], Int)
-paginatedSelect filters options maybePage maybePerPage =
-    let
-        perPage = fromMaybe 25 maybePerPage
-        page = fromMaybe 1 maybePage
-        offset = (page - 1) * perPage
-    in
-        runDB $ do
-            products <- selectList filters ([LimitTo perPage, OffsetBy offset] ++ options)
-            productsCount <- count filters
-            return (products, productsCount)
+--
 
--- TODO: Implement price sorting by ordering queries w/ esqueleto
-parseProductsSorting :: Maybe T.Text -> SelectOpt Product
-parseProductsSorting queryString =
-        case fromMaybe "" queryString of
-            "name-asc" ->
-                Asc ProductName
-            "name-desc" ->
-                Desc ProductName
-            "price-asc" ->
-                error "Not Implemented"
-            "price-desc" ->
-                error "Not Implemented"
-            "number-asc" ->
-                Asc ProductBaseSku
-            _ ->
-                Asc ProductName
+variantSorted :: (E.SqlExpr (E.Value (Maybe Cents)) -> [E.SqlExpr E.OrderBy])
+              -> Int64 -> Int64
+              -> (E.SqlExpr (Entity Product) -> E.SqlExpr (E.Value Bool))
+              -> App ([Entity Product], Int)
+variantSorted ordering offset perPage filters = runDB $ do
+    productsAndPrice <- E.select $ E.from $ \(p `E.InnerJoin` v) -> do
+        E.on (p E.^. ProductId E.==. v E.^. ProductVariantProductId)
+        let minPrice = E.min_ $ v E.^. ProductVariantPrice
+        E.groupBy $ p E.^. ProductId
+        E.orderBy $ ordering minPrice
+        E.where_ $ filters p
+        E.limit perPage
+        E.offset offset
+        return (p, minPrice)
+    pCount <- E.select $ E.from $ \p -> do
+        E.where_ $ filters p
+        return (E.countRows :: E.SqlExpr (E.Value Int))
+    let (ps, _) = unzip productsAndPrice
+    return (ps, E.unValue $ head pCount)
+
+paginatedSelect :: Maybe T.Text -> Maybe Int -> Maybe Int -> (E.SqlExpr (Entity Product) -> E.SqlExpr (E.Value Bool)) -> App ([Entity Product], Int)
+paginatedSelect maybeSorting maybePage maybePerPage productFilters =
+    let sorting = fromMaybe "" maybeSorting in
+    case sorting of
+        "name-asc" ->
+            productsSelect (\p -> E.orderBy [E.asc $ p E.^. ProductName])
+        "name-desc" ->
+            productsSelect (\p -> E.orderBy [E.desc $ p E.^. ProductName])
+        "number-asc" ->
+            productsSelect (\p -> E.orderBy [E.asc $ p E.^. ProductBaseSku])
+        "price-asc" ->
+            variantSorted (\f -> [E.asc f]) offset perPage productFilters
+        "price-desc" ->
+            variantSorted (\f -> [E.desc f]) offset perPage productFilters
+        _ ->
+            productsSelect (\p -> E.orderBy [E.asc $ p E.^. ProductName])
+    where perPage =
+            fromIntegral $ fromMaybe 25 maybePerPage
+          page =
+            fromIntegral $ fromMaybe 1 maybePage
+          offset =
+            (page - 1) * perPage
+          productsSelect ordering =
+            runDB $ do
+                products <- E.select $ E.from $ \p -> do
+                    E.where_ $ productFilters p
+                    _ <- ordering p
+                    E.limit perPage
+                    E.offset offset
+                    return p
+                productsCount <- E.select $ E.from $ \p -> do
+                    E.where_ $ productFilters p
+                    return (E.countRows :: E.SqlExpr (E.Value Int))
+                return (products, E.unValue $ head productsCount)
