@@ -38,22 +38,19 @@ type alias PageData =
 initial : PageData
 initial =
     let
-        categoryInit slug sorting page =
+        categoryPaginate =
             Paginate.initial categoryConfig
-                { slug = slug, sorting = sorting }
-                page
+                { slug = "", sorting = Sorting.default }
+                (.page Pagination.default)
+                (.perPage Pagination.default)
                 |> Tuple.first
 
-        searchInit data sorting page =
+        searchPaginate =
             Paginate.initial searchConfig
-                { data = data, sorting = sorting }
-                page
+                { data = Search.initial, sorting = Sorting.default }
+                (.page Pagination.default)
+                (.perPage Pagination.default)
                 |> Tuple.first
-
-        ( categoryPaginate, searchPaginate ) =
-            ( categoryInit "" Sorting.default (.page Pagination.default)
-            , searchInit Search.initial Sorting.default (.page Pagination.default)
-            )
     in
         { categoryDetails = ( RemoteData.NotAsked, categoryPaginate )
         , productDetails = RemoteData.NotAsked
@@ -77,14 +74,12 @@ categoryDetailsDecoder =
 categoryConfig : Paginate.Config ProductData { slug : String, sorting : Sorting.Option }
 categoryConfig =
     let
-        request { slug, sorting } page =
+        request { slug, sorting } page perPage =
             Http.get
                 ("/api/categories/details/"
                     ++ slug
-                    ++ "/?page="
-                    ++ toString page
-                    ++ "&"
-                    ++ Sorting.toQueryString sorting
+                    ++ "/?"
+                    ++ Pagination.toQueryString (Pagination.Data page perPage sorting)
                 )
             <|
                 Decode.map2 Paginate.FetchResponse
@@ -118,12 +113,10 @@ type alias SearchResults =
 searchConfig : Paginate.Config ProductData { data : Search.Data, sorting : Sorting.Option }
 searchConfig =
     let
-        request { data, sorting } page =
+        request { data, sorting } page perPage =
             Http.post
-                ("/api/products/search/?page="
-                    ++ toString page
-                    ++ "&"
-                    ++ Sorting.toQueryString sorting
+                ("/api/products/search/?"
+                    ++ Pagination.toQueryString (Pagination.Data page perPage sorting)
                 )
                 (Search.encode data |> Http.jsonBody)
                 (Decode.map2 Paginate.FetchResponse

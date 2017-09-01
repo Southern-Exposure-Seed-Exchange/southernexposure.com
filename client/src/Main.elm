@@ -86,10 +86,10 @@ fetchDataForRoute ({ route, pageData } as model) =
         updateCategoryDetails slug pagination ( category, products ) =
             let
                 ( updatedProducts, cmd ) =
-                    Paginate.updateData
-                        PageData.categoryConfig
-                        products
-                        { slug = slug, sorting = pagination.sorting }
+                    products
+                        |> Paginate.updateData PageData.categoryConfig
+                            { slug = slug, sorting = pagination.sorting }
+                        |> discardCmd (Paginate.updatePerPage PageData.categoryConfig pagination.perPage)
                         |> discardCmd (Paginate.jumpTo PageData.categoryConfig pagination.page)
             in
                 ( ( RemoteData.Loading, updatedProducts ), cmd )
@@ -113,9 +113,10 @@ fetchDataForRoute ({ route, pageData } as model) =
                             )
 
                 SearchResults data pagination ->
-                    Paginate.updateData PageData.searchConfig
-                        pageData.searchResults
-                        { data = data, sorting = pagination.sorting }
+                    pageData.searchResults
+                        |> Paginate.updateData PageData.searchConfig
+                            { data = data, sorting = pagination.sorting }
+                        |> discardCmd (Paginate.updatePerPage PageData.searchConfig pagination.perPage)
                         |> discardCmd (Paginate.jumpTo PageData.searchConfig pagination.page)
                         |> Tuple.mapFirst (\sr -> { pageData | searchResults = sr })
                         |> Tuple.mapSecond (Cmd.map SearchPaginationMsg)
@@ -426,7 +427,10 @@ productsList routeConstructor pagination products =
     let
         sortHtml =
             if productsCount > 1 then
-                div [ class "d-flex mb-2 justify-content-between align-items-center" ] [ sortingInput ]
+                div [ class "d-flex mb-2 justify-content-between align-items-center" ]
+                    [ sortingInput
+                    , perPageLinks
+                    ]
             else
                 text ""
 
@@ -461,6 +465,20 @@ productsList routeConstructor pagination products =
             targetValue
                 |> Decode.map (\str -> msg <| { pagination | sorting = Sorting.fromQueryValue str })
                 |> on "change"
+
+        perPageLinks =
+            [ 10, 25, 50, 75, 100 ]
+                |> List.map
+                    (\c ->
+                        if c == pagination.perPage then
+                            span [ class "font-weight-bold" ]
+                                [ text <| toString c ]
+                        else
+                            a (routeLinkAttributes <| routeConstructor { pagination | perPage = c })
+                                [ text <| toString c ]
+                    )
+                |> List.intersperse (text " | ")
+                |> (\ps -> span [] <| span [ class "font-weight-bold" ] [ text "Products per page: " ] :: ps)
 
         paginationHtml =
             div [ class "d-flex mb-2 justify-content-between align-items-center" ] [ pagingText, pager ]
