@@ -11,9 +11,6 @@ module Products.Sorting
         )
 
 import UrlParser as Url exposing ((<?>))
-import Models.Fields exposing (Cents(..))
-import Product exposing (Product, ProductVariant)
-import SeedAttribute exposing (SeedAttribute)
 
 
 -- MODEL
@@ -56,6 +53,9 @@ toQueryString data =
             "sortBy=" ++ value
 
 
+fromQueryString :
+    Url.Parser ((a -> d) -> a -> d) (Option -> b)
+    -> Url.Parser (b -> c) c
 fromQueryString pathParser =
     Url.map (<|)
         (pathParser

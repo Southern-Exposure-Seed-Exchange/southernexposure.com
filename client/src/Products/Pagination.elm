@@ -40,6 +40,9 @@ toQueryString { page, perPage, sorting } =
         |> String.join "&"
 
 
+fromQueryString :
+    Url.Parser ((Data -> c) -> Int -> Int -> Sorting.Option -> c) (Int -> Int -> Sorting.Option -> b)
+    -> Url.Parser (b -> c1) c1
 fromQueryString pathParser =
     Url.map (\constructor page perPage -> constructor << Data page perPage)
         (pathParser

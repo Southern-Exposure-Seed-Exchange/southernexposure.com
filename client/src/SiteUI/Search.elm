@@ -11,7 +11,6 @@ import Html.Attributes exposing (class, type_, value)
 import Html.Events exposing (onInput, onSubmit)
 import Navigation
 import Products.Pagination as Pagination
-import Products.Sorting as Sorting
 import Routing exposing (Route(SearchResults), reverse)
 import Search
 

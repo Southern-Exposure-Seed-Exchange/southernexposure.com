@@ -8,7 +8,6 @@ module Routing
 import Navigation
 import UrlParser as Url exposing ((</>))
 import Products.Pagination as Pagination
-import Products.Sorting as Sorting
 import Search
 
 
