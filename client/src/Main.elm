@@ -195,16 +195,51 @@ update msg ({ pageData } as model) =
         CategoryPaginationMsg subMsg ->
             pageData.categoryDetails
                 |> Tuple.mapSecond (Paginate.update PageData.categoryConfig subMsg)
-                |> (\( cd, ( ps, cmd ) ) -> ( ( cd, ps ), cmd ))
-                |> Tuple.mapSecond (Cmd.map CategoryPaginationMsg)
+                |> Tuple.mapSecond (Tuple.mapSecond <| Cmd.map CategoryPaginationMsg)
+                |> (\( cd, ( ps, cmd ) ) ->
+                        ( ( cd, ps )
+                        , Cmd.batch [ cmd, updatePageFromPagination model.route ps ]
+                        )
+                   )
                 |> Tuple.mapFirst (\cd -> { pageData | categoryDetails = cd })
                 |> Tuple.mapFirst (\pd -> { model | pageData = pd })
 
         SearchPaginationMsg subMsg ->
             Paginate.update PageData.searchConfig subMsg pageData.searchResults
                 |> Tuple.mapSecond (Cmd.map SearchPaginationMsg)
+                |> (\( sr, cmd ) ->
+                        ( sr, Cmd.batch [ cmd, updatePageFromPagination model.route sr ] )
+                   )
                 |> Tuple.mapFirst (\sr -> { pageData | searchResults = sr })
                 |> Tuple.mapFirst (\pd -> { model | pageData = pd })
+
+
+updatePageFromPagination : Route -> Paginated a b -> Cmd msg
+updatePageFromPagination route paginated =
+    let
+        ( maybePage, newRouteConstructor ) =
+            case route of
+                CategoryDetails slug pagination ->
+                    ( Just pagination.page, \p -> CategoryDetails slug { pagination | page = p } )
+
+                SearchResults data pagination ->
+                    ( Just pagination.page, \p -> SearchResults data { pagination | page = p } )
+
+                _ ->
+                    ( Nothing, always route )
+
+        newPage =
+            Paginate.getPage paginated
+    in
+        case maybePage of
+            Nothing ->
+                Cmd.none
+
+            Just page ->
+                if page == newPage then
+                    Cmd.none
+                else
+                    Navigation.newUrl << reverse <| newRouteConstructor newPage
 
 
 clearSearchForm : ( Model, Cmd msg ) -> ( Model, Cmd msg )
@@ -446,7 +481,7 @@ productsList routeConstructor pagination products =
 
         pagingStart _ =
             toString <|
-                (Paginate.getPage products - 1)
+                (currentPage - 1)
                     * pagination.perPage
                     + 1
 
@@ -455,21 +490,32 @@ productsList routeConstructor pagination products =
                 if (not << Paginate.hasNext) products || productsCount < pagination.perPage then
                     productsCount
                 else
-                    (Paginate.getPage products * pagination.perPage)
+                    (currentPage * pagination.perPage)
+
+        totalPages =
+            Paginate.getTotalPages products
+
+        currentPage =
+            Paginate.getPage products
 
         pager =
-            if Paginate.getTotalPages products <= 1 then
+            if totalPages <= 1 then
                 text ""
             else
                 node "nav"
                     [ attribute "aria-label" "Category Product Pages" ]
                     [ ul [ class "pagination pagination-sm mb-0" ] <|
                         previousLink ()
-                            :: (List.range 1 (Paginate.getTotalPages products)
-                                    |> List.map (\i -> renderPager i (i == Paginate.getPage products))
-                               )
+                            :: (renderSections ())
                             ++ [ nextLink () ]
                     ]
+
+        renderSections _ =
+            Paginate.bootstrapPager
+                (\p -> routeLinkAttributes <| routeConstructor { pagination | page = p })
+                2
+                2
+                products
 
         previousLink _ =
             let
@@ -484,7 +530,7 @@ productsList routeConstructor pagination products =
         nextLink _ =
             let
                 nextPage =
-                    min (Paginate.getTotalPages products) (pagination.page + 1)
+                    min totalPages (pagination.page + 1)
 
                 nextRoute =
                     routeConstructor { pagination | page = nextPage }
@@ -502,25 +548,6 @@ productsList routeConstructor pagination products =
                 li [ class <| "page-item" ++ itemClass ]
                     [ a (class "page-link" :: linkAttrs ++ routeLinkAttributes route)
                         [ text content ]
-                    ]
-
-        renderPager page isCurrent =
-            let
-                itemClass =
-                    if isCurrent then
-                        "page-item active"
-                    else
-                        "page-item"
-            in
-                li [ class itemClass ]
-                    [ a
-                        ([ class "page-link" ]
-                            ++ routeLinkAttributes
-                                (routeConstructor
-                                    { pagination | page = page }
-                                )
-                        )
-                        [ text <| toString page ]
                     ]
 
         productRows =
