@@ -2,14 +2,16 @@
 module Models.Utils
     ( slugify
     , truncateDescription
+    , getChildCategoryIds
     ) where
 
 import Data.Char (isAlphaNum)
 import Data.Monoid ((<>))
-import Database.Persist (Entity(..))
+import Database.Persist ((==.), Entity(..), Key(..), selectKeysList)
 import Text.HTML.TagSoup (parseTags, innerText)
 
-import Models.DB (Product(productLongDescription))
+import Models.DB (Product(productLongDescription), Category, EntityField(CategoryParentId))
+import Server
 
 import qualified Data.Text as T
 
@@ -45,3 +47,11 @@ truncateDescription (Entity pId p) =
                         truncatedDescription
             in
                 Entity pId $ p { productLongDescription = newDescription }
+
+
+-- | Return the ID's of a Category's Child Categories.
+getChildCategoryIds  :: Key Category -> App [Key Category]
+getChildCategoryIds categoryId = do
+            childrenKeys <- runDB $ selectKeysList [CategoryParentId ==. Just categoryId] []
+            subKeys <- concat <$> mapM getChildCategoryIds childrenKeys
+            return $ categoryId : subKeys

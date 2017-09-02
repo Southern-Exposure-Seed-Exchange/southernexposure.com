@@ -10,10 +10,10 @@ module Routes
     , productRoutes
     ) where
 
-import Data.Aeson ((.=), (.:), ToJSON(..), FromJSON(..), object, withObject)
+import Data.Aeson ((.=), (.:), (.:?), ToJSON(..), FromJSON(..), object, withObject)
 import Data.Int (Int64)
 import Data.Maybe (fromMaybe)
-import Database.Persist ((==.), (<-.), Entity(..), SelectOpt(..), selectList, getBy)
+import Database.Persist ((==.), (<-.), Entity(..), SelectOpt(..), selectList, get, getBy)
 import Database.Persist.Sql (fromSqlKey)
 import Servant ((:>), (:<|>)(..), Capture, QueryParam, ReqBody, Get, Post, JSON, throwError, err404)
 
@@ -135,7 +135,7 @@ categoryDetailsRoute slug maybeSort maybePage maybePerPage = do
             subCategories <- runDB $ selectList [CategoryParentId ==. Just categoryId] [Asc CategoryName]
             (products, productsCount) <- paginatedSelect
                 maybeSort maybePage maybePerPage
-                    (\p -> (p E.^. ProductCategoryIds) E.==. E.val [categoryId])
+                    (\p _ -> (p E.^. ProductCategoryIds) E.==. E.val [categoryId])
             productData <- mapM (getProductData . truncateDescription) products
             return $ CategoryDetailsData e subCategories productData productsCount
 
@@ -220,27 +220,41 @@ productDetailsRoute slug = do
                 return $ ProductDetailsData e variants maybeAttribute categories
 
 
-newtype ProductsSearchParameters =
+data ProductsSearchParameters =
     ProductsSearchParameters
         { pspQuery :: T.Text
+        , pspSearchDescription :: Bool
+        , pspFilterOrganic :: Bool
+        , pspFilterHeirloom :: Bool
+        , pspFilterRegional :: Bool
+        , pspFilterEcological :: Bool
+        , pspCategoryId :: Maybe CategoryId
         } deriving (Show)
 
 instance FromJSON ProductsSearchParameters where
     parseJSON =
         withObject "ProductsSearchParameters" $ \v ->
-            ProductsSearchParameters <$>
-                v .: "query"
+            ProductsSearchParameters
+                <$> v .: "query"
+                <*> v .: "searchDescription"
+                <*> v .: "filterOrganic"
+                <*> v .: "filterHeirloom"
+                <*> v .: "filterRegional"
+                <*> v .: "filterEcological"
+                <*> v .:? "category"
 
 data ProductsSearchData =
     ProductsSearchData
         { psdProductData :: [ProductData]
         , psdTotalProducts :: Int
+        , psdCategoryName :: Maybe T.Text
         } deriving (Show)
 
 instance ToJSON ProductsSearchData where
     toJSON searchData =
         object [ "products" .= toJSON (psdProductData searchData)
                , "total" .= toJSON (psdTotalProducts searchData)
+               , "categoryName" .= toJSON (psdCategoryName searchData)
                ]
 
 type ProductsSearchRoute =
@@ -251,40 +265,76 @@ type ProductsSearchRoute =
     :> Post '[JSON] ProductsSearchData
 
 productsSearchRoute :: Maybe T.Text -> Maybe Int -> Maybe Int -> ProductsSearchParameters -> App ProductsSearchData
-productsSearchRoute maybeSort maybePage maybePerPage ProductsSearchParameters { pspQuery } = do
+productsSearchRoute maybeSort maybePage maybePerPage parameters = do
+    let queryFilters p
+            | pspQuery parameters /= "" && pspSearchDescription parameters =
+                foldl1 (E.&&.) . map (nameOrDescription p) . T.words $ pspQuery parameters
+            | pspQuery parameters /= "" =
+                foldl1 (E.&&.) . map (nameFilter p) . T.words $ pspQuery parameters
+            | otherwise =
+                E.val True
+        organicFilter =
+            attributeFilter pspFilterOrganic SeedAttributeIsOrganic
+        heirloomFilter =
+            attributeFilter pspFilterHeirloom SeedAttributeIsHeirloom
+        regionalFilter =
+            attributeFilter pspFilterRegional SeedAttributeIsRegional
+        ecologicalFilter =
+            attributeFilter pspFilterEcological SeedAttributeIsEcological
+    (categoryFilter, categoryName) <- case pspCategoryId parameters of
+        Nothing ->
+            return (const $ E.val True, Nothing)
+        Just cId -> do
+            name <- fmap categoryName <$> runDB (get cId)
+            categories <- getChildCategoryIds cId
+            return (\p -> p E.^. ProductCategoryIds `E.in_` E.valList (map (: []) categories), name)
     (products, productsCount) <- paginatedSelect
         maybeSort maybePage maybePerPage
-        (\p -> ((p E.^. ProductName) `E.ilike` ((E.%) E.++. E.val pspQuery E.++. (E.%))) E.||.
-               ((p E.^. ProductLongDescription) `E.ilike` ((E.%) E.++. E.val pspQuery E.++. (E.%)))
-        )
+        (\p sa -> queryFilters p E.&&. organicFilter sa E.&&. heirloomFilter sa E.&&.
+                  regionalFilter sa E.&&. ecologicalFilter sa E.&&.
+                  categoryFilter p)
     searchData <- mapM (getProductData . truncateDescription) products
-    return $ ProductsSearchData searchData productsCount
+    return $ ProductsSearchData searchData productsCount categoryName
+    where fuzzyILike f s =
+            f `E.ilike` ((E.%) E.++. E.val s E.++. (E.%))
+          nameOrDescription p w =
+                (p E.^. ProductName) `fuzzyILike` w E.||.
+                (p E.^. ProductLongDescription) `fuzzyILike` w
+          nameFilter p w =
+                (p E.^. ProductName) `fuzzyILike` w
+          attributeFilter selector attribute sa =
+              if selector parameters then
+                sa E.?. attribute E.==. E.just (E.val True)
+              else
+                E.val True
 
 
 -- Utils
---
-
 variantSorted :: (E.SqlExpr (E.Value (Maybe Cents)) -> [E.SqlExpr E.OrderBy])
               -> Int64 -> Int64
-              -> (E.SqlExpr (Entity Product) -> E.SqlExpr (E.Value Bool))
+              -> (E.SqlExpr (Entity Product) -> E.SqlExpr (Maybe (Entity SeedAttribute)) -> E.SqlExpr (E.Value Bool))
               -> App ([Entity Product], Int)
 variantSorted ordering offset perPage filters = runDB $ do
-    productsAndPrice <- E.select $ E.from $ \(p `E.InnerJoin` v) -> do
+    productsAndPrice <- E.select $ E.from $ \(p `E.InnerJoin` v `E.LeftOuterJoin` sa) -> do
+        E.on (E.just (p E.^. ProductId) E.==. sa E.?. SeedAttributeProductId)
         E.on (p E.^. ProductId E.==. v E.^. ProductVariantProductId)
         let minPrice = E.min_ $ v E.^. ProductVariantPrice
         E.groupBy $ p E.^. ProductId
         E.orderBy $ ordering minPrice
-        E.where_ $ filters p
+        E.where_ $ filters p sa
         E.limit perPage
         E.offset offset
         return (p, minPrice)
-    pCount <- E.select $ E.from $ \p -> do
-        E.where_ $ filters p
+    pCount <- E.select $ E.from $ \(p `E.LeftOuterJoin` sa) -> do
+        E.on (E.just (p E.^. ProductId) E.==. sa E.?. SeedAttributeProductId)
+        E.where_ $ filters p sa
         return (E.countRows :: E.SqlExpr (E.Value Int))
     let (ps, _) = unzip productsAndPrice
     return (ps, E.unValue $ head pCount)
 
-paginatedSelect :: Maybe T.Text -> Maybe Int -> Maybe Int -> (E.SqlExpr (Entity Product) -> E.SqlExpr (E.Value Bool)) -> App ([Entity Product], Int)
+paginatedSelect :: Maybe T.Text -> Maybe Int -> Maybe Int
+                -> (E.SqlExpr (Entity Product) -> E.SqlExpr (Maybe (Entity SeedAttribute)) -> E.SqlExpr (E.Value Bool))
+                -> App ([Entity Product], Int)
 paginatedSelect maybeSorting maybePage maybePerPage productFilters =
     let sorting = fromMaybe "" maybeSorting in
     case sorting of
@@ -308,13 +358,15 @@ paginatedSelect maybeSorting maybePage maybePerPage productFilters =
             (page - 1) * perPage
           productsSelect ordering =
             runDB $ do
-                products <- E.select $ E.from $ \p -> do
-                    E.where_ $ productFilters p
+                products <- E.select $ E.from $ \(p `E.LeftOuterJoin` sa) -> do
+                    E.on (E.just (p E.^. ProductId) E.==. sa E.?. SeedAttributeProductId)
+                    E.where_ $ productFilters p sa
                     _ <- ordering p
                     E.limit perPage
                     E.offset offset
                     return p
-                productsCount <- E.select $ E.from $ \p -> do
-                    E.where_ $ productFilters p
+                productsCount <- E.select $ E.from $ \(p `E.LeftOuterJoin` sa) -> do
+                    E.on (E.just (p E.^. ProductId) E.==. sa E.?. SeedAttributeProductId)
+                    E.where_ $ productFilters p sa
                     return (E.countRows :: E.SqlExpr (E.Value Int))
                 return (products, E.unValue $ head productsCount)
