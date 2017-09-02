@@ -54,15 +54,18 @@ getProductData e@(Entity productId _) =
 type CategoryAPI =
          "nav" :> CategoryNavbarRoute
     :<|> "details" :> CategoryDetailsRoute
+    :<|> "search" :> AdvancedSearchRoute
 
 type CategoryRoutes =
          App CategoryNavbarData
     :<|> (T.Text -> Maybe T.Text -> Maybe Int -> Maybe Int -> App CategoryDetailsData)
+    :<|> App AdvancedSearchData
 
 categoryRoutes :: CategoryRoutes
 categoryRoutes =
          categoryNavbarRoute
     :<|> categoryDetailsRoute
+    :<|> advancedSearchRoute
 
 
 data CategoryNavbarData =
@@ -135,6 +138,36 @@ categoryDetailsRoute slug maybeSort maybePage maybePerPage = do
                     (\p -> (p E.^. ProductCategoryIds) E.==. E.val [categoryId])
             productData <- mapM (getProductData . truncateDescription) products
             return $ CategoryDetailsData e subCategories productData productsCount
+
+
+newtype AdvancedSearchData =
+    AdvancedSearchData
+        { asdCategories :: [ASDCategory]
+        } deriving (Show)
+
+instance ToJSON AdvancedSearchData where
+    toJSON AdvancedSearchData { asdCategories } =
+        object [ "categories" .= toJSON asdCategories ]
+
+data ASDCategory =
+    ASDCategory
+        { asdcId :: Int64
+        , asdcName :: T.Text
+        } deriving (Show)
+
+instance ToJSON ASDCategory where
+    toJSON ASDCategory { asdcId, asdcName } =
+        object [ "id" .= asdcId, "name" .= asdcName ]
+
+type AdvancedSearchRoute =
+    Get '[JSON] AdvancedSearchData
+
+advancedSearchRoute :: App AdvancedSearchData
+advancedSearchRoute = do
+    cs <- runDB $ E.select $ E.from $ \c -> do
+        E.orderBy [E.asc $ c E.^. CategoryName]
+        return (c E.^. CategoryId, c E.^. CategoryName)
+    return . AdvancedSearchData $ map (\(i, n) -> ASDCategory (fromSqlKey $ E.unValue i) (E.unValue n)) cs
 
 
 
