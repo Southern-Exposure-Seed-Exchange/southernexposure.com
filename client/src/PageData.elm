@@ -11,16 +11,19 @@ module PageData
         , searchConfig
         , ProductData
         , productDataDecoder
+        , AdvancedSearch
+        , advancedSearchDecoder
         )
 
 import Http
 import Json.Decode as Decode exposing (Decoder)
 import Paginate exposing (Paginated)
 import RemoteData exposing (WebData)
-import Category exposing (Category)
+import Category exposing (Category, CategoryId(..))
 import Product exposing (Product, ProductVariant)
 import Products.Pagination as Pagination
 import Products.Sorting as Sorting
+import Routing.Utils exposing (joinPath, withQueryStrings)
 import Search
 import SeedAttribute exposing (SeedAttribute)
 
@@ -29,9 +32,10 @@ import SeedAttribute exposing (SeedAttribute)
 
 
 type alias PageData =
-    { categoryDetails : ( WebData CategoryDetails, Paginated ProductData { slug : String, sorting : Sorting.Option } )
+    { categoryDetails : Paginated ProductData { slug : String, sorting : Sorting.Option } CategoryDetails
     , productDetails : WebData ProductDetails
-    , searchResults : Paginated ProductData { data : Search.Data, sorting : Sorting.Option }
+    , advancedSearch : WebData AdvancedSearch
+    , searchResults : Paginated ProductData { data : Search.Data, sorting : Sorting.Option } String
     }
 
 
@@ -52,8 +56,9 @@ initial =
                 (.perPage Pagination.default)
                 |> Tuple.first
     in
-        { categoryDetails = ( RemoteData.NotAsked, categoryPaginate )
+        { categoryDetails = categoryPaginate
         , productDetails = RemoteData.NotAsked
+        , advancedSearch = RemoteData.NotAsked
         , searchResults = searchPaginate
         }
 
@@ -71,20 +76,20 @@ categoryDetailsDecoder =
         (Decode.field "subCategories" <| Decode.list Category.decoder)
 
 
-categoryConfig : Paginate.Config ProductData { slug : String, sorting : Sorting.Option }
+categoryConfig : Paginate.Config ProductData { slug : String, sorting : Sorting.Option } CategoryDetails
 categoryConfig =
     let
         request { slug, sorting } page perPage =
             Http.get
-                ("/api/categories/details/"
-                    ++ slug
-                    ++ "/?"
-                    ++ Pagination.toQueryString (Pagination.Data page perPage sorting)
+                (joinPath [ "api/categories/details/", slug ]
+                    ++ withQueryStrings
+                        [ Pagination.toQueryString (Pagination.Data page perPage sorting) ]
                 )
             <|
-                Decode.map2 Paginate.FetchResponse
+                Decode.map3 Paginate.FetchResponse
                     (Decode.field "products" <| Decode.list productDataDecoder)
                     (Decode.field "total" Decode.int)
+                    (Decode.map Just categoryDetailsDecoder)
     in
         Paginate.makeConfig request
 
@@ -107,21 +112,22 @@ productDetailsDecoder =
 
 
 type alias SearchResults =
-    Paginated ProductData { data : Search.Data, sorting : Sorting.Option }
+    Paginated ProductData { data : Search.Data, sorting : Sorting.Option } String
 
 
-searchConfig : Paginate.Config ProductData { data : Search.Data, sorting : Sorting.Option }
+searchConfig : Paginate.Config ProductData { data : Search.Data, sorting : Sorting.Option } String
 searchConfig =
     let
         request { data, sorting } page perPage =
             Http.post
-                ("/api/products/search/?"
-                    ++ Pagination.toQueryString (Pagination.Data page perPage sorting)
+                ("/api/products/search/"
+                    ++ withQueryStrings [ Pagination.toQueryString (Pagination.Data page perPage sorting) ]
                 )
                 (Search.encode data |> Http.jsonBody)
-                (Decode.map2 Paginate.FetchResponse
+                (Decode.map3 Paginate.FetchResponse
                     (Decode.field "products" <| Decode.list productDataDecoder)
                     (Decode.field "total" Decode.int)
+                    (Decode.field "categoryName" <| Decode.nullable Decode.string)
                 )
     in
         Paginate.makeConfig request
@@ -137,3 +143,22 @@ productDataDecoder =
         (Decode.field "product" Product.decoder)
         (Decode.field "variants" <| Decode.list Product.variantDecoder)
         (Decode.field "seedAttribute" <| Decode.nullable SeedAttribute.decoder)
+
+
+type alias AdvancedSearch =
+    List AdvancedSearchCategory
+
+
+type alias AdvancedSearchCategory =
+    { id : CategoryId
+    , name : String
+    }
+
+
+advancedSearchDecoder : Decoder AdvancedSearch
+advancedSearchDecoder =
+    Decode.field "categories" <|
+        Decode.list <|
+            Decode.map2 AdvancedSearchCategory
+                (Decode.field "id" <| Decode.map CategoryId Decode.int)
+                (Decode.field "name" Decode.string)

@@ -2,6 +2,7 @@ module Category
     exposing
         ( CategoryId(..)
         , Category
+        , initial
         , decoder
         )
 
@@ -21,6 +22,11 @@ type alias Category =
     , imageURL : String
     , order : Int
     }
+
+
+initial : Category
+initial =
+    Category (CategoryId 0) "" "" Nothing "" "" 0
 
 
 decoder : Decoder Category

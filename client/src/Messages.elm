@@ -2,6 +2,7 @@ module Messages exposing (Msg(..))
 
 import Paginate
 import RemoteData exposing (WebData)
+import AdvancedSearch
 import PageData exposing (ProductData)
 import Routing exposing (Route)
 import SiteUI exposing (NavigationData)
@@ -12,8 +13,9 @@ type Msg
     = UrlUpdate Route
     | NavigateTo Route
     | SearchMsg SiteSearch.Msg
+    | AdvancedSearchMsg AdvancedSearch.Msg
     | GetProductDetailsData (WebData PageData.ProductDetails)
-    | GetCategoryDetailsData (WebData PageData.CategoryDetails)
     | GetNavigationData (WebData NavigationData)
-    | CategoryPaginationMsg (Paginate.Msg ProductData)
-    | SearchPaginationMsg (Paginate.Msg ProductData)
+    | GetAdvancedSearchData (WebData PageData.AdvancedSearch)
+    | CategoryPaginationMsg (Paginate.Msg ProductData PageData.CategoryDetails)
+    | SearchPaginationMsg (Paginate.Msg ProductData String)

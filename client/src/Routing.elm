@@ -8,12 +8,14 @@ module Routing
 import Navigation
 import UrlParser as Url exposing ((</>))
 import Products.Pagination as Pagination
+import Routing.Utils exposing (joinPath, withQueryStrings)
 import Search
 
 
 type Route
     = ProductDetails String
     | CategoryDetails String Pagination.Data
+    | AdvancedSearch
     | SearchResults Search.Data Pagination.Data
 
 
@@ -25,6 +27,7 @@ parseRoute =
                 [ Url.map ProductDetails (Url.s "products" </> Url.string)
                 , Url.map CategoryDetails (Url.s "categories" </> Url.string)
                     |> Pagination.fromQueryString
+                , Url.map AdvancedSearch (Url.s "search" </> Url.s "advanced")
                 , Url.map SearchResults (Url.s "search")
                     |> Search.fromQueryString
                     |> Pagination.fromQueryString
@@ -36,32 +39,21 @@ parseRoute =
 
 reverse : Route -> String
 reverse route =
-    let
-        joinPath paths =
-            String.join "/" <| "" :: paths ++ [ "" ]
+    case route of
+        ProductDetails slug ->
+            joinPath [ "products", slug ]
 
-        joinQueryStrings =
-            List.filter (not << String.isEmpty)
-                >> String.join "&"
-                >> (\s ->
-                        if String.isEmpty s then
-                            ""
-                        else
-                            "?" ++ s
-                   )
-    in
-        case route of
-            ProductDetails slug ->
-                joinPath [ "products", slug ]
+        CategoryDetails slug pagination ->
+            joinPath [ "categories", slug ]
+                ++ withQueryStrings
+                    [ Pagination.toQueryString pagination ]
 
-            CategoryDetails slug pagination ->
-                joinPath [ "categories", slug ]
-                    ++ joinQueryStrings
-                        [ Pagination.toQueryString pagination ]
+        AdvancedSearch ->
+            joinPath [ "search", "advanced" ]
 
-            SearchResults data pagination ->
-                joinPath [ "search" ]
-                    ++ joinQueryStrings
-                        [ Search.toQueryString data
-                        , Pagination.toQueryString pagination
-                        ]
+        SearchResults data pagination ->
+            joinPath [ "search" ]
+                ++ withQueryStrings
+                    [ Search.toQueryString data
+                    , Pagination.toQueryString pagination
+                    ]

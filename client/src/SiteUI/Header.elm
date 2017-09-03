@@ -1,11 +1,14 @@
 module SiteUI.Header exposing (view)
 
-import Html exposing (Html, div, a, img, h1, br, text)
+import Html exposing (Html, div, a, img, h1, br, text, small)
 import Html.Attributes exposing (id, class, href, src)
+import Messages
 import SiteUI.Search as SiteSearch
+import Views.Utils exposing (routeLinkAttributes)
+import Routing exposing (Route(AdvancedSearch))
 
 
-view : (SiteSearch.Msg -> msg) -> SiteSearch.Data -> Html msg
+view : (SiteSearch.Msg -> Messages.Msg) -> SiteSearch.Data -> Html Messages.Msg
 view tagger searchQuery =
     div [ class "container" ]
         [ div [ id "site-header", class "row clearfix" ]
@@ -33,6 +36,10 @@ view tagger searchQuery =
             , div [ class "col-auto ml-auto d-none d-sm-block text-right" ]
                 [ text "QUICK LINKS"
                 , SiteSearch.form tagger searchQuery
+                , small []
+                    [ a (routeLinkAttributes AdvancedSearch)
+                        [ text "Advanced Search" ]
+                    ]
                 ]
             ]
         ]

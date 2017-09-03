@@ -1,16 +1,17 @@
 module Main exposing (main)
 
-import Html exposing (Html, text, div, h1, h3, h4, hr, node, br, a, img, span, button, ul, li, small, table, tbody, tr, td, b, label, select, option, p)
+import Html exposing (Html, text, div, h1, h3, h4, hr, node, br, a, img, span, button, ul, li, small, table, tbody, tr, td, b, label, select, option, p, form, input)
 import Html.Attributes exposing (attribute, id, class, href, src, type_, target, tabindex, title, value, for, selected)
 import Html.Attributes.Extra exposing (innerHtml)
-import Html.Events exposing (on, targetValue)
+import Html.Events exposing (on, targetValue, onSubmit)
 import Http
 import Json.Decode as Decode
 import Navigation
 import Paginate exposing (Paginated)
 import RemoteData exposing (WebData)
+import AdvancedSearch
+import Category exposing (Category, CategoryId(..))
 import Messages exposing (Msg(..))
-import Category exposing (Category)
 import PageData exposing (PageData, ProductData)
 import Products.Pagination as Pagination
 import Products.Sorting as Sorting
@@ -46,6 +47,7 @@ type alias Model =
     , route : Route
     , pageData : PageData
     , searchData : Search.Data
+    , advancedSearchData : Search.Data
     }
 
 
@@ -61,6 +63,7 @@ init location =
                 , route = route
                 , pageData = PageData.initial
                 , searchData = Search.initial
+                , advancedSearchData = Search.initial
                 }
     in
         ( model
@@ -83,16 +86,12 @@ fetchDataForRoute ({ route, pageData } as model) =
         discardCmd f ( a, _ ) =
             f a
 
-        updateCategoryDetails slug pagination ( category, products ) =
-            let
-                ( updatedProducts, cmd ) =
-                    products
-                        |> Paginate.updateData PageData.categoryConfig
-                            { slug = slug, sorting = pagination.sorting }
-                        |> discardCmd (Paginate.updatePerPage PageData.categoryConfig pagination.perPage)
-                        |> discardCmd (Paginate.jumpTo PageData.categoryConfig pagination.page)
-            in
-                ( ( RemoteData.Loading, updatedProducts ), cmd )
+        updateCategoryDetails slug pagination products =
+            products
+                |> Paginate.updateData PageData.categoryConfig
+                    { slug = slug, sorting = pagination.sorting }
+                |> discardCmd (Paginate.updatePerPage PageData.categoryConfig pagination.perPage)
+                |> discardCmd (Paginate.jumpTo PageData.categoryConfig pagination.page)
 
         ( data, cmd ) =
             case route of
@@ -104,13 +103,12 @@ fetchDataForRoute ({ route, pageData } as model) =
                 CategoryDetails slug pagination ->
                     updateCategoryDetails slug pagination pageData.categoryDetails
                         |> Tuple.mapFirst (\cd -> { pageData | categoryDetails = cd })
-                        |> Tuple.mapSecond
-                            (\cmd ->
-                                Cmd.batch
-                                    [ Cmd.map CategoryPaginationMsg cmd
-                                    , getCategoryDetailsData slug
-                                    ]
-                            )
+                        |> Tuple.mapSecond (Cmd.map CategoryPaginationMsg)
+
+                AdvancedSearch ->
+                    ( { pageData | advancedSearch = RemoteData.Loading }
+                    , getAdvancedSearchData
+                    )
 
                 SearchResults data pagination ->
                     pageData.searchResults
@@ -136,17 +134,16 @@ getProductDetailsData slug =
         |> sendRequest GetProductDetailsData
 
 
-getCategoryDetailsData : String -> Cmd Msg
-getCategoryDetailsData slug =
-    Http.get ("/api/categories/details/" ++ slug ++ "/")
-        PageData.categoryDetailsDecoder
-        |> sendRequest GetCategoryDetailsData
-
-
 getNavigationData : Cmd Msg
 getNavigationData =
     Http.get "/api/categories/nav/" SiteUI.navigationDecoder
         |> sendRequest GetNavigationData
+
+
+getAdvancedSearchData : Cmd Msg
+getAdvancedSearchData =
+    Http.get "/api/categories/search/" PageData.advancedSearchDecoder
+        |> sendRequest GetAdvancedSearchData
 
 
 
@@ -173,6 +170,11 @@ update msg ({ pageData } as model) =
             in
                 ( { model | searchData = searchData }, cmd )
 
+        AdvancedSearchMsg subMsg ->
+            ( { model | advancedSearchData = AdvancedSearch.update subMsg model.advancedSearchData }
+            , Cmd.none
+            )
+
         GetProductDetailsData response ->
             let
                 updatedPageData =
@@ -180,27 +182,22 @@ update msg ({ pageData } as model) =
             in
                 ( { model | pageData = updatedPageData }, Cmd.none )
 
-        GetCategoryDetailsData response ->
-            let
-                updatedPageData =
-                    { pageData
-                        | categoryDetails =
-                            Tuple.mapFirst (always response) pageData.categoryDetails
-                    }
-            in
-                ( { model | pageData = updatedPageData }, Cmd.none )
-
         GetNavigationData response ->
             ( { model | navigationData = logUnsuccessfulRequest response }, Cmd.none )
 
+        GetAdvancedSearchData response ->
+            let
+                updatedPageData =
+                    { pageData | advancedSearch = response }
+            in
+                ( { model | pageData = updatedPageData }, Cmd.none )
+
         CategoryPaginationMsg subMsg ->
             pageData.categoryDetails
-                |> Tuple.mapSecond (Paginate.update PageData.categoryConfig subMsg)
-                |> Tuple.mapSecond (Tuple.mapSecond <| Cmd.map CategoryPaginationMsg)
-                |> (\( cd, ( ps, cmd ) ) ->
-                        ( ( cd, ps )
-                        , Cmd.batch [ cmd, updatePageFromPagination model.route ps ]
-                        )
+                |> Paginate.update PageData.categoryConfig subMsg
+                |> Tuple.mapSecond (Cmd.map CategoryPaginationMsg)
+                |> (\( ps, cmd ) ->
+                        ( ps, Cmd.batch [ cmd, updatePageFromPagination model.route ps ] )
                    )
                 |> Tuple.mapFirst (\cd -> { pageData | categoryDetails = cd })
                 |> Tuple.mapFirst (\pd -> { model | pageData = pd })
@@ -215,7 +212,7 @@ update msg ({ pageData } as model) =
                 |> Tuple.mapFirst (\pd -> { model | pageData = pd })
 
 
-updatePageFromPagination : Route -> Paginated a b -> Cmd msg
+updatePageFromPagination : Route -> Paginated a b c -> Cmd msg
 updatePageFromPagination route paginated =
     let
         ( maybePage, newRouteConstructor ) =
@@ -247,11 +244,17 @@ clearSearchForm : ( Model, Cmd msg ) -> ( Model, Cmd msg )
 clearSearchForm ( model, cmd ) =
     flip (,) cmd <|
         case model.route of
+            AdvancedSearch ->
+                { model | searchData = Search.initial }
+
             SearchResults _ _ ->
                 model
 
             _ ->
-                { model | searchData = Search.resetQuery model.searchData }
+                { model
+                    | searchData = Search.initial
+                    , advancedSearchData = Search.initial
+                }
 
 
 logUnsuccessfulRequest : WebData a -> WebData a
@@ -266,10 +269,11 @@ logUnsuccessfulRequest response =
 
 
 -- VIEW
+-- TODO: Refactor into modules
 
 
 view : Model -> Html Msg
-view { route, pageData, navigationData, searchData } =
+view { route, pageData, navigationData, searchData, advancedSearchData } =
     let
         middleContent =
             div [ class "container" ]
@@ -285,8 +289,16 @@ view { route, pageData, navigationData, searchData } =
                     withIntermediateText productDetailsView pageData.productDetails
 
                 CategoryDetails _ pagination ->
-                    withIntermediateText (\data -> categoryDetailsView pagination ( data, Tuple.second pageData.categoryDetails ))
-                        (Tuple.first pageData.categoryDetails)
+                    if Paginate.isLoading pageData.categoryDetails then
+                        [ text "Loading..." ]
+                    else
+                        categoryDetailsView pagination
+                            pageData.categoryDetails
+
+                AdvancedSearch ->
+                    withIntermediateText
+                        (AdvancedSearch.view NavigateTo AdvancedSearchMsg advancedSearchData)
+                        pageData.advancedSearch
 
                 SearchResults data pagination ->
                     if Paginate.isLoading pageData.searchResults then
@@ -371,10 +383,18 @@ productDetailsView { product, variants, maybeSeedAttribute, categories } =
 
 categoryDetailsView :
     Pagination.Data
-    -> ( { category : Category, subCategories : List Category }, Paginated ProductData a )
+    -> Paginated ProductData { slug : String, sorting : Sorting.Option } PageData.CategoryDetails
     -> List (Html Msg)
-categoryDetailsView pagination ( { category, subCategories }, products ) =
+categoryDetailsView pagination products =
     let
+        { category, subCategories } =
+            case Paginate.getResponseData products of
+                Just r ->
+                    r
+
+                Nothing ->
+                    { category = Category.initial, subCategories = [] }
+
         subCategoryCards =
             if List.length subCategories > 0 then
                 List.map subCategoryCard subCategories
@@ -408,12 +428,74 @@ searchResultsView ({ query } as data) pagination products =
     let
         content =
             text query
+
+        searchDescription =
+            p []
+                [ queryDescription
+                , filterDescriptions
+                ]
+
+        queryDescription =
+            if String.isEmpty query then
+                text ""
+            else
+                span []
+                    [ text "Found "
+                    , b [] [ text <| toString (Paginate.getTotalItems products) ]
+                    , text " results for “"
+                    , b [] [ text query ]
+                    , text "”."
+                    ]
+
+        filterDescriptions =
+            case ( categoryDescription, attributeDescriptions ) of
+                ( "", [] ) ->
+                    text ""
+
+                ( "", attrs ) ->
+                    div []
+                        [ text "Showing Products that are "
+                        , span [] attrs
+                        , text "."
+                        ]
+
+                ( cat, [] ) ->
+                    div []
+                        [ text "Showing Products in the "
+                        , b [] [ text cat ]
+                        , text " category."
+                        ]
+
+                ( cat, attrs ) ->
+                    div []
+                        [ text "Showing Products that are "
+                        , span [] attrs
+                        , text ", & in the "
+                        , b [] [ text cat ]
+                        , text " category."
+                        ]
+
+        categoryDescription =
+            case Paginate.getResponseData products of
+                Nothing ->
+                    ""
+
+                Just name ->
+                    name
+
+        attributeDescriptions =
+            [ ( .isOrganic, "Organic" )
+            , ( .isHeirloom, "Heirloom" )
+            , ( .isRegional, "Suitable for the South-East" )
+            , ( .isEcological, "Ecologically Grown" )
+            ]
+                |> List.filter (\( selector, _ ) -> selector data)
+                |> List.map (\( _, name ) -> b [] [ text name ])
+                |> List.intersperse (text ", ")
     in
         [ h1 [] [ text "Search Results" ]
         , hr [] []
-        , p []
-            [ text <| "Found " ++ toString (Paginate.getTotalItems products) ++ " results for “" ++ query ++ "”."
-            ]
+        , searchDescription
         ]
             ++ productsList (SearchResults data) pagination products
 
@@ -421,7 +503,7 @@ searchResultsView ({ query } as data) pagination products =
 productsList :
     (Pagination.Data -> Route)
     -> Pagination.Data
-    -> Paginated ProductData a
+    -> Paginated ProductData a c
     -> List (Html Msg)
 productsList routeConstructor pagination products =
     let

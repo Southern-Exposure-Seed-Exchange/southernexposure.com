@@ -5,6 +5,8 @@ module SeedAttribute
         , decoder
         , legend
         , icons
+        , Attribute(..)
+        , iconUrl
         )
 
 import Html exposing (Html, div, ul, li, img, span, text)
