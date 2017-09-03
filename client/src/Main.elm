@@ -305,10 +305,25 @@ view { route, pageData, navigationData, searchData, advancedSearchData } =
                         [ text "Loading..." ]
                     else
                         searchResultsView data pagination pageData.searchResults
+
+        activeCategories =
+            case route of
+                CategoryDetails _ _ ->
+                    Paginate.getResponseData pageData.categoryDetails
+                        |> Maybe.map .predecessors
+                        |> Maybe.withDefault []
+
+                ProductDetails _ ->
+                    RemoteData.toMaybe pageData.productDetails
+                        |> Maybe.map .predecessors
+                        |> Maybe.withDefault []
+
+                _ ->
+                    []
     in
         div []
             [ SiteHeader.view SearchMsg searchData
-            , SiteNavigation.view navigationData searchData
+            , SiteNavigation.view navigationData activeCategories searchData
             , middleContent
             , SiteFooter.view
             ]
@@ -393,7 +408,7 @@ categoryDetailsView pagination products =
                     r
 
                 Nothing ->
-                    { category = Category.initial, subCategories = [] }
+                    { category = Category.initial, subCategories = [], predecessors = [] }
 
         subCategoryCards =
             if List.length subCategories > 0 then

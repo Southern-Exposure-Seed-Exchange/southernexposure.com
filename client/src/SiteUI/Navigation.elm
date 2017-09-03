@@ -14,8 +14,8 @@ import SiteUI.Search as SiteSearch
 import Views.Utils exposing (routeLinkAttributes, icon)
 
 
-view : WebData NavigationData -> Search.Data -> Html Msg
-view navigationData searchData =
+view : WebData NavigationData -> List CategoryId -> Search.Data -> Html Msg
+view navigationData activeCategories searchData =
     let
         categoryNavigation =
             RemoteData.toMaybe navigationData
@@ -51,7 +51,7 @@ view navigationData searchData =
             in
                 case Dict.get categoryId children of
                     Nothing ->
-                        li [ class "nav-item" ]
+                        li [ class <| "nav-item" ++ activeClass category ]
                             [ a
                                 ([ class "nav-link" ]
                                     ++ (routeLinkAttributes <|
@@ -62,7 +62,7 @@ view navigationData searchData =
                             ]
 
                     Just children ->
-                        li [ class "nav-item dropdown" ]
+                        li [ class <| "nav-item dropdown" ++ activeClass category ]
                             [ a
                                 [ class "nav-link dropdown-toggle"
                                 , href <|
@@ -78,12 +78,18 @@ view navigationData searchData =
 
         childCategory category =
             a
-                ([ class "dropdown-item" ]
+                ([ class <| "dropdown-item" ++ activeClass category ]
                     ++ (routeLinkAttributes <|
                             CategoryDetails category.slug Pagination.default
                        )
                 )
                 [ text category.name ]
+
+        activeClass category =
+            if List.member category.id activeCategories then
+                " active "
+            else
+                ""
     in
         div [ id "navigation", class "container" ]
             [ node "nav"

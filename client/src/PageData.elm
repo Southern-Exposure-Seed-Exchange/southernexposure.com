@@ -66,14 +66,16 @@ initial =
 type alias CategoryDetails =
     { category : Category
     , subCategories : List Category
+    , predecessors : List CategoryId
     }
 
 
 categoryDetailsDecoder : Decoder CategoryDetails
 categoryDetailsDecoder =
-    Decode.map2 CategoryDetails
+    Decode.map3 CategoryDetails
         (Decode.field "category" Category.decoder)
         (Decode.field "subCategories" <| Decode.list Category.decoder)
+        (Decode.field "predecessors" <| Decode.list <| Decode.map CategoryId Decode.int)
 
 
 categoryConfig : Paginate.Config ProductData { slug : String, sorting : Sorting.Option } CategoryDetails
@@ -99,16 +101,18 @@ type alias ProductDetails =
     , variants : List ProductVariant
     , maybeSeedAttribute : Maybe SeedAttribute
     , categories : List Category
+    , predecessors : List CategoryId
     }
 
 
 productDetailsDecoder : Decoder ProductDetails
 productDetailsDecoder =
-    Decode.map4 ProductDetails
+    Decode.map5 ProductDetails
         (Decode.field "product" Product.decoder)
         (Decode.field "variants" <| Decode.list Product.variantDecoder)
         (Decode.field "seedAttribute" <| Decode.nullable SeedAttribute.decoder)
         (Decode.field "categories" <| Decode.list Category.decoder)
+        (Decode.field "predecessors" <| Decode.list <| Decode.map CategoryId Decode.int)
 
 
 type alias SearchResults =
