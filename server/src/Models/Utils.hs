@@ -3,14 +3,15 @@ module Models.Utils
     ( slugify
     , truncateDescription
     , getChildCategoryIds
+    , getParentCategoryIds
     ) where
 
 import Data.Char (isAlphaNum)
 import Data.Monoid ((<>))
-import Database.Persist ((==.), Entity(..), Key(..), selectKeysList)
+import Database.Persist ((==.), Entity(..), Key(..), get, selectKeysList)
 import Text.HTML.TagSoup (parseTags, innerText)
 
-import Models.DB (Product(productLongDescription), Category, EntityField(CategoryParentId))
+import Models.DB
 import Server
 
 import qualified Data.Text as T
@@ -49,9 +50,22 @@ truncateDescription (Entity pId p) =
                 Entity pId $ p { productLongDescription = newDescription }
 
 
--- | Return the ID's of a Category's Child Categories.
+-- | Return the ID's of a Category's Child Categories, including the passed
+-- CategoryId.
 getChildCategoryIds  :: Key Category -> App [Key Category]
 getChildCategoryIds categoryId = do
-            childrenKeys <- runDB $ selectKeysList [CategoryParentId ==. Just categoryId] []
-            subKeys <- concat <$> mapM getChildCategoryIds childrenKeys
-            return $ categoryId : subKeys
+    childrenKeys <- runDB $ selectKeysList [CategoryParentId ==. Just categoryId] []
+    subKeys <- concat <$> mapM getChildCategoryIds childrenKeys
+    return $ categoryId : subKeys
+
+
+-- | Return the ID's of a Category's Parent Categories, including the
+-- passed CategoryId.
+getParentCategoryIds :: Key Category -> App [Key Category]
+getParentCategoryIds categoryId = do
+    category <- runDB $ get categoryId
+    case category >>= categoryParentId of
+        Nothing ->
+            return [categoryId]
+        Just parentId ->
+            (\ids -> categoryId : ids) <$> getParentCategoryIds parentId

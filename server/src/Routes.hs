@@ -107,14 +107,16 @@ data CategoryDetailsData =
         , cddSubCategories :: [Entity Category]
         , cddProducts :: [ProductData]
         , cddTotalProducts :: Int
+        , cddPredecessors :: [Key Category]
         } deriving (Show)
 
 instance ToJSON CategoryDetailsData where
-    toJSON CategoryDetailsData { cddCategory, cddSubCategories, cddProducts, cddTotalProducts } =
+    toJSON CategoryDetailsData { cddCategory, cddSubCategories, cddProducts, cddTotalProducts, cddPredecessors } =
         object [ "category" .= toJSON cddCategory
                , "subCategories" .= toJSON cddSubCategories
                , "products" .= toJSON cddProducts
                , "total" .= toJSON cddTotalProducts
+               , "predecessors" .= toJSON cddPredecessors
                ]
 
 
@@ -137,7 +139,8 @@ categoryDetailsRoute slug maybeSort maybePage maybePerPage = do
                 maybeSort maybePage maybePerPage
                     (\p _ -> (p E.^. ProductCategoryIds) E.==. E.val [categoryId])
             productData <- mapM (getProductData . truncateDescription) products
-            return $ CategoryDetailsData e subCategories productData productsCount
+            predecessors <- getParentCategoryIds categoryId
+            return $ CategoryDetailsData e subCategories productData productsCount predecessors
 
 
 newtype AdvancedSearchData =
@@ -192,14 +195,16 @@ data ProductDetailsData =
         , pddVariants :: [Entity ProductVariant]
         , pddSeedAttribute :: Maybe (Entity SeedAttribute)
         , pddCategories :: [Entity Category]
+        , pddPredecessors :: [Key Category]
         } deriving (Show)
 
 instance ToJSON ProductDetailsData where
     toJSON productData =
         object [ "product" .= toJSON (pddProduct productData)
-               , "variants" .= map toJSON (pddVariants productData)
+               , "variants" .= toJSON (pddVariants productData)
                , "seedAttribute" .= toJSON (pddSeedAttribute productData)
-               , "categories" .= map toJSON (pddCategories productData)
+               , "categories" .= toJSON (pddCategories productData)
+               , "predecessors" .= toJSON (pddPredecessors productData)
                ]
 
 type ProductDetailsRoute =
@@ -217,7 +222,8 @@ productDetailsRoute slug = do
                     (,,) <$> selectList [ProductVariantProductId ==. productId] []
                         <*> getBy (UniqueAttribute productId)
                         <*> selectList [CategoryId <-. productCategoryIds prod] []
-                return $ ProductDetailsData e variants maybeAttribute categories
+                predecessors <- concat <$> mapM getParentCategoryIds (productCategoryIds prod)
+                return $ ProductDetailsData e variants maybeAttribute categories predecessors
 
 
 data ProductsSearchParameters =
