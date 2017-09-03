@@ -33,9 +33,9 @@ view tagger searchQuery =
                         ]
                     ]
                 ]
-            , div [ class "col-auto ml-auto d-none d-sm-block text-right" ]
+            , div [ class "col-auto ml-auto d-none d-md-block text-right" ]
                 [ text "QUICK LINKS"
-                , SiteSearch.form tagger searchQuery
+                , SiteSearch.form tagger "primary" searchQuery
                 , small []
                     [ a (routeLinkAttributes AdvancedSearch)
                         [ text "Advanced Search" ]

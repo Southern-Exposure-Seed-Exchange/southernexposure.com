@@ -308,7 +308,7 @@ view { route, pageData, navigationData, searchData, advancedSearchData } =
     in
         div []
             [ SiteHeader.view SearchMsg searchData
-            , SiteNavigation.view navigationData
+            , SiteNavigation.view navigationData searchData
             , middleContent
             , SiteFooter.view
             ]

@@ -42,8 +42,8 @@ update msg data =
 -- VIEW
 
 
-form : (Msg -> msg) -> Search.Data -> Html msg
-form tagger { query } =
+form : (Msg -> msg) -> String -> Search.Data -> Html msg
+form tagger buttonColor { query } =
     Html.form [ onSubmit <| tagger Submit ]
         [ div [ class "input-group input-group-sm" ]
             [ input
@@ -54,7 +54,7 @@ form tagger { query } =
                 ]
                 []
             , span [ class "input-group-btn" ]
-                [ button [ class "btn btn-primary", type_ "submit" ] [ text "Search" ]
+                [ button [ class <| "btn btn-" ++ buttonColor, type_ "submit" ] [ text "Search" ]
                 ]
             ]
         ]

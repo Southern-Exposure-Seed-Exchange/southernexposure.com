@@ -11,6 +11,7 @@ module.exports = {
   entry: {
     vendor: [
       'bootstrap',
+      'font-awesome-sass-loader',
     ],
     styles: [
       './src/styles.sass',
@@ -47,10 +48,20 @@ module.exports = {
         exclude: [/node_modules/,],
         use: [ 'style-loader', 'css-loader', 'sass-loader' ],
       },
-
       {
-        test: /\.(jpg|png|svg|ttf)$/,
-        exclude: [/node_modules/],
+        test: /\.woff(2)?(\?v=[0-9]\.[0-9]\.[0-9])?$/,
+        use: [
+          {
+            loader: 'url-loader',
+            options: {
+              limit: 10000,
+              mimetype: 'application/font-woff',
+            },
+          },
+        ],
+      },
+      {
+        test: /\.(jpg|png|svg|ttf|eot)(\?v=[0-9]\.[0-9]\.[0-9])?$/,
         use: [
           {
             loader: 'file-loader',
@@ -61,7 +72,6 @@ module.exports = {
           },
         ],
       },
-
     ],
     noParse: [/.elm$/]
   },

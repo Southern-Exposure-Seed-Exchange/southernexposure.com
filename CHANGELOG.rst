@@ -6,6 +6,10 @@ CHANGELOG
 v0.2.0
 ======
 
+* Change ``Search Descriptions`` checkbox on the Advanced Search page into a
+  radio field with ``Titles`` and ``Titles & Descriptions`` options.
+* Remove ``Include Subcategories`` checkbox on the Advanced Search page.
+  Instead, subcategories are always included.
 * Show used search terms & filters on the Search Results page.
 * Combine the different SKUs of identical Products into a single Product(merge
   bulk Products into their normal Products).

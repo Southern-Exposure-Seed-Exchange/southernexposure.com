@@ -1,19 +1,21 @@
 module SiteUI.Navigation exposing (view)
 
 import Dict
-import Html exposing (Html, text, div, ul, li, span, button, a, node)
+import Html exposing (Html, text, div, ul, li, span, button, a, node, form)
 import Html.Attributes exposing (attribute, id, class, href, type_)
 import RemoteData exposing (WebData)
 import Category exposing (CategoryId(..))
-import Messages exposing (Msg)
+import Messages exposing (Msg(SearchMsg))
 import Products.Pagination as Pagination
 import Routing exposing (Route(..), reverse)
+import Search
 import SiteUI exposing (NavigationData)
-import Views.Utils exposing (routeLinkAttributes)
+import SiteUI.Search as SiteSearch
+import Views.Utils exposing (routeLinkAttributes, icon)
 
 
-view : WebData NavigationData -> Html Msg
-view navigationData =
+view : WebData NavigationData -> Search.Data -> Html Msg
+view navigationData searchData =
     let
         categoryNavigation =
             RemoteData.toMaybe navigationData
@@ -87,7 +89,17 @@ view navigationData =
             [ node "nav"
                 [ class "navbar navbar-expand-md navbar-light bg-success" ]
                 [ button
-                    [ class "navbar-toggler"
+                    [ class "navbar-toggler ml-auto"
+                    , type_ "button"
+                    , attribute "data-toggle" "collapse"
+                    , attribute "data-target" "#search-navbar"
+                    , attribute "aria-controls" "navbarSupportedContent"
+                    , attribute "aria-expanded" "false"
+                    , attribute "aria-label" "Toggle navigation"
+                    ]
+                    [ icon "search p-1" ]
+                , button
+                    [ class "navbar-toggler ml-2"
                     , type_ "button"
                     , attribute "data-toggle" "collapse"
                     , attribute "data-target" "#category-navbar"
@@ -96,6 +108,15 @@ view navigationData =
                     , attribute "aria-label" "Toggle navigation"
                     ]
                     [ span [ class "navbar-toggler-icon" ] [] ]
+                , div [ id "search-navbar", class "collapse navbar-collapse" ]
+                    [ div [ class "mt-2" ] [ SiteSearch.form SearchMsg "light" searchData ]
+                    , ul [ class "nav navbar-nav" ]
+                        [ li [ class "nav-item" ]
+                            [ a (class "nav-link" :: routeLinkAttributes AdvancedSearch)
+                                [ text "Advanced Search" ]
+                            ]
+                        ]
+                    ]
                 , div [ id "category-navbar", class "collapse navbar-collapse" ]
                     [ ul [ class "navbar-nav mx-auto d-flex text-left" ]
                         categoryNavigation

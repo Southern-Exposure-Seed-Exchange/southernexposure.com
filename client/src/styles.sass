@@ -1,3 +1,5 @@
+@import "~bootstrap/scss/functions"
+
 /** Variables **/
 /* Set the height of the Site Logo & Title */
 $logo-height: 120px
@@ -23,7 +25,9 @@ $body-bg: lighten($light-pale-tan, 14.5%)
 $body-color: $dark-brown
 $link-color: $dark-green
 
-$navbar-padding-y: 0px
+$container-max-widths: ( sm: 570px, md: 762px, lg: 995px, xl: 1180px)
+
+$navbar-padding-y: 2px
 $navbar-padding-x: 10px
 
 $navbar-light-color: lighten($light-pale-tan, 10%)
@@ -32,7 +36,7 @@ $navbar-light-active-bg: darken($dark-green, 7.5%)
 $navbar-light-hover-color: $orange-yellow
 $navbar-light-hover-bg: $dark-green
 $navbar-light-toggler-border-color: $light-pale-tan
-$navbar-light-toggler-icon-bg: str-replace(url("data:image/svg+xml;charset=utf8,%3Csvg viewBox='0 0 30 30' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath stroke='#{$navbar-light-color}' stroke-width='2' stroke-linecap='round' stroke-miterlimit='10' d='M4 7h22M4 15h22M4 23h22'/%3E%3C/svg%3E"), "#", "%23")
+$navbar-light-toggler-icon-bg: str-replace(url("data:image/svg+xml;charset=utf8,%3Csvg viewBox='0 0 30 30' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath stroke='#{$light-pale-tan}' stroke-width='2' stroke-linecap='round' stroke-miterlimit='10' d='M4 7h22M4 15h22M4 23h22'/%3E%3C/svg%3E"), "#", "%23") !default;
 
 $table-bg: lighten($light-pale-tan, 12.5%)
 $table-accent-bg: $pale-tan-accent
@@ -41,7 +45,6 @@ $input-color: #333
 
 $hr-border: #C0C0C0
 
-@import "~bootstrap/scss/functions"
 @import "~bootstrap/scss/variables"
 @import "~bootstrap/scss/bootstrap"
 
@@ -93,10 +96,12 @@ body > div#main > div > div.container
   /* Round the Corners of the Navbar */
   nav
     border-radius: 4px
+  /* Color the mobile navbar buttons */
+  .navbar-toggler
+    color: $light-pale-tan
   #category-navbar
+    font-size: 1.3rem
     &, .dropdown-menu
-      /* Increase font size */
-      font-size: 1.1em
       /* De-emphasize */
       font-weight: normal
     /* Space Out Navbar Links */
@@ -106,6 +111,8 @@ body > div#main > div > div.container
     .active
       background-color: $navbar-light-active-bg
     .dropdown-menu
+      /* Increase font size */
+      font-size: 1.2rem
       /* Remove corner rounding from top corners */
       border-top-left-radius: 0
       border-top-right-radius: 0
@@ -125,6 +132,10 @@ body > div#main > div > div.container
     .dropdown-item
       padding: 0.25rem 1.5rem
       width: auto
+  /* Hide search menu on non-mobile screens */
+  #search-navbar
+    +media-breakpoint-up(md)
+      display: none !important
 
 /* The entire footer background should match the color of the table stripes */
 #footer
