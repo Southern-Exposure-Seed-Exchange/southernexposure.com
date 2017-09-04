@@ -421,14 +421,22 @@ categoryDetailsView pagination products =
             div [ class "col-6 col-sm-4 col-md-3 mb-2" ]
                 [ a (routeLinkAttributes <| CategoryDetails category.slug Pagination.default)
                     [ div [ class "h-100 text-center" ]
-                        [ img [ class "img-fluid mx-auto", src <| Images.media category.imageURL ] []
+                        [ img
+                            [ class "img-fluid mx-auto"
+                            , src <| Images.media <| "categories/" ++ category.imageURL
+                            ]
+                            []
                         , div [ class "my-auto" ] [ text category.name ]
                         ]
                     ]
                 ]
     in
         [ div [ class "d-flex align-items-center" ]
-            [ img [ class "img-fluid", src <| Images.media category.imageURL ] []
+            [ img
+                [ class "img-fluid"
+                , src <| Images.media <| "categories/" ++ category.imageURL
+                ]
+                []
             , h1 [ class "mb-0 pl-2" ] [ text category.name ]
             ]
         , hr [ class "mt-2" ] []
