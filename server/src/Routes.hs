@@ -135,9 +135,10 @@ categoryDetailsRoute slug maybeSort maybePage maybePerPage = do
             throwError err404
         Just e@(Entity categoryId _) -> do
             subCategories <- runDB $ selectList [CategoryParentId ==. Just categoryId] [Asc CategoryName]
+            descendants <- getChildCategoryIds categoryId
             (products, productsCount) <- paginatedSelect
                 maybeSort maybePage maybePerPage
-                    (\p _ -> (p E.^. ProductCategoryIds) E.==. E.val [categoryId])
+                    (\p _ -> (p E.^. ProductCategoryIds) `E.in_` E.valList (map (: []) descendants))
             productData <- mapM (getProductData . truncateDescription) products
             predecessors <- getParentCategoryIds categoryId
             return $ CategoryDetailsData e subCategories productData productsCount predecessors

@@ -6,6 +6,7 @@ CHANGELOG
 v0.2.0
 ======
 
+* Show Products in subcategories on a Category's Detail page.
 * Change ``Search Descriptions`` checkbox on the Advanced Search page into a
   radio field with ``Titles`` and ``Titles & Descriptions`` options.
 * Remove ``Include Subcategories`` checkbox on the Advanced Search page.
