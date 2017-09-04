@@ -8,6 +8,8 @@ module Routes
     , categoryRoutes
     , ProductAPI
     , productRoutes
+    , StaticPageAPI
+    , staticPageRoutes
     ) where
 
 import Data.Aeson ((.=), (.:), (.:?), ToJSON(..), FromJSON(..), object, withObject)
@@ -314,6 +316,41 @@ productsSearchRoute maybeSort maybePage maybePerPage parameters = do
                 sa E.?. attribute E.==. E.just (E.val True)
               else
                 E.val True
+
+
+-- Pages
+type StaticPageAPI =
+    "details" :> PageDetailsRoute
+
+type StaticPageRoutes =
+    (T.Text -> App PageDetailsData)
+
+staticPageRoutes :: StaticPageRoutes
+staticPageRoutes =
+    pageDetailsRoute
+
+
+newtype PageDetailsData =
+    StaticPageDetailsData
+        { spddPage :: Entity Page
+        } deriving (Show)
+
+instance ToJSON PageDetailsData where
+    toJSON StaticPageDetailsData { spddPage } =
+        object [ "page" .= toJSON spddPage ]
+
+type PageDetailsRoute =
+    Capture "slug" T.Text :> Get '[JSON] PageDetailsData
+
+pageDetailsRoute :: T.Text -> App PageDetailsData
+pageDetailsRoute slug = do
+    maybePage <- runDB . getBy $ UniquePageSlug slug
+    case maybePage of
+        Nothing ->
+            throwError err404
+        Just pageEntity ->
+            return $ StaticPageDetailsData pageEntity
+
 
 
 -- Utils

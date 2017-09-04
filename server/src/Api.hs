@@ -36,9 +36,11 @@ api = Proxy
 type API =
          "categories" :> CategoryAPI
     :<|> "products" :> ProductAPI
+    :<|> "pages" :> StaticPageAPI
 
 -- | Return the Handler functions for the `API` type.
 server :: ServerT API App
 server =
          categoryRoutes
     :<|> productRoutes
+    :<|> staticPageRoutes

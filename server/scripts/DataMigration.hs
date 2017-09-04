@@ -15,7 +15,7 @@ import Data.Scientific (Scientific)
 import Database.MySQL.Base
     ( MySQLConn, Query(..), query_, close, MySQLValue(..), prepareStmt, queryStmt )
 import Database.Persist
-    (Entity(..), Filter, getBy, insert, deleteWhere)
+    (Entity(..), Filter, getBy, insert, insertMany_, deleteWhere)
 import Database.Persist.Postgresql
     (ConnectionPool, SqlWriteT, createPostgresqlPool, toSqlKey, runSqlPool)
 import System.FilePath (takeFileName)
@@ -39,12 +39,14 @@ main = do
             $ map (\(_, catId, _, _, _, _, p) -> (catId, p)) mysqlProducts
         variants = makeVariants mysqlProducts
     attributes <- makeSeedAttributes mysqlConn
+    pages <- makePages mysqlConn
     flip runSqlPool psqlConn
         $ dropNewDatabaseRows
         >> insertCategories categories
         >>= insertProducts products
         >> insertVariants variants
         >> insertAttributes attributes
+        >> insertPages pages
     close mysqlConn
     destroyAllResources psqlConn
 
@@ -62,6 +64,7 @@ dropNewDatabaseRows =
         >> deleteWhere ([] :: [Filter ProductVariant])
         >> deleteWhere ([] :: [Filter Product])
         >> deleteWhere ([] :: [Filter Category])
+        >> deleteWhere ([] :: [Filter Page])
 
 
 -- MySQL -> Persistent Functions
@@ -158,6 +161,17 @@ splitSku fullSku =
             (fullSku, "")
 
 
+makePages :: MySQLConn -> IO [Page]
+makePages mysql = do
+    pages <- Streams.toList . snd
+        =<< (query_ mysql . Query
+            $ "SELECT pages_title, pages_html_text"
+            <> "    FROM ezpages WHERE pages_html_text <> \"\"")
+    return $ flip map pages $ \[MySQLText name, MySQLText content] ->
+        Page name (slugify name) content
+
+
+
 -- Persistent Model Saving Functions
 insertCategories :: [(Int, Int, Category)] -> SqlWriteT IO (IntMap.IntMap (Key Category))
 insertCategories =
@@ -201,3 +215,6 @@ insertAttributes =
                     lift . putStrLn $ "No product for: " ++ show attribute
                 Just (Entity prodId _) ->
                     void . insert $ attribute { seedAttributeProductId = prodId }
+
+insertPages :: [Page] -> SqlWriteT IO ()
+insertPages = insertMany_

@@ -56,4 +56,12 @@ SeedAttribute json
     isRegional Bool
     UniqueAttribute productId
     deriving Show
+
+
+Page json
+    name T.Text
+    slug T.Text
+    content T.Text
+    UniquePageSlug slug
+    deriving Show
 |]
