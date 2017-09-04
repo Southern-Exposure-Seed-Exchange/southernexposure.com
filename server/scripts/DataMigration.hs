@@ -13,19 +13,17 @@ import Data.Monoid ((<>))
 import Data.Pool (destroyAllResources)
 import Data.Scientific (Scientific)
 import Database.MySQL.Base
-    ( MySQLConn, ConnectInfo(..), Query(..), connect, defaultConnectInfo, query_, close, MySQLValue(..)
-    , prepareStmt, queryStmt
-    )
+    ( MySQLConn, Query(..), query_, close, MySQLValue(..), prepareStmt, queryStmt )
 import Database.Persist
     (Entity(..), Filter, getBy, insert, deleteWhere)
 import Database.Persist.Postgresql
     (ConnectionPool, SqlWriteT, createPostgresqlPool, toSqlKey, runSqlPool)
-import System.Environment (lookupEnv)
+import System.FilePath (takeFileName)
 
 import Models
 import Models.Fields
+import Utils
 
-import qualified Data.ByteString.Char8 as BS
 import qualified Data.IntMap as IntMap
 import qualified Data.Text as T
 import qualified System.IO.Streams as Streams
@@ -52,16 +50,6 @@ main = do
 
 
 -- DB Utility Functions
-
-connectToMysql :: IO MySQLConn
-connectToMysql = do
-    mysqlUser <- maybe "" BS.pack <$> lookupEnv "DB_USER"
-    mysqlPass <- maybe "" BS.pack <$> lookupEnv "DB_PASS"
-    connect $ defaultConnectInfo
-            { ciUser = mysqlUser
-            , ciDatabase = "retailzen"
-            , ciPassword = mysqlPass
-            }
 
 connectToPostgres :: IO ConnectionPool
 connectToPostgres =
@@ -104,7 +92,7 @@ makeCategories mysql = do
                 return
                     ( fromIntegral catId
                     , fromIntegral parentId
-                    , Category name (slugify name) Nothing description imgUrl (fromIntegral catOrder)
+                    , Category name (slugify name) Nothing description (T.pack . takeFileName $ T.unpack imgUrl) (fromIntegral catOrder)
                     )
           toData r = print r >> error "Category Lambda Did Not Match"
 
@@ -123,7 +111,7 @@ makeProducts mysql = do
             _ <- return prodId
             _ <- return prodQty
             let (baseSku, skuSuffix) = splitSku prodSKU
-            return (prodId, fromIntegral catId, skuSuffix, prodPrice, prodQty, prodWeight, Product name (slugify name) [] baseSku "" description prodImg)
+            return (prodId, fromIntegral catId, skuSuffix, prodPrice, prodQty, prodWeight, Product name (slugify name) [] baseSku "" description (T.pack . takeFileName $ T.unpack prodImg))
 
 
 makeVariants :: [(Int32, Int, T.Text, Scientific, Float, Float, Product)] -> [(T.Text, ProductVariant)]
