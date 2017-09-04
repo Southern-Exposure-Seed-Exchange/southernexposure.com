@@ -24,6 +24,7 @@ import SiteUI.Header as SiteHeader
 import SiteUI.Navigation as SiteNavigation
 import SiteUI.Search as SiteSearch
 import SiteUI.Sidebar as SiteSidebar
+import StaticPage exposing (StaticPage)
 import Views.Images as Images
 import Views.Utils exposing (routeLinkAttributes, htmlOrBlank)
 
@@ -118,6 +119,11 @@ fetchDataForRoute ({ route, pageData } as model) =
                         |> discardCmd (Paginate.jumpTo PageData.searchConfig pagination.page)
                         |> Tuple.mapFirst (\sr -> { pageData | searchResults = sr })
                         |> Tuple.mapSecond (Cmd.map SearchPaginationMsg)
+
+                PageDetails slug ->
+                    ( { pageData | pageDetails = RemoteData.Loading }
+                    , getPageDetails slug
+                    )
     in
         ( { model | pageData = data }, cmd )
 
@@ -144,6 +150,13 @@ getAdvancedSearchData : Cmd Msg
 getAdvancedSearchData =
     Http.get "/api/categories/search/" PageData.advancedSearchDecoder
         |> sendRequest GetAdvancedSearchData
+
+
+getPageDetails : String -> Cmd Msg
+getPageDetails slug =
+    Http.get ("/api/pages/details/" ++ slug ++ "/")
+        (Decode.field "page" StaticPage.decoder)
+        |> sendRequest GetPageDetailsData
 
 
 
@@ -189,6 +202,13 @@ update msg ({ pageData } as model) =
             let
                 updatedPageData =
                     { pageData | advancedSearch = response }
+            in
+                ( { model | pageData = updatedPageData }, Cmd.none )
+
+        GetPageDetailsData response ->
+            let
+                updatedPageData =
+                    { pageData | pageDetails = response }
             in
                 ( { model | pageData = updatedPageData }, Cmd.none )
 
@@ -305,6 +325,9 @@ view { route, pageData, navigationData, searchData, advancedSearchData } =
                         [ text "Loading..." ]
                     else
                         searchResultsView data pagination pageData.searchResults
+
+                PageDetails _ ->
+                    withIntermediateText staticPageView pageData.pageDetails
 
         activeCategories =
             case route of
@@ -521,6 +544,20 @@ searchResultsView ({ query } as data) pagination products =
         , searchDescription
         ]
             ++ productsList (SearchResults data) pagination products
+
+
+staticPageView : StaticPage -> List (Html Msg)
+staticPageView { name, slug, content } =
+    let
+        header =
+            if slug == "home" then
+                text ""
+            else
+                h1 [] [ text name ]
+    in
+        [ header
+        , div [ innerHtml content ] []
+        ]
 
 
 productsList :

@@ -20,6 +20,7 @@ import Json.Decode as Decode exposing (Decoder)
 import Paginate exposing (Paginated)
 import RemoteData exposing (WebData)
 import Category exposing (Category, CategoryId(..))
+import StaticPage exposing (StaticPage)
 import Product exposing (Product, ProductVariant)
 import Products.Pagination as Pagination
 import Products.Sorting as Sorting
@@ -36,6 +37,7 @@ type alias PageData =
     , productDetails : WebData ProductDetails
     , advancedSearch : WebData AdvancedSearch
     , searchResults : Paginated ProductData { data : Search.Data, sorting : Sorting.Option } String
+    , pageDetails : WebData StaticPage
     }
 
 
@@ -60,6 +62,7 @@ initial =
         , productDetails = RemoteData.NotAsked
         , advancedSearch = RemoteData.NotAsked
         , searchResults = searchPaginate
+        , pageDetails = RemoteData.NotAsked
         }
 
 

@@ -5,7 +5,7 @@ import Html.Attributes exposing (id, class, href, src)
 import Messages
 import SiteUI.Search as SiteSearch
 import Views.Utils exposing (routeLinkAttributes)
-import Routing exposing (Route(AdvancedSearch))
+import Routing exposing (Route(AdvancedSearch, PageDetails))
 
 
 view : (SiteSearch.Msg -> Messages.Msg) -> SiteSearch.Data -> Html Messages.Msg
@@ -14,7 +14,7 @@ view tagger searchQuery =
         [ div [ id "site-header", class "row clearfix" ]
             [ div [ class "col-sm-7 col-lg-6" ]
                 [ div [ class "media" ]
-                    [ a [ href "/" ]
+                    [ a (routeLinkAttributes <| PageDetails "home")
                         [ img
                             [ id "site-logo"
                             , class "float-left mx-3"
@@ -24,7 +24,7 @@ view tagger searchQuery =
                         ]
                     , div [ id "site-title", class "media-body my-auto" ]
                         [ h1 [ class "media-heading m-0" ]
-                            [ a [ href "/" ]
+                            [ a (routeLinkAttributes <| PageDetails "home")
                                 [ text "Southern Exposure"
                                 , br [] []
                                 , text "Seed Exchange"

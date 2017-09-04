@@ -17,6 +17,7 @@ type Route
     | CategoryDetails String Pagination.Data
     | AdvancedSearch
     | SearchResults Search.Data Pagination.Data
+    | PageDetails String
 
 
 parseRoute : Navigation.Location -> Route
@@ -24,13 +25,15 @@ parseRoute =
     let
         routeParser =
             Url.oneOf
-                [ Url.map ProductDetails (Url.s "products" </> Url.string)
+                [ Url.map (PageDetails "home") Url.top
+                , Url.map ProductDetails (Url.s "products" </> Url.string)
                 , Url.map CategoryDetails (Url.s "categories" </> Url.string)
                     |> Pagination.fromQueryString
                 , Url.map AdvancedSearch (Url.s "search" </> Url.s "advanced")
                 , Url.map SearchResults (Url.s "search")
                     |> Search.fromQueryString
                     |> Pagination.fromQueryString
+                , Url.map PageDetails (Url.string)
                 ]
     in
         Url.parsePath routeParser
@@ -57,3 +60,9 @@ reverse route =
                     [ Search.toQueryString data
                     , Pagination.toQueryString pagination
                     ]
+
+        PageDetails slug ->
+            if slug == "home" then
+                ""
+            else
+                joinPath [ slug ]

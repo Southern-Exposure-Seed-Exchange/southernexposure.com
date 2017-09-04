@@ -2,13 +2,38 @@ module SiteUI.Footer exposing (view)
 
 import Html exposing (..)
 import Html.Attributes exposing (id, class, href, target, title)
+import Messages exposing (Msg)
+import Routing exposing (Route(PageDetails))
+import Views.Utils exposing (routeLinkAttributes)
 
 
-view : Html msg
+view : Html Msg
 view =
     let
         break =
             br [] []
+
+        staticPageLink slug title =
+            li []
+                [ a (routeLinkAttributes <| PageDetails slug) [ text title ]
+                ]
+
+        informationLinks =
+            ul [ class "list-unstyled" ]
+                [ staticPageLink "shipping-info" "Shipping & Returns"
+                , staticPageLink "privacy" "Privacy Notice"
+                , staticPageLink "conditions" "Conditions of Use"
+                , staticPageLink "contact-us" "Contact Us"
+                , staticPageLink "site-map" "Site Map"
+                ]
+
+        importantLinks =
+            ul [ class "list-unstyled" ]
+                [ staticPageLink "our-seed-growers" "Our Seed Growers"
+                , staticPageLink "our-nongmo-policy" "Our Non-GMO Policy"
+                , staticPageLink "quality-promise" "Quality Promise"
+                , staticPageLink "growing-guides" "Growing Guides"
+                ]
 
         contactAddress =
             address []
@@ -32,8 +57,14 @@ view =
             [ node "footer"
                 []
                 [ div [ class "row" ]
-                    [ div [ class "col-sm-4" ] [ h4 [ class "mt-3" ] [ text "Information" ] ]
-                    , div [ class "col-sm-4" ] [ h4 [ class "mt-3" ] [ text "Important Links" ] ]
+                    [ div [ class "col-sm-4" ]
+                        [ h4 [ class "mt-3" ] [ text "Information" ]
+                        , informationLinks
+                        ]
+                    , div [ class "col-sm-4" ]
+                        [ h4 [ class "mt-3" ] [ text "Important Links" ]
+                        , importantLinks
+                        ]
                     , div [ class "col-sm-4" ]
                         [ h4 [ class "mt-3" ] [ text "Contact Us" ]
                         , contactAddress
