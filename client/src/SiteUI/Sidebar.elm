@@ -3,19 +3,31 @@ module SiteUI.Sidebar exposing (view)
 import Html exposing (..)
 import Html.Attributes exposing (id, class, href, target, src)
 import Messages exposing (Msg)
-import Routing exposing (Route(PageDetails))
+import Products.Pagination as Pagination
+import Routing exposing (Route(PageDetails, SearchResults))
+import Search
+import SeedAttribute
 import Views.Images as Images
 import Views.Utils exposing (routeLinkAttributes)
+
+
+-- TODO: Mark active search/static pages
 
 
 view : Html Msg
 view =
     let
-        staticPageLink slug title =
+        pageLink route title =
             li []
-                [ a (class "py-2 d-block" :: (routeLinkAttributes <| PageDetails slug))
-                    [ text title ]
+                [ a (class "py-1 d-block" :: (routeLinkAttributes route)) [ text title ]
                 ]
+
+        staticPageLink slug =
+            pageLink (PageDetails slug)
+
+        specialSearchLink modifier =
+            SearchResults (modifier Search.initial) Pagination.default
+                |> pageLink
 
         pageLinks =
             ul [ class "nav nav-pills nav-fill flex-column text-center mb-2" ]
@@ -27,6 +39,38 @@ view =
                 , staticPageLink "links" "Links"
                 , a [ href "/blog/", target "_blank" ] [ text "Blog" ]
                 , staticPageLink "contact-us" "Contact Us"
+                , specialSearchLink identity "All Products"
+                ]
+
+        specialSearch modifier =
+            routeLinkAttributes (SearchResults (modifier Search.initial) Pagination.default)
+
+        attributeLink attribute title modifier =
+            li [ class "media" ]
+                [ a (class "px-2 w-100" :: specialSearch modifier)
+                    [ div [ class "mr-auto d-flex align-items-center" ]
+                        [ img [ class "pl-1 my-2", src <| SeedAttribute.iconUrl attribute ] []
+                        , h6 [ class "pl-2 py-2 mb-0 font-weight-normal" ] [ text title ]
+                        ]
+                    ]
+                ]
+
+        attributesCard =
+            div [ class "card mb-2 icon-legend" ]
+                [ ul [ class "list-unstyled mb-0" ]
+                    [ attributeLink SeedAttribute.Organic
+                        "Certified Organic"
+                        (\s -> { s | isOrganic = True })
+                    , attributeLink SeedAttribute.Heirloom
+                        "Heirloom"
+                        (\s -> { s | isHeirloom = True })
+                    , attributeLink SeedAttribute.Regional
+                        "Especially well-suited to the South-East"
+                        (\s -> { s | isRegional = True })
+                    , attributeLink SeedAttribute.Ecological
+                        "Ecologically Grown"
+                        (\s -> { s | isEcological = True })
+                    ]
                 ]
 
         logoCard =
@@ -46,5 +90,6 @@ view =
     in
         div [ id "sidebar", class "col-12 col-md-3 col-lg-3 col-xl-2 order-md-1" ]
             [ pageLinks
+            , attributesCard
             , logoCard
             ]

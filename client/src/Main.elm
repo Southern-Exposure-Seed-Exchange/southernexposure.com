@@ -16,7 +16,7 @@ import PageData exposing (PageData, ProductData)
 import Products.Pagination as Pagination
 import Products.Sorting as Sorting
 import Routing exposing (Route(..), reverse, parseRoute)
-import Search
+import Search exposing (UniqueSearch(..))
 import SeedAttribute exposing (SeedAttribute)
 import SiteUI exposing (NavigationData)
 import SiteUI.Footer as SiteFooter
@@ -472,14 +472,39 @@ categoryDetailsView pagination products =
 searchResultsView : Search.Data -> Pagination.Data -> PageData.SearchResults -> List (Html Msg)
 searchResultsView ({ query } as data) pagination products =
     let
-        content =
-            text query
+        uniqueSearch =
+            Search.uniqueSearch data
+
+        header =
+            case uniqueSearch of
+                Nothing ->
+                    "Search Results"
+
+                Just searchType ->
+                    case searchType of
+                        AllProducts ->
+                            "All Products"
+
+                        AttributeSearch (SeedAttribute.Organic) ->
+                            "Organic Products"
+
+                        AttributeSearch (SeedAttribute.Heirloom) ->
+                            "Heirloom Products"
+
+                        AttributeSearch (SeedAttribute.Regional) ->
+                            "South-Eastern Products"
+
+                        AttributeSearch (SeedAttribute.Ecological) ->
+                            "Ecologically Grown Products"
 
         searchDescription =
-            p []
-                [ queryDescription
-                , filterDescriptions
-                ]
+            if uniqueSearch == Nothing then
+                p []
+                    [ queryDescription
+                    , filterDescriptions
+                    ]
+            else
+                text ""
 
         queryDescription =
             if String.isEmpty query then
@@ -539,7 +564,7 @@ searchResultsView ({ query } as data) pagination products =
                 |> List.map (\( _, name ) -> b [] [ text name ])
                 |> List.intersperse (text ", ")
     in
-        [ h1 [] [ text "Search Results" ]
+        [ h1 [] [ text header ]
         , hr [] []
         , searchDescription
         ]

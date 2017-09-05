@@ -140,6 +140,17 @@ body > div#main > div > div.container
 #sidebar
   .nav-pills
     font-size: 1.1em
+  .icon-legend
+    a
+      img
+        height: 1.25rem
+      &, &:hover, &:active
+        /* Don't differentiate the active & hover states from the normal state */
+        color: $body-color
+        text-decoration: none
+      &:hover, &:active
+        /* Color the backgorund on hover instead */
+        background-color: $pale-tan-accent
 
 /* The entire footer background should match the color of the table stripes */
 #footer

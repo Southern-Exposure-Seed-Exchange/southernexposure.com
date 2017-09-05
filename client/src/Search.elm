@@ -7,12 +7,15 @@ module Search
         , encode
         , toQueryString
         , fromQueryString
+        , UniqueSearch(..)
+        , uniqueSearch
         )
 
 import Json.Encode as Encode exposing (Value)
 import UrlParser as Url exposing ((<?>))
 import Category exposing (CategoryId(..))
 import Routing.Utils as Routing exposing (queryFlag, queryParameter)
+import SeedAttribute
 
 
 type alias Data =
@@ -29,11 +32,6 @@ type alias Data =
 type SearchScope
     = Titles
     | TitlesAndDescriptions
-
-
-fromQuery : String -> Data
-fromQuery query =
-    { initial | query = query }
 
 
 initial : Data
@@ -114,3 +112,39 @@ fromQueryString pathParser =
             (\constructor q descr org heir reg eco cat ->
                 constructor <| Data q descr org heir reg eco cat
             )
+
+
+
+-- Unique Searches
+
+
+type UniqueSearch
+    = AttributeSearch SeedAttribute.Attribute
+    | AllProducts
+
+
+uniqueSearch : Data -> Maybe UniqueSearch
+uniqueSearch { query, searchIn, category, isOrganic, isHeirloom, isRegional, isEcological } =
+    case ( query, searchIn, category ) of
+        ( "", TitlesAndDescriptions, Nothing ) ->
+            case ( isOrganic, isHeirloom, isRegional, isEcological ) of
+                ( True, False, False, False ) ->
+                    Just <| AttributeSearch SeedAttribute.Organic
+
+                ( False, True, False, False ) ->
+                    Just <| AttributeSearch SeedAttribute.Heirloom
+
+                ( False, False, True, False ) ->
+                    Just <| AttributeSearch SeedAttribute.Regional
+
+                ( False, False, False, True ) ->
+                    Just <| AttributeSearch SeedAttribute.Ecological
+
+                ( False, False, False, False ) ->
+                    Just AllProducts
+
+                _ ->
+                    Nothing
+
+        _ ->
+            Nothing
