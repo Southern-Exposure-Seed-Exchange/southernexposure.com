@@ -14,13 +14,24 @@ import Views.Utils exposing (routeLinkAttributes)
 -- TODO: Mark active search/static pages
 
 
-view : Html Msg
-view =
+view : Route -> Html Msg
+view route =
     let
-        pageLink route title =
-            li []
-                [ a (class "py-1 d-block" :: (routeLinkAttributes route)) [ text title ]
-                ]
+        pageLink linkRoute title =
+            let
+                activeClass =
+                    if linkRoute == route then
+                        " active"
+                    else
+                        ""
+            in
+                li [ class "nav-item" ]
+                    [ a
+                        (class ("py-1 d-block border-0 nav-link" ++ activeClass)
+                            :: (routeLinkAttributes linkRoute)
+                        )
+                        [ text title ]
+                    ]
 
         staticPageLink slug =
             pageLink (PageDetails slug)

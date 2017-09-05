@@ -5,6 +5,9 @@ CHANGELOG
 v0.3.0
 ======
 
+* Style the current page in the left sidebar's nav links.
+* Reduce size of attribute icons in sidebar, reduce empty space between each.
+
 
 v0.2.0
 ======

@@ -299,7 +299,7 @@ view { route, pageData, navigationData, searchData, advancedSearchData } =
             div [ class "container" ]
                 [ div [ class "row" ]
                     [ div [ class "col order-md-2" ] pageContent
-                    , SiteSidebar.view
+                    , SiteSidebar.view route
                     ]
                 ]
 
