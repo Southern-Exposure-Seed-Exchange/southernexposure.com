@@ -130,6 +130,9 @@ setPageTitle { route, pageData } =
             PageDetails _ ->
                 mapper .pageDetails .name
 
+            NotFound ->
+                Ports.setPageTitle "Page Not Found"
+
 
 {-| TODO: Move to PageData module?
 -}
@@ -176,6 +179,9 @@ fetchDataForRoute ({ route, pageData } as model) =
                     ( { pageData | pageDetails = RemoteData.Loading }
                     , getPageDetails slug
                     )
+
+                NotFound ->
+                    ( pageData, Cmd.none )
     in
         ( { model | pageData = data }, cmd )
 
@@ -377,6 +383,8 @@ view { route, pageData, navigationData, searchData, advancedSearchData } =
                 CategoryDetails _ pagination ->
                     if Paginate.isLoading pageData.categoryDetails then
                         [ text "Loading..." ]
+                    else if Paginate.getError pageData.categoryDetails /= Nothing then
+                        notFoundView
                     else
                         categoryDetailsView pagination
                             pageData.categoryDetails
@@ -394,6 +402,9 @@ view { route, pageData, navigationData, searchData, advancedSearchData } =
 
                 PageDetails _ ->
                     withIntermediateText staticPageView pageData.pageDetails
+
+                NotFound ->
+                    notFoundView
 
         activeCategories =
             case route of
@@ -427,8 +438,21 @@ withIntermediateText view data =
         RemoteData.Success d ->
             view d
 
+        RemoteData.Failure (Http.BadStatus resp) ->
+            if resp.status.code == 404 then
+                notFoundView
+            else
+                [ text <| toString e ]
+
         e ->
             [ text <| toString e ]
+
+
+notFoundView : List (Html msg)
+notFoundView =
+    [ h1 [] [ text "Page Not Found" ]
+    , p [] [ text "Sorry, we couldn't find the page your were looking for." ]
+    ]
 
 
 productDetailsView : PageData.ProductDetails -> List (Html Msg)

@@ -19,6 +19,7 @@ type Route
     | AdvancedSearch
     | SearchResults Search.Data Pagination.Data
     | PageDetails String
+    | NotFound
 
 
 parseRoute : Navigation.Location -> Route
@@ -59,7 +60,7 @@ parseRoute =
                 ]
     in
         Url.parsePath routeParser
-            >> Maybe.withDefault (ProductDetails "green-pod-red-seed-asparagus-yardlong-bean-7-g")
+            >> Maybe.withDefault NotFound
 
 
 reverse : Route -> String
@@ -113,3 +114,6 @@ reverse route =
                 ""
             else
                 joinPath [ slug ]
+
+        NotFound ->
+            joinPath [ "page-not-found" ]
