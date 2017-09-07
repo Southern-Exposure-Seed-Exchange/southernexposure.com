@@ -1,5 +1,5 @@
 name:                sese-website
-version:             0.1.0.0
+version:             0.3.0.0
 -- synopsis:
 -- description:
 homepage:            https://github.com/prikhi/sese-website#readme
@@ -94,4 +94,4 @@ executable image-migration
 
 source-repository head
   type:     git
-  location: https://github.com/prikhi/sese-website
+  location: https://github.com/Southern-Exposure-Seed-Exchange/southernexposure.com
