@@ -6,6 +6,7 @@ import Html.Attributes exposing (attribute, id, class, href, type_)
 import RemoteData exposing (WebData)
 import Category exposing (CategoryId(..))
 import Messages exposing (Msg(SearchMsg))
+import PageData
 import Products.Pagination as Pagination
 import Routing exposing (Route(..), reverse)
 import Search
@@ -14,7 +15,7 @@ import SiteUI.Search as SiteSearch
 import Views.Utils exposing (routeLinkAttributes, icon)
 
 
-view : WebData NavigationData -> List CategoryId -> Search.Data -> Html Msg
+view : WebData NavigationData -> List PageData.PredecessorCategory -> Search.Data -> Html Msg
 view navigationData activeCategories searchData =
     let
         categoryNavigation =
@@ -86,10 +87,13 @@ view navigationData activeCategories searchData =
                 [ text category.name ]
 
         activeClass category =
-            if List.member category.id activeCategories then
+            if List.member category.id activeCategoryIds then
                 " active "
             else
                 ""
+
+        activeCategoryIds =
+            List.map .id activeCategories
     in
         div [ id "navigation", class "container" ]
             [ node "nav"

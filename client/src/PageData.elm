@@ -2,6 +2,7 @@ module PageData
     exposing
         ( PageData
         , initial
+        , PredecessorCategory
         , CategoryDetails
         , categoryDetailsDecoder
         , categoryConfig
@@ -66,10 +67,14 @@ initial =
         }
 
 
+
+-- Category Details
+
+
 type alias CategoryDetails =
     { category : Category
     , subCategories : List Category
-    , predecessors : List CategoryId
+    , predecessors : List PredecessorCategory
     }
 
 
@@ -78,7 +83,10 @@ categoryDetailsDecoder =
     Decode.map3 CategoryDetails
         (Decode.field "category" Category.decoder)
         (Decode.field "subCategories" <| Decode.list Category.decoder)
-        (Decode.field "predecessors" <| Decode.list <| Decode.map CategoryId Decode.int)
+        (Decode.field "predecessors" <|
+            Decode.map List.reverse <|
+                Decode.list predecessorCategoryDecoder
+        )
 
 
 categoryConfig : Paginate.Config ProductData { slug : String, sorting : Sorting.Option } CategoryDetails
@@ -99,12 +107,16 @@ categoryConfig =
         Paginate.makeConfig request
 
 
+
+-- Product Details
+
+
 type alias ProductDetails =
     { product : Product
     , variants : List ProductVariant
     , maybeSeedAttribute : Maybe SeedAttribute
     , categories : List Category
-    , predecessors : List CategoryId
+    , predecessors : List PredecessorCategory
     }
 
 
@@ -115,7 +127,14 @@ productDetailsDecoder =
         (Decode.field "variants" <| Decode.list Product.variantDecoder)
         (Decode.field "seedAttribute" <| Decode.nullable SeedAttribute.decoder)
         (Decode.field "categories" <| Decode.list Category.decoder)
-        (Decode.field "predecessors" <| Decode.list <| Decode.map CategoryId Decode.int)
+        (Decode.field "predecessors" <|
+            Decode.map List.reverse <|
+                Decode.list predecessorCategoryDecoder
+        )
+
+
+
+-- Search Results
 
 
 type alias SearchResults =
@@ -138,6 +157,25 @@ searchConfig =
                 )
     in
         Paginate.makeConfig request
+
+
+
+-- Common Page Data
+
+
+type alias PredecessorCategory =
+    { id : CategoryId
+    , slug : String
+    , name : String
+    }
+
+
+predecessorCategoryDecoder : Decoder PredecessorCategory
+predecessorCategoryDecoder =
+    Decode.map3 PredecessorCategory
+        (Decode.field "id" <| Decode.map CategoryId Decode.int)
+        (Decode.field "slug" Decode.string)
+        (Decode.field "name" Decode.string)
 
 
 type alias ProductData =

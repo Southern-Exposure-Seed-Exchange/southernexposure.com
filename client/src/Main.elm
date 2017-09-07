@@ -20,6 +20,7 @@ import Routing exposing (Route(..), reverse, parseRoute)
 import Search exposing (UniqueSearch(..))
 import SeedAttribute exposing (SeedAttribute)
 import SiteUI exposing (NavigationData)
+import SiteUI.Breadcrumbs as SiteBreadcrumbs
 import SiteUI.Footer as SiteFooter
 import SiteUI.Header as SiteHeader
 import SiteUI.Navigation as SiteNavigation
@@ -424,6 +425,7 @@ view { route, pageData, navigationData, searchData, advancedSearchData } =
         div []
             [ SiteHeader.view SearchMsg searchData
             , SiteNavigation.view navigationData activeCategories searchData
+            , SiteBreadcrumbs.view route pageData
             , middleContent
             , SiteFooter.view
             ]
