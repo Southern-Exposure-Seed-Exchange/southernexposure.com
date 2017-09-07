@@ -3,7 +3,7 @@ module Models.Utils
     ( slugify
     , truncateDescription
     , getChildCategoryIds
-    , getParentCategoryIds
+    , getParentCategories
     ) where
 
 import Data.Char (isAlphaNum)
@@ -58,14 +58,12 @@ getChildCategoryIds categoryId = do
     subKeys <- concat <$> mapM getChildCategoryIds childrenKeys
     return $ categoryId : subKeys
 
-
--- | Return the ID's of a Category's Parent Categories, including the
--- passed CategoryId.
-getParentCategoryIds :: Key Category -> App [Key Category]
-getParentCategoryIds categoryId = do
-    category <- runDB $ get categoryId
-    case category >>= categoryParentId of
-        Nothing ->
-            return [categoryId]
-        Just parentId ->
-            (\ids -> categoryId : ids) <$> getParentCategoryIds parentId
+getParentCategories :: Key Category -> App [Entity Category]
+getParentCategories categoryId = do
+    maybeCategory <- runDB $ get categoryId
+    flip (maybe $ return []) maybeCategory $ \category ->
+        case categoryParentId category of
+            Nothing ->
+                return [Entity categoryId category]
+            Just parentId ->
+                (Entity categoryId category :) <$> getParentCategories parentId
