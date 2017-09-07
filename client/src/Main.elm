@@ -13,6 +13,7 @@ import AdvancedSearch
 import Category exposing (Category, CategoryId(..))
 import Messages exposing (Msg(..))
 import PageData exposing (PageData, ProductData)
+import Ports
 import Products.Pagination as Pagination
 import Products.Sorting as Sorting
 import Routing exposing (Route(..), reverse, parseRoute)
@@ -71,12 +72,63 @@ init location =
         , Cmd.batch
             [ cmd
             , getNavigationData
+            , setPageTitle model
             ]
         )
 
 
 
 -- COMMANDS
+
+
+setPageTitle : Model -> Cmd Msg
+setPageTitle { route, pageData } =
+    let
+        mapper selector f =
+            selector pageData
+                |> RemoteData.toMaybe
+                |> Maybe.map (f >> Ports.setPageTitle)
+                |> Maybe.withDefault Cmd.none
+    in
+        case route of
+            ProductDetails _ ->
+                mapper .productDetails (.product >> .name)
+
+            CategoryDetails _ _ ->
+                pageData.categoryDetails
+                    |> Paginate.getResponseData
+                    |> Maybe.map (.category >> .name)
+                    |> Maybe.withDefault ""
+                    |> Ports.setPageTitle
+
+            AdvancedSearch ->
+                Ports.setPageTitle "Advanced Search"
+
+            SearchResults data _ ->
+                Ports.setPageTitle <|
+                    case Search.uniqueSearch data of
+                        Nothing ->
+                            "Search Results"
+
+                        Just searchType ->
+                            case searchType of
+                                AllProducts ->
+                                    "All Products"
+
+                                AttributeSearch (SeedAttribute.Organic) ->
+                                    "Organic Products"
+
+                                AttributeSearch (SeedAttribute.Heirloom) ->
+                                    "Heirloom Products"
+
+                                AttributeSearch (SeedAttribute.Regional) ->
+                                    "South-Eastern Products"
+
+                                AttributeSearch (SeedAttribute.Ecological) ->
+                                    "Ecologically Grown Products"
+
+            PageDetails _ ->
+                mapper .pageDetails .name
 
 
 {-| TODO: Move to PageData module?
@@ -172,6 +224,8 @@ update msg ({ pageData } as model) =
             { model | route = route }
                 |> fetchDataForRoute
                 |> clearSearchForm
+                |> withCommand setPageTitle
+                |> withCommand (always (Ports.collapseMobileMenus ()))
 
         NavigateTo route ->
             ( model, Navigation.newUrl <| reverse route )
@@ -194,6 +248,8 @@ update msg ({ pageData } as model) =
                     { pageData | productDetails = response }
             in
                 ( { model | pageData = updatedPageData }, Cmd.none )
+                    |> withCommand setPageTitle
+                    |> withCommand (always Ports.scrollToTop)
 
         GetNavigationData response ->
             ( { model | navigationData = logUnsuccessfulRequest response }, Cmd.none )
@@ -211,6 +267,8 @@ update msg ({ pageData } as model) =
                     { pageData | pageDetails = response }
             in
                 ( { model | pageData = updatedPageData }, Cmd.none )
+                    |> withCommand setPageTitle
+                    |> withCommand (always Ports.scrollToTop)
 
         CategoryPaginationMsg subMsg ->
             pageData.categoryDetails
@@ -221,6 +279,8 @@ update msg ({ pageData } as model) =
                    )
                 |> Tuple.mapFirst (\cd -> { pageData | categoryDetails = cd })
                 |> Tuple.mapFirst (\pd -> { model | pageData = pd })
+                |> withCommand setPageTitle
+                |> withCommand (always Ports.scrollToTop)
 
         SearchPaginationMsg subMsg ->
             Paginate.update PageData.searchConfig subMsg pageData.searchResults
@@ -230,6 +290,12 @@ update msg ({ pageData } as model) =
                    )
                 |> Tuple.mapFirst (\sr -> { pageData | searchResults = sr })
                 |> Tuple.mapFirst (\pd -> { model | pageData = pd })
+                |> withCommand (always Ports.scrollToTop)
+
+
+withCommand : (Model -> Cmd msg) -> ( Model, Cmd msg ) -> ( Model, Cmd msg )
+withCommand newCmd ( model, cmd ) =
+    ( model, Cmd.batch [ cmd, newCmd model ] )
 
 
 updatePageFromPagination : Route -> Paginated a b c -> Cmd msg

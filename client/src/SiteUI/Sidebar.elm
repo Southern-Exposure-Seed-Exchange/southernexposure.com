@@ -11,9 +11,6 @@ import Views.Images as Images
 import Views.Utils exposing (routeLinkAttributes)
 
 
--- TODO: Mark active search/static pages
-
-
 view : Route -> Html Msg
 view route =
     let
