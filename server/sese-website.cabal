@@ -23,6 +23,11 @@ library
                      , Models.Utils
                      , Models.Fields
                      , Routes
+                     , Routes.Categories
+                     , Routes.CommonData
+                     , Routes.Products
+                     , Routes.StaticPages
+                     , Routes.Utils
                      , Server
   build-depends:       base >= 4.7 && < 5
                      , aeson
