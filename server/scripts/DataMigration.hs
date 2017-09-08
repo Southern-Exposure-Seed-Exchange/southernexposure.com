@@ -26,6 +26,8 @@ import Utils
 
 import qualified Data.IntMap as IntMap
 import qualified Data.Text as T
+import qualified Data.UUID as UUID
+import qualified Data.UUID.V4 as UUID4
 import qualified System.IO.Streams as Streams
 
 
@@ -40,6 +42,7 @@ main = do
         variants = makeVariants mysqlProducts
     attributes <- makeSeedAttributes mysqlConn
     pages <- makePages mysqlConn
+    customers <- makeCustomers mysqlConn
     flip runSqlPool psqlConn
         $ dropNewDatabaseRows
         >> insertCategories categories
@@ -47,6 +50,7 @@ main = do
         >> insertVariants variants
         >> insertAttributes attributes
         >> insertPages pages
+        >> insertCustomers customers
     close mysqlConn
     destroyAllResources psqlConn
 
@@ -65,6 +69,7 @@ dropNewDatabaseRows =
         >> deleteWhere ([] :: [Filter Product])
         >> deleteWhere ([] :: [Filter Category])
         >> deleteWhere ([] :: [Filter Page])
+        >> deleteWhere ([] :: [Filter Customer])
 
 
 -- MySQL -> Persistent Functions
@@ -170,6 +175,54 @@ makePages mysql = do
     return $ flip map pages $ \[MySQLText name, MySQLText content] ->
         Page name (slugify name) content
 
+makeCustomers :: MySQLConn -> IO [Customer]
+makeCustomers mysql = do
+    customers <- Streams.toList . snd
+        =<< (query_ mysql . Query
+                $ "SELECT c.customers_firstname, c.customers_lastname, c.customers_email_address,"
+                <> "      c.customers_telephone, c.customers_password, a.entry_street_address,"
+                <> "      a.entry_suburb, a.entry_postcode, a.entry_city,"
+                <> "      a.entry_state, z.zone_name, co.countries_name "
+                <> "FROM customers AS c "
+                <> "RIGHT JOIN address_book AS a "
+                <> "    ON c.customers_default_address_id=a.address_book_id "
+                <> "LEFT JOIN zones AS z "
+                <> "    ON a.entry_zone_id=z.zone_id "
+                <> "RIGHT JOIN countries as co "
+                <> "    ON entry_country_id=co.countries_id "
+                <> "WHERE c.COWOA_account=0"
+            )
+    forM customers $
+        \[ MySQLText firstName, MySQLText lastName, MySQLText email
+         , MySQLText telephone, MySQLText _, MySQLText address
+         , MySQLText addressTwo , MySQLText zipCode, MySQLText city
+         , MySQLText state , nullableZoneName, MySQLText country
+         ] ->
+        let
+            zone =
+                case nullableZoneName of
+                    MySQLText text ->
+                        text
+                    _ ->
+                        state
+        in do
+            token <- generateToken
+            return Customer
+                { customerFirstName = firstName
+                , customerLastName = lastName
+                , customerAddressOne = address
+                , customerAddressTwo = addressTwo
+                , customerCity = city
+                , customerState = zone
+                , customerZipCode = zipCode
+                , customerCountry = country
+                , customerTelephone = telephone
+                , customerEmail = email
+                , customerEncryptedPassword = ""
+                , customerAuthToken = token
+                , customerIsAdmin = email == "gardens@southernexposure.com"
+                }
+    where generateToken = UUID.toText <$> UUID4.nextRandom
 
 
 -- Persistent Model Saving Functions
@@ -218,3 +271,6 @@ insertAttributes =
 
 insertPages :: [Page] -> SqlWriteT IO ()
 insertPages = insertMany_
+
+insertCustomers :: [Customer] -> SqlWriteT IO ()
+insertCustomers = insertMany_

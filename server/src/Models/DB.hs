@@ -64,4 +64,22 @@ Page json
     content T.Text
     UniquePageSlug slug
     deriving Show
+
+
+Customer json
+    firstName T.Text
+    lastName T.Text
+    addressOne T.Text
+    addressTwo T.Text
+    city T.Text
+    state T.Text
+    zipCode T.Text
+    country T.Text
+    telephone T.Text
+    email T.Text
+    encryptedPassword T.Text
+    authToken T.Text
+    isAdmin Bool default=false
+    UniqueToken authToken
+    UniqueEmail email
 |]
