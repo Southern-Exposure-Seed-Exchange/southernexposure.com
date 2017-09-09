@@ -72,9 +72,9 @@ Customer json
     addressOne T.Text
     addressTwo T.Text
     city T.Text
-    state T.Text
+    state Region
     zipCode T.Text
-    country T.Text
+    country Country
     telephone T.Text
     email T.Text
     encryptedPassword T.Text

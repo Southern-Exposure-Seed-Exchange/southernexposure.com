@@ -22,6 +22,7 @@ library
                      , Models.DB
                      , Models.Utils
                      , Models.Fields
+                     , Models.ProvinceCodes
                      , Routes
                      , Routes.Categories
                      , Routes.CommonData
@@ -33,10 +34,12 @@ library
                      , aeson
                      , containers
                      , esqueleto
+                     , iso3166-country-codes
                      , mtl
                      , persistent
                      , persistent-template
                      , servant-server
+                     , state-codes
                      , tagsoup
                      , text
   default-language:    Haskell2010
@@ -73,14 +76,17 @@ executable data-migration
                      , containers
                      , filepath
                      , io-streams
+                     , iso3166-country-codes
                      , monad-logger
                      , mysql-haskell
                      , persistent
                      , persistent-postgresql
                      , resource-pool
                      , scientific
+                     , state-codes
                      , text
                      , transformers
+                     , uuid
   default-language:    Haskell2010
 
 executable image-migration

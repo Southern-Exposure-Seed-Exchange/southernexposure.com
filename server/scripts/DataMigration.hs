@@ -19,15 +19,19 @@ import Database.Persist
 import Database.Persist.Postgresql
     (ConnectionPool, SqlWriteT, createPostgresqlPool, toSqlKey, runSqlPool)
 import System.FilePath (takeFileName)
+import Text.Read (readMaybe)
 
 import Models
 import Models.Fields
 import Utils
 
+import qualified Data.ISO3166_CountryCodes as CountryCodes
 import qualified Data.IntMap as IntMap
+import qualified Data.StateCodes as StateCodes
 import qualified Data.Text as T
 import qualified Data.UUID as UUID
 import qualified Data.UUID.V4 as UUID4
+import qualified Models.ProvinceCodes as ProvinceCodes
 import qualified System.IO.Streams as Streams
 
 
@@ -182,7 +186,7 @@ makeCustomers mysql = do
                 $ "SELECT c.customers_firstname, c.customers_lastname, c.customers_email_address,"
                 <> "      c.customers_telephone, c.customers_password, a.entry_street_address,"
                 <> "      a.entry_suburb, a.entry_postcode, a.entry_city,"
-                <> "      a.entry_state, z.zone_name, co.countries_name "
+                <> "      a.entry_state, z.zone_name, co.countries_iso_code_2 "
                 <> "FROM customers AS c "
                 <> "RIGHT JOIN address_book AS a "
                 <> "    ON c.customers_default_address_id=a.address_book_id "
@@ -196,7 +200,7 @@ makeCustomers mysql = do
         \[ MySQLText firstName, MySQLText lastName, MySQLText email
          , MySQLText telephone, MySQLText _, MySQLText address
          , MySQLText addressTwo , MySQLText zipCode, MySQLText city
-         , MySQLText state , nullableZoneName, MySQLText country
+         , MySQLText state , nullableZoneName, MySQLText rawCountryCode
          ] ->
         let
             zone =
@@ -205,6 +209,61 @@ makeCustomers mysql = do
                         text
                     _ ->
                         state
+            country =
+                case zone of
+                    "Federated States Of Micronesia" ->
+                        Country CountryCodes.FM
+                    "Marshall Islands" ->
+                        Country CountryCodes.MH
+                    _ ->
+                        case readMaybe (T.unpack rawCountryCode) of
+                            Just countryCode ->
+                                Country countryCode
+                            Nothing ->
+                                case rawCountryCode of
+                                    "AN" ->
+                                        Country CountryCodes.BQ
+                                    _ ->
+                                        error $ "Invalid Country Code: " ++ T.unpack rawCountryCode
+            region =
+                case fromCountry country of
+                    CountryCodes.US ->
+                        case StateCodes.fromMName zone of
+                            Just stateCode ->
+                                USState stateCode
+                            Nothing ->
+                                case zone of
+                                    "Armed Forces Africa" ->
+                                        USArmedForces AE
+                                    "Armed Forces Canada" ->
+                                        USArmedForces AE
+                                    "Armed Forces Europe" ->
+                                        USArmedForces AE
+                                    "Armed Forces Middle East" ->
+                                        USArmedForces AE
+                                    "Armed Forces Pacific" ->
+                                        USArmedForces AP
+                                    "Armed Forces Americas" ->
+                                        USArmedForces AA
+                                    "Virgin Islands" ->
+                                        USState StateCodes.VI
+                                    _ ->
+                                        error $ "Invalid State Code: " ++ T.unpack zone
+                    CountryCodes.CA ->
+                        case ProvinceCodes.fromMName zone of
+                            Just provinceCode ->
+                                CAProvince provinceCode
+                            Nothing ->
+                                case zone of
+                                    "Yukon Territory" ->
+                                        CAProvince ProvinceCodes.YT
+                                    "Newfoundland" ->
+                                        CAProvince ProvinceCodes.NL
+                                    _ ->
+                                        error $ "Invalid Canadian Province: " ++ T.unpack zone
+                    _ ->
+                        CustomRegion zone
+
         in do
             token <- generateToken
             return Customer
@@ -213,7 +272,7 @@ makeCustomers mysql = do
                 , customerAddressOne = address
                 , customerAddressTwo = addressTwo
                 , customerCity = city
-                , customerState = zone
+                , customerState = region
                 , customerZipCode = zipCode
                 , customerCountry = country
                 , customerTelephone = telephone
