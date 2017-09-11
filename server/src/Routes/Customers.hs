@@ -2,26 +2,27 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeOperators #-}
 module Routes.Customers
     ( CustomerAPI
     , customerRoutes
     ) where
 
-import Control.Monad ((>=>))
+import Control.Monad ((>=>), when)
 import Control.Monad.Trans (lift)
 import Control.Monad.IO.Class (liftIO)
-import Crypto.BCrypt (hashPasswordUsingPolicy, slowerBcryptHashingPolicy)
-import Data.Aeson (ToJSON(..), FromJSON(..), (.=), (.:), withObject, object)
+import Data.Aeson (ToJSON(..), FromJSON(..), (.=), (.:), withObject, object, encode)
 import Data.Text.Encoding (encodeUtf8, decodeUtf8)
-import Database.Persist (getBy, insertUnique)
-import Servant ((:>), (:<|>)(..), ReqBody, JSON, Get, Post, errBody, err500, throwError)
+import Database.Persist ((=.), Entity(..), getBy, insertUnique, update)
+import Servant ((:>), (:<|>)(..), ReqBody, JSON, Get, Post, errBody, err422, err500, throwError)
 
 import Models
 import Models.Fields (Country(..), Region, ArmedForcesRegionCode, armedForcesRegion)
 import Server
 import Validation (Validation(..))
 
+import qualified Crypto.BCrypt as BCrypt
 import qualified Data.ISO3166_CountryCodes as CountryCodes
 import qualified Data.StateCodes as StateCodes
 import qualified Data.Text as T
@@ -34,15 +35,50 @@ import qualified Validation as V
 type CustomerAPI =
          "locations" :> LocationRoute
     :<|> "register" :> RegisterRoute
+    :<|> "login" :> LoginRoute
 
 type CustomerRoutes =
          App LocationData
-    :<|> (RegistrationParameters -> App RegistrationData)
+    :<|> (RegistrationParameters -> App AuthorizationData)
+    :<|> (LoginParameters -> App AuthorizationData)
 
 customerRoutes :: CustomerRoutes
 customerRoutes =
          locationRoute
     :<|> registrationRoute
+    :<|> loginRoute
+
+
+-- AUTHORIZATION DATA
+
+
+data AuthorizationData =
+    AuthorizationData
+        { adId :: CustomerId
+        , adFirstName :: T.Text
+        , adLastName :: T.Text
+        , adEmail :: T.Text
+        , adToken :: T.Text
+        } deriving (Show)
+
+instance ToJSON AuthorizationData where
+    toJSON authData =
+        object [ "id" .= toJSON (adId authData)
+               , "firstName" .= toJSON (adFirstName authData)
+               , "lastName" .= toJSON (adLastName authData)
+               , "email" .= toJSON (adEmail authData)
+               , "token" .= toJSON (adToken authData)
+               ]
+
+customerToAuthorizationData :: Entity Customer -> AuthorizationData
+customerToAuthorizationData (Entity customerId customer) =
+    AuthorizationData
+        { adId = customerId
+        , adFirstName = customerFirstName customer
+        , adLastName = customerLastName customer
+        , adEmail = customerEmail customer
+        , adToken = customerAuthToken customer
+        }
 
 
 -- LOCATIONS
@@ -144,6 +180,7 @@ instance FromJSON RegistrationParameters where
                 <*> v .: "telephone"
 
 instance Validation RegistrationParameters where
+    -- TODO: Better validation, validate emails, compare to Zencart
     validators parameters = do
         emailDoesntExist <- V.doesntExist $ UniqueEmail $ rpEmail parameters
         return
@@ -166,29 +203,11 @@ instance Validation RegistrationParameters where
             , ( "telephone", [ V.required $ rpTelephone parameters ])
             ]
 
-data RegistrationData =
-    RegistrationData
-        { rdId :: CustomerId
-        , rdFirstName :: T.Text
-        , rdLastName :: T.Text
-        , rdEmail :: T.Text
-        , rdToken :: T.Text
-        } deriving (Show)
-
-instance ToJSON RegistrationData where
-    toJSON regData =
-        object [ "id" .= toJSON (rdId regData)
-               , "firstName" .= toJSON (rdFirstName regData)
-               , "lastName" .= toJSON (rdLastName regData)
-               , "email" .= toJSON (rdEmail regData)
-               , "token" .= toJSON (rdToken regData)
-               ]
-
 type RegisterRoute =
        ReqBody '[JSON] RegistrationParameters
-    :> Post '[JSON] RegistrationData
+    :> Post '[JSON] AuthorizationData
 
-registrationRoute :: RegistrationParameters -> App RegistrationData
+registrationRoute :: RegistrationParameters -> App AuthorizationData
 registrationRoute = validate >=> \parameters -> do
     encryptedPass <- hashPassword $ rpPassword parameters
     authToken <- generateToken
@@ -212,12 +231,12 @@ registrationRoute = validate >=> \parameters -> do
         Nothing ->
             lift $ throwError err500
         Just customerId ->
-            return RegistrationData
-                { rdId = customerId
-                , rdFirstName = rpFirstName parameters
-                , rdLastName = rpLastName parameters
-                , rdEmail = rpEmail parameters
-                , rdToken = authToken
+            return AuthorizationData
+                { adId = customerId
+                , adFirstName = rpFirstName parameters
+                , adLastName = rpLastName parameters
+                , adEmail = rpEmail parameters
+                , adToken = authToken
                 }
 
 generateToken :: App T.Text
@@ -232,7 +251,7 @@ generateToken = do
 
 hashPassword :: T.Text -> App T.Text
 hashPassword password = do
-    maybePass <- liftIO . hashPasswordUsingPolicy slowerBcryptHashingPolicy
+    maybePass <- liftIO . BCrypt.hashPasswordUsingPolicy BCrypt.slowerBcryptHashingPolicy
         $ encodeUtf8 password
     case maybePass of
         Nothing ->
@@ -240,3 +259,72 @@ hashPassword password = do
                 $ err500 { errBody = "Misconfigured Hashing Policy" }
         Just pass ->
             return $ decodeUtf8 pass
+
+
+-- LOGIN
+
+
+data LoginParameters =
+    LoginParameters
+        { lpEmail :: T.Text
+        , lpPassword :: T.Text
+        }
+
+instance FromJSON LoginParameters where
+    parseJSON =
+        withObject "LoginParameters" $ \v ->
+            LoginParameters
+                <$> v .: "email"
+                <*> v .: "password"
+
+type LoginRoute =
+       ReqBody '[JSON] LoginParameters
+    :> Post '[JSON] AuthorizationData
+
+loginRoute :: LoginParameters -> App AuthorizationData
+loginRoute LoginParameters { lpEmail, lpPassword } =
+    let
+        authorizationError =
+            validationError "Invalid Email or Password."
+        resetRequiredError =
+            validationError "Sorry, you need to reset your password before logging in."
+    in do
+        maybeCustomer <- runDB . getBy $ UniqueEmail lpEmail
+        case maybeCustomer of
+            Just e@(Entity _ customer) -> do
+                isValid <- validatePassword e
+                when (customerEncryptedPassword customer == "") resetRequiredError
+                if isValid then
+                    return $ customerToAuthorizationData e
+                else
+                    authorizationError
+            Nothing -> do
+                x <- liftIO . BCrypt.hashPasswordUsingPolicy BCrypt.slowerBcryptHashingPolicy
+                    $ encodeUtf8 lpPassword
+                const authorizationError $! x
+    where validationError text =
+            lift . throwError $ err422 { errBody = encode (text :: T.Text) }
+          validatePassword (Entity customerId customer) =
+            let
+                hashedPassword =
+                    encodeUtf8 $ customerEncryptedPassword customer
+                isValid =
+                    BCrypt.validatePassword hashedPassword
+                        (encodeUtf8 lpPassword)
+                usesPolicy =
+                    BCrypt.hashUsesPolicy BCrypt.slowerBcryptHashingPolicy
+                        hashedPassword
+            in
+                if isValid && usesPolicy then
+                    return True
+                else if isValid then do
+                    maybeNewHash <- liftIO . BCrypt.hashPasswordUsingPolicy
+                        BCrypt.slowerBcryptHashingPolicy
+                        $ encodeUtf8 lpPassword
+                    newHash <- maybe
+                        (lift . throwError $ err500 { errBody = "Misconfigured Hashing Policy" })
+                        (return . decodeUtf8) maybeNewHash
+                    runDB $ update customerId [CustomerEncryptedPassword =. newHash]
+                    return True
+                else
+                    return False
