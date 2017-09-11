@@ -30,6 +30,7 @@ library
                      , Routes.StaticPages
                      , Routes.Utils
                      , Server
+                     , Validation
   build-depends:       base >= 4.7 && < 5
                      , aeson
                      , containers
