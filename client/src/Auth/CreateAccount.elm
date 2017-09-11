@@ -17,6 +17,7 @@ import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode exposing (Value)
 import Navigation
 import RemoteData exposing (WebData)
+import Auth.Utils exposing (noCommandOrStatus)
 import PageData
 import Ports
 import User exposing (AuthStatus)
@@ -225,11 +226,6 @@ addError key error errors =
 errorDecoder : Decoder (Dict String (List String))
 errorDecoder =
     Decode.dict <| Decode.list Decode.string
-
-
-noCommandOrStatus : a -> ( a, Maybe b, Cmd msg )
-noCommandOrStatus form =
-    ( form, Nothing, Cmd.none )
 
 
 createNewAccount : Form -> Cmd Msg
