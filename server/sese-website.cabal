@@ -70,6 +70,7 @@ executable data-migration
   hs-source-dirs:      scripts
   main-is:             DataMigration.hs
   ghc-options:         -threaded -rtsopts -with-rtsopts=-N
+  other-modules:       Utils
   build-depends:       base
                      , sese-website
                      , bytestring
@@ -93,6 +94,7 @@ executable image-migration
   hs-source-dirs:      scripts
   main-is:             ImageMigration.hs
   ghc-options:         -threaded -rtsopts -with-rtsopts=-N
+  other-modules:       Utils
   build-depends:       base
                      , sese-website
                      , bytestring
