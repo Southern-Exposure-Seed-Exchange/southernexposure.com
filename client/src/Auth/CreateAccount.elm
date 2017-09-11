@@ -15,7 +15,6 @@ import Html.Events exposing (onInput, onSubmit, on, targetValue)
 import Http
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode exposing (Value)
-import Navigation
 import RemoteData exposing (WebData)
 import Auth.Utils exposing (noCommandOrStatus)
 import PageData
@@ -190,7 +189,7 @@ update msg form =
                 RemoteData.Success authStatus ->
                     ( form
                     , Just authStatus
-                    , Navigation.newUrl <| reverse CreateAccountSuccess
+                    , Routing.newUrl CreateAccountSuccess
                     )
 
                 RemoteData.Failure (Http.BadStatus rawResponse) ->

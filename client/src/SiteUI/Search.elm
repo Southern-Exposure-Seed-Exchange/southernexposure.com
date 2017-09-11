@@ -9,7 +9,6 @@ module SiteUI.Search
 import Html exposing (Html, div, span, text, button, input)
 import Html.Attributes exposing (class, type_, value)
 import Html.Events exposing (onInput, onSubmit)
-import Navigation
 import Products.Pagination as Pagination
 import Routing exposing (Route(SearchResults), reverse)
 import Search
@@ -35,7 +34,7 @@ update msg data =
             ( { data | query = query }, Cmd.none )
 
         Submit ->
-            ( data, Navigation.newUrl << reverse <| SearchResults data Pagination.default )
+            ( data, Routing.newUrl <| SearchResults data Pagination.default )
 
 
 

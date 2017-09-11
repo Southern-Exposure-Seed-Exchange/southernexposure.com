@@ -277,7 +277,7 @@ update msg ({ pageData } as model) =
                 |> withCommand (always (Ports.collapseMobileMenus ()))
 
         NavigateTo route ->
-            ( model, Navigation.newUrl <| reverse route )
+            ( model, Routing.newUrl route )
 
         SearchMsg subMsg ->
             let
@@ -391,7 +391,7 @@ updatePageFromPagination route paginated =
                 if page == newPage then
                     Cmd.none
                 else
-                    Navigation.newUrl << reverse <| newRouteConstructor newPage
+                    Routing.newUrl <| newRouteConstructor newPage
 
 
 clearSearchForm : ( Model, Cmd msg ) -> ( Model, Cmd msg )

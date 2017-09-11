@@ -3,6 +3,7 @@ module Routing
         ( Route(..)
         , parseRoute
         , reverse
+        , newUrl
         )
 
 import Navigation
@@ -132,3 +133,8 @@ reverse route =
 
         NotFound ->
             joinPath [ "page-not-found" ]
+
+
+newUrl : Route -> Cmd msg
+newUrl =
+    reverse >> Navigation.newUrl
