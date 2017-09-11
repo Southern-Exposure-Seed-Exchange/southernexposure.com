@@ -4,6 +4,7 @@ import Paginate
 import RemoteData exposing (WebData)
 import AdvancedSearch
 import Auth.CreateAccount as CreateAccount
+import Auth.Login as Login
 import StaticPage exposing (StaticPage)
 import PageData exposing (ProductData)
 import Routing exposing (Route)
@@ -17,6 +18,7 @@ type Msg
     | SearchMsg SiteSearch.Msg
     | AdvancedSearchMsg AdvancedSearch.Msg
     | CreateAccountMsg CreateAccount.Msg
+    | LoginMsg Login.Msg
     | GetProductDetailsData (WebData PageData.ProductDetails)
     | GetNavigationData (WebData NavigationData)
     | GetAdvancedSearchData (WebData PageData.AdvancedSearch)

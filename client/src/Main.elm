@@ -55,6 +55,7 @@ type alias Model =
     , searchData : Search.Data
     , advancedSearchData : Search.Data
     , createAccountForm : CreateAccount.Form
+    , loginForm : Login.Form
     , currentUser : AuthStatus
     }
 
@@ -73,6 +74,7 @@ init location =
                 , searchData = Search.initial
                 , advancedSearchData = Search.initial
                 , createAccountForm = CreateAccount.initial
+                , loginForm = Login.initial
                 , currentUser = User.unauthorized
                 }
     in
@@ -303,6 +305,18 @@ update msg ({ pageData } as model) =
                 , Cmd.map CreateAccountMsg cmd
                 )
 
+        LoginMsg subMsg ->
+            let
+                ( updatedForm, maybeAuthStatus, cmd ) =
+                    Login.update subMsg model.loginForm
+            in
+                ( { model
+                    | loginForm = updatedForm
+                    , currentUser = maybeAuthStatus |> Maybe.withDefault model.currentUser
+                  }
+                , Cmd.map LoginMsg cmd
+                )
+
         GetProductDetailsData response ->
             let
                 updatedPageData =
@@ -474,7 +488,7 @@ view ({ route, pageData, navigationData } as model) =
                     CreateAccount.successView
 
                 Login ->
-                    Login.view
+                    Login.view LoginMsg model.loginForm
 
                 NotFound ->
                     notFoundView
