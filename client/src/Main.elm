@@ -6,6 +6,7 @@ import Html.Attributes.Extra exposing (innerHtml)
 import Html.Events exposing (on, targetValue, onSubmit)
 import Http
 import Json.Decode as Decode
+import Json.Encode as Encode
 import Navigation
 import Paginate exposing (Paginated)
 import RemoteData exposing (WebData)
@@ -34,14 +35,25 @@ import Views.Images as Images
 import Views.Utils exposing (routeLinkAttributes, htmlOrBlank)
 
 
-main : Program Never Model Msg
+main : Program Flags Model Msg
 main =
-    Navigation.program (parseRoute >> UrlUpdate)
+    Navigation.programWithFlags (parseRoute >> UrlUpdate)
         { init = init
         , update = update
-        , subscriptions = always Sub.none
+        , subscriptions =
+            Sub.batch
+                [ Ports.loggedOut (always LogOut)
+                , Ports.loggedIn OtherTabLoggedIn
+                ]
+                |> always
         , view = view
         }
+
+
+type alias Flags =
+    { authToken : Maybe String
+    , authUserId : Maybe Int
+    }
 
 
 
@@ -60,8 +72,8 @@ type alias Model =
     }
 
 
-init : Navigation.Location -> ( Model, Cmd Msg )
-init location =
+init : Flags -> Navigation.Location -> ( Model, Cmd Msg )
+init flags location =
     let
         route =
             parseRoute location
@@ -77,12 +89,17 @@ init location =
                 , loginForm = Login.initial
                 , currentUser = User.unauthorized
                 }
+
+        authorizationCmd =
+            Maybe.map2 reAuthorize flags.authUserId flags.authToken
+                |> Maybe.withDefault Cmd.none
     in
         ( model
         , Cmd.batch
             [ cmd
             , getNavigationData
             , setPageTitle model
+            , authorizationCmd
             ]
         )
 
@@ -262,6 +279,21 @@ getLocationsData =
         |> sendRequest GetLocationsData
 
 
+reAuthorize : Int -> String -> Cmd Msg
+reAuthorize userId token =
+    let
+        authParameters =
+            Encode.object
+                [ ( "userId", Encode.int userId )
+                , ( "token", Encode.string token )
+                ]
+    in
+        Http.post "/api/customers/authorize/"
+            (Http.jsonBody authParameters)
+            User.decoder
+            |> sendRequest ReAuthorize
+
+
 
 -- UPDATE
 
@@ -280,6 +312,14 @@ update msg ({ pageData } as model) =
 
         NavigateTo route ->
             ( model, Routing.newUrl route )
+
+        LogOut ->
+            ( { model | currentUser = User.unauthorized }
+            , Cmd.batch [ logoutRedirect model.route, Ports.removeAuthDetails () ]
+            )
+
+        OtherTabLoggedIn authData ->
+            ( model, reAuthorize authData.userId authData.token )
 
         SearchMsg subMsg ->
             let
@@ -316,6 +356,16 @@ update msg ({ pageData } as model) =
                   }
                 , Cmd.map LoginMsg cmd
                 )
+
+        ReAuthorize response ->
+            case response of
+                RemoteData.Success authStatus ->
+                    ( { model | currentUser = authStatus }
+                    , Cmd.none
+                    )
+
+                _ ->
+                    ( model, Cmd.none )
 
         GetProductDetailsData response ->
             let
@@ -433,6 +483,14 @@ logUnsuccessfulRequest response =
 
         _ ->
             Debug.log "Unsuccessful Request Returned" response
+
+
+logoutRedirect : Route -> Cmd msg
+logoutRedirect route =
+    if Routing.authRequired route then
+        Routing.newUrl <| PageDetails "home"
+    else
+        Cmd.none
 
 
 

@@ -3,6 +3,7 @@ module Routing
         ( Route(..)
         , parseRoute
         , reverse
+        , authRequired
         , newUrl
         )
 
@@ -133,6 +134,37 @@ reverse route =
 
         NotFound ->
             joinPath [ "page-not-found" ]
+
+
+authRequired : Route -> Bool
+authRequired route =
+    case route of
+        ProductDetails _ ->
+            False
+
+        CategoryDetails _ _ ->
+            False
+
+        AdvancedSearch ->
+            False
+
+        SearchResults _ _ ->
+            False
+
+        PageDetails _ ->
+            False
+
+        CreateAccount ->
+            False
+
+        CreateAccountSuccess ->
+            True
+
+        Login ->
+            False
+
+        NotFound ->
+            False
 
 
 newUrl : Route -> Cmd msg

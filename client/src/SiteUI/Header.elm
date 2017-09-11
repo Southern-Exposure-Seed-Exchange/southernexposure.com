@@ -2,7 +2,8 @@ module SiteUI.Header exposing (view)
 
 import Html exposing (Html, div, a, img, h1, br, ul, li, text, small)
 import Html.Attributes exposing (id, class, href, src)
-import Messages exposing (Msg)
+import Html.Events.Extra exposing (onClickPreventDefault)
+import Messages exposing (Msg(LogOut))
 import Routing exposing (Route(AdvancedSearch, PageDetails, Login, CreateAccount))
 import SiteUI.Search as SiteSearch
 import User exposing (AuthStatus(..))
@@ -47,27 +48,30 @@ logoAndName =
 linksAndSearch : (SiteSearch.Msg -> Msg) -> SiteSearch.Data -> AuthStatus -> List (Html Msg)
 linksAndSearch searchTagger searchData authStatus =
     let
+        quickLinks =
+            routeLink "Quick Order" (PageDetails "home")
+                :: authLinks
+                |> ul [ id "quick-links", class "list-unstyled" ]
+
         authLinks =
             case authStatus of
                 Anonymous ->
-                    [ ( "Register", CreateAccount )
-                    , ( "Log In", Login )
+                    [ routeLink "Register" CreateAccount
+                    , routeLink "Log In" Login
                     ]
 
                 Authorized _ ->
-                    [ ( "My Account", PageDetails "home" )
-                    , ( "Log Out", PageDetails "home" )
+                    [ routeLink "My Account" <| PageDetails "home"
+                    , linkItem [ href "/account/logout/", onClickPreventDefault LogOut ]
+                        "Log Out"
                     ]
 
-        quickLinks =
-            ( "Quick Order", PageDetails "home" )
-                :: authLinks
-                |> List.map
-                    (\( content, route ) ->
-                        li [ class "d-inline-block ml-1" ]
-                            [ a (class "p-2" :: routeLinkAttributes route) [ text content ] ]
-                    )
-                |> ul [ id "quick-links", class "list-unstyled" ]
+        routeLink content route =
+            linkItem (routeLinkAttributes route) content
+
+        linkItem attrs content =
+            li [ class "d-inline-block ml-1" ]
+                [ a (class "p-2" :: attrs) [ text content ] ]
     in
         [ quickLinks
         , SiteSearch.form searchTagger "primary" searchData

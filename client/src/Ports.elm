@@ -4,7 +4,13 @@ port module Ports
         , scrollToTop
         , scrollToID
         , collapseMobileMenus
+        , storeAuthDetails
+        , removeAuthDetails
+        , loggedIn
+        , loggedOut
         )
+
+-- Page Change
 
 
 port setPageTitle : String -> Cmd msg
@@ -24,3 +30,19 @@ scrollToTop =
 scrollToID : String -> Cmd msg
 scrollToID id =
     scrollToSelector <| "#" ++ id
+
+
+
+-- Auth
+
+
+port storeAuthDetails : ( String, Int ) -> Cmd msg
+
+
+port removeAuthDetails : () -> Cmd msg
+
+
+port loggedIn : ({ userId : Int, token : String } -> msg) -> Sub msg
+
+
+port loggedOut : (() -> msg) -> Sub msg

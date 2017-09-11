@@ -8,8 +8,8 @@ module Auth.Login
         )
 
 import Html exposing (..)
-import Html.Attributes exposing (id, class, for, type_, href, required)
-import Html.Events exposing (onInput, onSubmit)
+import Html.Attributes exposing (id, class, for, type_, href, required, autofocus, checked, value)
+import Html.Events exposing (onInput, onCheck, onSubmit)
 import Html.Events.Extra exposing (onClickPreventDefault)
 import Http exposing (Error(BadStatus))
 import Json.Decode as Decode
@@ -18,7 +18,7 @@ import RemoteData exposing (WebData)
 import Auth.Utils exposing (noCommandOrStatus)
 import Ports
 import Routing exposing (Route(CreateAccount, PageDetails), reverse)
-import User exposing (AuthStatus)
+import User exposing (AuthStatus, UserId(..))
 
 
 -- MODEL
@@ -27,6 +27,7 @@ import User exposing (AuthStatus)
 type alias Form =
     { email : String
     , password : String
+    , remember : Bool
     , error : String
     }
 
@@ -35,6 +36,7 @@ initial : Form
 initial =
     { email = ""
     , password = ""
+    , remember = True
     , error = ""
     }
 
@@ -54,6 +56,7 @@ encode { email, password } =
 type Msg
     = Email String
     | Password String
+    | Remember Bool
     | CreateAccountPage
     | SubmitForm
     | SubmitResponse (WebData AuthStatus)
@@ -68,6 +71,10 @@ update msg model =
 
         Password password ->
             { model | password = password }
+                |> noCommandOrStatus
+
+        Remember remember ->
+            { model | remember = remember }
                 |> noCommandOrStatus
 
         CreateAccountPage ->
@@ -86,7 +93,13 @@ update msg model =
         SubmitResponse response ->
             case response of
                 RemoteData.Success authStatus ->
-                    ( initial, Just authStatus, Routing.newUrl <| PageDetails "home" )
+                    ( initial
+                    , Just authStatus
+                    , Cmd.batch
+                        [ Routing.newUrl <| PageDetails "home"
+                        , rememberAuth model.remember authStatus
+                        ]
+                    )
 
                 RemoteData.Failure (BadStatus rawResponse) ->
                     if rawResponse.status.code == 422 then
@@ -101,6 +114,20 @@ update msg model =
 
                 _ ->
                     debugResponse response model
+
+
+rememberAuth : Bool -> AuthStatus -> Cmd msg
+rememberAuth remember authStatus =
+    case ( remember, authStatus ) of
+        ( True, User.Authorized user ) ->
+            let
+                (UserId id) =
+                    user.id
+            in
+                Ports.storeAuthDetails ( user.authToken, id )
+
+        _ ->
+            Cmd.none
 
 
 debugResponse : c -> a -> ( a, Maybe b, Cmd msg )
@@ -134,6 +161,7 @@ view tagger model =
                     [ legend [] [ text "Returning Customers" ]
                     , errorHtml
                     , loginInputs
+                    , rememberCheckbox
                     , div [ class "form-group" ]
                         [ button
                             [ class "btn btn-primary"
@@ -159,7 +187,9 @@ view tagger model =
                     , class "form-control"
                     , type_ "email"
                     , onInput <| tagger << Email
+                    , value model.email
                     , required True
+                    , autofocus True
                     ]
                     []
                 ]
@@ -171,12 +201,27 @@ view tagger model =
                     , class "form-control"
                     , type_ "password"
                     , onInput <| tagger << Password
+                    , value model.password
                     , required True
                     ]
                     []
                 ]
             ]
                 |> div []
+
+        rememberCheckbox =
+            div [ class "form-check" ]
+                [ label [ class "form-check-label" ]
+                    [ input
+                        [ class "form-check-input"
+                        , type_ "checkbox"
+                        , onCheck <| tagger << Remember
+                        , checked model.remember
+                        ]
+                        []
+                    , text "Stay Signed In"
+                    ]
+                ]
 
         createAccountSection =
             fieldset []
