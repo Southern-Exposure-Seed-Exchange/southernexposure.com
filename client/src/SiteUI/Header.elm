@@ -55,8 +55,8 @@ linksAndSearch searchTagger searchData authStatus =
                     ]
 
                 Authorized _ ->
-                    [ ( "My Account", PageDetails "" )
-                    , ( "Log Out", PageDetails "" )
+                    [ ( "My Account", PageDetails "home" )
+                    , ( "Log Out", PageDetails "home" )
                     ]
 
         quickLinks =
