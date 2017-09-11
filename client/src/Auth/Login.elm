@@ -82,28 +82,25 @@ update msg model =
         SubmitForm ->
             ( { model | error = "" }, Nothing, login model )
 
+        -- TODO: Better error case handling/feedback
         SubmitResponse response ->
-            let
-                _ =
-                    Debug.log "response" response
-            in
-                case response of
-                    RemoteData.Success authStatus ->
-                        ( initial, Just authStatus, Routing.newUrl <| PageDetails "home" )
+            case response of
+                RemoteData.Success authStatus ->
+                    ( initial, Just authStatus, Routing.newUrl <| PageDetails "home" )
 
-                    RemoteData.Failure (BadStatus rawResponse) ->
-                        if rawResponse.status.code == 422 then
-                            case Decode.decodeString Decode.string rawResponse.body of
-                                Ok error ->
-                                    ( { model | error = error }, Nothing, Ports.scrollToTop )
+                RemoteData.Failure (BadStatus rawResponse) ->
+                    if rawResponse.status.code == 422 then
+                        case Decode.decodeString Decode.string rawResponse.body of
+                            Ok error ->
+                                ( { model | error = error }, Nothing, Ports.scrollToTop )
 
-                                Err _ ->
-                                    debugResponse response model
-                        else
-                            debugResponse response model
-
-                    _ ->
+                            Err _ ->
+                                debugResponse response model
+                    else
                         debugResponse response model
+
+                _ ->
+                    debugResponse response model
 
 
 debugResponse : c -> a -> ( a, Maybe b, Cmd msg )
