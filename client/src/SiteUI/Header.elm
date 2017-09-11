@@ -2,44 +2,53 @@ module SiteUI.Header exposing (view)
 
 import Html exposing (Html, div, a, img, h1, br, text, small)
 import Html.Attributes exposing (id, class, href, src)
-import Messages
+import Messages exposing (Msg)
 import SiteUI.Search as SiteSearch
+import Views.Images as Images
 import Views.Utils exposing (routeLinkAttributes)
 import Routing exposing (Route(AdvancedSearch, PageDetails))
 
 
-view : (SiteSearch.Msg -> Messages.Msg) -> SiteSearch.Data -> Html Messages.Msg
-view tagger searchQuery =
+view : (SiteSearch.Msg -> Msg) -> SiteSearch.Data -> Html Msg
+view searchTagger searchData =
     div [ class "container" ]
         [ div [ id "site-header", class "row clearfix" ]
-            [ div [ class "col-sm-7 col-lg-6" ]
-                [ div [ class "media" ]
-                    [ a (routeLinkAttributes <| PageDetails "home")
-                        [ img
-                            [ id "site-logo"
-                            , class "float-left mx-3"
-                            , src "/static/img/logos/sese.png"
-                            ]
-                            []
-                        ]
-                    , div [ id "site-title", class "media-body my-auto" ]
-                        [ h1 [ class "media-heading m-0" ]
-                            [ a (routeLinkAttributes <| PageDetails "home")
-                                [ text "Southern Exposure"
-                                , br [] []
-                                , text "Seed Exchange"
-                                ]
-                            ]
-                        ]
-                    ]
-                ]
-            , div [ class "col-auto ml-auto d-none d-md-block text-right" ]
-                [ text "QUICK LINKS"
-                , SiteSearch.form tagger "primary" searchQuery
-                , small []
-                    [ a (routeLinkAttributes AdvancedSearch)
-                        [ text "Advanced Search" ]
-                    ]
-                ]
+            [ div [ class "col-sm-7 col-lg-6" ] [ logoAndName ]
+            , div [ class "col-auto ml-auto d-none d-md-block text-right" ] <|
+                linksAndSearch searchTagger searchData
             ]
         ]
+
+
+logoAndName : Html Msg
+logoAndName =
+    let
+        logoImage =
+            img
+                [ id "site-logo"
+                , class "float-left mx-3"
+                , src <| Images.static "logos/sese.png"
+                ]
+                []
+
+        titleLink =
+            a (routeLinkAttributes <| PageDetails "home")
+                [ text "Southern Exposure", br [] [], text "Seed Exchange" ]
+    in
+        div [ class "media" ]
+            [ a (routeLinkAttributes <| PageDetails "home") [ logoImage ]
+            , div [ id "site-title", class "media-body my-auto" ]
+                [ h1 [ class "media-heading m-0" ] [ titleLink ]
+                ]
+            ]
+
+
+linksAndSearch : (SiteSearch.Msg -> Msg) -> SiteSearch.Data -> List (Html Msg)
+linksAndSearch searchTagger searchData =
+    [ text "QUICK LINKS"
+    , SiteSearch.form searchTagger "primary" searchData
+    , small []
+        [ a (routeLinkAttributes AdvancedSearch)
+            [ text "Advanced Search" ]
+        ]
+    ]
