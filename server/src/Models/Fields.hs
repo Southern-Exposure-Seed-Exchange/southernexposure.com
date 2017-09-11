@@ -8,8 +8,8 @@ import Control.Monad (fail, join)
 import Data.Aeson (ToJSON(..), FromJSON(..), (.=), (.:?), object, withObject, withText)
 import Data.ISO3166_CountryCodes (CountryCode)
 import Data.StateCodes (StateCode)
-import Database.Persist (PersistField)
-import Database.Persist.Sql (PersistFieldSql)
+import Database.Persist (PersistField(..))
+import Database.Persist.Sql (PersistFieldSql(..), SqlType(SqlString))
 import Database.Persist.TH (derivePersistField)
 import GHC.Generics (Generic)
 import Numeric.Natural (Natural)
@@ -92,12 +92,19 @@ instance FromJSON Region where
                                         fail "Invalid Region Format, No Matching Key"
 
 
-
 newtype Country =
     Country { fromCountry :: CountryCode }
-    deriving (Show, Read, Eq, Ord, Generic)
+    deriving (Show, Read, Eq, Ord)
 
-derivePersistField "Country"
+instance PersistField Country where
+    toPersistValue = toPersistValue . show . fromCountry
+    fromPersistValue val = do
+        value <- fromPersistValue val
+        maybe (Left "Couldn't parse Country Code") (Right . Country)
+            $ readMaybe value
+
+instance PersistFieldSql Country where
+    sqlType _ = SqlString
 
 instance ToJSON Country where
     toJSON =
