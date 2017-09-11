@@ -3,7 +3,6 @@ module Main where
 
 import Control.Monad.Logger (runStderrLoggingT)
 import Database.Persist.Postgresql
-import Network.Wai.Handler.Warp (run)
 import Network.Wai.Middleware.RequestLogger (logStdoutDev, logStdout)
 import System.Directory (getCurrentDirectory, createDirectoryIfMissing)
 import System.Environment (lookupEnv)
@@ -11,6 +10,8 @@ import System.Environment (lookupEnv)
 import Api
 import Config
 import Models
+
+import qualified Network.Wai.Handler.Warp as Warp
 
 -- | Connect to the database, configure the application, & start the server.
 main :: IO ()
@@ -21,7 +22,7 @@ main = do
     createDirectoryIfMissing True mediaDir
     pool <- makePool env
     let cfg = defaultConfig { getPool = pool, getEnv = env, getMediaDirectory = mediaDir }
-    run port . httpLogger env $ app cfg
+    Warp.runSettings (warpSettings port) . httpLogger env $ app cfg
     where lookupSetting env def =
             maybe def read <$> lookupEnv env
           makePool :: Environment -> IO ConnectionPool
@@ -36,6 +37,10 @@ main = do
                     8
                 Development ->
                     1
+          warpSettings port =
+              Warp.setServerName ""
+              $ Warp.setPort port
+              $ Warp.defaultSettings
           httpLogger env =
               case env of
                 Production ->
