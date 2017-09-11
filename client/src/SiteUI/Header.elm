@@ -3,19 +3,20 @@ module SiteUI.Header exposing (view)
 import Html exposing (Html, div, a, img, h1, br, ul, li, text, small)
 import Html.Attributes exposing (id, class, href, src)
 import Messages exposing (Msg)
+import Routing exposing (Route(AdvancedSearch, PageDetails, Login, CreateAccount))
 import SiteUI.Search as SiteSearch
+import User exposing (AuthStatus(..))
 import Views.Images as Images
 import Views.Utils exposing (routeLinkAttributes)
-import Routing exposing (Route(AdvancedSearch, PageDetails, Login))
 
 
-view : (SiteSearch.Msg -> Msg) -> SiteSearch.Data -> Html Msg
-view searchTagger searchData =
+view : (SiteSearch.Msg -> Msg) -> SiteSearch.Data -> AuthStatus -> Html Msg
+view searchTagger searchData authStatus =
     div [ class "container" ]
         [ div [ id "site-header", class "row clearfix" ]
             [ div [ class "col-sm-7 col-lg-6" ] [ logoAndName ]
             , div [ class "col-auto ml-auto d-none d-md-block text-right" ] <|
-                linksAndSearch searchTagger searchData
+                linksAndSearch searchTagger searchData authStatus
             ]
         ]
 
@@ -43,13 +44,24 @@ logoAndName =
             ]
 
 
-linksAndSearch : (SiteSearch.Msg -> Msg) -> SiteSearch.Data -> List (Html Msg)
-linksAndSearch searchTagger searchData =
+linksAndSearch : (SiteSearch.Msg -> Msg) -> SiteSearch.Data -> AuthStatus -> List (Html Msg)
+linksAndSearch searchTagger searchData authStatus =
     let
+        authLinks =
+            case authStatus of
+                Anonymous ->
+                    [ ( "Register", CreateAccount )
+                    , ( "Log In", Login )
+                    ]
+
+                Authorized _ ->
+                    [ ( "My Account", PageDetails "" )
+                    , ( "Log Out", PageDetails "" )
+                    ]
+
         quickLinks =
-            [ ( "Quick Order", PageDetails "home" )
-            , ( "Log In", Login )
-            ]
+            ( "Quick Order", PageDetails "home" )
+                :: authLinks
                 |> List.map
                     (\( content, route ) ->
                         li [ class "d-inline-block ml-1" ]
