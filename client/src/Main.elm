@@ -11,6 +11,7 @@ import Paginate exposing (Paginated)
 import RemoteData exposing (WebData)
 import AdvancedSearch
 import Auth.CreateAccount as CreateAccount
+import Auth.Login as Login
 import Category exposing (Category, CategoryId(..))
 import Messages exposing (Msg(..))
 import PageData exposing (PageData, ProductData)
@@ -143,6 +144,9 @@ setPageTitle { route, pageData } =
             CreateAccountSuccess ->
                 Ports.setPageTitle "Account Creation Successful"
 
+            Login ->
+                Ports.setPageTitle "Customer Login"
+
             NotFound ->
                 Ports.setPageTitle "Page Not Found"
 
@@ -204,10 +208,16 @@ fetchDataForRoute ({ route, pageData } as model) =
                             )
 
                 CreateAccountSuccess ->
-                    ( pageData, Cmd.none )
+                    doNothing
+
+                Login ->
+                    doNothing
 
                 NotFound ->
-                    ( pageData, Cmd.none )
+                    doNothing
+
+        doNothing =
+            ( pageData, Cmd.none )
     in
         ( { model | pageData = data }, cmd )
 
@@ -462,6 +472,9 @@ view ({ route, pageData, navigationData } as model) =
 
                 CreateAccountSuccess ->
                     CreateAccount.successView
+
+                Login ->
+                    Login.view
 
                 NotFound ->
                     notFoundView

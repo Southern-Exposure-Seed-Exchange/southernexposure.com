@@ -1,12 +1,12 @@
 module SiteUI.Header exposing (view)
 
-import Html exposing (Html, div, a, img, h1, br, text, small)
+import Html exposing (Html, div, a, img, h1, br, ul, li, text, small)
 import Html.Attributes exposing (id, class, href, src)
 import Messages exposing (Msg)
 import SiteUI.Search as SiteSearch
 import Views.Images as Images
 import Views.Utils exposing (routeLinkAttributes)
-import Routing exposing (Route(AdvancedSearch, PageDetails))
+import Routing exposing (Route(AdvancedSearch, PageDetails, Login))
 
 
 view : (SiteSearch.Msg -> Msg) -> SiteSearch.Data -> Html Msg
@@ -45,10 +45,22 @@ logoAndName =
 
 linksAndSearch : (SiteSearch.Msg -> Msg) -> SiteSearch.Data -> List (Html Msg)
 linksAndSearch searchTagger searchData =
-    [ text "QUICK LINKS"
-    , SiteSearch.form searchTagger "primary" searchData
-    , small []
-        [ a (routeLinkAttributes AdvancedSearch)
-            [ text "Advanced Search" ]
+    let
+        quickLinks =
+            [ ( "Quick Order", PageDetails "home" )
+            , ( "Log In", Login )
+            ]
+                |> List.map
+                    (\( content, route ) ->
+                        li [ class "d-inline-block ml-1" ]
+                            [ a (class "p-2" :: routeLinkAttributes route) [ text content ] ]
+                    )
+                |> ul [ id "quick-links", class "list-unstyled" ]
+    in
+        [ quickLinks
+        , SiteSearch.form searchTagger "primary" searchData
+        , small []
+            [ a (routeLinkAttributes AdvancedSearch)
+                [ text "Advanced Search" ]
+            ]
         ]
-    ]

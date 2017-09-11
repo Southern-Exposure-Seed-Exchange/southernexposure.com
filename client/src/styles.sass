@@ -83,16 +83,32 @@ body
 body > div#main > div > div.container
   background: $body-bg
 
-/* Set logo height & spacing */
-#site-logo
-  height: $logo-height - 10px
-  margin-top: 5px
-  margin-bottom: 5px
+#site-header
+  /* Set logo height & spacing */
+  #site-logo
+    height: $logo-height - 10px
+    margin-top: 5px
+    margin-bottom: 5px
 
-/* Don't color or decorate the site title link */
-#site-title a, #site-title a:hover
-  color: $body-color
-  text-decoration: none
+  /* Don't color or decorate the site title link */
+  #site-title a, #site-title a:hover
+    color: $body-color
+    text-decoration: none
+
+  /* Style the Quick Links */
+  #quick-links
+    font-size: 0.9rem
+    a
+      border-style: solid
+      border-width: 0 1px 1px
+      border-radius: 0 0 0.3rem 0.3rem
+      border-color: $gray-900
+      background-color: $pale-tan-accent
+      color: $gray-900
+      &:active, &:hover
+        color: $gray-900
+        text-decoration: none
+        background-color: darken($pale-tan-accent, 10%)
 
 
 #navigation

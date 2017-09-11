@@ -21,6 +21,7 @@ type Route
     | PageDetails String
     | CreateAccount
     | CreateAccountSuccess
+    | Login
     | NotFound
 
 
@@ -60,6 +61,7 @@ parseRoute =
                     |> Pagination.fromQueryString
                 , Url.map CreateAccount (Url.s "account" </> Url.s "create")
                 , Url.map CreateAccountSuccess (Url.s "account" </> Url.s "create" </> Url.s "success")
+                , Url.map Login (Url.s "account" </> Url.s "login")
                 , Url.map PageDetails (Url.string)
                 ]
     in
@@ -124,6 +126,9 @@ reverse route =
 
         CreateAccountSuccess ->
             joinPath [ "account", "create", "success" ]
+
+        Login ->
+            joinPath [ "account", "login" ]
 
         NotFound ->
             joinPath [ "page-not-found" ]

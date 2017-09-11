@@ -61,6 +61,9 @@ view route pageData =
                     , activeItem "Success"
                     ]
 
+                Login ->
+                    singleItem "Login"
+
                 NotFound ->
                     singleItem "Page Not Found"
 
