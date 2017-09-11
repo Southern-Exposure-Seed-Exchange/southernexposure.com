@@ -13,9 +13,11 @@ import Control.Monad ((>=>), when)
 import Control.Monad.Trans (lift)
 import Control.Monad.IO.Class (liftIO)
 import Data.Aeson (ToJSON(..), FromJSON(..), (.=), (.:), withObject, object, encode)
+import Data.Int (Int64)
 import Data.Text.Encoding (encodeUtf8, decodeUtf8)
-import Database.Persist ((=.), Entity(..), getBy, insertUnique, update)
-import Servant ((:>), (:<|>)(..), ReqBody, JSON, Get, Post, errBody, err422, err500, throwError)
+import Database.Persist ((=.), Entity(..), get, getBy, insertUnique, update)
+import Database.Persist.Sql (toSqlKey)
+import Servant ((:>), (:<|>)(..), ReqBody, JSON, Get, Post, errBody, err403, err422, err500, throwError)
 
 import Models
 import Models.Fields (Country(..), Region, ArmedForcesRegionCode, armedForcesRegion)
@@ -36,17 +38,20 @@ type CustomerAPI =
          "locations" :> LocationRoute
     :<|> "register" :> RegisterRoute
     :<|> "login" :> LoginRoute
+    :<|> "authorize" :> AuthorizeRoute
 
 type CustomerRoutes =
          App LocationData
     :<|> (RegistrationParameters -> App AuthorizationData)
     :<|> (LoginParameters -> App AuthorizationData)
+    :<|> (AuthorizeParameters -> App AuthorizationData)
 
 customerRoutes :: CustomerRoutes
 customerRoutes =
          locationRoute
     :<|> registrationRoute
     :<|> loginRoute
+    :<|> authorizeRoute
 
 
 -- AUTHORIZATION DATA
@@ -331,3 +336,38 @@ loginRoute LoginParameters { lpEmail, lpPassword } =
                     return True
                 else
                     return False
+
+
+-- AUTHORIZE
+
+
+data AuthorizeParameters =
+    AuthorizeParameters
+        { apUserId :: Int64
+        , apToken :: T.Text
+        }
+
+instance FromJSON AuthorizeParameters where
+    parseJSON = withObject "AuthorizeParameters" $ \v ->
+        AuthorizeParameters
+            <$> v .: "userId"
+            <*> v .: "token"
+
+type AuthorizeRoute =
+       ReqBody '[JSON] AuthorizeParameters
+    :> Post '[JSON] AuthorizationData
+
+authorizeRoute :: AuthorizeParameters -> App AuthorizationData
+authorizeRoute AuthorizeParameters { apUserId, apToken } =
+    let
+        userId = toSqlKey apUserId
+    in do
+        maybeCustomer <- runDB $ get userId
+        case maybeCustomer of
+            Just customer ->
+                if apToken == customerAuthToken customer then
+                    return $ customerToAuthorizationData (Entity userId customer )
+                else
+                    lift $ throwError err403
+            Nothing ->
+                lift $ throwError err403
