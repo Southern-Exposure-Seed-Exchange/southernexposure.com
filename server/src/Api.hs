@@ -37,6 +37,7 @@ type API =
          "categories" :> CategoryAPI
     :<|> "products" :> ProductAPI
     :<|> "pages" :> StaticPageAPI
+    :<|> "customers" :> CustomerAPI
 
 -- | Return the Handler functions for the `API` type.
 server :: ServerT API App
@@ -44,3 +45,4 @@ server =
          categoryRoutes
     :<|> productRoutes
     :<|> staticPageRoutes
+    :<|> customerRoutes

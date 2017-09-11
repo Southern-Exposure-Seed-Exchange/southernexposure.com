@@ -1,5 +1,6 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell #-}
 module Models.Fields where
@@ -39,10 +40,21 @@ data ArmedForcesRegionCode
     = AA
     | AE
     | AP
-    deriving (Show, Read, Eq, Generic)
+    deriving (Show, Read, Eq, Enum, Bounded, Generic)
 
 instance ToJSON ArmedForcesRegionCode
 instance FromJSON ArmedForcesRegionCode
+
+armedForcesRegion :: ArmedForcesRegionCode -> T.Text
+armedForcesRegion = \case
+    AA ->
+        "Armed Forces Americas"
+    AE ->
+        "Armed Forces Europe, Middle East, Africa, & Canada"
+    AP ->
+        "Armed Forces Pacific"
+
+
 
 data Region
     = USState StateCode
@@ -64,6 +76,7 @@ instance ToJSON Region where
         object [ "custom" .= toJSON region ]
 
 instance FromJSON Region where
+    -- TODO: Cleaner way to do this.. Use Either type instead of Maybe?
     parseJSON = withObject "Region" $ \v -> do
         maybeState <- v .:? "state"
         case maybeState of
@@ -78,8 +91,8 @@ instance FromJSON Region where
                             (return . USArmedForces)
                             $ readMaybe afCode
                     Nothing -> do
-                        maybeProvince <- join <$> fmap ProvinceCodes.fromMName
-                                              <$> v .:? "province"
+                        maybeProvince <- join . fmap ProvinceCodes.fromMName
+                                            <$> (v .:? "province")
                         case maybeProvince of
                             Just province ->
                                 return $ CAProvince province

@@ -26,6 +26,7 @@ library
                      , Routes
                      , Routes.Categories
                      , Routes.CommonData
+                     , Routes.Customers
                      , Routes.Products
                      , Routes.StaticPages
                      , Routes.Utils
@@ -33,6 +34,7 @@ library
                      , Validation
   build-depends:       base >= 4.7 && < 5
                      , aeson
+                     , bcrypt
                      , containers
                      , esqueleto
                      , iso3166-country-codes
@@ -43,6 +45,8 @@ library
                      , state-codes
                      , tagsoup
                      , text
+                     , unordered-containers
+                     , uuid
   default-language:    Haskell2010
 
 executable sese-website-exe
