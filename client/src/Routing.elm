@@ -19,6 +19,8 @@ type Route
     | AdvancedSearch
     | SearchResults Search.Data Pagination.Data
     | PageDetails String
+    | CreateAccount
+    | CreateAccountSuccess
     | NotFound
 
 
@@ -56,6 +58,8 @@ parseRoute =
                 , Url.map SearchResults (Url.s "search")
                     |> Search.fromQueryString
                     |> Pagination.fromQueryString
+                , Url.map CreateAccount (Url.s "account" </> Url.s "create")
+                , Url.map CreateAccountSuccess (Url.s "account" </> Url.s "create" </> Url.s "success")
                 , Url.map PageDetails (Url.string)
                 ]
     in
@@ -114,6 +118,12 @@ reverse route =
                 ""
             else
                 joinPath [ slug ]
+
+        CreateAccount ->
+            joinPath [ "account", "create" ]
+
+        CreateAccountSuccess ->
+            joinPath [ "account", "create", "success" ]
 
         NotFound ->
             joinPath [ "page-not-found" ]

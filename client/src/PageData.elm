@@ -14,6 +14,8 @@ module PageData
         , productDataDecoder
         , AdvancedSearch
         , advancedSearchDecoder
+        , LocationData
+        , locationDataDecoder
         )
 
 import Http
@@ -39,6 +41,7 @@ type alias PageData =
     , advancedSearch : WebData AdvancedSearch
     , searchResults : Paginated ProductData { data : Search.Data, sorting : Sorting.Option } String
     , pageDetails : WebData StaticPage
+    , locations : WebData LocationData
     }
 
 
@@ -64,6 +67,7 @@ initial =
         , advancedSearch = RemoteData.NotAsked
         , searchResults = searchPaginate
         , pageDetails = RemoteData.NotAsked
+        , locations = RemoteData.NotAsked
         }
 
 
@@ -157,6 +161,40 @@ searchConfig =
                 )
     in
         Paginate.makeConfig request
+
+
+
+-- Locations
+
+
+type alias Location =
+    { code : String
+    , name : String
+    }
+
+
+locationDecoder : Decoder Location
+locationDecoder =
+    Decode.map2 Location
+        (Decode.field "code" Decode.string)
+        (Decode.field "name" Decode.string)
+
+
+type alias LocationData =
+    { countries : List Location
+    , states : List Location
+    , armedForces : List Location
+    , provinces : List Location
+    }
+
+
+locationDataDecoder : Decoder LocationData
+locationDataDecoder =
+    Decode.map4 LocationData
+        (Decode.field "countries" <| Decode.list locationDecoder)
+        (Decode.field "states" <| Decode.list locationDecoder)
+        (Decode.field "armedForces" <| Decode.list locationDecoder)
+        (Decode.field "provinces" <| Decode.list locationDecoder)
 
 
 

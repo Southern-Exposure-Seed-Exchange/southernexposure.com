@@ -10,6 +10,7 @@ import Navigation
 import Paginate exposing (Paginated)
 import RemoteData exposing (WebData)
 import AdvancedSearch
+import Auth.CreateAccount as CreateAccount
 import Category exposing (Category, CategoryId(..))
 import Messages exposing (Msg(..))
 import PageData exposing (PageData, ProductData)
@@ -27,6 +28,7 @@ import SiteUI.Navigation as SiteNavigation
 import SiteUI.Search as SiteSearch
 import SiteUI.Sidebar as SiteSidebar
 import StaticPage exposing (StaticPage)
+import User exposing (User, AuthStatus)
 import Views.Images as Images
 import Views.Utils exposing (routeLinkAttributes, htmlOrBlank)
 
@@ -51,6 +53,8 @@ type alias Model =
     , pageData : PageData
     , searchData : Search.Data
     , advancedSearchData : Search.Data
+    , createAccountForm : CreateAccount.Form
+    , currentUser : AuthStatus
     }
 
 
@@ -67,6 +71,8 @@ init location =
                 , pageData = PageData.initial
                 , searchData = Search.initial
                 , advancedSearchData = Search.initial
+                , createAccountForm = CreateAccount.initial
+                , currentUser = User.unauthorized
                 }
     in
         ( model
@@ -131,6 +137,12 @@ setPageTitle { route, pageData } =
             PageDetails _ ->
                 mapper .pageDetails .name
 
+            CreateAccount ->
+                Ports.setPageTitle "Create an Account"
+
+            CreateAccountSuccess ->
+                Ports.setPageTitle "Account Creation Successful"
+
             NotFound ->
                 Ports.setPageTitle "Page Not Found"
 
@@ -181,6 +193,19 @@ fetchDataForRoute ({ route, pageData } as model) =
                     , getPageDetails slug
                     )
 
+                CreateAccount ->
+                    case pageData.locations of
+                        RemoteData.Success _ ->
+                            ( pageData, Cmd.none )
+
+                        _ ->
+                            ( { pageData | locations = RemoteData.Loading }
+                            , getLocationsData
+                            )
+
+                CreateAccountSuccess ->
+                    ( pageData, Cmd.none )
+
                 NotFound ->
                     ( pageData, Cmd.none )
     in
@@ -218,6 +243,13 @@ getPageDetails slug =
         |> sendRequest GetPageDetailsData
 
 
+getLocationsData : Cmd Msg
+getLocationsData =
+    Http.get "/api/customers/locations/"
+        PageData.locationDataDecoder
+        |> sendRequest GetLocationsData
+
+
 
 -- UPDATE
 
@@ -249,6 +281,18 @@ update msg ({ pageData } as model) =
             , Cmd.none
             )
 
+        CreateAccountMsg subMsg ->
+            let
+                ( updatedForm, maybeAuthStatus, cmd ) =
+                    CreateAccount.update subMsg model.createAccountForm
+            in
+                ( { model
+                    | createAccountForm = updatedForm
+                    , currentUser = maybeAuthStatus |> Maybe.withDefault model.currentUser
+                  }
+                , Cmd.map CreateAccountMsg cmd
+                )
+
         GetProductDetailsData response ->
             let
                 updatedPageData =
@@ -276,6 +320,13 @@ update msg ({ pageData } as model) =
                 ( { model | pageData = updatedPageData }, Cmd.none )
                     |> withCommand setPageTitle
                     |> withCommand (always Ports.scrollToTop)
+
+        GetLocationsData response ->
+            let
+                updatedPageData =
+                    { pageData | locations = response }
+            in
+                ( { model | pageData = updatedPageData }, Cmd.none )
 
         CategoryPaginationMsg subMsg ->
             pageData.categoryDetails
@@ -366,7 +417,7 @@ logUnsuccessfulRequest response =
 
 
 view : Model -> Html Msg
-view { route, pageData, navigationData, searchData, advancedSearchData } =
+view ({ route, pageData, navigationData } as model) =
     let
         middleContent =
             div [ class "container" ]
@@ -392,7 +443,7 @@ view { route, pageData, navigationData, searchData, advancedSearchData } =
 
                 AdvancedSearch ->
                     withIntermediateText
-                        (AdvancedSearch.view NavigateTo AdvancedSearchMsg advancedSearchData)
+                        (AdvancedSearch.view NavigateTo AdvancedSearchMsg model.advancedSearchData)
                         pageData.advancedSearch
 
                 SearchResults data pagination ->
@@ -403,6 +454,14 @@ view { route, pageData, navigationData, searchData, advancedSearchData } =
 
                 PageDetails _ ->
                     withIntermediateText staticPageView pageData.pageDetails
+
+                CreateAccount ->
+                    withIntermediateText
+                        (CreateAccount.view CreateAccountMsg model.createAccountForm)
+                        pageData.locations
+
+                CreateAccountSuccess ->
+                    CreateAccount.successView
 
                 NotFound ->
                     notFoundView
@@ -423,8 +482,8 @@ view { route, pageData, navigationData, searchData, advancedSearchData } =
                     []
     in
         div []
-            [ SiteHeader.view SearchMsg searchData
-            , SiteNavigation.view navigationData activeCategories searchData
+            [ SiteHeader.view SearchMsg model.searchData
+            , SiteNavigation.view navigationData activeCategories model.searchData
             , SiteBreadcrumbs.view route pageData
             , middleContent
             , SiteFooter.view

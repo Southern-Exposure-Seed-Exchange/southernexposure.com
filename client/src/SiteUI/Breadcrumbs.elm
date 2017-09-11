@@ -53,6 +53,14 @@ view route pageData =
                 SearchResults _ _ ->
                     singleItem "Search Results"
 
+                CreateAccount ->
+                    singleItem "Create an Account"
+
+                CreateAccountSuccess ->
+                    [ inactiveItem "Create An Account" CreateAccount
+                    , activeItem "Success"
+                    ]
+
                 NotFound ->
                     singleItem "Page Not Found"
 
