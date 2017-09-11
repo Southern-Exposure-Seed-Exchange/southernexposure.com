@@ -287,7 +287,12 @@ loginRoute LoginParameters { lpEmail, lpPassword } =
         authorizationError =
             validationError "Invalid Email or Password."
         resetRequiredError =
-            validationError "Sorry, you need to reset your password before logging in."
+            hashAnyways
+                $ validationError "Sorry, you need to reset your password before logging in."
+        hashAnyways returnValue = do
+            hash <- liftIO . BCrypt.hashPasswordUsingPolicy BCrypt.slowerBcryptHashingPolicy
+                $ encodeUtf8 lpPassword
+            const returnValue $! hash
     in do
         maybeCustomer <- runDB . getBy $ UniqueEmail lpEmail
         case maybeCustomer of
@@ -298,10 +303,8 @@ loginRoute LoginParameters { lpEmail, lpPassword } =
                     return $ customerToAuthorizationData e
                 else
                     authorizationError
-            Nothing -> do
-                x <- liftIO . BCrypt.hashPasswordUsingPolicy BCrypt.slowerBcryptHashingPolicy
-                    $ encodeUtf8 lpPassword
-                const authorizationError $! x
+            Nothing ->
+                hashAnyways authorizationError
     where validationError text =
             lift . throwError $ err422 { errBody = encode (text :: T.Text) }
           validatePassword (Entity customerId customer) =
