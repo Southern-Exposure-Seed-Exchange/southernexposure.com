@@ -8,6 +8,7 @@ module Api
 import Control.Monad.Reader (runReaderT)
 import Servant
 
+import Auth
 import Config
 import Routes
 import Server
@@ -24,7 +25,7 @@ app cfg =
         readerToHandler =
             NT $ \x -> runReaderT x cfg
     in
-        serve api $
+        serveWithContext api authServerContext $
                  readerServer
             :<|> serveDirectoryWebApp (getMediaDirectory cfg)
 

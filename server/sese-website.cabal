@@ -16,6 +16,7 @@ cabal-version:       >=1.10
 library
   hs-source-dirs:      src
   exposed-modules:     Api
+                     , Auth
                      , Config
                      , Models
                      , Models.Classes
@@ -47,6 +48,7 @@ library
                      , text
                      , unordered-containers
                      , uuid
+                     , wai
   default-language:    Haskell2010
 
 executable sese-website-exe
