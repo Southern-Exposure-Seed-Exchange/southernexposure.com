@@ -13,13 +13,13 @@ module Routes.Customers
 import Control.Monad ((>=>), when, void)
 import Control.Monad.Trans (lift)
 import Control.Monad.IO.Class (liftIO)
-import Data.Aeson (ToJSON(..), FromJSON(..), (.=), (.:), (.:?), withObject, object, encode)
+import Data.Aeson (ToJSON(..), FromJSON(..), (.=), (.:), (.:?), withObject, object)
 import Data.Int (Int64)
 import Data.Maybe (fromMaybe)
 import Data.Text.Encoding (encodeUtf8, decodeUtf8)
 import Database.Persist ((=.), Entity(..), get, getBy, insertUnique, update)
 import Database.Persist.Sql (toSqlKey)
-import Servant ((:>), (:<|>)(..), AuthProtect, ReqBody, JSON, Get, Post, Put, errBody, err403, err422, err500, throwError)
+import Servant ((:>), (:<|>)(..), AuthProtect, ReqBody, JSON, Get, Post, Put, errBody, err403, err500, throwError)
 
 import Auth
 import Models
@@ -296,14 +296,10 @@ loginRoute :: LoginParameters -> App AuthorizationData
 loginRoute LoginParameters { lpEmail, lpPassword } =
     let
         authorizationError =
-            validationError "Invalid Email or Password."
+            V.singleError "Invalid Email or Password."
         resetRequiredError =
-            hashAnyways
-                $ validationError "Sorry, you need to reset your password before logging in."
-        hashAnyways returnValue = do
-            hash <- liftIO . BCrypt.hashPasswordUsingPolicy BCrypt.slowerBcryptHashingPolicy
-                $ encodeUtf8 lpPassword
-            const returnValue $! hash
+            hashAnyways $ V.singleError
+                "Sorry, you need to reset your password before logging in."
     in do
         maybeCustomer <- runDB . getBy $ UniqueEmail lpEmail
         case maybeCustomer of
@@ -316,8 +312,10 @@ loginRoute LoginParameters { lpEmail, lpPassword } =
                     authorizationError
             Nothing ->
                 hashAnyways authorizationError
-    where validationError text =
-            lift . throwError $ err422 { errBody = encode (text :: T.Text) }
+    where hashAnyways returnValue = do
+            hash <- liftIO . BCrypt.hashPasswordUsingPolicy BCrypt.slowerBcryptHashingPolicy
+                $ encodeUtf8 lpPassword
+            const returnValue $! hash
           validatePassword (Entity customerId customer) =
             let
                 hashedPassword =
