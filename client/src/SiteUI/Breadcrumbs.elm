@@ -64,6 +64,14 @@ view route pageData =
                 Login ->
                     singleItem "Login"
 
+                MyAccount ->
+                    singleItem "My Account"
+
+                EditLogin ->
+                    [ inactiveItem "My Account" MyAccount
+                    , activeItem "Edit Login Details"
+                    ]
+
                 NotFound ->
                     singleItem "Page Not Found"
 

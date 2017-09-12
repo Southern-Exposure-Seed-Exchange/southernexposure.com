@@ -4,7 +4,7 @@ import Html exposing (Html, div, a, img, h1, br, ul, li, text, small)
 import Html.Attributes exposing (id, class, href, src)
 import Html.Events.Extra exposing (onClickPreventDefault)
 import Messages exposing (Msg(LogOut))
-import Routing exposing (Route(AdvancedSearch, PageDetails, Login, CreateAccount))
+import Routing exposing (Route(..))
 import SiteUI.Search as SiteSearch
 import User exposing (AuthStatus(..))
 import Views.Images as Images
@@ -61,7 +61,7 @@ linksAndSearch searchTagger searchData authStatus =
                     ]
 
                 Authorized _ ->
-                    [ routeLink "My Account" <| PageDetails "home"
+                    [ routeLink "My Account" MyAccount
                     , linkItem [ href "/account/logout/", onClickPreventDefault LogOut ]
                         "Log Out"
                     ]

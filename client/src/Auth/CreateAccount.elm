@@ -175,7 +175,8 @@ update msg form =
             if form.password /= form.passwordConfirm then
                 ( { form
                     | errors =
-                        Api.addError "passwordConfirm" "Passwords do not match." Dict.empty
+                        Api.initialErrors
+                            |> Api.addError "passwordConfirm" "Passwords do not match."
                             |> Api.addError "password" "Passwords do not match."
                   }
                 , Nothing

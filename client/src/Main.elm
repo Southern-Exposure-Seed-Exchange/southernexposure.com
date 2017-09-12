@@ -13,6 +13,8 @@ import RemoteData exposing (WebData)
 import AdvancedSearch
 import Auth.CreateAccount as CreateAccount
 import Auth.Login as Login
+import Auth.MyAccount as MyAccount
+import Auth.EditLogin as EditLogin
 import Category exposing (Category, CategoryId(..))
 import Messages exposing (Msg(..))
 import PageData exposing (PageData, ProductData)
@@ -68,6 +70,7 @@ type alias Model =
     , advancedSearchData : Search.Data
     , createAccountForm : CreateAccount.Form
     , loginForm : Login.Form
+    , editLoginForm : EditLogin.Form
     , currentUser : AuthStatus
     }
 
@@ -87,6 +90,7 @@ init flags location =
                 , advancedSearchData = Search.initial
                 , createAccountForm = CreateAccount.initial
                 , loginForm = Login.initial
+                , editLoginForm = EditLogin.initial
                 , currentUser = User.unauthorized
                 }
 
@@ -166,6 +170,12 @@ setPageTitle { route, pageData } =
             Login ->
                 Ports.setPageTitle "Customer Login"
 
+            MyAccount ->
+                Ports.setPageTitle "My Account"
+
+            EditLogin ->
+                Ports.setPageTitle "Edit Login Details"
+
             NotFound ->
                 Ports.setPageTitle "Page Not Found"
 
@@ -230,6 +240,12 @@ fetchDataForRoute ({ route, pageData } as model) =
                     doNothing
 
                 Login ->
+                    doNothing
+
+                MyAccount ->
+                    doNothing
+
+                EditLogin ->
                     doNothing
 
                 NotFound ->
@@ -356,6 +372,13 @@ update msg ({ pageData } as model) =
                   }
                 , Cmd.map LoginMsg cmd
                 )
+
+        EditLoginMsg subMsg ->
+            let
+                ( updatedForm, cmd ) =
+                    EditLogin.update subMsg model.editLoginForm model.currentUser
+            in
+                ( { model | editLoginForm = updatedForm }, Cmd.map EditLoginMsg cmd )
 
         ReAuthorize response ->
             case response of
@@ -547,6 +570,12 @@ view ({ route, pageData, navigationData } as model) =
 
                 Login ->
                     Login.view LoginMsg model.loginForm
+
+                MyAccount ->
+                    MyAccount.view
+
+                EditLogin ->
+                    EditLogin.view EditLoginMsg model.editLoginForm
 
                 NotFound ->
                     notFoundView

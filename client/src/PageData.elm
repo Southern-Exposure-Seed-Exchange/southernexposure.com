@@ -14,6 +14,7 @@ module PageData
         , productDataDecoder
         , AdvancedSearch
         , advancedSearchDecoder
+        , Location
         , LocationData
         , locationDataDecoder
         )
