@@ -1,5 +1,6 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -9,16 +10,18 @@ module Routes.Customers
     , customerRoutes
     ) where
 
-import Control.Monad ((>=>), when)
+import Control.Monad ((>=>), when, void)
 import Control.Monad.Trans (lift)
 import Control.Monad.IO.Class (liftIO)
-import Data.Aeson (ToJSON(..), FromJSON(..), (.=), (.:), withObject, object, encode)
+import Data.Aeson (ToJSON(..), FromJSON(..), (.=), (.:), (.:?), withObject, object, encode)
 import Data.Int (Int64)
+import Data.Maybe (fromMaybe)
 import Data.Text.Encoding (encodeUtf8, decodeUtf8)
 import Database.Persist ((=.), Entity(..), get, getBy, insertUnique, update)
 import Database.Persist.Sql (toSqlKey)
-import Servant ((:>), (:<|>)(..), ReqBody, JSON, Get, Post, errBody, err403, err422, err500, throwError)
+import Servant ((:>), (:<|>)(..), AuthProtect, ReqBody, JSON, Get, Post, Put, errBody, err403, err422, err500, throwError)
 
+import Auth
 import Models
 import Models.Fields (Country(..), Region, ArmedForcesRegionCode, armedForcesRegion)
 import Server
@@ -39,12 +42,14 @@ type CustomerAPI =
     :<|> "register" :> RegisterRoute
     :<|> "login" :> LoginRoute
     :<|> "authorize" :> AuthorizeRoute
+    :<|> "edit" :> EditDetailsRoute
 
 type CustomerRoutes =
          App LocationData
     :<|> (RegistrationParameters -> App AuthorizationData)
     :<|> (LoginParameters -> App AuthorizationData)
     :<|> (AuthorizeParameters -> App AuthorizationData)
+    :<|> (AuthToken -> EditDetailsParameters -> App ())
 
 customerRoutes :: CustomerRoutes
 customerRoutes =
@@ -52,6 +57,7 @@ customerRoutes =
     :<|> registrationRoute
     :<|> loginRoute
     :<|> authorizeRoute
+    :<|> editDetailsRoute
 
 
 -- AUTHORIZATION DATA
@@ -371,3 +377,55 @@ authorizeRoute AuthorizeParameters { apUserId, apToken } =
                     lift $ throwError err403
             Nothing ->
                 lift $ throwError err403
+
+
+-- EDIT DETAILS
+
+
+data EditDetailsParameters =
+    EditDetailsParameters
+        { edpEmail :: Maybe T.Text
+        , edpPassword :: Maybe T.Text
+        }
+
+instance FromJSON EditDetailsParameters where
+    parseJSON = withObject "EditDetailsParameters" $ \v ->
+        EditDetailsParameters
+            <$> v .:? "email"
+            <*> v .:? "password"
+
+instance Validation (EditDetailsParameters, Customer) where
+    validators (parameters, customer) = do
+        maybeEmailDoesntExist <- mapM (V.doesntExist . UniqueEmail) $ edpEmail parameters
+        return
+            [ ( "email"
+              , [ ( "An Account with this Email already exists."
+                  , flip (maybe False) (edpEmail parameters) $ \e ->
+                        (fromMaybe False maybeEmailDoesntExist)
+                        && (e /= customerEmail customer)
+                  )
+                ]
+              )
+            , ( "password"
+              , [ maybe ("", False) (V.minimumLength 8) $ edpPassword parameters
+                ]
+              )
+            ]
+
+
+type EditDetailsRoute =
+       AuthProtect "auth-token"
+    :> ReqBody '[JSON] EditDetailsParameters
+    :> Put '[JSON] ()
+
+editDetailsRoute :: AuthToken -> EditDetailsParameters -> App ()
+editDetailsRoute token p = do
+    (Entity customerId customer) <- validateToken token
+    (parameters, _) <- validate (p, customer)
+    maybeHash <- mapM hashPassword $ edpPassword parameters
+    void . runDB . update customerId $ updateFields (edpEmail parameters) maybeHash
+    where updateFields maybeEmail maybePassword =
+            concat
+                [ maybe [] (\e -> [CustomerEmail =. e]) maybeEmail
+                , maybe [] (\e -> [CustomerEncryptedPassword =. e]) maybePassword
+                ]
