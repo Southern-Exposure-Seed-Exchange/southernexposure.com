@@ -12,10 +12,10 @@ import Dict exposing (Dict)
 import Html exposing (..)
 import Html.Attributes exposing (id, class, for, type_, required, value, selected)
 import Html.Events exposing (onInput, onSubmit, on, targetValue)
-import Http
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode exposing (Value)
 import RemoteData exposing (WebData)
+import Api
 import Auth.Utils exposing (noCommandOrStatus)
 import PageData
 import Ports
@@ -39,7 +39,7 @@ type alias Form =
     , zipCode : String
     , country : String
     , phoneNumber : String
-    , errors : Dict String (List String)
+    , errors : Api.FormErrors
     }
 
 
@@ -57,7 +57,7 @@ initial =
     , zipCode = ""
     , country = "US"
     , phoneNumber = ""
-    , errors = Dict.empty
+    , errors = Api.initialErrors
     }
 
 
@@ -116,7 +116,7 @@ type Msg
     | Country String
     | PhoneNumber String
     | SubmitForm
-    | SubmitResponse (WebData AuthStatus)
+    | SubmitResponse (WebData (Result Api.FormErrors AuthStatus))
 
 
 update : Msg -> Form -> ( Form, Maybe AuthStatus, Cmd Msg )
@@ -174,66 +174,40 @@ update msg form =
             if form.password /= form.passwordConfirm then
                 ( { form
                     | errors =
-                        addError "passwordConfirm" "Passwords do not match." Dict.empty
-                            |> addError "password" "Passwords do not match."
+                        Api.addError "passwordConfirm" "Passwords do not match." Dict.empty
+                            |> Api.addError "password" "Passwords do not match."
                   }
                 , Nothing
                 , Ports.scrollToID "form-errors-text"
                 )
             else
-                ( { form | errors = Dict.empty }, Nothing, createNewAccount form )
+                ( { form | errors = Api.initialErrors }, Nothing, createNewAccount form )
 
         -- TODO: Better error case handling/feedback
         SubmitResponse response ->
             case response of
-                RemoteData.Success authStatus ->
+                RemoteData.Success (Ok authStatus) ->
                     ( form
                     , Just authStatus
                     , Routing.newUrl CreateAccountSuccess
                     )
 
-                RemoteData.Failure (Http.BadStatus rawResponse) ->
-                    if rawResponse.status.code == 422 then
-                        case Decode.decodeString errorDecoder rawResponse.body of
-                            Ok errors ->
-                                ( { form | errors = errors }
-                                , Nothing
-                                , Ports.scrollToID "form-errors-text"
-                                )
-
-                            Err _ ->
-                                form |> noCommandOrStatus
-                    else
-                        form |> noCommandOrStatus
+                RemoteData.Success (Err errors) ->
+                    ( { form | errors = errors }
+                    , Nothing
+                    , Ports.scrollToID "form-errors-text"
+                    )
 
                 _ ->
                     form |> noCommandOrStatus
 
 
-addError : String -> String -> Dict String (List String) -> Dict String (List String)
-addError key error errors =
-    flip (Dict.update key) errors <|
-        \val ->
-            case val of
-                Nothing ->
-                    Just [ error ]
-
-                Just errs ->
-                    Just (error :: errs)
-
-
-errorDecoder : Decoder (Dict String (List String))
-errorDecoder =
-    Decode.dict <| Decode.list Decode.string
-
-
 createNewAccount : Form -> Cmd Msg
 createNewAccount form =
-    Http.post "/api/customers/register/"
-        (encode form |> Http.jsonBody)
-        User.decoder
-        |> RemoteData.sendRequest
-        |> Cmd.map SubmitResponse
+    Api.post "/api/customers/register/"
+        |> Api.withJsonBody (encode form)
+        |> Api.withJsonResponse User.decoder
+        |> Api.withErrorHandler SubmitResponse
 
 
 

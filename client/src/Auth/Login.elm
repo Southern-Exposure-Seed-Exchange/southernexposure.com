@@ -7,14 +7,14 @@ module Auth.Login
         , view
         )
 
+import Dict
 import Html exposing (..)
 import Html.Attributes exposing (id, class, for, type_, href, required, autofocus, checked, value)
 import Html.Events exposing (onInput, onCheck, onSubmit)
 import Html.Events.Extra exposing (onClickPreventDefault)
-import Http exposing (Error(BadStatus))
-import Json.Decode as Decode
 import Json.Encode as Encode exposing (Value)
 import RemoteData exposing (WebData)
+import Api
 import Auth.Utils exposing (noCommandOrStatus)
 import Ports
 import Routing exposing (Route(CreateAccount, PageDetails), reverse)
@@ -28,7 +28,7 @@ type alias Form =
     { email : String
     , password : String
     , remember : Bool
-    , error : String
+    , errors : Api.FormErrors
     }
 
 
@@ -37,7 +37,7 @@ initial =
     { email = ""
     , password = ""
     , remember = True
-    , error = ""
+    , errors = Api.initialErrors
     }
 
 
@@ -59,7 +59,7 @@ type Msg
     | Remember Bool
     | CreateAccountPage
     | SubmitForm
-    | SubmitResponse (WebData AuthStatus)
+    | SubmitResponse (WebData (Result Api.FormErrors AuthStatus))
 
 
 update : Msg -> Form -> ( Form, Maybe AuthStatus, Cmd Msg )
@@ -87,12 +87,12 @@ update msg model =
             )
 
         SubmitForm ->
-            ( { model | error = "" }, Nothing, login model )
+            ( { model | errors = Api.initialErrors }, Nothing, login model )
 
         -- TODO: Better error case handling/feedback
         SubmitResponse response ->
             case response of
-                RemoteData.Success authStatus ->
+                RemoteData.Success (Ok authStatus) ->
                     ( initial
                     , Just authStatus
                     , Cmd.batch
@@ -101,16 +101,8 @@ update msg model =
                         ]
                     )
 
-                RemoteData.Failure (BadStatus rawResponse) ->
-                    if rawResponse.status.code == 422 then
-                        case Decode.decodeString Decode.string rawResponse.body of
-                            Ok error ->
-                                ( { model | error = error }, Nothing, Ports.scrollToTop )
-
-                            Err _ ->
-                                debugResponse response model
-                    else
-                        debugResponse response model
+                RemoteData.Success (Err errors) ->
+                    ( { model | errors = errors }, Nothing, Ports.scrollToTop )
 
                 _ ->
                     debugResponse response model
@@ -141,11 +133,10 @@ debugResponse response model =
 
 login : Form -> Cmd Msg
 login form =
-    Http.post "/api/customers/login/"
-        (encode form |> Http.jsonBody)
-        User.decoder
-        |> RemoteData.sendRequest
-        |> Cmd.map SubmitResponse
+    Api.post "/api/customers/login/"
+        |> Api.withJsonBody (encode form)
+        |> Api.withJsonResponse User.decoder
+        |> Api.withErrorHandler SubmitResponse
 
 
 
@@ -173,10 +164,14 @@ view tagger model =
                 ]
 
         errorHtml =
-            if String.isEmpty model.error then
-                text ""
-            else
-                p [ class "text-danger font-weight-bold" ] [ text model.error ]
+            case Dict.get "" model.errors of
+                Nothing ->
+                    text ""
+
+                Just errors ->
+                    List.map text errors
+                        |> List.intersperse (br [] [])
+                        |> p [ class "text-danger font-weight-bold" ]
 
         loginInputs =
             [ div [ class "form-group" ]
