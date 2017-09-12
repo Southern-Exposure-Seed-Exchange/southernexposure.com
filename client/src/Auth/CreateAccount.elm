@@ -20,6 +20,7 @@ import Auth.Utils exposing (noCommandOrStatus)
 import PageData
 import Ports
 import User exposing (AuthStatus)
+import Views.HorizontalForm as Form
 import Routing exposing (Route(CreateAccountSuccess), reverse)
 
 
@@ -232,64 +233,14 @@ view tagger model locations =
                             ++ "& resubmit the form."
                     ]
 
-        requiredField =
-            inputField True
+        requiredField msg =
+            inputField msg True
 
-        optionalField =
-            inputField False
+        optionalField msg =
+            inputField msg False
 
-        inputField isRequired labelText inputType errorField msg =
-            let
-                inputId =
-                    String.filter (\c -> c /= ' ') labelText
-
-                fieldErrors =
-                    Dict.get errorField model.errors
-                        |> Maybe.withDefault []
-
-                inputClass =
-                    if List.isEmpty fieldErrors && not (Dict.isEmpty model.errors) then
-                        "form-control is-valid"
-                    else if List.isEmpty fieldErrors then
-                        "form-control"
-                    else
-                        "form-control is-invalid"
-
-                errorHtml =
-                    if List.isEmpty fieldErrors then
-                        text ""
-                    else
-                        fieldErrors
-                            |> List.map text
-                            |> List.intersperse (br [] [])
-                            |> div [ class "invalid-feedback" ]
-            in
-                input
-                    [ id <| "input" ++ inputId
-                    , class inputClass
-                    , type_ inputType
-                    , required isRequired
-                    , onInput <| tagger << msg
-                    ]
-                    []
-                    |> (\i -> [ i, errorHtml ])
-                    |> withLabel labelText inputId isRequired
-
-        requiredHtml isRequired =
-            if isRequired then
-                span [ class "text-danger" ] [ text "*" ]
-            else
-                text ""
-
-        withLabel labelText inputId isRequired input =
-            div [ class "form-group form-row align-items-center" ]
-                [ label
-                    [ class "col-sm-3 col-form-label text-right font-weight-bold"
-                    , for <| "input" ++ inputId
-                    ]
-                    [ requiredHtml isRequired, text " ", text <| labelText ++ ":" ]
-                , div [ class "col" ] input
-                ]
+        inputField msg =
+            Form.inputRow model.errors (tagger << msg)
 
         countrySelect =
             List.map (locationToOption .country) locations.countries
@@ -299,7 +250,7 @@ view tagger model locations =
                     , onSelect <| tagger << Country
                     ]
                 |> List.singleton
-                |> withLabel "Country" "Country" True
+                |> Form.withLabel "Country" True
 
         locationToOption selector { code, name } =
             option [ value code, selected <| selector model == code ]
@@ -315,24 +266,24 @@ view tagger model locations =
 
                 _ ->
                     input
-                        [ id "Region"
+                        [ id "inputState/Province"
                         , class "form-control"
                         , type_ "text"
                         , onInput <| tagger << State
                         ]
                         []
                         |> List.singleton
-                        |> withLabel "State / Province" "Region" True
+                        |> Form.withLabel "State / Province" True
 
         regionSelect labelText =
             List.map (locationToOption .state)
                 >> select
-                    [ id labelText
+                    [ id <| "input" ++ labelText
                     , class "form-control"
                     , onSelect <| tagger << State
                     ]
                 >> List.singleton
-                >> withLabel labelText labelText True
+                >> Form.withLabel labelText True
 
         onSelect msg =
             targetValue
@@ -345,21 +296,21 @@ view tagger model locations =
         , form [ onSubmit <| tagger SubmitForm ]
             [ fieldset []
                 [ legend [] [ text "Login Information" ]
-                , requiredField "Email" "email" "email" Email
-                , requiredField "Password" "password" "password" Password
-                , requiredField "Confirm Password" "password" "passwordConfirm" PasswordConfirm
+                , requiredField Email "Email" "email" "email"
+                , requiredField Password "Password" "password" "password"
+                , requiredField PasswordConfirm "Confirm Password" "password" "passwordConfirm"
                 ]
             , fieldset []
                 [ legend [] [ text "Contact Information" ]
-                , requiredField "First Name" "text" "firstName" FirstName
-                , requiredField "Last Name" "text" "lastName" LastName
-                , requiredField "Street Address" "text" "addressOne" Street
-                , optionalField "Address Line 2" "text" "" AddressTwo
-                , requiredField "City" "text" "city" City
+                , requiredField FirstName "First Name" "text" "firstName"
+                , requiredField LastName "Last Name" "text" "lastName"
+                , requiredField Street "Street Address" "text" "addressOne"
+                , optionalField AddressTwo "Address Line 2" "text" ""
+                , requiredField City "City" "text" "city"
                 , regionField
-                , requiredField "Zip Code" "text" "zipCode" ZipCode
+                , requiredField ZipCode "Zip Code" "text" "zipCode"
                 , countrySelect
-                , requiredField "Phone Number" "tel" "telephone" PhoneNumber
+                , requiredField PhoneNumber "Phone Number" "tel" "telephone"
                 ]
             , div [ class "form-group clearfix" ]
                 [ small [ class "font-weight-bold text-danger" ]
