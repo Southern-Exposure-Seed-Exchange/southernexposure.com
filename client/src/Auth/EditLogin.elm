@@ -9,7 +9,6 @@ module Auth.EditLogin
 
 import Dict exposing (Dict)
 import Html exposing (..)
-import Html.Attributes exposing (id, class, type_, value)
 import Html.Events exposing (onInput, onSubmit)
 import Json.Decode as Decode
 import Json.Encode as Encode exposing (Value)
@@ -136,25 +135,31 @@ updateLoginDetails model token =
 -- VIEW
 
 
-view : (Msg -> msg) -> Form -> List (Html msg)
-view tagger model =
+view : (Msg -> msg) -> Form -> AuthStatus -> List (Html msg)
+view tagger model authStatus =
     let
-        inputRow msg =
-            Form.inputRow model.errors (tagger << msg)
+        maybeEmail =
+            case model.email of
+                Nothing ->
+                    case authStatus of
+                        Authorized user ->
+                            user.email
+
+                        Anonymous ->
+                            ""
+
+                Just email ->
+                    ""
+
+        inputRow selector msg =
+            Form.inputRow model.errors (selector model) (tagger << msg)
 
         inputs =
-            [ inputRow Email False "Email" "email" "email"
-            , inputRow Password False "Password" "password" "password"
-            , inputRow PasswordConfirm False "Confirm Password" "passwordConfirm" "password"
+            [ inputRow (always maybeEmail) Email False "Email" "email" "email"
+            , inputRow (.password >> Maybe.withDefault "") Password False "Password" "password" "password"
+            , inputRow (.passwordConfirm >> Maybe.withDefault "") PasswordConfirm False "Confirm Password" "passwordConfirm" "password"
+            , Form.submitButton "Update" False
             ]
-                ++ [ div [ class "form-group text-right" ]
-                        [ button
-                            [ class "btn btn-primary"
-                            , type_ "submit"
-                            ]
-                            [ text "Update" ]
-                        ]
-                   ]
     in
         [ h1 [] [ text "Edit Login Details" ]
         , hr [] []

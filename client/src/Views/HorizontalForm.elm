@@ -2,21 +2,38 @@ module Views.HorizontalForm
     exposing
         ( inputRow
         , withLabel
+        , submitButton
         )
 
 import Dict
 import Html exposing (..)
-import Html.Attributes exposing (id, class, for, type_, required)
+import Html.Attributes exposing (id, class, for, name, type_, required, value)
 import Html.Events exposing (onInput)
 import Api
+
+
+submitButton : String -> Bool -> Html msg
+submitButton content showRequiredLabel =
+    let
+        requiredLabel =
+            if showRequiredLabel then
+                small [ class "font-weight-bold text-danger" ] [ text "* Required Fields" ]
+            else
+                text ""
+    in
+        div [ class "form-group clearfix" ]
+            [ requiredLabel
+            , button [ class "btn btn-primary float-right", type_ "submit" ]
+                [ text content ]
+            ]
 
 
 {-| TODO: Have users define a Field type w/ functions to convert to required
 arguments, then pass these functions to a config function that returns a
 version of this function that just takes a Field type?
 -}
-inputRow : Api.FormErrors -> (String -> msg) -> Bool -> String -> String -> String -> Html msg
-inputRow errors inputMsg isRequired labelText errorField inputType =
+inputRow : Api.FormErrors -> String -> (String -> msg) -> Bool -> String -> String -> String -> Html msg
+inputRow errors inputValue inputMsg isRequired labelText errorField inputType =
     let
         inputId =
             String.filter (\c -> c /= ' ') labelText
@@ -44,8 +61,10 @@ inputRow errors inputMsg isRequired labelText errorField inputType =
     in
         input
             [ id <| "input" ++ inputId
+            , name inputId
             , class inputClass
             , type_ inputType
+            , value inputValue
             , required isRequired
             , onInput inputMsg
             ]

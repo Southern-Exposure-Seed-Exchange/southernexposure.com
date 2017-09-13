@@ -575,7 +575,7 @@ view ({ route, pageData, navigationData } as model) =
                     MyAccount.view
 
                 EditLogin ->
-                    EditLogin.view EditLoginMsg model.editLoginForm
+                    EditLogin.view EditLoginMsg model.editLoginForm model.currentUser
 
                 NotFound ->
                     notFoundView

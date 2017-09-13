@@ -234,14 +234,14 @@ view tagger model locations =
                             ++ "& resubmit the form."
                     ]
 
-        requiredField msg =
-            inputField msg True
+        requiredField s msg =
+            inputField s msg True
 
-        optionalField msg =
-            inputField msg False
+        optionalField s msg =
+            inputField s msg False
 
-        inputField msg =
-            Form.inputRow model.errors (tagger << msg)
+        inputField selector msg =
+            Form.inputRow model.errors (selector model) (tagger << msg)
 
         countrySelect =
             List.map (locationToOption .country) locations.countries
@@ -271,6 +271,7 @@ view tagger model locations =
                         , class "form-control"
                         , type_ "text"
                         , onInput <| tagger << State
+                        , value model.state
                         ]
                         []
                         |> List.singleton
@@ -297,28 +298,23 @@ view tagger model locations =
         , form [ onSubmit <| tagger SubmitForm ]
             [ fieldset []
                 [ legend [] [ text "Login Information" ]
-                , requiredField Email "Email" "email" "email"
-                , requiredField Password "Password" "password" "password"
-                , requiredField PasswordConfirm "Confirm Password" "password" "passwordConfirm"
+                , requiredField .email Email "Email" "email" "email"
+                , requiredField .password Password "Password" "password" "password"
+                , requiredField .passwordConfirm PasswordConfirm "Confirm Password" "password" "passwordConfirm"
                 ]
             , fieldset []
                 [ legend [] [ text "Contact Information" ]
-                , requiredField FirstName "First Name" "text" "firstName"
-                , requiredField LastName "Last Name" "text" "lastName"
-                , requiredField Street "Street Address" "text" "addressOne"
-                , optionalField AddressTwo "Address Line 2" "text" ""
-                , requiredField City "City" "text" "city"
+                , requiredField .firstName FirstName "First Name" "text" "firstName"
+                , requiredField .lastName LastName "Last Name" "text" "lastName"
+                , requiredField .street Street "Street Address" "text" "addressOne"
+                , optionalField .addressTwo AddressTwo "Address Line 2" "text" ""
+                , requiredField .city City "City" "text" "city"
                 , regionField
-                , requiredField ZipCode "Zip Code" "text" "zipCode"
+                , requiredField .zipCode ZipCode "Zip Code" "text" "zipCode"
                 , countrySelect
-                , requiredField PhoneNumber "Phone Number" "tel" "telephone"
+                , requiredField .phoneNumber PhoneNumber "Phone Number" "tel" "telephone"
                 ]
-            , div [ class "form-group clearfix" ]
-                [ small [ class "font-weight-bold text-danger" ]
-                    [ text "* Required Fields" ]
-                , button [ class "btn btn-primary float-right", type_ "submit" ]
-                    [ text "Register" ]
-                ]
+            , Form.submitButton "Register" True
             ]
         ]
 
