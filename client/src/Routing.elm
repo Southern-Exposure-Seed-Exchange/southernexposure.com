@@ -52,6 +52,15 @@ parseRoute =
                     )
                 |> Url.oneOf
 
+        accountParser =
+            Url.oneOf
+                [ Url.map Login (Url.s "login")
+                , Url.map CreateAccount (Url.s "create")
+                , Url.map CreateAccountSuccess (Url.s "create" </> Url.s "success")
+                , Url.map MyAccount Url.top
+                , Url.map EditLogin (Url.s "edit")
+                ]
+
         routeParser =
             Url.oneOf
                 [ Url.map (PageDetails "home") Url.top
@@ -63,11 +72,7 @@ parseRoute =
                 , Url.map SearchResults (Url.s "search")
                     |> Search.fromQueryString
                     |> Pagination.fromQueryString
-                , Url.map CreateAccount (Url.s "account" </> Url.s "create")
-                , Url.map CreateAccountSuccess (Url.s "account" </> Url.s "create" </> Url.s "success")
-                , Url.map Login (Url.s "account" </> Url.s "login")
-                , Url.map MyAccount (Url.s "account")
-                , Url.map EditLogin (Url.s "account" </> Url.s "edit")
+                , Url.s "account" </> accountParser
                 , Url.map PageDetails (Url.string)
                 ]
     in
