@@ -15,6 +15,7 @@ import Json.Encode as Encode exposing (Value)
 import RemoteData exposing (WebData)
 import Api
 import Routing exposing (Route(MyAccount, Login))
+import Update.Utils exposing (noCommand)
 import User exposing (AuthStatus(..))
 import Views.HorizontalForm as Form
 
@@ -115,11 +116,6 @@ update msg model authStatus =
 
                     _ ->
                         model |> noCommand
-
-
-noCommand : a -> ( a, Cmd msg )
-noCommand =
-    flip (,) Cmd.none
 
 
 updateLoginDetails : Form -> String -> Cmd Msg
