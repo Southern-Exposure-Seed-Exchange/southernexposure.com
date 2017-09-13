@@ -17,10 +17,17 @@ module PageData
         , Location
         , LocationData
         , locationDataDecoder
+        , Region(..)
+        , regionEncoder
+        , regionDecoder
+        , ContactDetails
+        , contactDetailsDecoder
+        , contactDetailsEncoder
         )
 
 import Http
 import Json.Decode as Decode exposing (Decoder)
+import Json.Encode as Encode exposing (Value)
 import Paginate exposing (Paginated)
 import RemoteData exposing (WebData)
 import Category exposing (Category, CategoryId(..))
@@ -43,6 +50,7 @@ type alias PageData =
     , searchResults : Paginated ProductData { data : Search.Data, sorting : Sorting.Option } String
     , pageDetails : WebData StaticPage
     , locations : WebData LocationData
+    , contactDetails : WebData ContactDetails
     }
 
 
@@ -69,6 +77,7 @@ initial =
         , searchResults = searchPaginate
         , pageDetails = RemoteData.NotAsked
         , locations = RemoteData.NotAsked
+        , contactDetails = RemoteData.NotAsked
         }
 
 
@@ -196,6 +205,98 @@ locationDataDecoder =
         (Decode.field "states" <| Decode.list locationDecoder)
         (Decode.field "armedForces" <| Decode.list locationDecoder)
         (Decode.field "provinces" <| Decode.list locationDecoder)
+
+
+
+-- Contact Details
+
+
+type Region
+    = USState String
+    | ArmedForces String
+    | CAProvince String
+    | Custom String
+
+
+regionDecoder : Decoder Region
+regionDecoder =
+    [ ( USState, "state" )
+    , ( ArmedForces, "armedForces" )
+    , ( CAProvince, "province" )
+    , ( Custom, "custom" )
+    ]
+        |> List.map
+            (\( constructor, field ) ->
+                Decode.map constructor (Decode.field field Decode.string)
+            )
+        |> Decode.oneOf
+
+
+regionEncoder : Region -> Value
+regionEncoder region =
+    let
+        regionObject key value =
+            Encode.object [ ( key, Encode.string value ) ]
+    in
+        case region of
+            USState code ->
+                regionObject "state" code
+
+            ArmedForces code ->
+                regionObject "armedForces" code
+
+            CAProvince code ->
+                regionObject "province" code
+
+            Custom str ->
+                regionObject "custom" str
+
+
+type alias ContactDetails =
+    { firstName : String
+    , lastName : String
+    , street : String
+    , addressTwo : String
+    , city : String
+    , state : Region
+    , zipCode : String
+    , country : String
+    , phoneNumber : String
+    }
+
+
+contactDetailsDecoder : Decoder ContactDetails
+contactDetailsDecoder =
+    Decode.map8 ContactDetails
+        (Decode.field "firstName" Decode.string)
+        (Decode.field "lastName" Decode.string)
+        (Decode.field "addressOne" Decode.string)
+        (Decode.field "addressTwo" Decode.string)
+        (Decode.field "city" Decode.string)
+        (Decode.field "state" regionDecoder)
+        (Decode.field "zipCode" Decode.string)
+        (Decode.field "country" Decode.string)
+        |> Decode.andThen
+            (\constr ->
+                Decode.map constr
+                    (Decode.field "telephone" Decode.string)
+            )
+
+
+contactDetailsEncoder : ContactDetails -> Value
+contactDetailsEncoder details =
+    [ ( "firstName", details.firstName )
+    , ( "lastName", details.lastName )
+    , ( "addressOne", details.street )
+    , ( "addressTwo", details.addressTwo )
+    , ( "city", details.city )
+    , ( "zipCode", details.zipCode )
+    , ( "country", details.country )
+    , ( "telephone", details.phoneNumber )
+    ]
+        |> List.map (Tuple.mapSecond Encode.string)
+        |> ((::) <| ( "state", regionEncoder details.state ))
+        |> Encode.object
 
 
 

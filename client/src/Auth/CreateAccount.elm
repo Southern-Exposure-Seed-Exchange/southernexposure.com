@@ -8,6 +8,8 @@ module Auth.CreateAccount
         , successView
         )
 
+-- TODO: Refactor module as a composition of the EditLogin & EditContact module forms.
+
 import Dict exposing (Dict)
 import Html exposing (..)
 import Html.Attributes exposing (id, class, for, type_, required, value, selected)

@@ -6,6 +6,7 @@ import AdvancedSearch
 import Auth.CreateAccount as CreateAccount
 import Auth.Login as Login
 import Auth.EditLogin as EditLogin
+import Auth.EditContact as EditContact
 import StaticPage exposing (StaticPage)
 import PageData exposing (ProductData)
 import Routing exposing (Route)
@@ -24,11 +25,13 @@ type Msg
     | CreateAccountMsg CreateAccount.Msg
     | LoginMsg Login.Msg
     | EditLoginMsg EditLogin.Msg
+    | EditContactMsg EditContact.Msg
     | ReAuthorize (WebData User.AuthStatus)
     | GetProductDetailsData (WebData PageData.ProductDetails)
     | GetNavigationData (WebData NavigationData)
     | GetAdvancedSearchData (WebData PageData.AdvancedSearch)
     | GetPageDetailsData (WebData StaticPage)
     | GetLocationsData (WebData PageData.LocationData)
+    | GetContactDetails (WebData PageData.ContactDetails)
     | CategoryPaginationMsg (Paginate.Msg ProductData PageData.CategoryDetails)
     | SearchPaginationMsg (Paginate.Msg ProductData String)

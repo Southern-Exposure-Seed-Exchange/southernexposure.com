@@ -72,6 +72,11 @@ view route pageData =
                     , activeItem "Edit Login Details"
                     ]
 
+                EditContact ->
+                    [ inactiveItem "My Account" MyAccount
+                    , activeItem "Edit Contact Details"
+                    ]
+
                 NotFound ->
                     singleItem "Page Not Found"
 

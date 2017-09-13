@@ -3,7 +3,7 @@ module Auth.MyAccount exposing (view)
 import Html exposing (..)
 import Messages exposing (Msg)
 import Views.Utils exposing (routeLinkAttributes)
-import Routing exposing (Route(EditLogin))
+import Routing exposing (Route(EditLogin, EditContact))
 
 
 view : List (Html Msg)
@@ -12,11 +12,11 @@ view =
         accountLinks =
             [ li []
                 [ a (routeLinkAttributes EditLogin)
-                    [ text "Change Login Details" ]
+                    [ text "Edit Login Details" ]
                 ]
             , li []
-                [ a (routeLinkAttributes EditLogin)
-                    [ text "Change Contact Information" ]
+                [ a (routeLinkAttributes EditContact)
+                    [ text "Edit Contact Information" ]
                 ]
             ]
     in

@@ -26,6 +26,7 @@ type Route
     | Login
     | MyAccount
     | EditLogin
+    | EditContact
     | NotFound
 
 
@@ -59,6 +60,7 @@ parseRoute =
                 , Url.map CreateAccountSuccess (Url.s "create" </> Url.s "success")
                 , Url.map MyAccount Url.top
                 , Url.map EditLogin (Url.s "edit")
+                , Url.map EditContact (Url.s "edit-contact")
                 ]
 
         routeParser =
@@ -147,6 +149,9 @@ reverse route =
         EditLogin ->
             joinPath [ "account", "edit" ]
 
+        EditContact ->
+            joinPath [ "account", "edit-contact" ]
+
         NotFound ->
             joinPath [ "page-not-found" ]
 
@@ -182,6 +187,9 @@ authRequired route =
             True
 
         EditLogin ->
+            True
+
+        EditContact ->
             True
 
         NotFound ->

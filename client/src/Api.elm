@@ -1,6 +1,7 @@
 module Api
     exposing
-        ( post
+        ( get
+        , post
         , put
         , withToken
         , withJsonBody
@@ -42,6 +43,11 @@ initialRequest =
     , timeout = Nothing
     , withCredentials = False
     }
+
+
+get : String -> Request String
+get url =
+    { initialRequest | method = "GET", url = url }
 
 
 post : String -> Request String

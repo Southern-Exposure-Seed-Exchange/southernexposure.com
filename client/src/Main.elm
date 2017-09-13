@@ -11,9 +11,11 @@ import Navigation
 import Paginate exposing (Paginated)
 import RemoteData exposing (WebData)
 import AdvancedSearch
+import Api
 import Auth.CreateAccount as CreateAccount
 import Auth.Login as Login
 import Auth.MyAccount as MyAccount
+import Auth.EditContact as EditContact
 import Auth.EditLogin as EditLogin
 import Category exposing (Category, CategoryId(..))
 import Messages exposing (Msg(..))
@@ -71,6 +73,7 @@ type alias Model =
     , createAccountForm : CreateAccount.Form
     , loginForm : Login.Form
     , editLoginForm : EditLogin.Form
+    , editContactForm : EditContact.Form
     , currentUser : AuthStatus
     }
 
@@ -91,6 +94,7 @@ init flags location =
                 , createAccountForm = CreateAccount.initial
                 , loginForm = Login.initial
                 , editLoginForm = EditLogin.initial
+                , editContactForm = EditContact.initial
                 , currentUser = User.unauthorized
                 }
 
@@ -176,6 +180,9 @@ setPageTitle { route, pageData } =
             EditLogin ->
                 Ports.setPageTitle "Edit Login Details"
 
+            EditContact ->
+                Ports.setPageTitle "Edit Contact Details"
+
             NotFound ->
                 Ports.setPageTitle "Page Not Found"
 
@@ -248,6 +255,17 @@ fetchDataForRoute ({ route, pageData } as model) =
                 EditLogin ->
                     doNothing
 
+                EditContact ->
+                    if RemoteData.isSuccess pageData.locations then
+                        ( pageData, getContactDetails model.currentUser )
+                    else
+                        ( pageData
+                        , Cmd.batch
+                            [ getContactDetails model.currentUser
+                            , getLocationsData
+                            ]
+                        )
+
                 NotFound ->
                     doNothing
 
@@ -293,6 +311,19 @@ getLocationsData =
     Http.get "/api/customers/locations/"
         PageData.locationDataDecoder
         |> sendRequest GetLocationsData
+
+
+getContactDetails : AuthStatus -> Cmd Msg
+getContactDetails authStatus =
+    case authStatus of
+        User.Anonymous ->
+            Cmd.none
+
+        User.Authorized user ->
+            Api.get "/api/customers/contact/"
+                |> Api.withJsonResponse PageData.contactDetailsDecoder
+                |> Api.withToken user.authToken
+                |> Api.sendRequest GetContactDetails
 
 
 reAuthorize : Int -> String -> Cmd Msg
@@ -374,18 +405,20 @@ update msg ({ pageData } as model) =
                 )
 
         EditLoginMsg subMsg ->
-            let
-                ( updatedForm, cmd ) =
-                    EditLogin.update subMsg model.editLoginForm model.currentUser
-            in
-                ( { model | editLoginForm = updatedForm }, Cmd.map EditLoginMsg cmd )
+            EditLogin.update subMsg model.editLoginForm model.currentUser
+                |> Tuple.mapFirst (\form -> { model | editLoginForm = form })
+                |> Tuple.mapSecond (Cmd.map EditLoginMsg)
+
+        EditContactMsg subMsg ->
+            EditContact.update subMsg model.editContactForm model.currentUser
+                |> Tuple.mapFirst (\form -> { model | editContactForm = form })
+                |> Tuple.mapSecond (Cmd.map EditContactMsg)
 
         ReAuthorize response ->
             case response of
                 RemoteData.Success authStatus ->
-                    ( { model | currentUser = authStatus }
-                    , Cmd.none
-                    )
+                    { model | currentUser = authStatus }
+                        |> fetchDataForRoute
 
                 _ ->
                     ( model, Cmd.none )
@@ -414,7 +447,9 @@ update msg ({ pageData } as model) =
                 updatedPageData =
                     { pageData | pageDetails = response }
             in
-                ( { model | pageData = updatedPageData }, Cmd.none )
+                ( { model | pageData = updatedPageData }
+                , Cmd.none
+                )
                     |> withCommand setPageTitle
                     |> withCommand (always Ports.scrollToTop)
 
@@ -424,6 +459,26 @@ update msg ({ pageData } as model) =
                     { pageData | locations = response }
             in
                 ( { model | pageData = updatedPageData }, Cmd.none )
+
+        GetContactDetails response ->
+            let
+                updatedPageData =
+                    { pageData
+                        | contactDetails = response
+                    }
+
+                updatedForm =
+                    response
+                        |> RemoteData.toMaybe
+                        |> Maybe.map EditContact.fromContactDetails
+                        |> Maybe.withDefault model.editContactForm
+            in
+                ( { model
+                    | pageData = updatedPageData
+                    , editContactForm = updatedForm
+                  }
+                , Cmd.none
+                )
 
         CategoryPaginationMsg subMsg ->
             pageData.categoryDetails
@@ -576,6 +631,11 @@ view ({ route, pageData, navigationData } as model) =
 
                 EditLogin ->
                     EditLogin.view EditLoginMsg model.editLoginForm model.currentUser
+
+                EditContact ->
+                    withIntermediateText
+                        (EditContact.view EditContactMsg model.editContactForm)
+                        pageData.locations
 
                 NotFound ->
                     notFoundView
