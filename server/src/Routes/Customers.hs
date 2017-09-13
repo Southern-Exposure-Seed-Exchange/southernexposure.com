@@ -43,6 +43,8 @@ type CustomerAPI =
     :<|> "login" :> LoginRoute
     :<|> "authorize" :> AuthorizeRoute
     :<|> "edit" :> EditDetailsRoute
+    :<|> "contact" :> ContactDetailsRoute
+    :<|> "contact-edit" :> ContactEditRoute
 
 type CustomerRoutes =
          App LocationData
@@ -50,6 +52,8 @@ type CustomerRoutes =
     :<|> (LoginParameters -> App AuthorizationData)
     :<|> (AuthorizeParameters -> App AuthorizationData)
     :<|> (AuthToken -> EditDetailsParameters -> App ())
+    :<|> (AuthToken -> App ContactDetailsData)
+    :<|> (AuthToken -> ContactEditParameters -> App ())
 
 customerRoutes :: CustomerRoutes
 customerRoutes =
@@ -58,6 +62,8 @@ customerRoutes =
     :<|> loginRoute
     :<|> authorizeRoute
     :<|> editDetailsRoute
+    :<|> contactDetailsRoute
+    :<|> contactEditRoute
 
 
 -- AUTHORIZATION DATA
@@ -427,3 +433,117 @@ editDetailsRoute token p = do
                 [ maybe [] (\e -> [CustomerEmail =. e]) maybeEmail
                 , maybe [] (\e -> [CustomerEncryptedPassword =. e]) maybePassword
                 ]
+
+
+-- CONTACT DETAILS
+
+
+data ContactDetailsData =
+    ContactDetailsData
+        { cddFirstName :: T.Text
+        , cddLastName :: T.Text
+        , cddAddressOne :: T.Text
+        , cddAddressTwo :: T.Text
+        , cddCity :: T.Text
+        , cddState :: Region
+        , cddZipCode :: T.Text
+        , cddCountry :: Country
+        , cddTelephone :: T.Text
+        }
+
+instance ToJSON ContactDetailsData where
+    toJSON contact =
+        object [ "firstName" .= (cddFirstName contact)
+               , "lastName" .= (cddLastName contact)
+               , "addressOne" .= (cddAddressOne contact)
+               , "addressTwo" .= (cddAddressTwo contact)
+               , "city" .= (cddCity contact)
+               , "state" .= (cddState contact)
+               , "zipCode" .= (cddZipCode contact)
+               , "country" .= (cddCountry contact)
+               , "telephone" .= (cddTelephone contact)
+               ]
+
+customerToContactDetails :: Entity Customer -> ContactDetailsData
+customerToContactDetails (Entity _ customer) =
+    ContactDetailsData
+        { cddFirstName = customerFirstName customer
+        , cddLastName = customerLastName customer
+        , cddAddressOne = customerAddressOne customer
+        , cddAddressTwo = customerAddressTwo customer
+        , cddCity = customerCity customer
+        , cddState = customerState customer
+        , cddZipCode = customerZipCode customer
+        , cddCountry = customerCountry customer
+        , cddTelephone = customerTelephone customer
+        }
+
+type ContactDetailsRoute =
+       AuthProtect "auth-token"
+    :> Get '[JSON] ContactDetailsData
+
+contactDetailsRoute :: AuthToken -> App ContactDetailsData
+contactDetailsRoute token =
+    validateToken token >>= return . customerToContactDetails
+
+
+-- EDIT CONTACT DETAILS
+
+
+data ContactEditParameters =
+    ContactEditParameters
+        { cepFirstName :: T.Text
+        , cepLastName :: T.Text
+        , cepAddressOne :: T.Text
+        , cepAddressTwo :: T.Text
+        , cepCity :: T.Text
+        , cepState :: Region
+        , cepZipCode :: T.Text
+        , cepCountry :: Country
+        , cepTelephone :: T.Text
+        }
+
+instance FromJSON ContactEditParameters where
+    parseJSON =
+        withObject "ContactEditParameters" $ \v ->
+            ContactEditParameters
+                <$> v .: "firstName"
+                <*> v .: "lastName"
+                <*> v .: "addressOne"
+                <*> v .: "addressTwo"
+                <*> v .: "city"
+                <*> v .: "state"
+                <*> v .: "zipCode"
+                <*> v .: "country"
+                <*> v .: "telephone"
+
+instance Validation ContactEditParameters where
+    validators parameters =
+        return
+            [ ( "firstName", [ V.required $ cepFirstName parameters ])
+            , ( "lastName", [ V.required $ cepLastName parameters ])
+            , ( "addressOne", [ V.required $ cepAddressOne parameters ])
+            , ( "city", [ V.required $ cepCity parameters ])
+            , ( "zipCode", [ V.required $ cepZipCode parameters ])
+            , ( "telephone", [ V.required $ cepTelephone parameters ])
+            ]
+
+type ContactEditRoute =
+       AuthProtect "auth-token"
+    :> ReqBody '[JSON] ContactEditParameters
+    :> Post '[JSON] ()
+
+contactEditRoute :: AuthToken -> ContactEditParameters -> App ()
+contactEditRoute token = validate >=> \parameters -> do
+    (Entity customerId _) <- validateToken token
+    void . runDB $ update customerId
+        [ CustomerFirstName =. cepFirstName parameters
+        , CustomerLastName =. cepLastName parameters
+        , CustomerAddressOne =. cepAddressOne parameters
+        , CustomerAddressTwo =. cepAddressTwo parameters
+        , CustomerCity =. cepCity parameters
+        , CustomerState =. cepState parameters
+        , CustomerZipCode =. cepZipCode parameters
+        , CustomerCountry =. cepCountry parameters
+        , CustomerTelephone =. cepTelephone parameters
+        ]
