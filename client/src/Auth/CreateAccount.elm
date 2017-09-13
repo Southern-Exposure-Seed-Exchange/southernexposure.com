@@ -12,7 +12,6 @@ import Dict exposing (Dict)
 import Html exposing (..)
 import Html.Attributes exposing (id, class, for, type_, required, value, selected)
 import Html.Events exposing (onInput, onSubmit, on, targetValue)
-import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode exposing (Value)
 import RemoteData exposing (WebData)
 import Api
@@ -223,17 +222,6 @@ createNewAccount form =
 view : (Msg -> msg) -> Form -> PageData.LocationData -> List (Html msg)
 view tagger model locations =
     let
-        errorText =
-            if Dict.isEmpty model.errors then
-                text ""
-            else
-                div [ id "form-errors-text", class "alert alert-danger" ]
-                    [ text <|
-                        "There were issues processing your information, "
-                            ++ "please correct any errors detailed below "
-                            ++ "& resubmit the form."
-                    ]
-
         requiredField s msg =
             inputField s msg True
 
@@ -243,15 +231,12 @@ view tagger model locations =
         inputField selector msg =
             Form.inputRow model.errors (selector model) (tagger << msg)
 
+        selectRow msg =
+            Form.selectRow Ok (tagger << msg)
+
         countrySelect =
             List.map (locationToOption .country) locations.countries
-                |> select
-                    [ id "Country"
-                    , class "form-control"
-                    , onSelect <| tagger << Country
-                    ]
-                |> List.singleton
-                |> Form.withLabel "Country" True
+                |> selectRow Country "Country" True
 
         locationToOption selector { code, name } =
             option [ value code, selected <| selector model == code ]
@@ -266,35 +251,14 @@ view tagger model locations =
                     regionSelect "Province" locations.provinces
 
                 _ ->
-                    input
-                        [ id "inputState/Province"
-                        , class "form-control"
-                        , type_ "text"
-                        , onInput <| tagger << State
-                        , value model.state
-                        ]
-                        []
-                        |> List.singleton
-                        |> Form.withLabel "State / Province" True
+                    requiredField .state State "State / Province" "state" "state"
 
         regionSelect labelText =
-            List.map (locationToOption .state)
-                >> select
-                    [ id <| "input" ++ labelText
-                    , class "form-control"
-                    , onSelect <| tagger << State
-                    ]
-                >> List.singleton
-                >> Form.withLabel labelText True
-
-        onSelect msg =
-            targetValue
-                |> Decode.map msg
-                |> on "change"
+            List.map (locationToOption .state) >> selectRow State labelText True
     in
         [ h1 [] [ text "Create an Account" ]
         , hr [] []
-        , errorText
+        , Form.genericErrorText (not <| Dict.isEmpty model.errors)
         , form [ onSubmit <| tagger SubmitForm ]
             [ fieldset []
                 [ legend [] [ text "Login Information" ]

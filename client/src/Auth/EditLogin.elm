@@ -7,8 +7,9 @@ module Auth.EditLogin
         , view
         )
 
-import Dict exposing (Dict)
+import Dict
 import Html exposing (..)
+import Html.Attributes exposing (id)
 import Html.Events exposing (onInput, onSubmit)
 import Json.Decode as Decode
 import Json.Encode as Encode exposing (Value)
@@ -134,7 +135,7 @@ updateLoginDetails model token =
 view : (Msg -> msg) -> Form -> AuthStatus -> List (Html msg)
 view tagger model authStatus =
     let
-        maybeEmail =
+        email =
             case model.email of
                 Nothing ->
                     case authStatus of
@@ -145,13 +146,14 @@ view tagger model authStatus =
                             ""
 
                 Just email ->
-                    ""
+                    email
 
         inputRow selector msg =
             Form.inputRow model.errors (selector model) (tagger << msg)
 
         inputs =
-            [ inputRow (always maybeEmail) Email False "Email" "email" "email"
+            [ Form.genericErrorText (not <| Dict.isEmpty model.errors)
+            , inputRow (always email) Email False "Email" "email" "email"
             , inputRow (.password >> Maybe.withDefault "") Password False "Password" "password" "password"
             , inputRow (.passwordConfirm >> Maybe.withDefault "") PasswordConfirm False "Confirm Password" "passwordConfirm" "password"
             , Form.submitButton "Update" False
@@ -159,5 +161,5 @@ view tagger model authStatus =
     in
         [ h1 [] [ text "Edit Login Details" ]
         , hr [] []
-        , form [ onSubmit <| tagger Submit ] inputs
+        , form [ id "edit-form", onSubmit <| tagger Submit ] inputs
         ]

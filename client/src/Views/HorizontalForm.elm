@@ -1,6 +1,8 @@
 module Views.HorizontalForm
     exposing
-        ( inputRow
+        ( genericErrorText
+        , selectRow
+        , inputRow
         , withLabel
         , submitButton
         )
@@ -8,8 +10,22 @@ module Views.HorizontalForm
 import Dict
 import Html exposing (..)
 import Html.Attributes exposing (id, class, for, name, type_, required, value)
-import Html.Events exposing (onInput)
+import Html.Events exposing (onInput, on, targetValue)
+import Json.Decode as Decode exposing (Decoder)
 import Api
+
+
+genericErrorText : Bool -> Html msg
+genericErrorText hasErrors =
+    if hasErrors then
+        div [ id "form-errors-text", class "alert alert-danger" ]
+            [ text <|
+                "There were issues processing your request, "
+                    ++ "please correct any errors highlighted below "
+                    ++ "& resubmit the form."
+            ]
+    else
+        text ""
 
 
 submitButton : String -> Bool -> Html msg
@@ -70,6 +86,31 @@ inputRow errors inputValue inputMsg isRequired labelText errorField inputType =
             ]
             []
             |> (\i -> [ i, errorHtml ])
+            |> withLabel labelText isRequired
+
+
+selectRow : (String -> Result String a) -> (a -> msg) -> String -> Bool -> List (Html msg) -> Html msg
+selectRow parser msg labelText isRequired options =
+    let
+        inputId =
+            "input" ++ String.filter (\c -> c /= ' ') labelText
+
+        onSelect msg =
+            targetValue
+                |> Decode.andThen decoder
+                |> Decode.map msg
+                |> on "change"
+
+        decoder str =
+            case parser str of
+                Ok x ->
+                    Decode.succeed x
+
+                Err e ->
+                    Decode.fail e
+    in
+        select [ id inputId, class "form-control", onSelect msg ] options
+            |> List.singleton
             |> withLabel labelText isRequired
 
 
