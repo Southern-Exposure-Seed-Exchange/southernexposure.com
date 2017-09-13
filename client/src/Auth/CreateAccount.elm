@@ -190,7 +190,10 @@ update msg form =
                 RemoteData.Success (Ok authStatus) ->
                     ( form
                     , Just authStatus
-                    , Routing.newUrl CreateAccountSuccess
+                    , Cmd.batch
+                        [ Routing.newUrl CreateAccountSuccess
+                        , Ports.scrollToTop
+                        ]
                     )
 
                 RemoteData.Success (Err errors) ->

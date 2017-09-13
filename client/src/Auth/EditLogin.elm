@@ -15,6 +15,7 @@ import Json.Decode as Decode
 import Json.Encode as Encode exposing (Value)
 import RemoteData exposing (WebData)
 import Api
+import Ports
 import Routing exposing (Route(MyAccount, Login))
 import Update.Utils exposing (noCommand)
 import User exposing (AuthStatus(..))
@@ -109,11 +110,12 @@ update msg model authStatus =
             SubmitResponse response ->
                 case response of
                     RemoteData.Success (Err errors) ->
-                        { model | errors = errors }
-                            |> noCommand
+                        ( { model | errors = errors }
+                        , Ports.scrollToID "edit-form"
+                        )
 
                     RemoteData.Success (Ok _) ->
-                        ( initial, Routing.newUrl MyAccount )
+                        ( initial, Cmd.batch [ Routing.newUrl MyAccount, Ports.scrollToTop ] )
 
                     _ ->
                         model |> noCommand
