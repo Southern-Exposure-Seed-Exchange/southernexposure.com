@@ -24,13 +24,21 @@ app cfg =
         readerToHandler :: App :~> Handler
         readerToHandler =
             NT $ \x -> runReaderT x cfg
-    in
-        serveWithContext api authServerContext $
-                 readerServer
-            :<|> serveDirectoryWebApp (getMediaDirectory cfg)
 
-api :: Proxy (API :<|> "media" :> Raw)
+    in
+        case getEnv cfg of
+            Production ->
+                serveWithContext api authServerContext readerServer
+            Development ->
+                serveWithContext devApi authServerContext $
+                         readerServer
+                    :<|> serveDirectoryWebApp (getMediaDirectory cfg)
+
+api :: Proxy API
 api = Proxy
+
+devApi :: Proxy (API :<|> "media" :> Raw)
+devApi = Proxy
 
 
 -- | The `API` type describes the API schema of the entire Application.
