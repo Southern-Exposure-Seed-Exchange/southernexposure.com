@@ -133,7 +133,7 @@ debugResponse response model =
 
 login : Form -> Cmd Msg
 login form =
-    Api.post "/api/customers/login/"
+    Api.post Api.CustomerLogin
         |> Api.withJsonBody (encode form)
         |> Api.withJsonResponse User.decoder
         |> Api.withErrorHandler SubmitResponse

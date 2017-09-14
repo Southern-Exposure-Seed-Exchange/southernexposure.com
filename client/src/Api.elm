@@ -1,6 +1,7 @@
 module Api
     exposing
-        ( get
+        ( Endpoint(..)
+        , get
         , post
         , put
         , withToken
@@ -8,6 +9,7 @@ module Api
         , withJsonResponse
         , withErrorHandler
         , sendRequest
+        , toRequest
         , FormErrors
         , initialErrors
         , formErrorsDecoder
@@ -20,6 +22,80 @@ import Json.Decode as Decode exposing (Decoder)
 import Json.Encode exposing (Value)
 import RemoteData
 import Time
+import Products.Pagination as Pagination
+import Routing.Utils exposing (joinPath, withQueryStrings)
+
+
+-- API ENDPOINTS
+
+
+type Endpoint
+    = NavigationData
+    | CategoryDetails String Pagination.Data
+    | ProductDetails String
+    | ProductSearch Pagination.Data
+    | PageDetails String
+    | AdvancedSearchData
+    | CustomerLogin
+    | CustomerRegister
+    | CustomerAuthorize
+    | CustomerLocations
+    | CustomerContactDetails
+    | CustomerEditLogin
+    | CustomerEditContact
+
+
+toUrl : Endpoint -> String
+toUrl endpoint =
+    let
+        endpointUrl =
+            case endpoint of
+                NavigationData ->
+                    joinPath [ "categories", "nav" ]
+
+                CategoryDetails slug data ->
+                    joinPath [ "categories", "details", slug ]
+                        ++ withQueryStrings [ Pagination.toQueryString data ]
+
+                ProductDetails slug ->
+                    joinPath [ "products", "details", slug ]
+
+                ProductSearch data ->
+                    joinPath [ "products", "search" ]
+                        ++ withQueryStrings [ Pagination.toQueryString data ]
+
+                PageDetails slug ->
+                    joinPath [ "pages", "details", slug ]
+
+                AdvancedSearchData ->
+                    joinPath [ "categories", "search" ]
+
+                CustomerLogin ->
+                    joinPath [ "customers", "login" ]
+
+                CustomerRegister ->
+                    joinPath [ "customers", "register" ]
+
+                CustomerAuthorize ->
+                    joinPath [ "customers", "authorize" ]
+
+                CustomerLocations ->
+                    joinPath [ "customers", "locations" ]
+
+                CustomerContactDetails ->
+                    joinPath [ "customers", "contact" ]
+
+                CustomerEditLogin ->
+                    joinPath [ "customers", "edit" ]
+
+                CustomerEditContact ->
+                    joinPath [ "customers", "contact-edit" ]
+    in
+        "/api" ++ endpointUrl
+
+
+
+-- REQUEST BUILDING
 
 
 type alias Request a =
@@ -45,19 +121,19 @@ initialRequest =
     }
 
 
-get : String -> Request String
-get url =
-    { initialRequest | method = "GET", url = url }
+get : Endpoint -> Request String
+get endpoint =
+    { initialRequest | method = "GET", url = toUrl endpoint }
 
 
-post : String -> Request String
-post url =
-    { initialRequest | method = "POST", url = url }
+post : Endpoint -> Request String
+post endpoint =
+    { initialRequest | method = "POST", url = toUrl endpoint }
 
 
-put : String -> Request String
-put url =
-    { initialRequest | method = "PUT", url = url }
+put : Endpoint -> Request String
+put endpoint =
+    { initialRequest | method = "PUT", url = toUrl endpoint }
 
 
 withToken : String -> Request a -> Request a
@@ -114,8 +190,13 @@ sendRequest msg =
     Http.request >> RemoteData.sendRequest >> Cmd.map msg
 
 
+toRequest : Request a -> Http.Request a
+toRequest =
+    Http.request
 
--- Request Body Validation Errors
+
+
+-- API VALIDATION ERROR RESPONSES
 
 
 validationErrorCode : Int

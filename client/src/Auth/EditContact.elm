@@ -141,7 +141,7 @@ updateContactDetails : PageData.ContactDetails -> AuthStatus -> Cmd Msg
 updateContactDetails details authStatus =
     case authStatus of
         Authorized user ->
-            Api.post "/api/customers/contact-edit/"
+            Api.post Api.CustomerEditContact
                 |> Api.withToken user.authToken
                 |> Api.withJsonBody (PageData.contactDetailsEncoder details)
                 |> Api.withJsonResponse (Decode.succeed ())

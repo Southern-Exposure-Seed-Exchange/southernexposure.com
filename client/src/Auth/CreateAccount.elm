@@ -210,7 +210,7 @@ update msg form =
 
 createNewAccount : Form -> Cmd Msg
 createNewAccount form =
-    Api.post "/api/customers/register/"
+    Api.post Api.CustomerRegister
         |> Api.withJsonBody (encode form)
         |> Api.withJsonResponse User.decoder
         |> Api.withErrorHandler SubmitResponse

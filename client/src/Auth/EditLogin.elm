@@ -123,7 +123,7 @@ update msg model authStatus =
 
 updateLoginDetails : Form -> String -> Cmd Msg
 updateLoginDetails model token =
-    Api.put "/api/customers/edit/"
+    Api.put Api.CustomerEditLogin
         |> Api.withJsonBody (encoder model)
         |> Api.withJsonResponse (Decode.succeed ())
         |> Api.withToken token

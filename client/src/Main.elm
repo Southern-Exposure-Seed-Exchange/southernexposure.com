@@ -237,35 +237,35 @@ fetchDataForRoute ({ route, pageData } as model) =
 
 getProductDetailsData : String -> Cmd Msg
 getProductDetailsData slug =
-    Api.get ("/api/products/details/" ++ slug ++ "/")
+    Api.get (Api.ProductDetails slug)
         |> Api.withJsonResponse PageData.productDetailsDecoder
         |> Api.sendRequest GetProductDetailsData
 
 
 getNavigationData : Cmd Msg
 getNavigationData =
-    Api.get "/api/categories/nav/"
+    Api.get Api.NavigationData
         |> Api.withJsonResponse SiteUI.navigationDecoder
         |> Api.sendRequest GetNavigationData
 
 
 getAdvancedSearchData : Cmd Msg
 getAdvancedSearchData =
-    Api.get "/api/categories/search/"
+    Api.get Api.AdvancedSearchData
         |> Api.withJsonResponse PageData.advancedSearchDecoder
         |> Api.sendRequest GetAdvancedSearchData
 
 
 getPageDetails : String -> Cmd Msg
 getPageDetails slug =
-    Api.get ("/api/pages/details/" ++ slug ++ "/")
+    Api.get (Api.PageDetails slug)
         |> Api.withJsonResponse (Decode.field "page" StaticPage.decoder)
         |> Api.sendRequest GetPageDetailsData
 
 
 getLocationsData : Cmd Msg
 getLocationsData =
-    Api.get "/api/customers/locations/"
+    Api.get Api.CustomerLocations
         |> Api.withJsonResponse PageData.locationDataDecoder
         |> Api.sendRequest GetLocationsData
 
@@ -277,7 +277,7 @@ getContactDetails authStatus =
             Cmd.none
 
         User.Authorized user ->
-            Api.get "/api/customers/contact/"
+            Api.get Api.CustomerContactDetails
                 |> Api.withJsonResponse PageData.contactDetailsDecoder
                 |> Api.withToken user.authToken
                 |> Api.sendRequest GetContactDetails
@@ -292,7 +292,7 @@ reAuthorize userId token =
                 , ( "token", Encode.string token )
                 ]
     in
-        Api.post "/api/customers/authorize/"
+        Api.post Api.CustomerAuthorize
             |> Api.withJsonBody authParameters
             |> Api.withJsonResponse User.decoder
             |> Api.sendRequest ReAuthorize

@@ -25,17 +25,16 @@ module PageData
         , contactDetailsEncoder
         )
 
-import Http
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode exposing (Value)
 import Paginate exposing (Paginated)
 import RemoteData exposing (WebData)
+import Api
 import Category exposing (Category, CategoryId(..))
 import StaticPage exposing (StaticPage)
 import Product exposing (Product, ProductVariant)
 import Products.Pagination as Pagination
 import Products.Sorting as Sorting
-import Routing.Utils exposing (joinPath, withQueryStrings)
 import Search
 import SeedAttribute exposing (SeedAttribute)
 
@@ -107,16 +106,15 @@ categoryConfig : Paginate.Config ProductData { slug : String, sorting : Sorting.
 categoryConfig =
     let
         request { slug, sorting } page perPage =
-            Http.get
-                (joinPath [ "api/categories/details/", slug ]
-                    ++ withQueryStrings
-                        [ Pagination.toQueryString (Pagination.Data page perPage sorting) ]
-                )
-            <|
-                Decode.map3 Paginate.FetchResponse
-                    (Decode.field "products" <| Decode.list productDataDecoder)
-                    (Decode.field "total" Decode.int)
-                    (Decode.map Just categoryDetailsDecoder)
+            Api.get (Api.CategoryDetails slug <| Pagination.Data page perPage sorting)
+                |> Api.withJsonResponse fetchDecoder
+                |> Api.toRequest
+
+        fetchDecoder =
+            Decode.map3 Paginate.FetchResponse
+                (Decode.field "products" <| Decode.list productDataDecoder)
+                (Decode.field "total" Decode.int)
+                (Decode.map Just categoryDetailsDecoder)
     in
         Paginate.makeConfig request
 
@@ -158,17 +156,17 @@ type alias SearchResults =
 searchConfig : Paginate.Config ProductData { data : Search.Data, sorting : Sorting.Option } String
 searchConfig =
     let
+        fetchDecoder =
+            Decode.map3 Paginate.FetchResponse
+                (Decode.field "products" <| Decode.list productDataDecoder)
+                (Decode.field "total" Decode.int)
+                (Decode.field "categoryName" <| Decode.nullable Decode.string)
+
         request { data, sorting } page perPage =
-            Http.post
-                ("/api/products/search/"
-                    ++ withQueryStrings [ Pagination.toQueryString (Pagination.Data page perPage sorting) ]
-                )
-                (Search.encode data |> Http.jsonBody)
-                (Decode.map3 Paginate.FetchResponse
-                    (Decode.field "products" <| Decode.list productDataDecoder)
-                    (Decode.field "total" Decode.int)
-                    (Decode.field "categoryName" <| Decode.nullable Decode.string)
-                )
+            Api.post (Api.ProductSearch <| Pagination.Data page perPage sorting)
+                |> Api.withJsonBody (Search.encode data)
+                |> Api.withJsonResponse fetchDecoder
+                |> Api.toRequest
     in
         Paginate.makeConfig request
 
