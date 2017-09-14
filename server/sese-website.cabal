@@ -16,14 +16,14 @@ cabal-version:       >=1.10
 library
   hs-source-dirs:      src
   exposed-modules:     Api
-                     , Auth
                      , Config
                      , Models
+                     , Models.Fields
+                     , Models.ProvinceCodes
+  other-modules:       Auth
                      , Models.Classes
                      , Models.DB
                      , Models.Utils
-                     , Models.Fields
-                     , Models.ProvinceCodes
                      , Routes
                      , Routes.Categories
                      , Routes.CommonData
