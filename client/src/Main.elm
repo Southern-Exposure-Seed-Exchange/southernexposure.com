@@ -1,6 +1,5 @@
 module Main exposing (main)
 
-import Http
 import Json.Decode as Decode
 import Json.Encode as Encode
 import Navigation
@@ -9,19 +8,20 @@ import RemoteData exposing (WebData)
 import AdvancedSearch
 import Api
 import Auth.CreateAccount as CreateAccount
-import Auth.Login as Login
 import Auth.EditContact as EditContact
 import Auth.EditLogin as EditLogin
+import Auth.Login as Login
 import Messages exposing (Msg(..))
 import Model exposing (Model)
 import PageData exposing (PageData, ProductData)
 import Ports
 import Routing exposing (Route(..), reverse, parseRoute)
-import SiteUI
-import SiteUI.Search as SiteSearch
 import Search exposing (UniqueSearch(..))
 import SeedAttribute exposing (SeedAttribute)
+import SiteUI
+import SiteUI.Search as SiteSearch
 import StaticPage exposing (StaticPage)
+import Update.Utils exposing (withCommand, discardCommand)
 import User exposing (User, AuthStatus)
 import View exposing (view)
 
@@ -155,15 +155,12 @@ setPageTitle { route, pageData } =
 fetchDataForRoute : Model -> ( Model, Cmd Msg )
 fetchDataForRoute ({ route, pageData } as model) =
     let
-        discardCmd f ( a, _ ) =
-            f a
-
         updateCategoryDetails slug pagination products =
             products
                 |> Paginate.updateData PageData.categoryConfig
                     { slug = slug, sorting = pagination.sorting }
-                |> discardCmd (Paginate.updatePerPage PageData.categoryConfig pagination.perPage)
-                |> discardCmd (Paginate.jumpTo PageData.categoryConfig pagination.page)
+                |> discardCommand (Paginate.updatePerPage PageData.categoryConfig pagination.perPage)
+                |> discardCommand (Paginate.jumpTo PageData.categoryConfig pagination.page)
 
         ( data, cmd ) =
             case route of
@@ -186,8 +183,8 @@ fetchDataForRoute ({ route, pageData } as model) =
                     pageData.searchResults
                         |> Paginate.updateData PageData.searchConfig
                             { data = data, sorting = pagination.sorting }
-                        |> discardCmd (Paginate.updatePerPage PageData.searchConfig pagination.perPage)
-                        |> discardCmd (Paginate.jumpTo PageData.searchConfig pagination.page)
+                        |> discardCommand (Paginate.updatePerPage PageData.searchConfig pagination.perPage)
+                        |> discardCommand (Paginate.jumpTo PageData.searchConfig pagination.page)
                         |> Tuple.mapFirst (\sr -> { pageData | searchResults = sr })
                         |> Tuple.mapSecond (Cmd.map SearchPaginationMsg)
 
@@ -238,42 +235,39 @@ fetchDataForRoute ({ route, pageData } as model) =
         ( { model | pageData = data }, cmd )
 
 
-sendRequest : (WebData a -> msg) -> Http.Request a -> Cmd msg
-sendRequest msg =
-    RemoteData.sendRequest >> Cmd.map msg
-
-
 getProductDetailsData : String -> Cmd Msg
 getProductDetailsData slug =
-    Http.get ("/api/products/details/" ++ slug ++ "/")
-        PageData.productDetailsDecoder
-        |> sendRequest GetProductDetailsData
+    Api.get ("/api/products/details/" ++ slug ++ "/")
+        |> Api.withJsonResponse PageData.productDetailsDecoder
+        |> Api.sendRequest GetProductDetailsData
 
 
 getNavigationData : Cmd Msg
 getNavigationData =
-    Http.get "/api/categories/nav/" SiteUI.navigationDecoder
-        |> sendRequest GetNavigationData
+    Api.get "/api/categories/nav/"
+        |> Api.withJsonResponse SiteUI.navigationDecoder
+        |> Api.sendRequest GetNavigationData
 
 
 getAdvancedSearchData : Cmd Msg
 getAdvancedSearchData =
-    Http.get "/api/categories/search/" PageData.advancedSearchDecoder
-        |> sendRequest GetAdvancedSearchData
+    Api.get "/api/categories/search/"
+        |> Api.withJsonResponse PageData.advancedSearchDecoder
+        |> Api.sendRequest GetAdvancedSearchData
 
 
 getPageDetails : String -> Cmd Msg
 getPageDetails slug =
-    Http.get ("/api/pages/details/" ++ slug ++ "/")
-        (Decode.field "page" StaticPage.decoder)
-        |> sendRequest GetPageDetailsData
+    Api.get ("/api/pages/details/" ++ slug ++ "/")
+        |> Api.withJsonResponse (Decode.field "page" StaticPage.decoder)
+        |> Api.sendRequest GetPageDetailsData
 
 
 getLocationsData : Cmd Msg
 getLocationsData =
-    Http.get "/api/customers/locations/"
-        PageData.locationDataDecoder
-        |> sendRequest GetLocationsData
+    Api.get "/api/customers/locations/"
+        |> Api.withJsonResponse PageData.locationDataDecoder
+        |> Api.sendRequest GetLocationsData
 
 
 getContactDetails : AuthStatus -> Cmd Msg
@@ -298,10 +292,10 @@ reAuthorize userId token =
                 , ( "token", Encode.string token )
                 ]
     in
-        Http.post "/api/customers/authorize/"
-            (Http.jsonBody authParameters)
-            User.decoder
-            |> sendRequest ReAuthorize
+        Api.post "/api/customers/authorize/"
+            |> Api.withJsonBody authParameters
+            |> Api.withJsonResponse User.decoder
+            |> Api.sendRequest ReAuthorize
 
 
 
@@ -464,11 +458,6 @@ update msg ({ pageData } as model) =
                 |> Tuple.mapFirst (\sr -> { pageData | searchResults = sr })
                 |> Tuple.mapFirst (\pd -> { model | pageData = pd })
                 |> withCommand (always Ports.scrollToTop)
-
-
-withCommand : (Model -> Cmd msg) -> ( Model, Cmd msg ) -> ( Model, Cmd msg )
-withCommand newCmd ( model, cmd ) =
-    ( model, Cmd.batch [ cmd, newCmd model ] )
 
 
 updatePageFromPagination : Route -> Paginated a b c -> Cmd msg
