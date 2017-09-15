@@ -2,7 +2,7 @@ module Views.Category exposing (details)
 
 import Html exposing (..)
 import Html.Attributes exposing (class, src)
-import Html.Attributes.Extra exposing (innerHtml)
+import Markdown
 import Paginate exposing (Paginated)
 import Category
 import Messages exposing (Msg)
@@ -59,7 +59,7 @@ details pagination products =
             , h1 [ class "mb-0 pl-2" ] [ text category.name ]
             ]
         , hr [ class "mt-2" ] []
-        , div [ innerHtml category.description ] []
+        , div [] [ Markdown.toHtml [] category.description ]
         , subCategoryCards
         ]
             ++ ProductViews.list (CategoryDetails category.slug) pagination products

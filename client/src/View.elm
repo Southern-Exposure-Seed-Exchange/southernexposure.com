@@ -2,8 +2,8 @@ module View exposing (view)
 
 import Html exposing (..)
 import Html.Attributes exposing (class, src)
-import Html.Attributes.Extra exposing (innerHtml)
 import Http
+import Markdown
 import Paginate exposing (Paginated)
 import RemoteData exposing (WebData)
 import AdvancedSearch
@@ -153,7 +153,7 @@ staticPageView { name, slug, content } =
                 h1 [] [ text name ]
     in
         [ header
-        , div [ innerHtml content ] []
+        , div [] [ Markdown.toHtml [] content ]
         ]
 
 

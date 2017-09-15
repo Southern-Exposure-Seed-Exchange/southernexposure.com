@@ -2,9 +2,9 @@ module Products.Views exposing (details, list)
 
 import Html exposing (..)
 import Html.Attributes exposing (attribute, id, class, src, for, value, selected, tabindex)
-import Html.Attributes.Extra exposing (innerHtml)
 import Html.Events exposing (on, targetValue)
 import Json.Decode as Decode
+import Markdown
 import Paginate exposing (Paginated)
 import Messages exposing (Msg(..))
 import PageData exposing (ProductData)
@@ -28,7 +28,7 @@ details { product, variants, maybeSeedAttribute, categories } =
                                 [ a (routeLinkAttributes <| CategoryDetails category.slug Pagination.default)
                                     [ text category.name ]
                                 ]
-                            , div [ innerHtml category.description ] []
+                            , div [] [ Markdown.toHtml [] category.description ]
                             ]
                     )
     in
@@ -63,7 +63,7 @@ details { product, variants, maybeSeedAttribute, categories } =
                         ]
                     ]
                 , div [ class "col" ]
-                    [ div [ innerHtml product.longDescription ] [] ]
+                    [ div [] [ Markdown.toHtml [] product.longDescription ] ]
                 , div [ class "col-12" ] categoryBlocks
                 ]
             ]
@@ -238,14 +238,11 @@ list routeConstructor pagination products =
                             ]
                         , td []
                             [ h3 [ class "mb-0" ]
-                                [ a
-                                    ([ innerHtml product.name ]
-                                        ++ (routeLinkAttributes <| ProductDetails product.slug)
-                                    )
-                                    []
+                                [ a (routeLinkAttributes <| ProductDetails product.slug)
+                                    [ Markdown.toHtml [] product.name ]
                                 , htmlOrBlank SeedAttribute.icons maybeSeedAttribute
                                 ]
-                            , div [ innerHtml product.longDescription ] []
+                            , div [] [ Markdown.toHtml [] product.longDescription ]
                             ]
                         , td [ class "text-center align-middle" ]
                             [ div []
