@@ -2,6 +2,7 @@
 module Main where
 
 import Control.Monad.Logger (runStderrLoggingT)
+import Data.Maybe (fromMaybe)
 import Database.Persist.Postgresql
 import Network.Wai.Middleware.RequestLogger (logStdoutDev, logStdout)
 import System.Directory (getCurrentDirectory, createDirectoryIfMissing)
@@ -20,8 +21,19 @@ main = do
     port <- lookupSetting "PORT" 3000
     mediaDir <- lookupSetting "MEDIA" =<< (++ "/media/") <$> getCurrentDirectory
     createDirectoryIfMissing True mediaDir
-    pool <- makePool env
-    let cfg = defaultConfig { getPool = pool, getEnv = env, getMediaDirectory = mediaDir }
+    smtpServer <- lookupSetting "SMTP_SERVER" "southernexposure.com"
+    smtpUser <- fromMaybe "" <$> lookupEnv "SMTP_USER"
+    smtpPass <- fromMaybe "" <$> lookupEnv "SMTP_PASS"
+    emailPool <- smtpPool smtpServer (poolSize env)
+    dbPool <- makePool env
+    let cfg = defaultConfig
+            { getPool = dbPool
+            , getEnv = env
+            , getMediaDirectory = mediaDir
+            , getSmtpPool = emailPool
+            , getSmtpUser = smtpUser
+            , getSmtpPass = smtpPass
+            }
     Warp.runSettings (warpSettings port) . httpLogger env $ app cfg
     where lookupSetting env def =
             maybe def read <$> lookupEnv env

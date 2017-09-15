@@ -21,6 +21,8 @@ library
                      , Models.Fields
                      , Models.ProvinceCodes
   other-modules:       Auth
+                     , Emails
+                     , Emails.AccountCreated
                      , Models.Classes
                      , Models.DB
                      , Models.Utils
@@ -35,13 +37,19 @@ library
                      , Validation
   build-depends:       base >= 4.7 && < 5
                      , aeson
+                     , async
                      , bcrypt
+                     , blaze-html
                      , containers
                      , esqueleto
+                     , HaskellNet
+                     , HaskellNet-SSL
                      , iso3166-country-codes
+                     , markdown
                      , mtl
                      , persistent
                      , persistent-template
+                     , resource-pool
                      , servant-server
                      , state-codes
                      , tagsoup

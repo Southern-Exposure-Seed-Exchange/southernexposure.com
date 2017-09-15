@@ -11,8 +11,8 @@ module Routes.Customers
     ) where
 
 import Control.Monad ((>=>), when, void)
-import Control.Monad.Trans (lift)
 import Control.Monad.IO.Class (liftIO)
+import Control.Monad.Trans (lift)
 import Data.Aeson (ToJSON(..), FromJSON(..), (.=), (.:), (.:?), withObject, object)
 import Data.Int (Int64)
 import Data.Maybe (fromMaybe)
@@ -33,6 +33,7 @@ import qualified Data.StateCodes as StateCodes
 import qualified Data.Text as T
 import qualified Data.UUID as UUID
 import qualified Data.UUID.V4 as UUID4
+import qualified Emails
 import qualified Models.ProvinceCodes as ProvinceCodes
 import qualified Validation as V
 
@@ -228,8 +229,7 @@ registrationRoute :: RegistrationParameters -> App AuthorizationData
 registrationRoute = validate >=> \parameters -> do
     encryptedPass <- hashPassword $ rpPassword parameters
     authToken <- generateToken
-    maybeCustomerId <- runDB . insertUnique $
-        Customer
+    let customer = Customer
             { customerEmail = rpEmail parameters
             , customerEncryptedPassword = encryptedPass
             , customerAuthToken = authToken
@@ -244,10 +244,12 @@ registrationRoute = validate >=> \parameters -> do
             , customerCountry = rpCountry parameters
             , customerTelephone = rpTelephone parameters
             }
+    maybeCustomerId <- runDB $ insertUnique customer
     case maybeCustomerId of
         Nothing ->
             lift $ throwError err500
         Just customerId ->
+            Emails.send (Emails.AccountCreated customer) >>
             return AuthorizationData
                 { adId = customerId
                 , adFirstName = rpFirstName parameters
