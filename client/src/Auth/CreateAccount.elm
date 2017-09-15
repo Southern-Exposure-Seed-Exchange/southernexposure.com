@@ -269,19 +269,19 @@ view tagger model locations =
                 [ legend [] [ text "Login Information" ]
                 , requiredField .email Email "Email" "email" "email"
                 , requiredField .password Password "Password" "password" "password"
-                , requiredField .passwordConfirm PasswordConfirm "Confirm Password" "password" "passwordConfirm"
+                , requiredField .passwordConfirm PasswordConfirm "Confirm Password" "passwordConfirm" "password"
                 ]
             , fieldset []
                 [ legend [] [ text "Contact Information" ]
-                , requiredField .firstName FirstName "First Name" "text" "firstName"
-                , requiredField .lastName LastName "Last Name" "text" "lastName"
-                , requiredField .street Street "Street Address" "text" "addressOne"
-                , optionalField .addressTwo AddressTwo "Address Line 2" "text" ""
-                , requiredField .city City "City" "text" "city"
+                , requiredField .firstName FirstName "First Name" "firstName" "text"
+                , requiredField .lastName LastName "Last Name" "lastName" "text"
+                , requiredField .street Street "Street Address" "addressOne" "text"
+                , optionalField .addressTwo AddressTwo "Address Line 2" "addressTwo" "text"
+                , requiredField .city City "City" "city" "text"
                 , regionField
-                , requiredField .zipCode ZipCode "Zip Code" "text" "zipCode"
+                , requiredField .zipCode ZipCode "Zip Code" "zipCode" "text"
                 , countrySelect
-                , requiredField .phoneNumber PhoneNumber "Phone Number" "tel" "telephone"
+                , requiredField .phoneNumber PhoneNumber "Phone Number" "telephone" "tel"
                 ]
             , Form.submitButton "Register" True
             ]
