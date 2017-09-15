@@ -26,6 +26,7 @@ newtype EmailType =
     AccountCreated Customer
 
 
+-- TODO: Make Configurable
 developmentEmailRecipient :: String
 developmentEmailRecipient = "pavan@acorncommunity.org"
 
@@ -34,6 +35,7 @@ send :: EmailType -> App (Async ())
 send email =
     let
         -- TODO: Add a Name to the sender address(see source for sendMimeMail)
+        -- TODO: Make Configurable
         sender =
             "gardens@southernexposure.com"
 

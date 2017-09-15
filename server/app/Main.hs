@@ -21,7 +21,7 @@ main = do
     port <- lookupSetting "PORT" 3000
     mediaDir <- lookupSetting "MEDIA" =<< (++ "/media/") <$> getCurrentDirectory
     createDirectoryIfMissing True mediaDir
-    smtpServer <- lookupSetting "SMTP_SERVER" "southernexposure.com"
+    smtpServer <- lookupSetting "SMTP_SERVER" ""
     smtpUser <- fromMaybe "" <$> lookupEnv "SMTP_USER"
     smtpPass <- fromMaybe "" <$> lookupEnv "SMTP_PASS"
     emailPool <- smtpPool smtpServer (poolSize env)
