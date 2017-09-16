@@ -12,6 +12,7 @@ import Auth.EditContact as EditContact
 import Auth.EditLogin as EditLogin
 import Auth.Login as Login
 import Auth.MyAccount as MyAccount
+import Auth.ResetPassword as ResetPassword
 import Views.Category as CategoryViews
 import Messages exposing (Msg(..))
 import Model exposing (Model)
@@ -78,6 +79,9 @@ view ({ route, pageData, navigationData } as model) =
 
                 Login ->
                     Login.view LoginMsg model.loginForm
+
+                ResetPassword maybeCode ->
+                    ResetPassword.view ResetPasswordMsg model.resetPasswordForm maybeCode
 
                 MyAccount ->
                     MyAccount.view

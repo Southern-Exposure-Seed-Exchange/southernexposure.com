@@ -5,6 +5,7 @@ import Auth.CreateAccount as CreateAccount
 import Auth.EditContact as EditContact
 import Auth.EditLogin as EditLogin
 import Auth.Login as Login
+import Auth.ResetPassword as ResetPassword
 import PageData exposing (PageData)
 import Routing exposing (Route)
 import Search
@@ -22,6 +23,7 @@ type alias Model =
     , loginForm : Login.Form
     , editLoginForm : EditLogin.Form
     , editContactForm : EditContact.Form
+    , resetPasswordForm : ResetPassword.Form
     , currentUser : AuthStatus
     }
 
@@ -37,5 +39,6 @@ initial route =
     , loginForm = Login.initial
     , editLoginForm = EditLogin.initial
     , editContactForm = EditContact.initial
+    , resetPasswordForm = ResetPassword.initial
     , currentUser = User.unauthorized
     }

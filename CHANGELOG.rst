@@ -5,6 +5,9 @@ CHANGELOG
 v0.4.0
 ======
 
+* Automatically log Customers in after they successfully reset their password.
+* Send Link to Password Reset page instead of emailing Customers a new password.
+* Password Reset page doesn't indicate if the email is registered.
 * Add ``Register`` link to links in the Site Header when logged out.
 * Put the Login Form first on the Log In page.
 * Re-organize fields on the Create Account page.

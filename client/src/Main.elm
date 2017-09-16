@@ -11,6 +11,7 @@ import Auth.CreateAccount as CreateAccount
 import Auth.EditContact as EditContact
 import Auth.EditLogin as EditLogin
 import Auth.Login as Login
+import Auth.ResetPassword as ResetPassword
 import Messages exposing (Msg(..))
 import Model exposing (Model)
 import PageData exposing (PageData, ProductData)
@@ -137,6 +138,12 @@ setPageTitle { route, pageData } =
             Login ->
                 Ports.setPageTitle "Customer Login"
 
+            ResetPassword Nothing ->
+                Ports.setPageTitle "Reset Password"
+
+            ResetPassword (Just _) ->
+                Ports.setPageTitle "Change Password"
+
             MyAccount ->
                 Ports.setPageTitle "My Account"
 
@@ -207,6 +214,9 @@ fetchDataForRoute ({ route, pageData } as model) =
                     doNothing
 
                 Login ->
+                    doNothing
+
+                ResetPassword _ ->
                     doNothing
 
                 MyAccount ->
@@ -360,6 +370,17 @@ update msg ({ pageData } as model) =
                   }
                 , Cmd.map LoginMsg cmd
                 )
+
+        ResetPasswordMsg subMsg ->
+            ResetPassword.update subMsg model.resetPasswordForm
+                |> (\( form, maybeAuthStatus, cmd ) ->
+                        ( { model
+                            | resetPasswordForm = form
+                            , currentUser = maybeAuthStatus |> Maybe.withDefault model.currentUser
+                          }
+                        , Cmd.map ResetPasswordMsg cmd
+                        )
+                   )
 
         EditLoginMsg subMsg ->
             EditLogin.update subMsg model.editLoginForm model.currentUser

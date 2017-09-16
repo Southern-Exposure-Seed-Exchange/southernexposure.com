@@ -7,6 +7,7 @@ import Auth.CreateAccount as CreateAccount
 import Auth.Login as Login
 import Auth.EditLogin as EditLogin
 import Auth.EditContact as EditContact
+import Auth.ResetPassword as ResetPassword
 import StaticPage exposing (StaticPage)
 import PageData exposing (ProductData)
 import Routing exposing (Route)
@@ -24,6 +25,7 @@ type Msg
     | AdvancedSearchMsg AdvancedSearch.Msg
     | CreateAccountMsg CreateAccount.Msg
     | LoginMsg Login.Msg
+    | ResetPasswordMsg ResetPassword.Msg
     | EditLoginMsg EditLogin.Msg
     | EditContactMsg EditContact.Msg
     | ReAuthorize (WebData User.AuthStatus)

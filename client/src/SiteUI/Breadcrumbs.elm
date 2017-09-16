@@ -64,6 +64,16 @@ view route pageData =
                 Login ->
                     singleItem "Login"
 
+                ResetPassword Nothing ->
+                    [ inactiveItem "Login" Login
+                    , activeItem "Reset Password"
+                    ]
+
+                ResetPassword (Just _) ->
+                    [ inactiveItem "Login" Login
+                    , activeItem "Change Password"
+                    ]
+
                 MyAccount ->
                     singleItem "My Account"
 

@@ -17,7 +17,7 @@ import RemoteData exposing (WebData)
 import Api
 import Auth.Utils exposing (noCommandOrStatus)
 import Ports
-import Routing exposing (Route(CreateAccount, PageDetails), reverse)
+import Routing exposing (Route(CreateAccount, ResetPassword, PageDetails), reverse)
 import User exposing (AuthStatus, UserId(..))
 
 
@@ -58,6 +58,7 @@ type Msg
     | Password String
     | Remember Bool
     | CreateAccountPage
+    | ResetPasswordPage
     | SubmitForm
     | SubmitResponse (WebData (Result Api.FormErrors AuthStatus))
 
@@ -82,6 +83,15 @@ update msg model =
             , Nothing
             , Cmd.batch
                 [ Routing.newUrl CreateAccount
+                , Ports.scrollToTop
+                ]
+            )
+
+        ResetPasswordPage ->
+            ( model
+            , Nothing
+            , Cmd.batch
+                [ Routing.newUrl <| ResetPassword <| Just ""
                 , Ports.scrollToTop
                 ]
             )
@@ -159,6 +169,13 @@ view tagger model =
                             , type_ "submit"
                             ]
                             [ text "Log In" ]
+                        ]
+                    , div []
+                        [ a
+                            [ onClickPreventDefault <| tagger ResetPasswordPage
+                            , href <| reverse <| ResetPassword <| Just ""
+                            ]
+                            [ text "Forgot your password?" ]
                         ]
                     ]
                 ]

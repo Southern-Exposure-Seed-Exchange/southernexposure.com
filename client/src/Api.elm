@@ -39,6 +39,8 @@ type Endpoint
     | CustomerLogin
     | CustomerRegister
     | CustomerAuthorize
+    | CustomerResetRequest
+    | CustomerPasswordReset
     | CustomerLocations
     | CustomerContactDetails
     | CustomerEditLogin
@@ -78,6 +80,12 @@ toUrl endpoint =
 
                 CustomerAuthorize ->
                     joinPath [ "customers", "authorize" ]
+
+                CustomerResetRequest ->
+                    joinPath [ "customers", "reset-request" ]
+
+                CustomerPasswordReset ->
+                    joinPath [ "customers", "reset-password" ]
 
                 CustomerLocations ->
                     joinPath [ "customers", "locations" ]

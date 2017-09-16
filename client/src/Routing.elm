@@ -8,7 +8,7 @@ module Routing
         )
 
 import Navigation
-import UrlParser as Url exposing ((</>))
+import UrlParser as Url exposing ((</>), (<?>))
 import Products.Pagination as Pagination
 import Routing.Utils exposing (joinPath, withQueryStrings)
 import SeedAttribute
@@ -24,6 +24,7 @@ type Route
     | CreateAccount
     | CreateAccountSuccess
     | Login
+    | ResetPassword (Maybe String)
     | MyAccount
     | EditLogin
     | EditContact
@@ -58,6 +59,7 @@ parseRoute =
                 [ Url.map Login (Url.s "login")
                 , Url.map CreateAccount (Url.s "create")
                 , Url.map CreateAccountSuccess (Url.s "create" </> Url.s "success")
+                , Url.map ResetPassword (Url.s "reset-password" <?> Url.stringParam "code")
                 , Url.map MyAccount Url.top
                 , Url.map EditLogin (Url.s "edit")
                 , Url.map EditContact (Url.s "edit-contact")
@@ -143,6 +145,9 @@ reverse route =
         Login ->
             joinPath [ "account", "login" ]
 
+        ResetPassword _ ->
+            joinPath [ "account", "reset-password" ]
+
         MyAccount ->
             joinPath [ "account" ]
 
@@ -181,6 +186,9 @@ authRequired route =
             True
 
         Login ->
+            False
+
+        ResetPassword _ ->
             False
 
         MyAccount ->
