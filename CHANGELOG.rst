@@ -2,6 +2,10 @@
 CHANGELOG
 =========
 
+v0.5.0
+======
+
+
 v0.4.0
 ======
 
@@ -12,6 +16,7 @@ v0.4.0
 * Put the Login Form first on the Log In page.
 * Re-organize fields on the Create Account page.
 * Remove the Company Name field from Contact Addresses.
+
 
 v0.3.0
 ======
