@@ -23,6 +23,7 @@ library
   other-modules:       Auth
                      , Emails
                      , Emails.AccountCreated
+                     , Emails.PasswordReset
                      , Models.Classes
                      , Models.DB
                      , Models.Utils
@@ -54,6 +55,7 @@ library
                      , state-codes
                      , tagsoup
                      , text
+                     , time
                      , unordered-containers
                      , uuid
                      , wai

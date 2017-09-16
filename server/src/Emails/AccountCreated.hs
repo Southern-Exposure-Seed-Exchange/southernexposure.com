@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
-module Emails.AccountCreated where
+module Emails.AccountCreated (get) where
 
 import Data.Monoid ((<>))
 
@@ -24,6 +24,7 @@ render firstName =
         "* View your order history\n" <>
         "* Change your email, password, & other contact information\n\n" <>
     "If you have questions, you can email us at [gardens@southernexposure.com][2], " <>
-    "or call us at 540-894-9480.\n\n"
+    "or call us at [540-894-9480][3].\n\n"
         <> "[1]: http://www.southernexposure.com/\n"
         <> "[2]: mailto:gardens@southernexposure.com\n"
+        <> "[3]: tel://5408949480\n"

@@ -8,6 +8,7 @@
 module Models.DB where
 
 import Data.Int (Int64)
+import Data.Time.Clock (UTCTime)
 import Database.Persist.TH
 
 import Models.Fields
@@ -82,4 +83,11 @@ Customer json
     isAdmin Bool default=false
     UniqueToken authToken
     UniqueEmail email
+
+PasswordReset
+    customer CustomerId
+    timeout UTCTime
+    code T.Text
+    UniquePasswordReset customer
+    UniqueResetCode code
 |]

@@ -16,8 +16,10 @@ import Control.Monad.Trans (lift)
 import Data.Aeson (ToJSON(..), FromJSON(..), (.=), (.:), (.:?), withObject, object)
 import Data.Int (Int64)
 import Data.Maybe (fromMaybe)
+import Data.Monoid ((<>))
 import Data.Text.Encoding (encodeUtf8, decodeUtf8)
-import Database.Persist ((=.), Entity(..), get, getBy, insertUnique, update)
+import Data.Time.Clock (getCurrentTime, addUTCTime)
+import Database.Persist ((=.), (==.), Entity(..), get, getBy, insertUnique, insert_, update, delete, deleteWhere)
 import Database.Persist.Sql (toSqlKey)
 import Servant ((:>), (:<|>)(..), AuthProtect, ReqBody, JSON, Get, Post, Put, errBody, err403, err500, throwError)
 
@@ -43,6 +45,8 @@ type CustomerAPI =
     :<|> "register" :> RegisterRoute
     :<|> "login" :> LoginRoute
     :<|> "authorize" :> AuthorizeRoute
+    :<|> "reset-request" :> ResetRequestRoute
+    :<|> "reset-password" :> ResetPasswordRoute
     :<|> "edit" :> EditDetailsRoute
     :<|> "contact" :> ContactDetailsRoute
     :<|> "contact-edit" :> ContactEditRoute
@@ -52,6 +56,8 @@ type CustomerRoutes =
     :<|> (RegistrationParameters -> App AuthorizationData)
     :<|> (LoginParameters -> App AuthorizationData)
     :<|> (AuthorizeParameters -> App AuthorizationData)
+    :<|> (ResetRequestParameters -> App ())
+    :<|> (ResetPasswordParameters -> App AuthorizationData)
     :<|> (AuthToken -> EditDetailsParameters -> App ())
     :<|> (AuthToken -> App ContactDetailsData)
     :<|> (AuthToken -> ContactEditParameters -> App ())
@@ -62,6 +68,8 @@ customerRoutes =
     :<|> registrationRoute
     :<|> loginRoute
     :<|> authorizeRoute
+    :<|> resetRequestRoute
+    :<|> resetPasswordRoute
     :<|> editDetailsRoute
     :<|> contactDetailsRoute
     :<|> contactEditRoute
@@ -204,8 +212,8 @@ instance Validation RegistrationParameters where
         return
             [ ( "email"
               , [ V.required $ rpEmail parameters
-                  , ( "An Account with this Email already exists."
-                    , emailDoesntExist )
+                , ( "An Account with this Email already exists."
+                  , emailDoesntExist )
                 ]
               )
             , ( "password"
@@ -383,6 +391,106 @@ authorizeRoute AuthorizeParameters { apUserId, apToken } =
                     lift $ throwError err403
             Nothing ->
                 lift $ throwError err403
+
+
+-- RESET PASSWORD
+
+
+data ResetRequestParameters =
+    ResetRequestParameters
+        { rrpEmail :: T.Text
+        }
+
+instance FromJSON ResetRequestParameters where
+    parseJSON = withObject "ResetRequestParameters" $ \v ->
+        ResetRequestParameters <$> v .: "email"
+
+instance Validation ResetRequestParameters where
+    validators parameters =
+        return [ ( "email", [V.required $ rrpEmail parameters] ) ]
+
+type ResetRequestRoute =
+       ReqBody '[JSON] ResetRequestParameters
+    :> Post '[JSON] ()
+
+resetRequestRoute :: ResetRequestParameters -> App ()
+resetRequestRoute = validate >=> \parameters -> do
+    maybeCustomer <- runDB . getBy $ UniqueEmail $ rrpEmail parameters
+    case maybeCustomer of
+        Nothing ->
+            (UUID.toText <$> liftIO UUID4.nextRandom)
+            >> (addUTCTime (15 * 60) <$> liftIO getCurrentTime)
+            >> return ()
+        Just (Entity customerId customer) -> do
+            runDB $ deleteWhere [PasswordResetCustomer ==. customerId]
+            resetCode <- UUID.toText <$> liftIO UUID4.nextRandom
+            expirationTime <- addUTCTime (15 * 60) <$> liftIO getCurrentTime
+            let passwordReset =
+                    PasswordReset
+                        { passwordResetCustomer = customerId
+                        , passwordResetTimeout = expirationTime
+                        , passwordResetCode = resetCode
+                        }
+            runDB $ insert_ passwordReset
+            void . Emails.send $ Emails.PasswordReset customer passwordReset
+
+
+data ResetPasswordParameters =
+    ResetPasswordParameters
+        { rppPassword :: T.Text
+        , rppResetCode :: T.Text
+        }
+
+instance FromJSON ResetPasswordParameters where
+    parseJSON = withObject "ResetPasswordParameters" $ \v ->
+        ResetPasswordParameters
+            <$> v .: "password"
+            <*> v .: "resetCode"
+
+instance Validation ResetPasswordParameters where
+    validators parameters =
+        return
+            [ ( "password"
+              , [ V.required $ rppPassword parameters
+                , V.minimumLength 8 $ rppPassword parameters
+                ]
+              )
+            ]
+
+type ResetPasswordRoute =
+       ReqBody '[JSON] ResetPasswordParameters
+    :> Post '[JSON] AuthorizationData
+
+resetPasswordRoute :: ResetPasswordParameters -> App AuthorizationData
+resetPasswordRoute = validate >=> \parameters ->
+    let
+        invalidCodeError =
+            V.singleError $
+                "Your reset code has expired, please try requesting a new " <>
+                "password reset link."
+    in do
+        maybeResetRequest <- runDB . getBy . UniqueResetCode $ rppResetCode parameters
+        case maybeResetRequest of
+            Nothing ->
+                invalidCodeError
+            Just (Entity resetId passwordReset) -> do
+                currentTime <- liftIO getCurrentTime
+                if (currentTime < passwordResetTimeout passwordReset) then do
+                    token <- generateToken
+                    newHash <- hashPassword $ rppPassword parameters
+                    let customerId = passwordResetCustomer passwordReset
+                    runDB $ update customerId
+                        [ CustomerAuthToken =. token
+                        , CustomerEncryptedPassword =. newHash
+                        ]
+                        >> delete resetId
+                    maybeCustomer <- runDB $ get customerId
+                    flip (maybe invalidCodeError) maybeCustomer $ \customer -> do
+                        void . Emails.send $ Emails.PasswordResetSuccess customer
+                        return . customerToAuthorizationData
+                            $ Entity customerId customer
+                else
+                    invalidCodeError
 
 
 -- EDIT DETAILS
