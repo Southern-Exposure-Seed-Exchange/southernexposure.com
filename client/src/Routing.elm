@@ -130,7 +130,7 @@ reverse route =
 
         PageDetails slug ->
             if slug == "home" then
-                ""
+                "/"
             else
                 joinPath [ slug ]
 
