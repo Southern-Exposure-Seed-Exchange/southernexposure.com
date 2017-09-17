@@ -51,8 +51,7 @@ main = do
                     1
           warpSettings port =
               Warp.setServerName ""
-              $ Warp.setPort port
-              $ Warp.defaultSettings
+              $ Warp.setPort port Warp.defaultSettings
           httpLogger env =
               case env of
                 Production ->

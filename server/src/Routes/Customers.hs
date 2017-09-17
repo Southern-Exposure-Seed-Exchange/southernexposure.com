@@ -396,7 +396,7 @@ authorizeRoute AuthorizeParameters { apUserId, apToken } =
 -- RESET PASSWORD
 
 
-data ResetRequestParameters =
+newtype ResetRequestParameters =
     ResetRequestParameters
         { rrpEmail :: T.Text
         }
@@ -475,7 +475,7 @@ resetPasswordRoute = validate >=> \parameters ->
                 invalidCodeError
             Just (Entity resetId passwordReset) -> do
                 currentTime <- liftIO getCurrentTime
-                if (currentTime < passwordResetTimeout passwordReset) then do
+                if currentTime < passwordResetTimeout passwordReset then do
                     token <- generateToken
                     newHash <- hashPassword $ rppPassword parameters
                     let customerId = passwordResetCustomer passwordReset
@@ -515,7 +515,7 @@ instance Validation (EditDetailsParameters, Customer) where
             [ ( "email"
               , [ ( "An Account with this Email already exists."
                   , flip (maybe False) (edpEmail parameters) $ \e ->
-                        (fromMaybe False maybeEmailDoesntExist)
+                        fromMaybe False maybeEmailDoesntExist
                         && (e /= customerEmail customer)
                   )
                 ]
@@ -539,10 +539,8 @@ editDetailsRoute token p = do
     maybeHash <- mapM hashPassword $ edpPassword parameters
     void . runDB . update customerId $ updateFields (edpEmail parameters) maybeHash
     where updateFields maybeEmail maybePassword =
-            concat
-                [ maybe [] (\e -> [CustomerEmail =. e]) maybeEmail
-                , maybe [] (\e -> [CustomerEncryptedPassword =. e]) maybePassword
-                ]
+            maybe [] (\e -> [CustomerEmail =. e]) maybeEmail
+                ++ maybe [] (\e -> [CustomerEncryptedPassword =. e]) maybePassword
 
 
 -- CONTACT DETAILS
@@ -563,15 +561,15 @@ data ContactDetailsData =
 
 instance ToJSON ContactDetailsData where
     toJSON contact =
-        object [ "firstName" .= (cddFirstName contact)
-               , "lastName" .= (cddLastName contact)
-               , "addressOne" .= (cddAddressOne contact)
-               , "addressTwo" .= (cddAddressTwo contact)
-               , "city" .= (cddCity contact)
-               , "state" .= (cddState contact)
-               , "zipCode" .= (cddZipCode contact)
-               , "country" .= (cddCountry contact)
-               , "telephone" .= (cddTelephone contact)
+        object [ "firstName" .= cddFirstName contact
+               , "lastName" .= cddLastName contact
+               , "addressOne" .= cddAddressOne contact
+               , "addressTwo" .= cddAddressTwo contact
+               , "city" .= cddCity contact
+               , "state" .= cddState contact
+               , "zipCode" .= cddZipCode contact
+               , "country" .= cddCountry contact
+               , "telephone" .= cddTelephone contact
                ]
 
 customerToContactDetails :: Entity Customer -> ContactDetailsData
@@ -594,7 +592,7 @@ type ContactDetailsRoute =
 
 contactDetailsRoute :: AuthToken -> App ContactDetailsData
 contactDetailsRoute token =
-    validateToken token >>= return . customerToContactDetails
+    customerToContactDetails <$> validateToken token
 
 
 -- EDIT CONTACT DETAILS
