@@ -398,6 +398,11 @@ update msg ({ pageData } as model) =
                     { model | currentUser = authStatus }
                         |> fetchDataForRoute
 
+                RemoteData.Failure _ ->
+                    ( { model | currentUser = User.Anonymous }
+                    , Ports.removeAuthDetails ()
+                    )
+
                 _ ->
                     ( model, Cmd.none )
 
