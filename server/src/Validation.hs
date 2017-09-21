@@ -5,15 +5,19 @@ module Validation
     , singleError
     , required
     , doesntExist
+    , exists
+    , uniqueExists
     , minimumLength
+    , zeroOrPositive
     ) where
 
 import Control.Monad.Trans (lift)
 import Control.Arrow (second)
 import Data.Aeson (ToJSON(..), encode, object)
+import Data.Maybe (isJust, isNothing)
 import Data.Monoid ((<>))
-import Database.Persist (PersistEntityBackend, PersistEntity, Unique, getBy)
-import Database.Persist.Sql (SqlBackend)
+import Database.Persist (PersistEntityBackend, PersistEntity, Unique, get, getBy)
+import Database.Persist.Sql (SqlBackend, Key)
 import Servant (throwError, err422, errBody)
 
 import Server
@@ -64,13 +68,23 @@ required text =
 
 doesntExist :: (PersistEntityBackend r ~ SqlBackend, PersistEntity r)
             => Unique r -> App Bool
-doesntExist uniqueKey = do
-    maybeItem <- runDB $ getBy uniqueKey
-    case maybeItem of
-        Nothing ->
-            return False
-        Just _ -> return True
+doesntExist uniqueKey =
+    isJust <$> runDB (getBy uniqueKey)
+
+exists :: (PersistEntityBackend r ~ SqlBackend, PersistEntity r)
+       => Key r -> App Bool
+exists entityId =
+    isNothing <$> runDB (get entityId)
+
+uniqueExists :: (PersistEntityBackend r ~ SqlBackend, PersistEntity r)
+             => Unique r -> App Bool
+uniqueExists uniqueKey =
+    isNothing <$> runDB (getBy uniqueKey)
 
 minimumLength :: Int -> T.Text -> (T.Text, Bool)
 minimumLength minLength text =
     ("Must be at least " <> T.pack (show minLength) <> " characters", T.length text < minLength)
+
+zeroOrPositive :: (Num a, Ord a) => a -> (T.Text, Bool)
+zeroOrPositive i =
+    ("Must be zero or higher.", i < 0)

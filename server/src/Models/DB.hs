@@ -90,4 +90,18 @@ PasswordReset
     code T.Text
     UniquePasswordReset customerId
     UniqueResetCode code
+
+
+Cart
+    customerId CustomerId Maybe
+    sessionToken T.Text Maybe
+    expirationTime UTCTime Maybe
+    UniqueCustomerCart customerId !force
+    UniqueAnonymousCart sessionToken !force
+
+CartItem
+    cartId CartId
+    productVariantId ProductVariantId
+    quantity Int64
+    UniqueCartItem cartId productVariantId
 |]
