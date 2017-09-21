@@ -11,7 +11,7 @@ import Control.Monad.IO.Class (liftIO)
 import Data.Aeson ((.:), (.:?), FromJSON(..), withObject)
 import Data.Int (Int64)
 import Data.Time.Clock (getCurrentTime, addUTCTime)
-import Database.Persist ((+=.), Entity(..), getBy, insert, insertEntity, upsertBy)
+import Database.Persist ((+=.), (=.), Entity(..), getBy, insert, insertEntity, update, upsertBy)
 import Servant ((:>), (:<|>)(..), AuthProtect, ReqBody, JSON, Post)
 
 import Auth
@@ -164,17 +164,23 @@ anonymousAddRoute = validate >=> \parameters ->
                     case maybeCart of
                         Nothing ->
                             createAnonymousCart
-                        Just cart ->
+                        Just cart@(Entity cartId _) -> do
+                            expirationTime <- getExpirationTime
+                            runDB $ update cartId [CartExpirationTime =. Just expirationTime]
                             return (token, cart)
           createAnonymousCart = do
-            let sixteenWeeksInSeconds = 16 * 7 * 24 * 60 * 60
             token <- generateToken
-            expiration <- addUTCTime sixteenWeeksInSeconds <$> liftIO getCurrentTime
+            expiration <- getExpirationTime
             (,) token <$> runDB (insertEntity Cart
                 { cartCustomerId = Nothing
                 , cartSessionToken = Just token
                 , cartExpirationTime = Just expiration
                 })
+          getExpirationTime =
+            let
+                sixteenWeeksInSeconds = 16 * 7 * 24 * 60 * 60
+            in
+                addUTCTime sixteenWeeksInSeconds <$> liftIO getCurrentTime
           generateToken = do
             token <- UUID.toText <$> liftIO UUID4.nextRandom
             maybeCart <- runDB . getBy . UniqueAnonymousCart $ Just token
