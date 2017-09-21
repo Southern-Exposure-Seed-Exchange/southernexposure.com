@@ -422,13 +422,13 @@ resetRequestRoute = validate >=> \parameters -> do
             >> (addUTCTime (15 * 60) <$> liftIO getCurrentTime)
             >> return ()
         Just (Entity customerId customer) -> do
-            runDB $ deleteWhere [PasswordResetCustomer ==. customerId]
+            runDB $ deleteWhere [PasswordResetCustomerId ==. customerId]
             resetCode <- UUID.toText <$> liftIO UUID4.nextRandom
             expirationTime <- addUTCTime (15 * 60) <$> liftIO getCurrentTime
             let passwordReset =
                     PasswordReset
-                        { passwordResetCustomer = customerId
-                        , passwordResetTimeout = expirationTime
+                        { passwordResetCustomerId = customerId
+                        , passwordResetExpirationTime = expirationTime
                         , passwordResetCode = resetCode
                         }
             runDB $ insert_ passwordReset
@@ -475,10 +475,10 @@ resetPasswordRoute = validate >=> \parameters ->
                 invalidCodeError
             Just (Entity resetId passwordReset) -> do
                 currentTime <- liftIO getCurrentTime
-                if currentTime < passwordResetTimeout passwordReset then do
+                if currentTime < passwordResetExpirationTime passwordReset then do
                     token <- generateToken
                     newHash <- hashPassword $ rppPassword parameters
-                    let customerId = passwordResetCustomer passwordReset
+                    let customerId = passwordResetCustomerId passwordReset
                     runDB $ update customerId
                         [ CustomerAuthToken =. token
                         , CustomerEncryptedPassword =. newHash
@@ -490,7 +490,7 @@ resetPasswordRoute = validate >=> \parameters ->
                         return . customerToAuthorizationData
                             $ Entity customerId customer
                 else
-                    invalidCodeError
+                    runDB (delete resetId) >> invalidCodeError
 
 
 -- EDIT DETAILS

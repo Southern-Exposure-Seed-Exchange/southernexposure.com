@@ -36,6 +36,9 @@ newtype Milligrams =
     deriving (Show, Read, Eq, Ord, ToJSON, FromJSON, PersistField, PersistFieldSql)
 
 
+-- LOCATIONS
+
+
 data ArmedForcesRegionCode
     = AA
     | AE
@@ -53,7 +56,6 @@ armedForcesRegion = \case
         "Armed Forces Europe, Middle East, Africa, & Canada"
     AP ->
         "Armed Forces Pacific"
-
 
 
 data Region

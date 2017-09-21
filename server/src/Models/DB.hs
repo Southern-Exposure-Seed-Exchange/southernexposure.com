@@ -85,9 +85,9 @@ Customer json
     UniqueEmail email
 
 PasswordReset
-    customer CustomerId
-    timeout UTCTime
+    customerId CustomerId
+    expirationTime UTCTime
     code T.Text
-    UniquePasswordReset customer
+    UniquePasswordReset customerId
     UniqueResetCode code
 |]

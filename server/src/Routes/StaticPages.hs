@@ -28,6 +28,7 @@ staticPageRoutes =
     pageDetailsRoute
 
 
+-- TODO: Just use Entity Page instead of creating new type?
 newtype PageDetailsData =
     StaticPageDetailsData
         { spddPage :: Entity Page

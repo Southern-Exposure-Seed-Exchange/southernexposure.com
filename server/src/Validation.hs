@@ -46,7 +46,7 @@ class Validation a where
                 concatMap (\(message, hasError) -> [message | hasError])
 
     -- | Return a list of validators by field name. Each field contains
-    -- a list of messages and whether they are valid. An empty field name
+    -- a list of messages and whether they are invalid. An empty field name
     -- corresponds to a general error.
     validators :: a -> App [(FieldName, [(ErrorMessage, Bool)])]
     validators _ = return []
