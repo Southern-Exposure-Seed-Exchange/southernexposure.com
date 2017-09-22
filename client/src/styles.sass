@@ -201,6 +201,12 @@ body > div#main > div > div.container
     width: 11rem
     text-align-last: center
 
+/* Fix spacing & display of markdown titles */
+h1.product-details-title > div
+  &, & > p
+    margin-bottom: 0
+    display: inline-block
+
 .products-table
   /* Don't color the Product links */
   a
@@ -212,6 +218,11 @@ body > div#main > div > div.container
   /* Restrict width of product image column */
   .row-product-image img
     max-width: 100px
+  /* Fix spacing & display of markdown titles */
+  .row-product-description h3 a > div
+    &, & > p
+      margin-bottom: 0
+      display: inline-block
 
 .advanced-search
   .filters

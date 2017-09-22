@@ -61,7 +61,7 @@ details pagination addToCartForms products =
             , h1 [ class "mb-0 pl-2" ] [ text category.name ]
             ]
         , hr [ class "mt-2" ] []
-        , div [] [ Markdown.toHtml [] category.description ]
+        , Markdown.toHtml [] category.description
         , subCategoryCards
         ]
             ++ ProductViews.list (CategoryDetails category.slug) pagination addToCartForms products

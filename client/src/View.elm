@@ -160,7 +160,7 @@ staticPageView { name, slug, content } =
                 h1 [] [ text name ]
     in
         [ header
-        , div [] [ Markdown.toHtml [] content ]
+        , Markdown.toHtml [] content
         ]
 
 

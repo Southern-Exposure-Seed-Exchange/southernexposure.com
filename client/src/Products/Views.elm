@@ -33,12 +33,12 @@ details addToCartForms { product, variants, maybeSeedAttribute, categories } =
                                 [ a (routeLinkAttributes <| CategoryDetails category.slug Pagination.default)
                                     [ text category.name ]
                                 ]
-                            , div [] [ Markdown.toHtml [] category.description ]
+                            , Markdown.toHtml [] category.description
                             ]
                     )
     in
-        [ h1 []
-            [ text product.name
+        [ h1 [ class "product-details-title" ]
+            [ Markdown.toHtml [] product.name
             , htmlOrBlank SeedAttribute.icons maybeSeedAttribute
             ]
         , hr [] []
@@ -57,9 +57,8 @@ details addToCartForms { product, variants, maybeSeedAttribute, categories } =
                             ]
                         ]
                     ]
-                , div [ class "col" ]
-                    [ div [] [ Markdown.toHtml [] product.longDescription ] ]
-                , div [ class "col-12" ] categoryBlocks
+                , Markdown.toHtml [] product.longDescription
+                , div [] categoryBlocks
                 ]
             ]
         ]
@@ -237,7 +236,7 @@ list routeConstructor pagination addToCartForms products =
                             [ Markdown.toHtml [] product.name ]
                         , htmlOrBlank SeedAttribute.icons maybeSeedAttribute
                         ]
-                    , div [] [ Markdown.toHtml [] product.longDescription ]
+                    , Markdown.toHtml [] product.longDescription
                     ]
                 , td [ class "text-center align-middle" ]
                     [ cartForm addToCartForms product variants ]
