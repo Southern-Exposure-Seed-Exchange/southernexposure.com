@@ -8,6 +8,8 @@ port module Ports
         , removeAuthDetails
         , loggedIn
         , loggedOut
+        , storeCartSessionToken
+        , newCartSessionToken
         )
 
 -- Page Change
@@ -46,3 +48,13 @@ port loggedIn : ({ userId : Int, token : String } -> msg) -> Sub msg
 
 
 port loggedOut : (() -> msg) -> Sub msg
+
+
+
+-- Cart Sessions
+
+
+port storeCartSessionToken : String -> Cmd msg
+
+
+port newCartSessionToken : (String -> msg) -> Sub msg

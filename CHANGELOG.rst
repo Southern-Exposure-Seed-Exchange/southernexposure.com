@@ -5,6 +5,13 @@ CHANGELOG
 v0.5.0
 ======
 
+* Show dropdowns for selecting an SKUs instead of showing each SKU as a
+  separate product on the Category, Search Results, & Product Pages.
+* Store anonymous Customer Carts for 4 months.
+* Move Add to Cart form on Product Details page from right side to under the
+  product image.
+* Show SKU under Add to Cart Form on the Product Details page.
+
 
 v0.4.0
 ======

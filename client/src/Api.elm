@@ -45,6 +45,8 @@ type Endpoint
     | CustomerContactDetails
     | CustomerEditLogin
     | CustomerEditContact
+    | CartAddCustomer
+    | CartAddAnonymous
 
 
 toUrl : Endpoint -> String
@@ -98,6 +100,12 @@ toUrl endpoint =
 
                 CustomerEditContact ->
                     joinPath [ "customers", "contact-edit" ]
+
+                CartAddCustomer ->
+                    joinPath [ "carts", "customer-add" ]
+
+                CartAddAnonymous ->
+                    joinPath [ "carts", "anonymous-add" ]
     in
         "/api" ++ endpointUrl
 

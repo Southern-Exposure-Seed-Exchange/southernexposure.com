@@ -181,13 +181,27 @@ body > div#main > div > div.container
     background-color:  $light-pale-tan
 
 
+.add-to-cart-form
+  /* Ensure there's enough space for 2-digit quantities */
+  .add-to-cart-group
+    width: 7.4rem
+  .variant-select
+    /* Ensure there's enough space for the Select input's text */
+    width: 11rem
+    /* Center the text of the selected item */
+    text-align-last: center
+
 .product-details
   /* Don't color the Category links */
   .product-category h3 a
-      &, &:hover, &:active
-        color: $body-color
+    &, &:hover, &:active
+      color: $body-color
+  /* Reduce size of Add-To-Cart inputs */
+  .variant-select
+    width: 11rem
+    text-align-last: center
 
-.category-products
+.products-table
   /* Don't color the Product links */
   a
     &, &:hover, &:active
@@ -196,7 +210,7 @@ body > div#main > div > div.container
   h3 img
     height: 1.25rem
   /* Restrict width of product image column */
-  .category-product-image img
+  .row-product-image img
     max-width: 100px
 
 .advanced-search

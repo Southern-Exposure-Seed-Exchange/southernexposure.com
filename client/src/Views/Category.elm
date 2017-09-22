@@ -6,6 +6,7 @@ import Markdown
 import Paginate exposing (Paginated)
 import Category
 import Messages exposing (Msg)
+import Model exposing (CartForms)
 import PageData exposing (ProductData)
 import Products.Pagination as Pagination
 import Products.Sorting as Sorting
@@ -17,9 +18,10 @@ import Views.Utils exposing (routeLinkAttributes)
 
 details :
     Pagination.Data
+    -> CartForms
     -> Paginated ProductData { slug : String, sorting : Sorting.Option } PageData.CategoryDetails
     -> List (Html Msg)
-details pagination products =
+details pagination addToCartForms products =
     let
         { category, subCategories } =
             case Paginate.getResponseData products of
@@ -62,4 +64,4 @@ details pagination products =
         , div [] [ Markdown.toHtml [] category.description ]
         , subCategoryCards
         ]
-            ++ ProductViews.list (CategoryDetails category.slug) pagination products
+            ++ ProductViews.list (CategoryDetails category.slug) pagination addToCartForms products

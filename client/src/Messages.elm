@@ -10,6 +10,7 @@ import Auth.EditContact as EditContact
 import Auth.ResetPassword as ResetPassword
 import StaticPage exposing (StaticPage)
 import PageData exposing (ProductData)
+import Product exposing (ProductId, ProductVariantId)
 import Routing exposing (Route)
 import SiteUI exposing (NavigationData)
 import SiteUI.Search as SiteSearch
@@ -21,6 +22,11 @@ type Msg
     | NavigateTo Route
     | LogOut
     | OtherTabLoggedIn { userId : Int, token : String }
+    | OtherTabNewCartToken String
+    | ChangeCartFormVariantId ProductId ProductVariantId
+    | ChangeCartFormQuantity ProductId Int
+    | SubmitAddToCart ProductId ProductVariantId
+    | SubmitAddToCartResponse (WebData String)
     | SearchMsg SiteSearch.Msg
     | AdvancedSearchMsg AdvancedSearch.Msg
     | CreateAccountMsg CreateAccount.Msg

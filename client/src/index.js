@@ -2,9 +2,11 @@ var Elm = require('./Main.elm');
 
 const authTokenKey = 'authToken';
 const authUserIdKey = 'authUserId';
+const cartTokenKey = 'cartSessionToken';
 
 
 /** FLAGS **/
+var cartToken = localStorage.getItem(cartTokenKey);
 var [userId, token] = getAuthData();
 function getAuthData() {
   var token = localStorage.getItem(authTokenKey);
@@ -26,12 +28,14 @@ var app = Elm.Main.embed(
   {
     authToken: token,
     authUserId: userId,
+    cartSessionToken: cartToken,
   }
 );
 
 
 /** SUBSCRIPTIONS **/
 
+/* Changes to Stored Auth Details */
 window.addEventListener('storage', function(e) {
   if ((e.key === authTokenKey || e.key === null) && e.oldValue !== e.newValue) {
     if (e.newValue === null) {
@@ -44,6 +48,15 @@ window.addEventListener('storage', function(e) {
         userId: userId,
         token: token,
       });
+    }
+  }
+});
+
+/* Changes to Stored Cart Session */
+window.addEventListener('storage', function(e) {
+  if ((e.key === cartTokenKey) && e.oldValue !== e.newValue) {
+    if (e.newValue !== null) {
+       app.ports.newCartSessionToken.send(e.newValue);
     }
   }
 });
@@ -88,4 +101,9 @@ app.ports.storeAuthDetails.subscribe(function(authDetails) {
 app.ports.removeAuthDetails.subscribe(function() {
   localStorage.removeItem(authUserIdKey);
   localStorage.removeItem(authTokenKey);
+});
+
+/* Store the Cart Session Token in Local Storage */
+app.ports.storeCartSessionToken.subscribe(function(token) {
+  localStorage.setItem(cartTokenKey, token);
 });

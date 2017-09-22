@@ -15,7 +15,7 @@ import Auth.MyAccount as MyAccount
 import Auth.ResetPassword as ResetPassword
 import Views.Category as CategoryViews
 import Messages exposing (Msg(..))
-import Model exposing (Model)
+import Model exposing (Model, CartForms)
 import PageData
 import Products.Pagination as Pagination
 import Products.Views as ProductViews
@@ -44,7 +44,9 @@ view ({ route, pageData, navigationData } as model) =
         pageContent =
             case route of
                 ProductDetails _ ->
-                    withIntermediateText ProductViews.details pageData.productDetails
+                    withIntermediateText
+                        (ProductViews.details model.addToCartForms)
+                        pageData.productDetails
 
                 CategoryDetails _ pagination ->
                     if Paginate.isLoading pageData.categoryDetails then
@@ -53,6 +55,7 @@ view ({ route, pageData, navigationData } as model) =
                         notFoundView
                     else
                         CategoryViews.details pagination
+                            model.addToCartForms
                             pageData.categoryDetails
 
                 AdvancedSearch ->
@@ -64,7 +67,7 @@ view ({ route, pageData, navigationData } as model) =
                     if Paginate.isLoading pageData.searchResults then
                         [ text "Loading..." ]
                     else
-                        searchResultsView data pagination pageData.searchResults
+                        searchResultsView data pagination model.addToCartForms pageData.searchResults
 
                 PageDetails _ ->
                     withIntermediateText staticPageView pageData.pageDetails
@@ -161,8 +164,8 @@ staticPageView { name, slug, content } =
         ]
 
 
-searchResultsView : Search.Data -> Pagination.Data -> PageData.SearchResults -> List (Html Msg)
-searchResultsView ({ query } as data) pagination products =
+searchResultsView : Search.Data -> Pagination.Data -> CartForms -> PageData.SearchResults -> List (Html Msg)
+searchResultsView ({ query } as data) pagination addToCartForms products =
     let
         uniqueSearch =
             Search.uniqueSearch data
@@ -260,4 +263,4 @@ searchResultsView ({ query } as data) pagination products =
         , hr [] []
         , searchDescription
         ]
-            ++ ProductViews.list (SearchResults data) pagination products
+            ++ ProductViews.list (SearchResults data) pagination addToCartForms products

@@ -1,13 +1,18 @@
 module Products.Views exposing (details, list)
 
+import Dict exposing (Dict)
 import Html exposing (..)
-import Html.Attributes exposing (attribute, id, class, src, for, value, selected, tabindex)
-import Html.Events exposing (on, targetValue)
+import Html.Attributes as A exposing (attribute, id, class, src, for, value, selected, tabindex, type_)
+import Html.Events exposing (on, targetValue, onInput, onSubmit)
+import Html.Events.Extra exposing (targetValueInt)
 import Json.Decode as Decode
 import Markdown
 import Paginate exposing (Paginated)
 import Messages exposing (Msg(..))
+import Model exposing (CartForms)
+import Models.Fields exposing (Cents(..), centsToString, Milligrams(..), milligramsToString)
 import PageData exposing (ProductData)
+import Product exposing (ProductId(..), Product, ProductVariantId(..), ProductVariant)
 import Products.Pagination as Pagination
 import Products.Sorting as Sorting
 import Routing exposing (Route(..))
@@ -16,8 +21,8 @@ import Views.Images as Images
 import Views.Utils exposing (routeLinkAttributes, htmlOrBlank)
 
 
-details : PageData.ProductDetails -> List (Html Msg)
-details { product, variants, maybeSeedAttribute, categories } =
+details : CartForms -> PageData.ProductDetails -> List (Html Msg)
+details addToCartForms { product, variants, maybeSeedAttribute, categories } =
     let
         categoryBlocks =
             List.filter (not << String.isEmpty << .description) categories
@@ -39,26 +44,16 @@ details { product, variants, maybeSeedAttribute, categories } =
         , hr [] []
         , div [ class "product-details" ]
             [ div [ class "clearfix" ]
-                [ div [ class "float-left col-sm-4 col-md-5 col-lg-4" ]
+                [ div [ class "float-left w-25 mr-3 mb-2" ]
                     [ div
                         [ class "card" ]
                         [ div [ class "card-body text-center p-1" ]
                             [ img
                                 [ src << Images.media <| "products/" ++ product.imageURL
-                                , class "img-fluid"
+                                , class "img-fluid mb-2"
                                 ]
                                 []
-                            ]
-                        ]
-                    ]
-                , div [ class "float-right col-sm-4 col-md-3 col-lg-3" ]
-                    [ div [ class "card" ]
-                        [ div [ class "card-body text-center p-2" ]
-                            [ h4 [] [ text "$999.99" ]
-                            , text "ADD TO CART BUTTON"
-                            , small [ class "text-muted d-block" ]
-                                [ text <| "Item #" ++ product.baseSKU
-                                ]
+                            , cartForm addToCartForms product variants
                             ]
                         ]
                     ]
@@ -70,8 +65,8 @@ details { product, variants, maybeSeedAttribute, categories } =
         ]
 
 
-list : (Pagination.Data -> Route) -> Pagination.Data -> Paginated ProductData a c -> List (Html Msg)
-list routeConstructor pagination products =
+list : (Pagination.Data -> Route) -> Pagination.Data -> CartForms -> Paginated ProductData a c -> List (Html Msg)
+list routeConstructor pagination addToCartForms products =
     let
         sortHtml =
             if productsCount > 1 then
@@ -225,42 +220,153 @@ list routeConstructor pagination products =
                     ]
 
         productRows =
-            flip List.map (Paginate.getCurrent products) <|
-                \( product, variants, maybeSeedAttribute ) ->
-                    tr []
-                        [ td [ class "category-product-image text-center align-middle" ]
-                            [ a (routeLinkAttributes <| ProductDetails product.slug)
-                                [ img
-                                    [ src << Images.media <| "products/" ++ product.imageURL
-                                    ]
-                                    []
-                                ]
-                            ]
-                        , td []
-                            [ h3 [ class "mb-0" ]
-                                [ a (routeLinkAttributes <| ProductDetails product.slug)
-                                    [ Markdown.toHtml [] product.name ]
-                                , htmlOrBlank SeedAttribute.icons maybeSeedAttribute
-                                ]
-                            , div [] [ Markdown.toHtml [] product.longDescription ]
-                            ]
-                        , td [ class "text-center align-middle" ]
-                            [ div []
-                                [ div [ class "font-weight-bold" ] [ text "$999.99" ]
-                                , div [] [ text "CART_INPUT" ]
-                                , small [ class "text-muted" ]
-                                    [ text <| "Item # " ++ product.baseSKU ]
-                                ]
-                            ]
+            List.map renderProduct (Paginate.getCurrent products)
+
+        renderProduct ( product, variants, maybeSeedAttribute ) =
+            tr []
+                [ td [ class "row-product-image text-center align-middle" ]
+                    [ a (routeLinkAttributes <| ProductDetails product.slug)
+                        [ img
+                            [ src << Images.media <| "products/" ++ product.imageURL ]
+                            []
                         ]
+                    ]
+                , td [ class "row-product-description" ]
+                    [ h3 [ class "mb-0" ]
+                        [ a (routeLinkAttributes <| ProductDetails product.slug)
+                            [ Markdown.toHtml [] product.name ]
+                        , htmlOrBlank SeedAttribute.icons maybeSeedAttribute
+                        ]
+                    , div [] [ Markdown.toHtml [] product.longDescription ]
+                    ]
+                , td [ class "text-center align-middle" ]
+                    [ cartForm addToCartForms product variants ]
+                ]
     in
         if productsCount /= 0 then
             [ sortHtml
             , paginationHtml
-            , table [ class "category-products table table-striped table-sm mb-2" ]
+            , table [ class "products-table table table-striped table-sm mb-2" ]
                 [ tbody [] <| productRows ]
             , paginationHtml
             , SeedAttribute.legend
             ]
         else
             []
+
+
+cartForm : CartForms -> Product -> Dict Int ProductVariant -> Html Msg
+cartForm addToCartForms product variants =
+    let
+        formAttributes =
+            (::) (class "add-to-cart-form") <|
+                case maybeSelectedVariantId of
+                    Just variantId ->
+                        [ onSubmit <| SubmitAddToCart product.id variantId ]
+
+                    Nothing ->
+                        []
+
+        selectedPrice =
+            maybeSelectedVariant
+                |> htmlOrBlank (\v -> h4 [] [ text <| "$" ++ centsToString v.price ])
+
+        hasMultipleVariants =
+            Dict.size variants > 1
+
+        variantSelect _ =
+            select
+                [ id <| "inputVariant-" ++ toString (fromProductId product.id)
+                , class "variant-select form-control mb-1 mx-auto"
+                , onSelectInt <| ChangeCartFormVariantId product.id
+                ]
+                (List.map variantOption <| Dict.values variants)
+
+        addToCartInput =
+            div [ class "input-group mx-auto justify-content-center add-to-cart-group mb-2" ]
+                [ input
+                    [ type_ "number"
+                    , class "form-control"
+                    , A.min "1"
+                    , A.step "1"
+                    , value <| toString quantity
+                    , on "input" (targetValueInt |> Decode.map (ChangeCartFormQuantity product.id))
+                    ]
+                    []
+                , span [ class "input-group-btn" ]
+                    [ button [ class "btn btn-primary", type_ "submit" ]
+                        [ text "Add" ]
+                    ]
+                ]
+
+        selectedItemNumber =
+            case maybeSelectedVariant of
+                Nothing ->
+                    product.baseSKU
+
+                Just v ->
+                    product.baseSKU ++ v.skuSuffix
+
+        maybeSelectedVariant =
+            maybeSelectedVariantId
+                |> Maybe.andThen (\id -> Dict.get (fromVariantId id) variants)
+
+        ( maybeSelectedVariantId, quantity ) =
+            Dict.get (fromProductId product.id) addToCartForms
+                |> Maybe.withDefault { variant = Nothing, quantity = 1 }
+                |> (\v -> ( v.variant |> ifNothing maybeFirstVariantId, v.quantity ))
+
+        ifNothing valIfNothing maybe =
+            case maybe of
+                Just x ->
+                    maybe
+
+                Nothing ->
+                    valIfNothing
+
+        maybeFirstVariantId =
+            Dict.values variants
+                |> List.head
+                |> Maybe.map .id
+
+        onSelectInt msg =
+            targetValue
+                |> Decode.andThen
+                    (String.toInt
+                        >> Result.map (ProductVariantId >> Decode.succeed)
+                        >> Result.withDefault (Decode.fail "")
+                    )
+                |> Decode.map msg
+                |> on "change"
+
+        variantOption variant =
+            [ milligramsToString variant.weight ++ "g"
+            , "$" ++ centsToString variant.price
+            ]
+                |> String.join " - "
+                |> text
+                |> List.singleton
+                |> option
+                    [ value <| toString <| fromVariantId variant.id
+                    , selected (Just variant == maybeSelectedVariant)
+                    ]
+
+        htmlWhen test renderer =
+            if test then
+                renderer ()
+            else
+                text ""
+
+        fromVariantId (ProductVariantId i) =
+            i
+
+        fromProductId (ProductId i) =
+            i
+    in
+        form formAttributes
+            [ selectedPrice
+            , htmlWhen hasMultipleVariants variantSelect
+            , addToCartInput
+            , small [ class "text-muted d-block" ]
+                [ text <| "Item #" ++ selectedItemNumber ]
+            ]

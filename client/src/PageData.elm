@@ -25,6 +25,7 @@ module PageData
         , contactDetailsEncoder
         )
 
+import Dict exposing (Dict)
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode exposing (Value)
 import Paginate exposing (Paginated)
@@ -32,7 +33,7 @@ import RemoteData exposing (WebData)
 import Api
 import Category exposing (Category, CategoryId(..))
 import StaticPage exposing (StaticPage)
-import Product exposing (Product, ProductVariant)
+import Product exposing (Product, ProductVariant, ProductVariantId(..))
 import Products.Pagination as Pagination
 import Products.Sorting as Sorting
 import Search
@@ -125,7 +126,7 @@ categoryConfig =
 
 type alias ProductDetails =
     { product : Product
-    , variants : List ProductVariant
+    , variants : Dict Int ProductVariant
     , maybeSeedAttribute : Maybe SeedAttribute
     , categories : List Category
     , predecessors : List PredecessorCategory
@@ -136,7 +137,7 @@ productDetailsDecoder : Decoder ProductDetails
 productDetailsDecoder =
     Decode.map5 ProductDetails
         (Decode.field "product" Product.decoder)
-        (Decode.field "variants" <| Decode.list Product.variantDecoder)
+        (Decode.field "variants" variantDictDecoder)
         (Decode.field "seedAttribute" <| Decode.nullable SeedAttribute.decoder)
         (Decode.field "categories" <| Decode.list Category.decoder)
         (Decode.field "predecessors" <|
@@ -317,15 +318,25 @@ predecessorCategoryDecoder =
 
 
 type alias ProductData =
-    ( Product, List ProductVariant, Maybe SeedAttribute )
+    ( Product, Dict Int ProductVariant, Maybe SeedAttribute )
 
 
 productDataDecoder : Decoder ProductData
 productDataDecoder =
     Decode.map3 (,,)
         (Decode.field "product" Product.decoder)
-        (Decode.field "variants" <| Decode.list Product.variantDecoder)
+        (Decode.field "variants" variantDictDecoder)
         (Decode.field "seedAttribute" <| Decode.nullable SeedAttribute.decoder)
+
+
+variantDictDecoder : Decoder (Dict Int ProductVariant)
+variantDictDecoder =
+    Decode.list Product.variantDecoder
+        |> Decode.map
+            (List.foldl
+                (\v -> Dict.insert ((\(ProductVariantId i) -> i) v.id) v)
+                Dict.empty
+            )
 
 
 type alias AdvancedSearch =

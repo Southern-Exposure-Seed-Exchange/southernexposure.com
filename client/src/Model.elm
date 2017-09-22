@@ -1,5 +1,11 @@
-module Model exposing (Model, initial)
+module Model
+    exposing
+        ( Model
+        , CartForms
+        , initial
+        )
 
+import Dict exposing (Dict)
 import RemoteData exposing (WebData)
 import Auth.CreateAccount as CreateAccount
 import Auth.EditContact as EditContact
@@ -7,6 +13,7 @@ import Auth.EditLogin as EditLogin
 import Auth.Login as Login
 import Auth.ResetPassword as ResetPassword
 import PageData exposing (PageData)
+import Product exposing (ProductVariantId)
 import Routing exposing (Route)
 import Search
 import SiteUI exposing (NavigationData)
@@ -24,8 +31,14 @@ type alias Model =
     , editLoginForm : EditLogin.Form
     , editContactForm : EditContact.Form
     , resetPasswordForm : ResetPassword.Form
+    , addToCartForms : CartForms
+    , maybeSessionToken : Maybe String
     , currentUser : AuthStatus
     }
+
+
+type alias CartForms =
+    Dict Int { variant : Maybe ProductVariantId, quantity : Int }
 
 
 initial : Route -> Model
@@ -40,5 +53,7 @@ initial route =
     , editLoginForm = EditLogin.initial
     , editContactForm = EditContact.initial
     , resetPasswordForm = ResetPassword.initial
+    , addToCartForms = Dict.empty
+    , maybeSessionToken = Nothing
     , currentUser = User.unauthorized
     }

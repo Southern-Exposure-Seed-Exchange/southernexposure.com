@@ -1,5 +1,6 @@
 module Main exposing (main)
 
+import Dict
 import Json.Decode as Decode
 import Json.Encode as Encode
 import Navigation
@@ -15,6 +16,7 @@ import Auth.ResetPassword as ResetPassword
 import Messages exposing (Msg(..))
 import Model exposing (Model)
 import PageData exposing (PageData, ProductData)
+import Product exposing (ProductId(..), ProductVariantId(..))
 import Ports
 import Routing exposing (Route(..), reverse, parseRoute)
 import Search exposing (UniqueSearch(..))
@@ -22,7 +24,7 @@ import SeedAttribute exposing (SeedAttribute)
 import SiteUI
 import SiteUI.Search as SiteSearch
 import StaticPage exposing (StaticPage)
-import Update.Utils exposing (withCommand, discardCommand)
+import Update.Utils exposing (withCommand, noCommand, discardCommand)
 import User exposing (User, AuthStatus)
 import View exposing (view)
 
@@ -36,6 +38,7 @@ main =
             Sub.batch
                 [ Ports.loggedOut (always LogOut)
                 , Ports.loggedIn OtherTabLoggedIn
+                , Ports.newCartSessionToken OtherTabNewCartToken
                 ]
                 |> always
         , view = view
@@ -45,6 +48,7 @@ main =
 type alias Flags =
     { authToken : Maybe String
     , authUserId : Maybe Int
+    , cartSessionToken : Maybe String
     }
 
 
@@ -66,7 +70,7 @@ init flags location =
             Maybe.map2 reAuthorize flags.authUserId flags.authToken
                 |> Maybe.withDefault Cmd.none
     in
-        ( model
+        ( { model | maybeSessionToken = flags.cartSessionToken }
         , Cmd.batch
             [ cmd
             , getNavigationData
@@ -308,6 +312,40 @@ reAuthorize userId token =
             |> Api.sendRequest ReAuthorize
 
 
+addToCustomerCart : String -> Int -> ProductVariantId -> Cmd Msg
+addToCustomerCart token quantity (ProductVariantId variantId) =
+    let
+        body =
+            Encode.object
+                [ ( "variant", Encode.int variantId )
+                , ( "quantity", Encode.int quantity )
+                ]
+    in
+        Api.post Api.CartAddCustomer
+            |> Api.withJsonBody body
+            |> Api.withJsonResponse (Decode.succeed "")
+            |> Api.withToken token
+            |> Api.sendRequest SubmitAddToCartResponse
+
+
+addToAnonymousCart : Maybe String -> Int -> ProductVariantId -> Cmd Msg
+addToAnonymousCart maybeSessionToken quantity (ProductVariantId variantId) =
+    let
+        body =
+            Encode.object
+                [ ( "variant", Encode.int variantId )
+                , ( "quantity", Encode.int quantity )
+                , ( "sessionToken", encodeMaybe Encode.string maybeSessionToken )
+                ]
+
+        encodeMaybe encoder =
+            Maybe.map encoder >> Maybe.withDefault Encode.null
+    in
+        Api.post Api.CartAddAnonymous
+            |> Api.withJsonBody body
+            |> Api.sendRequest SubmitAddToCartResponse
+
+
 
 -- UPDATE
 
@@ -334,6 +372,51 @@ update msg ({ pageData } as model) =
 
         OtherTabLoggedIn authData ->
             ( model, reAuthorize authData.userId authData.token )
+
+        OtherTabNewCartToken cartSessionToken ->
+            { model | maybeSessionToken = Just cartSessionToken }
+                |> noCommand
+
+        ChangeCartFormVariantId productId variantId ->
+            model
+                |> updateCartVariant productId variantId
+                |> noCommand
+
+        ChangeCartFormQuantity productId quantity ->
+            model
+                |> updateCartQuantity productId quantity
+                |> noCommand
+
+        SubmitAddToCart (ProductId productId) defaultVariant ->
+            let
+                performRequest f =
+                    ( model, f quantity variantId )
+
+                ( variantId, quantity ) =
+                    Dict.get productId model.addToCartForms
+                        |> Maybe.withDefault ({ variant = Nothing, quantity = 1 })
+                        |> \v -> ( v.variant |> Maybe.withDefault defaultVariant, v.quantity )
+            in
+                case model.currentUser of
+                    User.Authorized user ->
+                        performRequest (addToCustomerCart user.authToken)
+
+                    User.Anonymous ->
+                        performRequest (addToAnonymousCart model.maybeSessionToken)
+
+        -- TODO: error/success alert
+        SubmitAddToCartResponse response ->
+            case response of
+                RemoteData.Success sessionToken ->
+                    if String.isEmpty sessionToken then
+                        model |> noCommand
+                    else
+                        ( { model | maybeSessionToken = Just sessionToken }
+                        , Ports.storeCartSessionToken sessionToken
+                        )
+
+                _ ->
+                    model |> noCommand
 
         SearchMsg subMsg ->
             let
@@ -529,6 +612,40 @@ clearSearchForm ( model, cmd ) =
                     | searchData = Search.initial
                     , advancedSearchData = Search.initial
                 }
+
+
+updateCartQuantity : ProductId -> Int -> Model -> Model
+updateCartQuantity (ProductId productId) quantity model =
+    let
+        addToCartForms =
+            Dict.update productId updateForm model.addToCartForms
+
+        updateForm maybeForm =
+            case maybeForm of
+                Nothing ->
+                    Just { variant = Nothing, quantity = quantity }
+
+                Just v ->
+                    Just { v | quantity = quantity }
+    in
+        { model | addToCartForms = addToCartForms }
+
+
+updateCartVariant : ProductId -> ProductVariantId -> Model -> Model
+updateCartVariant (ProductId productId) variantId model =
+    let
+        addToCartForms =
+            Dict.update productId updateForm model.addToCartForms
+
+        updateForm maybeForm =
+            case maybeForm of
+                Nothing ->
+                    Just { variant = Just variantId, quantity = 1 }
+
+                Just v ->
+                    Just { v | variant = Just variantId }
+    in
+        { model | addToCartForms = addToCartForms }
 
 
 logUnsuccessfulRequest : WebData a -> WebData a
