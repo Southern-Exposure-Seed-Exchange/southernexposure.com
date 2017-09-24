@@ -64,7 +64,7 @@ singleError text =
 
 required :: T.Text -> (T.Text, Bool)
 required text =
-    ("This field is required", T.null text)
+    ("This field is required.", T.null text)
 
 doesntExist :: (PersistEntityBackend r ~ SqlBackend, PersistEntity r)
             => Unique r -> App Bool
@@ -83,7 +83,7 @@ uniqueExists uniqueKey =
 
 minimumLength :: Int -> T.Text -> (T.Text, Bool)
 minimumLength minLength text =
-    ("Must be at least " <> T.pack (show minLength) <> " characters", T.length text < minLength)
+    ("Must be at least " <> T.pack (show minLength) <> " characters.", T.length text < minLength)
 
 zeroOrPositive :: (Num a, Ord a) => a -> (T.Text, Bool)
 zeroOrPositive i =
