@@ -12,7 +12,7 @@ import Data.Aeson ((.:), (.:?), FromJSON(..), withObject)
 import Data.Int (Int64)
 import Data.Time.Clock (getCurrentTime, addUTCTime)
 import Database.Persist ((+=.), (=.), Entity(..), getBy, insert, insertEntity, update, upsertBy)
-import Servant ((:>), (:<|>)(..), AuthProtect, ReqBody, JSON, Post)
+import Servant ((:>), (:<|>)(..), AuthProtect, ReqBody, JSON, PlainText, Post)
 
 import Auth
 import Models
@@ -133,7 +133,7 @@ instance Validation AnonymousAddParameters where
 
 type AnonymousAddRoute =
        ReqBody '[JSON] AnonymousAddParameters
-    :> Post '[JSON] T.Text
+    :> Post '[PlainText] T.Text
 
 anonymousAddRoute :: AnonymousAddParameters -> App T.Text
 anonymousAddRoute = validate >=> \parameters ->
