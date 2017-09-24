@@ -279,7 +279,7 @@ cartForm addToCartForms product variants =
                 , class "variant-select form-control mb-1 mx-auto"
                 , onSelectInt <| ChangeCartFormVariantId product.id
                 ]
-                (List.map variantOption <| Dict.values variants)
+                (List.map variantOption <| List.sortBy .skuSuffix <| Dict.values variants)
 
         addToCartInput =
             div [ class "input-group mx-auto justify-content-center add-to-cart-group mb-2" ]
@@ -325,6 +325,7 @@ cartForm addToCartForms product variants =
 
         maybeFirstVariantId =
             Dict.values variants
+                |> List.sortBy .skuSuffix
                 |> List.head
                 |> Maybe.map .id
 
