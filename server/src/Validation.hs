@@ -3,6 +3,7 @@
 module Validation
     ( Validation(..)
     , singleError
+    , validateMap
     , required
     , doesntExist
     , exists
@@ -24,6 +25,7 @@ import Server
 
 import qualified Data.Text as T
 import qualified Data.HashMap.Strict as HM
+import qualified Data.Map.Strict as M
 
 
 type FieldName = T.Text
@@ -61,6 +63,13 @@ singleError :: T.Text -> App a
 singleError text =
     lift . throwError $
         err422 { errBody = encode $ object [ ( "", toJSON [ text ] ) ] }
+
+-- | Apply a list of validators to a Map, with each key of the Map as
+-- a separate field.
+validateMap :: Show k => [v -> (T.Text, Bool)] -> M.Map k v -> [(T.Text, [(T.Text, Bool)])]
+validateMap funcs =
+    M.foldlWithKey
+        (\acc key val -> ( T.pack $ show key, map ($ val) funcs) : acc) []
 
 required :: T.Text -> (T.Text, Bool)
 required text =
