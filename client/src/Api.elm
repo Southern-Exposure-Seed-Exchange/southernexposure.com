@@ -46,7 +46,11 @@ type Endpoint
     | CustomerEditLogin
     | CustomerEditContact
     | CartAddCustomer
+    | CartDetailsCustomer
+    | CartUpdateCustomer
     | CartAddAnonymous
+    | CartDetailsAnonymous
+    | CartUpdateAnonymous
 
 
 toUrl : Endpoint -> String
@@ -102,10 +106,22 @@ toUrl endpoint =
                     joinPath [ "customers", "contact-edit" ]
 
                 CartAddCustomer ->
-                    joinPath [ "carts", "customer-add" ]
+                    joinPath [ "carts", "customer", "add" ]
+
+                CartDetailsCustomer ->
+                    joinPath [ "carts", "customer", "details" ]
+
+                CartUpdateCustomer ->
+                    joinPath [ "carts", "customer", "update" ]
 
                 CartAddAnonymous ->
-                    joinPath [ "carts", "anonymous-add" ]
+                    joinPath [ "carts", "anonymous", "add" ]
+
+                CartDetailsAnonymous ->
+                    joinPath [ "carts", "anonymous", "details" ]
+
+                CartUpdateAnonymous ->
+                    joinPath [ "carts", "anonymous", "update" ]
     in
         "/api" ++ endpointUrl
 

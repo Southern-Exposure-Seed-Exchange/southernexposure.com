@@ -28,6 +28,7 @@ type Route
     | MyAccount
     | EditLogin
     | EditContact
+    | Cart
     | NotFound
 
 
@@ -77,6 +78,7 @@ parseRoute =
                     |> Search.fromQueryString
                     |> Pagination.fromQueryString
                 , Url.s "account" </> accountParser
+                , Url.map Cart (Url.s "cart")
                 , Url.map PageDetails (Url.string)
                 ]
     in
@@ -157,6 +159,9 @@ reverse route =
         EditContact ->
             joinPath [ "account", "edit-contact" ]
 
+        Cart ->
+            joinPath [ "cart" ]
+
         NotFound ->
             joinPath [ "page-not-found" ]
 
@@ -199,6 +204,9 @@ authRequired route =
 
         EditContact ->
             True
+
+        Cart ->
+            False
 
         NotFound ->
             False

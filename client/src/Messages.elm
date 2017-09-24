@@ -1,4 +1,8 @@
-module Messages exposing (Msg(..))
+module Messages
+    exposing
+        ( Msg(..)
+        , EditCartMessage(..)
+        )
 
 import Paginate
 import RemoteData exposing (WebData)
@@ -15,6 +19,13 @@ import Routing exposing (Route)
 import SiteUI exposing (NavigationData)
 import SiteUI.Search as SiteSearch
 import User
+
+
+type EditCartMessage
+    = Quantity PageData.CartItemId Int
+    | Remove PageData.CartItemId
+    | Submit
+    | UpdateResponse (WebData PageData.CartDetails)
 
 
 type Msg
@@ -34,6 +45,7 @@ type Msg
     | ResetPasswordMsg ResetPassword.Msg
     | EditLoginMsg EditLogin.Msg
     | EditContactMsg EditContact.Msg
+    | EditCartMsg EditCartMessage
     | ReAuthorize (WebData User.AuthStatus)
     | GetProductDetailsData (WebData PageData.ProductDetails)
     | GetNavigationData (WebData NavigationData)
@@ -41,5 +53,6 @@ type Msg
     | GetPageDetailsData (WebData StaticPage)
     | GetLocationsData (WebData PageData.LocationData)
     | GetContactDetails (WebData PageData.ContactDetails)
+    | GetCartDetails (WebData PageData.CartDetails)
     | CategoryPaginationMsg (Paginate.Msg ProductData PageData.CategoryDetails)
     | SearchPaginationMsg (Paginate.Msg ProductData String)

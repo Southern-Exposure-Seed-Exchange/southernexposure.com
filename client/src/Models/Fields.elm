@@ -25,6 +25,8 @@ type Milligrams
     = Milligrams Int
 
 
+{-| TODO: Remove trailing zeros, special cases for ounces/pounds
+-}
 milligramsToString : Milligrams -> String
 milligramsToString (Milligrams i) =
     Decimal.fromInt i

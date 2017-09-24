@@ -13,9 +13,10 @@ import Auth.EditContact as EditContact
 import Auth.EditLogin as EditLogin
 import Auth.Login as Login
 import Auth.ResetPassword as ResetPassword
+import Cart
 import Messages exposing (Msg(..))
 import Model exposing (Model)
-import PageData exposing (PageData, ProductData)
+import PageData exposing (PageData, ProductData, CartItemId(..))
 import Product exposing (ProductId(..), ProductVariantId(..))
 import Ports
 import Routing exposing (Route(..), reverse, parseRoute)
@@ -64,13 +65,14 @@ init flags location =
 
         ( model, cmd ) =
             Model.initial route
+                |> (\m -> { m | maybeSessionToken = flags.cartSessionToken })
                 |> fetchDataForRoute
 
         authorizationCmd =
             Maybe.map2 reAuthorize flags.authUserId flags.authToken
                 |> Maybe.withDefault Cmd.none
     in
-        ( { model | maybeSessionToken = flags.cartSessionToken }
+        ( model
         , Cmd.batch
             [ cmd
             , getNavigationData
@@ -157,6 +159,9 @@ setPageTitle { route, pageData } =
             EditContact ->
                 Ports.setPageTitle "Edit Contact Details"
 
+            Cart ->
+                Ports.setPageTitle "Shopping Cart"
+
             NotFound ->
                 Ports.setPageTitle "Page Not Found"
 
@@ -240,6 +245,18 @@ fetchDataForRoute ({ route, pageData } as model) =
                             ]
                         )
 
+                Cart ->
+                    case model.currentUser of
+                        User.Anonymous ->
+                            ( { pageData | cartDetails = RemoteData.Loading }
+                            , getAnonymousCartDetails model.maybeSessionToken
+                            )
+
+                        User.Authorized user ->
+                            ( { pageData | cartDetails = RemoteData.Loading }
+                            , getCartDetails user.authToken
+                            )
+
                 NotFound ->
                     doNothing
 
@@ -295,6 +312,27 @@ getContactDetails authStatus =
                 |> Api.withJsonResponse PageData.contactDetailsDecoder
                 |> Api.withToken user.authToken
                 |> Api.sendRequest GetContactDetails
+
+
+getCartDetails : String -> Cmd Msg
+getCartDetails token =
+    Api.get Api.CartDetailsCustomer
+        |> Api.withToken token
+        |> Api.withJsonResponse PageData.cartDetailsDecoder
+        |> Api.sendRequest GetCartDetails
+
+
+getAnonymousCartDetails : Maybe String -> Cmd Msg
+getAnonymousCartDetails maybeCartToken =
+    let
+        parameters =
+            Encode.object
+                [ ( "sessionToken", Encode.string <| Maybe.withDefault "" maybeCartToken ) ]
+    in
+        Api.post Api.CartDetailsAnonymous
+            |> Api.withJsonBody parameters
+            |> Api.withJsonResponse PageData.cartDetailsDecoder
+            |> Api.sendRequest GetCartDetails
 
 
 reAuthorize : Int -> String -> Cmd Msg
@@ -365,6 +403,7 @@ update msg ({ pageData } as model) =
         NavigateTo route ->
             ( model, Routing.newUrl route )
 
+        -- TODO: Refetch or clear cart details on logout
         LogOut ->
             ( { model | currentUser = User.unauthorized }
             , Cmd.batch [ logoutRedirect model.route, Ports.removeAuthDetails () ]
@@ -475,6 +514,29 @@ update msg ({ pageData } as model) =
                 |> Tuple.mapFirst (\form -> { model | editContactForm = form })
                 |> Tuple.mapSecond (Cmd.map EditContactMsg)
 
+        EditCartMsg subMsg ->
+            let
+                updatedPageData =
+                    Maybe.map RemoteData.Success
+                        >> Maybe.withDefault pageData.cartDetails
+                        >> (\cd -> { pageData | cartDetails = cd })
+
+                updatedForm form =
+                    Maybe.map Cart.fromCartDetails
+                        >> Maybe.withDefault form
+            in
+                model.pageData.cartDetails
+                    |> RemoteData.withDefault { items = [] }
+                    |> Cart.update subMsg model.currentUser model.maybeSessionToken model.editCartForm
+                    |> (\( form, maybeDetails, cmd ) ->
+                            ( { model
+                                | pageData = updatedPageData maybeDetails
+                                , editCartForm = updatedForm form maybeDetails
+                              }
+                            , cmd
+                            )
+                       )
+
         ReAuthorize response ->
             case response of
                 RemoteData.Success authStatus ->
@@ -545,6 +607,15 @@ update msg ({ pageData } as model) =
                   }
                 , Cmd.none
                 )
+
+        GetCartDetails response ->
+            let
+                updatedPageData =
+                    { pageData | cartDetails = response }
+            in
+                { model | pageData = updatedPageData }
+                    |> resetEditCartForm response
+                    |> noCommand
 
         CategoryPaginationMsg subMsg ->
             pageData.categoryDetails
@@ -646,6 +717,16 @@ updateCartVariant (ProductId productId) variantId model =
                     Just { v | variant = Just variantId }
     in
         { model | addToCartForms = addToCartForms }
+
+
+resetEditCartForm : WebData PageData.CartDetails -> Model -> Model
+resetEditCartForm response model =
+    case response of
+        RemoteData.Success details ->
+            { model | editCartForm = Cart.fromCartDetails details }
+
+        _ ->
+            model
 
 
 logUnsuccessfulRequest : WebData a -> WebData a

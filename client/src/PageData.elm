@@ -23,6 +23,10 @@ module PageData
         , ContactDetails
         , contactDetailsDecoder
         , contactDetailsEncoder
+        , CartItemId(..)
+        , CartItem
+        , CartDetails
+        , cartDetailsDecoder
         )
 
 import Dict exposing (Dict)
@@ -51,6 +55,7 @@ type alias PageData =
     , pageDetails : WebData StaticPage
     , locations : WebData LocationData
     , contactDetails : WebData ContactDetails
+    , cartDetails : WebData CartDetails
     }
 
 
@@ -78,6 +83,7 @@ initial =
         , pageDetails = RemoteData.NotAsked
         , locations = RemoteData.NotAsked
         , contactDetails = RemoteData.NotAsked
+        , cartDetails = RemoteData.NotAsked
         }
 
 
@@ -296,6 +302,44 @@ contactDetailsEncoder details =
         |> List.map (Tuple.mapSecond Encode.string)
         |> ((::) <| ( "state", regionEncoder details.state ))
         |> Encode.object
+
+
+
+-- Carts
+
+
+type CartItemId
+    = CartItemId Int
+
+
+type alias CartItem =
+    { id : CartItemId
+    , product : Product
+    , variant : ProductVariant
+    , maybeSeedAttribute : Maybe SeedAttribute
+    , quantity : Int
+    }
+
+
+cartItemDecoder : Decoder CartItem
+cartItemDecoder =
+    Decode.map5 CartItem
+        (Decode.field "id" <| Decode.map CartItemId Decode.int)
+        (Decode.field "product" Product.decoder)
+        (Decode.field "variant" Product.variantDecoder)
+        (Decode.field "seedAttribute" <| Decode.nullable SeedAttribute.decoder)
+        (Decode.field "quantity" Decode.int)
+
+
+type alias CartDetails =
+    { items : List CartItem
+    }
+
+
+cartDetailsDecoder : Decoder CartDetails
+cartDetailsDecoder =
+    Decode.map CartDetails
+        (Decode.field "items" <| Decode.list cartItemDecoder)
 
 
 

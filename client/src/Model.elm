@@ -12,6 +12,7 @@ import Auth.EditContact as EditContact
 import Auth.EditLogin as EditLogin
 import Auth.Login as Login
 import Auth.ResetPassword as ResetPassword
+import Cart
 import PageData exposing (PageData)
 import Product exposing (ProductVariantId)
 import Routing exposing (Route)
@@ -32,6 +33,7 @@ type alias Model =
     , editContactForm : EditContact.Form
     , resetPasswordForm : ResetPassword.Form
     , addToCartForms : CartForms
+    , editCartForm : Cart.Form
     , maybeSessionToken : Maybe String
     , currentUser : AuthStatus
     }
@@ -54,6 +56,7 @@ initial route =
     , editContactForm = EditContact.initial
     , resetPasswordForm = ResetPassword.initial
     , addToCartForms = Dict.empty
+    , editCartForm = Cart.initial
     , maybeSessionToken = Nothing
     , currentUser = User.unauthorized
     }

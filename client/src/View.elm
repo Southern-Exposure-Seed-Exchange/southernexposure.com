@@ -13,6 +13,7 @@ import Auth.EditLogin as EditLogin
 import Auth.Login as Login
 import Auth.MyAccount as MyAccount
 import Auth.ResetPassword as ResetPassword
+import Cart
 import Views.Category as CategoryViews
 import Messages exposing (Msg(..))
 import Model exposing (Model, CartForms)
@@ -96,6 +97,9 @@ view ({ route, pageData, navigationData } as model) =
                     withIntermediateText
                         (EditContact.view EditContactMsg model.editContactForm)
                         pageData.locations
+
+                Cart ->
+                    withIntermediateText (Cart.view model.editCartForm) pageData.cartDetails
 
                 NotFound ->
                     notFoundView

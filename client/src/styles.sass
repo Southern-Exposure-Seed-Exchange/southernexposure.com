@@ -181,6 +181,8 @@ body > div#main > div > div.container
     background-color:  $light-pale-tan
 
 
+/** General Elements **/
+
 .add-to-cart-form
   /* Ensure there's enough space for 2-digit quantities */
   .add-to-cart-group
@@ -190,6 +192,15 @@ body > div#main > div > div.container
     width: 11rem
     /* Center the text of the selected item */
     text-align-last: center
+
+
+/** Product Details **/
+
+/* Fix spacing & display of markdown titles */
+h1.product-details-title > div
+  &, & > p
+    margin-bottom: 0
+    display: inline-block
 
 .product-details
   /* Don't color the Category links */
@@ -201,11 +212,8 @@ body > div#main > div > div.container
     width: 11rem
     text-align-last: center
 
-/* Fix spacing & display of markdown titles */
-h1.product-details-title > div
-  &, & > p
-    margin-bottom: 0
-    display: inline-block
+
+/** Category Details **/
 
 .products-table
   /* Don't color the Product links */
@@ -224,9 +232,21 @@ h1.product-details-title > div
       margin-bottom: 0
       display: inline-block
 
+
+/** Advanced Search **/
+
 .advanced-search
   .filters
     img
       height: 1.2em
       margin-right: 0.25rem
       margin-bottom: 0.2rem
+
+
+/** Cart Details **/
+.cart-table
+  /* Limit Column Widths */
+  .cart-product-image
+    width: 3.25rem
+  .cart-quantity
+    width: 3.9rem

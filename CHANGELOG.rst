@@ -5,6 +5,8 @@ CHANGELOG
 v0.5.0
 ======
 
+* Disable the ``Update`` button on the Shopping Cart page if the Customer
+  hasn't changed any Quantities.
 * Show dropdowns for selecting an SKUs instead of showing each SKU as a
   separate product on the Category, Search Results, & Product Pages.
 * Store anonymous Customer Carts for 4 months.

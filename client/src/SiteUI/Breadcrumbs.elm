@@ -87,6 +87,9 @@ view route pageData =
                     , activeItem "Edit Contact Details"
                     ]
 
+                Cart ->
+                    singleItem "Shopping Cart"
+
                 NotFound ->
                     singleItem "Page Not Found"
 
