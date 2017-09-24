@@ -4,7 +4,6 @@ import Dict exposing (Dict)
 import Html exposing (..)
 import Html.Attributes as A exposing (attribute, id, class, src, for, value, selected, tabindex, type_)
 import Html.Events exposing (on, targetValue, onInput, onSubmit)
-import Html.Events.Extra exposing (targetValueInt)
 import Json.Decode as Decode
 import Markdown
 import Paginate exposing (Paginated)
@@ -18,7 +17,7 @@ import Products.Sorting as Sorting
 import Routing exposing (Route(..))
 import SeedAttribute
 import Views.Images as Images
-import Views.Utils exposing (routeLinkAttributes, htmlOrBlank)
+import Views.Utils exposing (routeLinkAttributes, onIntInput, htmlOrBlank)
 
 
 details : CartForms -> PageData.ProductDetails -> List (Html Msg)
@@ -289,7 +288,7 @@ cartForm addToCartForms product variants =
                     , A.min "1"
                     , A.step "1"
                     , value <| toString quantity
-                    , on "input" (targetValueInt |> Decode.map (ChangeCartFormQuantity product.id))
+                    , onIntInput <| ChangeCartFormQuantity product.id
                     ]
                     []
                 , span [ class "input-group-btn" ]

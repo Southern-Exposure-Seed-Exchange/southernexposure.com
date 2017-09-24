@@ -1,13 +1,16 @@
 module Views.Utils
     exposing
         ( routeLinkAttributes
+        , onIntInput
         , htmlOrBlank
         , icon
         )
 
 import Html exposing (Html, Attribute, i, text)
 import Html.Attributes exposing (href, class)
-import Html.Events.Extra exposing (onClickPreventDefault)
+import Html.Events exposing (on)
+import Html.Events.Extra exposing (onClickPreventDefault, targetValueInt)
+import Json.Decode as Decode
 import Messages exposing (Msg(NavigateTo))
 import Routing exposing (Route, reverse)
 
@@ -17,6 +20,11 @@ routeLinkAttributes route =
     [ onClickPreventDefault <| NavigateTo route
     , href <| reverse route
     ]
+
+
+onIntInput : (Int -> msg) -> Attribute msg
+onIntInput msg =
+    targetValueInt |> Decode.map msg |> on "input"
 
 
 htmlOrBlank : (a -> Html msg) -> Maybe a -> Html msg
