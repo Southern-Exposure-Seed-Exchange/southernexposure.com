@@ -40,7 +40,7 @@ initial =
 fromCartDetails : CartDetails -> Form
 fromCartDetails { items } =
     List.foldl
-        (\i acc -> Dict.insert ((\(CartItemId i) -> i) i.id) i.quantity acc)
+        (\item acc -> Dict.insert ((\(CartItemId i) -> i) item.id) item.quantity acc)
         Dict.empty
         items
         |> Form
