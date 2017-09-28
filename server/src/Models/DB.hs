@@ -10,6 +10,7 @@ module Models.DB where
 import Data.Int (Int64)
 import Data.Time.Clock (UTCTime)
 import Database.Persist.TH
+import Numeric.Natural (Natural)
 
 import Models.Fields
 
@@ -104,4 +105,29 @@ CartItem
     productVariantId ProductVariantId
     quantity Int64
     UniqueCartItem cartId productVariantId
+
+
+TaxRate
+    description T.Text
+    rate Natural
+    country Country
+    state Region Maybe
+    isActive Bool
+    UniqueTaxRate country state !force
+
+Surcharge
+    description T.Text
+    singleFee Cents
+    multipleFee Cents
+    categoryIds [CategoryId]
+    isActive Bool
+    UniqueSurcharge description
+
+ShippingMethod
+    description T.Text
+    countries [Country]
+    rates [ShippingRate]
+    categoryIds [CategoryId]
+    isActive Bool
+    priority Natural
 |]

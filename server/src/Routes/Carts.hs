@@ -13,14 +13,19 @@ import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Trans (lift)
 import Data.Aeson ((.:), (.:?), (.=), FromJSON(..), ToJSON(..), object, withObject)
 import Data.Int (Int64)
+import Data.List (intersect)
+import Data.Maybe (mapMaybe)
 import Data.Time.Clock (getCurrentTime, addUTCTime)
-import Database.Persist ( (+=.), (=.), (==.), Entity(..), getBy, insert, insertEntity
-                        , update, updateWhere, upsertBy, deleteWhere)
+import Database.Persist ( (+=.), (=.), (==.), Entity(..), SelectOpt(Asc), getBy
+                        , insert, insertEntity, update, updateWhere, upsertBy
+                        , deleteWhere, selectList )
 import Database.Persist.Sql (toSqlKey)
+import Numeric.Natural (Natural)
 import Servant ((:>), (:<|>)(..), AuthProtect, ReqBody, JSON, PlainText, Get, Post, throwError, err404)
 
 import Auth
 import Models
+import Models.Fields (Cents(..), Country, Region, ShippingRate(..))
 import Server
 import Validation (Validation(..))
 
@@ -84,14 +89,16 @@ anonymousRoutes =
 -- COMMON DATA
 
 
-newtype CartDetailsData =
+data CartDetailsData =
     CartDetailsData
         { cddItems :: [ ItemData ]
+        , cddCharges :: CartCharges
         }
 
 instance ToJSON CartDetailsData where
     toJSON details =
         object [ "items" .= cddItems details
+               , "charges" .= cddCharges details
                ]
 
 data ItemData =
@@ -112,6 +119,164 @@ instance ToJSON ItemData where
                , "quantity" .= idQuantity item
                ]
 
+data CartCharges =
+    CartCharges
+        { ccTax :: Maybe CartCharge
+        , ccSurcharges :: [CartCharge]
+        , ccShippingMethods :: [CartCharge]
+        }
+
+instance ToJSON CartCharges where
+    toJSON charges =
+        object [ "tax" .= ccTax charges
+               , "surcharges" .= ccSurcharges charges
+               , "shippingMethods" .= ccShippingMethods charges
+               ]
+
+data CartCharge =
+    CartCharge
+        { ccDescription :: T.Text
+        , ccAmount :: Cents
+        }
+
+instance ToJSON CartCharge where
+    toJSON charge =
+        object [ "description" .= ccDescription charge
+               , "amount" .= ccAmount charge
+               ]
+
+
+getCartItems :: (E.SqlExpr (Entity Cart) -> E.SqlExpr (E.Value Bool)) -> App [ItemData]
+getCartItems whereQuery = do
+    items <- runDB $ E.select $ E.from
+        $ \(ci `E.InnerJoin` c `E.InnerJoin` v `E.InnerJoin` p `E.LeftOuterJoin` sa) -> do
+            E.on (sa E.?. SeedAttributeProductId E.==. E.just (p E.^. ProductId))
+            E.on (p E.^. ProductId E.==. v E.^. ProductVariantProductId)
+            E.on (v E.^. ProductVariantId E.==. ci E.^. CartItemProductVariantId)
+            E.on (c E.^. CartId E.==. ci E.^. CartItemCartId)
+            E.where_ $ whereQuery c
+            E.orderBy [E.asc $ p E.^. ProductName]
+            return (ci E.^. CartItemId, p, v, sa, ci E.^. CartItemQuantity)
+    return $ map toItemData items
+    where toItemData (i, p, v, sa, q) =
+            ItemData (E.unValue i) p v sa (E.unValue q)
+
+getCharges :: Maybe Country -> Maybe Region -> [ItemData] -> App CartCharges
+getCharges maybeCountry maybeRegion items =
+    let
+        variant item =
+            (\(Entity _ v) -> v) $ idVariant item
+        subTotal =
+            foldl (\acc item -> acc + itemTotal item) 0 items
+        itemTotal item =
+            fromIntegral (idQuantity item) * fromCents (productVariantPrice $ variant item)
+    in do
+        surcharges <- getSurcharges items
+        shippingMethods <- getShippingMethods maybeCountry items subTotal
+        taxCharge <- getTaxCharge maybeCountry maybeRegion subTotal surcharges shippingMethods
+        return $ CartCharges taxCharge surcharges shippingMethods
+
+
+getSurcharges :: [ItemData] -> App [CartCharge]
+getSurcharges items =
+    mapMaybe (getSurcharge $ foldl buildQuantityMap M.empty items)
+        <$> runDB (selectList [SurchargeIsActive ==. True] [])
+    where buildQuantityMap initialMap item =
+            foldl (\acc cId -> M.insertWith (+) cId (idQuantity item) acc)
+                initialMap
+                ((\(Entity _ p) -> productCategoryIds p) $ idProduct item)
+          getSurcharge categories (Entity _ surcharge) =
+            let
+                quantity =
+                    foldl (\acc catId -> maybe acc (+ acc) $ M.lookup catId categories)
+                        0 (surchargeCategoryIds surcharge)
+                amount =
+                    if quantity == 1 then
+                        surchargeSingleFee surcharge
+                    else
+                        surchargeMultipleFee surcharge
+            in
+                if quantity == 0 then
+                    Nothing
+                else
+                    Just $ CartCharge (surchargeDescription surcharge) amount
+
+getShippingMethods :: Maybe Country -> [ItemData] -> Natural -> App [CartCharge]
+getShippingMethods maybeCountry items subTotal =
+    case maybeCountry of
+        Nothing ->
+            return []
+        Just country ->
+            mapMaybe (getMethod country)
+                <$> runDB (selectList [ShippingMethodIsActive ==. True] [Asc ShippingMethodPriority])
+    where getMethod country (Entity _ method) =
+            let
+                validCountry =
+                    country `elem` shippingMethodCountries method
+                validProducts =
+                    null (shippingMethodCategoryIds method)
+                        || all isValidProduct (map idProduct items)
+                isValidProduct (Entity _ prod) =
+                     not . null $ productCategoryIds prod `intersect` shippingMethodCategoryIds method
+                thresholdAmount rates =
+                    case rates of
+                        [] ->
+                            Cents 0
+                        [r] ->
+                            applyRate r
+                        r1 : r2 : rest ->
+                            if getThreshold r1 <= Cents subTotal && getThreshold r2 > Cents subTotal then
+                                applyRate r1
+                            else
+                                thresholdAmount $ r2 : rest
+                getThreshold rate =
+                    case rate of
+                        Flat t _ ->
+                            t
+                        Percentage t _ ->
+                            t
+                applyRate rate =
+                    case rate of
+                        Flat _ amount ->
+                            amount
+                        Percentage _ percentage ->
+                            Cents . round $ (toRational percentage / 100) * toRational subTotal
+            in
+                if validCountry && validProducts then
+                    Just . CartCharge (shippingMethodDescription method)
+                        . thresholdAmount $ shippingMethodRates method
+                else
+                    Nothing
+
+-- TODO: Simplify the maybe logic here; Natural -> Cents
+getTaxCharge :: Maybe Country -> Maybe Region -> Natural -> [CartCharge] -> [CartCharge] -> App (Maybe CartCharge)
+getTaxCharge maybeCountry maybeRegion subTotal surcharges shippingMethods =
+    case maybeCountry of
+        Just country -> do
+            maybeTaxRate <- runDB . getBy $ UniqueTaxRate country maybeRegion
+            case maybeTaxRate of
+                Nothing ->
+                    return Nothing
+                Just (Entity _ taxRate) ->
+                    if taxRateIsActive taxRate then
+                        return . Just $ CartCharge
+                            (taxRateDescription taxRate)
+                            (Cents . round $ taxAmount taxRate
+                                $ subTotal + surchargeAmount + shippingAmount)
+                    else
+                        return Nothing
+        Nothing ->
+            return Nothing
+    where taxAmount taxRate taxableTotal =
+            (toRational . toInteger $ taxRateRate taxRate) / 1000 * toRational taxableTotal
+          surchargeAmount =
+            foldl (\a c -> a + fromCents (ccAmount c)) 0 surcharges
+          shippingAmount =
+              case shippingMethods of
+                [] ->
+                    0
+                cc : _ ->
+                    fromCents $ ccAmount cc
 
 -- ADD ITEM
 
@@ -273,9 +438,12 @@ type CustomerDetailsRoute =
     :> Get '[JSON] CartDetailsData
 
 customerDetailsRoute :: AuthToken -> App CartDetailsData
-customerDetailsRoute = validateToken >=> \(Entity customerId _) ->
-    getCartDetailsData $ \c ->
+customerDetailsRoute = validateToken >=> \(Entity customerId customer) -> do
+    cartItems <- getCartItems $ \c ->
         c E.^. CartCustomerId E.==. E.just (E.val customerId)
+    charges <- getCharges (Just $ customerCountry customer) (Just $ customerState customer)
+        cartItems
+    return $ CartDetailsData cartItems charges
 
 
 newtype AnonymousDetailsParameters =
@@ -293,26 +461,12 @@ type AnonymousDetailsRoute =
     :> Post '[JSON] CartDetailsData
 
 anonymousDetailsRoute :: AnonymousDetailsParameters -> App CartDetailsData
-anonymousDetailsRoute parameters =
-    getCartDetailsData $ \c ->
+anonymousDetailsRoute parameters = do
+    cartItems <- getCartItems $ \c ->
         c E.^. CartSessionToken E.==. E.just (E.val $ adpCartToken parameters)
+    charges <- getCharges Nothing Nothing cartItems
+    return $ CartDetailsData cartItems charges
 
-
-getCartDetailsData :: (E.SqlExpr (Entity Cart) -> E.SqlExpr (E.Value Bool))
-                   -> App CartDetailsData
-getCartDetailsData whereQuery = do
-    items <- runDB $ E.select $ E.from
-        $ \(ci `E.InnerJoin` c `E.InnerJoin` v `E.InnerJoin` p `E.LeftOuterJoin` sa) -> do
-            E.on (sa E.?. SeedAttributeProductId E.==. E.just (p E.^. ProductId))
-            E.on (p E.^. ProductId E.==. v E.^. ProductVariantProductId)
-            E.on (v E.^. ProductVariantId E.==. ci E.^. CartItemProductVariantId)
-            E.on (c E.^. CartId E.==. ci E.^. CartItemCartId)
-            E.where_ $ whereQuery c
-            E.orderBy [E.asc $ p E.^. ProductName]
-            return (ci E.^. CartItemId, p, v, sa, ci E.^. CartItemQuantity)
-    return $ CartDetailsData $ map toItemData items
-    where toItemData (i, p, v, sa, q) =
-            ItemData (E.unValue i) p v sa (E.unValue q)
 
 
 -- UPDATE

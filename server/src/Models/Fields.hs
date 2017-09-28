@@ -132,3 +132,17 @@ instance FromJSON Country where
                 return $ Country countryCode
             Nothing ->
                 fail $ "Invalid Country Code: " ++ T.unpack t
+
+
+-- SHIPPING RATES
+
+
+type Threshold = Cents
+type Percent = Natural
+
+data ShippingRate
+    = Flat Threshold Cents
+    | Percentage Threshold Percent
+    deriving (Show, Read, Generic)
+
+derivePersistField "ShippingRate"

@@ -15,7 +15,7 @@ import Data.Scientific (Scientific)
 import Database.MySQL.Base
     ( MySQLConn, Query(..), query_, close, MySQLValue(..), prepareStmt, queryStmt )
 import Database.Persist
-    (Entity(..), Filter, getBy, insert, insertMany_, deleteWhere)
+    ((<-.), Entity(..), Filter, getBy, insert, insertMany_, deleteWhere, selectKeysList)
 import Database.Persist.Postgresql
     (ConnectionPool, SqlWriteT, createPostgresqlPool, toSqlKey, runSqlPool)
 import System.FilePath (takeFileName)
@@ -55,6 +55,7 @@ main = do
         >> insertAttributes attributes
         >> insertPages pages
         >> insertCustomers customers
+        >> insertCharges
     close mysqlConn
     destroyAllResources psqlConn
 
@@ -68,7 +69,12 @@ connectToPostgres =
 
 dropNewDatabaseRows :: SqlWriteT IO ()
 dropNewDatabaseRows =
-        deleteWhere ([] :: [Filter SeedAttribute])
+    deleteWhere ([] :: [Filter SeedAttribute])
+        >> deleteWhere ([] :: [Filter TaxRate])
+        >> deleteWhere ([] :: [Filter Surcharge])
+        >> deleteWhere ([] :: [Filter ShippingMethod])
+        >> deleteWhere ([] :: [Filter CartItem])
+        >> deleteWhere ([] :: [Filter Cart])
         >> deleteWhere ([] :: [Filter ProductVariant])
         >> deleteWhere ([] :: [Filter Product])
         >> deleteWhere ([] :: [Filter Category])
@@ -333,3 +339,54 @@ insertPages = insertMany_
 
 insertCustomers :: [Customer] -> SqlWriteT IO ()
 insertCustomers = insertMany_
+
+insertCharges :: SqlWriteT IO ()
+insertCharges = do
+    void . insert $
+        TaxRate "VA Sales Tax" 53 (Country CountryCodes.US)
+            (Just $ USState StateCodes.VA) True
+    getBy (UniqueCategorySlug "potatoes") >>=
+        maybe (return ()) (\(Entity catId _) -> void . insert $
+            Surcharge "Potato Fee" (Cents 200) (Cents 400) [catId] True)
+    getBy (UniqueCategorySlug "sweet-potatoes") >>=
+        maybe (return ()) (\(Entity catId _) -> void . insert $
+            Surcharge "Sweet Potato Fee" (Cents 200) (Cents 400) [catId] True)
+    fallCategoryIds <- selectKeysList
+        [ CategorySlug <-.
+            [ "garlic", "asiatic-turban", "elephant-garlic", "garlic-samplers"
+            , "softneck-braidable", "perennial-onions", "ginseng-goldenseal"
+            ]
+        ] []
+    void . insert $
+        Surcharge "Fall Item Fee" (Cents 200) (Cents 400) fallCategoryIds True
+    void . insert $
+        ShippingMethod "Shipping to USA" [Country CountryCodes.US]
+            [ Flat (Cents 1000) (Cents 350)
+            , Flat (Cents 3000) (Cents 450)
+            , Flat (Cents 5000) (Cents 550)
+            , Flat (Cents 12000) (Cents 650)
+            , Percentage (Cents 50000000) 5
+            ]
+            []
+            True
+            2
+    void . insert $
+        ShippingMethod "International Shipping"
+            [Country CountryCodes.CA, Country CountryCodes.MX]
+            [ Flat (Cents 1000) (Cents 550)
+            , Flat (Cents 3000) (Cents 750)
+            , Flat (Cents 5000) (Cents 950)
+            , Percentage (Cents 12000) 8
+            , Percentage (Cents 50000000) 10
+            ]
+            []
+            True
+            2
+    getBy (UniqueCategorySlug "request-a-catalog") >>=
+        maybe (return ()) (\(Entity catId _) -> void . insert $
+            ShippingMethod "Free Shipping" [Country CountryCodes.US]
+                [Flat (Cents 0) (Cents 0)]
+                [catId]
+                True
+                1
+            )
