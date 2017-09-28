@@ -5,6 +5,8 @@ CHANGELOG
 v0.5.0
 ======
 
+* Display Seasonal Item Surcharges on the Shopping Cart page for all Customers,
+  as well as Tax & Shipping charges for registered Customers.
 * Disable the ``Update`` button on the Shopping Cart page if the Customer
   hasn't changed any Quantities.
 * Show dropdowns for selecting an SKUs instead of showing each SKU as a

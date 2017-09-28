@@ -526,7 +526,7 @@ update msg ({ pageData } as model) =
                         >> Maybe.withDefault form
             in
                 model.pageData.cartDetails
-                    |> RemoteData.withDefault { items = [] }
+                    |> RemoteData.withDefault PageData.blankCartDetails
                     |> Cart.update subMsg model.currentUser model.maybeSessionToken model.editCartForm
                     |> (\( form, maybeDetails, cmd ) ->
                             ( { model

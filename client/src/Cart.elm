@@ -21,7 +21,7 @@ import PageData exposing (CartDetails, CartItemId(..))
 import Routing exposing (Route(ProductDetails))
 import User exposing (AuthStatus, User)
 import Views.Images as Images
-import Views.Utils exposing (icon, routeLinkAttributes, onIntInput)
+import Views.Utils exposing (icon, routeLinkAttributes, onIntInput, htmlOrBlank)
 
 
 -- MODEL
@@ -149,28 +149,46 @@ customerUpdateRequest user body =
 
 
 view : Form -> CartDetails -> List (Html Msg)
-view { quantities } { items } =
+view { quantities } { items, charges } =
     let
         itemCount =
             List.foldl (.quantity >> (+)) 0 items
 
         -- TODO: Add commas to format
+        totalAmount =
+            subTotal
+                |> centsMap2 (+) surchargeAmount
+                |> centsMap2 (+) shippingAmount
+                |> centsMap2 (+) taxAmount
+
         subTotal =
             List.foldl (itemTotal >> centsMap2 (+)) (Cents 0) items
-                |> centsToString
+
+        shippingAmount =
+            charges.shippingMethod
+                |> Maybe.map .amount
+                |> Maybe.withDefault (Cents 0)
+
+        taxAmount =
+            charges.tax |> Maybe.map .amount |> Maybe.withDefault (Cents 0)
+
+        surchargeAmount =
+            charges.surcharges |> List.foldl (\i -> centsMap2 (+) i.amount) (Cents 0)
 
         itemTotal { variant, quantity } =
             (centsMap <| (*) quantity) variant.price
-
-        formIsUnchanged =
-            changedQuantities quantities items
-                |> List.isEmpty
 
         cartTable =
             table [ class "table table-striped table-sm cart-table" ]
                 [ tableHeader
                 , tbody [] <| List.map productRow items
                 , tableFooter
+                ]
+
+        buttons =
+            div [ class "form-group text-right" ]
+                [ button [ class "btn btn-success", type_ "submit", disabled formIsUnchanged ]
+                    [ icon "refresh", text " Update" ]
                 ]
 
         tableHeader =
@@ -227,19 +245,37 @@ view { quantities } { items } =
                 ]
 
         tableFooter =
-            tfoot [ class "font-weight-bold" ]
-                [ tr []
-                    [ td [ colspan 4, class "text-right" ] [ text "Sub-Total:" ]
-                    , td [ class "text-right" ] [ text <| "$" ++ subTotal ]
-                    , td [] []
-                    ]
+            tfoot [] <|
+                [ footerRow "font-weight-bold" "Sub-Total" subTotal ]
+                    ++ List.map chargeRow charges.surcharges
+                    ++ [ htmlOrBlank chargeRow charges.shippingMethod
+                       , taxRow
+                       , totalRow
+                       ]
+
+        footerRow rowClass content amount =
+            tr [ class rowClass ]
+                [ td [ colspan 4, class "text-right" ] [ text <| content ++ ":" ]
+                , td [ class "text-right" ] [ text <| "$" ++ centsToString amount ]
+                , td [] []
                 ]
 
-        buttons =
-            div [ class "form-group text-right" ]
-                [ button [ class "btn btn-success", type_ "submit", disabled formIsUnchanged ]
-                    [ icon "refresh", text " Update" ]
-                ]
+        chargeRow charge =
+            footerRow "" charge.description charge.amount
+
+        taxRow =
+            charges.tax
+                |> htmlOrBlank (\{ description } -> footerRow "" description taxAmount)
+
+        totalRow =
+            if totalAmount /= subTotal then
+                footerRow "font-weight-bold" "Total" totalAmount
+            else
+                text ""
+
+        formIsUnchanged =
+            changedQuantities quantities items
+                |> List.isEmpty
 
         centsMap f (Cents c) =
             f c |> Cents
@@ -251,7 +287,7 @@ view { quantities } { items } =
             [ h1 [] [ text "Shopping Cart" ]
             , hr [] []
             , p [ class "text-center font-weight-bold" ]
-                [ text <| "Total Items: " ++ toString itemCount ++ " Amount: $" ++ subTotal
+                [ text <| "Total Items: " ++ toString itemCount ++ " Amount: $" ++ centsToString totalAmount
                 ]
             , form [ onSubmit <| EditCartMsg Submit ]
                 [ cartTable

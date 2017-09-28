@@ -26,6 +26,7 @@ module PageData
         , CartItemId(..)
         , CartItem
         , CartDetails
+        , blankCartDetails
         , cartDetailsDecoder
         )
 
@@ -36,6 +37,7 @@ import Paginate exposing (Paginated)
 import RemoteData exposing (WebData)
 import Api
 import Category exposing (Category, CategoryId(..))
+import Models.Fields exposing (Cents(..))
 import StaticPage exposing (StaticPage)
 import Product exposing (Product, ProductVariant, ProductVariantId(..))
 import Products.Pagination as Pagination
@@ -331,15 +333,53 @@ cartItemDecoder =
         (Decode.field "quantity" Decode.int)
 
 
+type alias CartCharge =
+    { description : String
+    , amount : Cents
+    }
+
+
+cartChargeDecoder : Decoder CartCharge
+cartChargeDecoder =
+    Decode.map2 CartCharge
+        (Decode.field "description" Decode.string)
+        (Decode.field "amount" <| Decode.map Cents Decode.int)
+
+
+type alias CartCharges =
+    { tax : Maybe CartCharge
+    , surcharges : List CartCharge
+    , shippingMethod : Maybe CartCharge
+    }
+
+
+cartChargesDecoder : Decoder CartCharges
+cartChargesDecoder =
+    Decode.map3 CartCharges
+        (Decode.field "tax" <| Decode.nullable cartChargeDecoder)
+        (Decode.field "surcharges" <| Decode.list cartChargeDecoder)
+        (Decode.field "shippingMethods" <|
+            Decode.map List.head <|
+                Decode.list cartChargeDecoder
+        )
+
+
 type alias CartDetails =
     { items : List CartItem
+    , charges : CartCharges
     }
+
+
+blankCartDetails : CartDetails
+blankCartDetails =
+    CartDetails [] (CartCharges Nothing [] Nothing)
 
 
 cartDetailsDecoder : Decoder CartDetails
 cartDetailsDecoder =
-    Decode.map CartDetails
+    Decode.map2 CartDetails
         (Decode.field "items" <| Decode.list cartItemDecoder)
+        (Decode.field "charges" cartChargesDecoder)
 
 
 
