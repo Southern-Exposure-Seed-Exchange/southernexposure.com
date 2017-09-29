@@ -361,7 +361,7 @@ insertCharges = do
         Surcharge "Fall Item Fee" (Cents 200) (Cents 400) fallCategoryIds True
     void . insert $
         ShippingMethod "Shipping to USA" [Country CountryCodes.US]
-            [ Flat (Cents 1000) (Cents 350)
+            [ Flat (Cents 0) (Cents 350)
             , Flat (Cents 3000) (Cents 450)
             , Flat (Cents 5000) (Cents 550)
             , Flat (Cents 12000) (Cents 650)
@@ -373,7 +373,7 @@ insertCharges = do
     void . insert $
         ShippingMethod "International Shipping"
             [Country CountryCodes.CA, Country CountryCodes.MX]
-            [ Flat (Cents 1000) (Cents 550)
+            [ Flat (Cents 0) (Cents 550)
             , Flat (Cents 3000) (Cents 750)
             , Flat (Cents 5000) (Cents 950)
             , Percentage (Cents 12000) 8
