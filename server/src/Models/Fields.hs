@@ -20,7 +20,6 @@ import Models.ProvinceCodes (ProvinceCode)
 
 import qualified Data.StateCodes as StateCodes
 import qualified Data.Text as T
-import qualified Models.ProvinceCodes as ProvinceCodes
 
 
 -- | Cents are used to do any currency-related arithmetic & are represented
@@ -93,7 +92,7 @@ instance FromJSON Region where
                             (return . USArmedForces)
                             $ readMaybe afCode
                     Nothing -> do
-                        maybeProvince <- join . fmap ProvinceCodes.fromMName
+                        maybeProvince <- join . fmap readMaybe
                                             <$> (v .:? "province")
                         case maybeProvince of
                             Just province ->
