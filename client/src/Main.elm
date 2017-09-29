@@ -472,7 +472,7 @@ update msg ({ pageData } as model) =
         CreateAccountMsg subMsg ->
             let
                 ( updatedForm, maybeAuthStatus, cmd ) =
-                    CreateAccount.update subMsg model.createAccountForm
+                    CreateAccount.update subMsg model.createAccountForm model.maybeSessionToken
             in
                 ( { model
                     | createAccountForm = updatedForm
@@ -484,7 +484,7 @@ update msg ({ pageData } as model) =
         LoginMsg subMsg ->
             let
                 ( updatedForm, maybeAuthStatus, cmd ) =
-                    Login.update subMsg model.loginForm
+                    Login.update subMsg model.loginForm model.maybeSessionToken
             in
                 ( { model
                     | loginForm = updatedForm
@@ -540,7 +540,7 @@ update msg ({ pageData } as model) =
         ReAuthorize response ->
             case response of
                 RemoteData.Success authStatus ->
-                    { model | currentUser = authStatus }
+                    { model | currentUser = authStatus, maybeSessionToken = Nothing }
                         |> fetchDataForRoute
 
                 RemoteData.Failure _ ->

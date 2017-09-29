@@ -9,6 +9,7 @@ port module Ports
         , loggedIn
         , loggedOut
         , storeCartSessionToken
+        , removeCartSessionToken
         , newCartSessionToken
         )
 
@@ -55,6 +56,9 @@ port loggedOut : (() -> msg) -> Sub msg
 
 
 port storeCartSessionToken : String -> Cmd msg
+
+
+port removeCartSessionToken : () -> Cmd msg
 
 
 port newCartSessionToken : (String -> msg) -> Sub msg

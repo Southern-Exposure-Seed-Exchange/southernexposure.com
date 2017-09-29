@@ -63,8 +63,8 @@ initial =
     }
 
 
-encode : Form -> Value
-encode model =
+encode : Form -> Maybe String -> Value
+encode model maybeSessionToken =
     let
         encodedState =
             (,) "state" <|
@@ -80,6 +80,12 @@ encode model =
 
                     _ ->
                         stateWithKey "custom"
+
+        encodedToken =
+            maybeSessionToken
+                |> Maybe.map Encode.string
+                |> Maybe.withDefault Encode.null
+                |> ((,) "sessionToken")
 
         stateWithKey key =
             Encode.object [ ( key, Encode.string model.state ) ]
@@ -97,6 +103,7 @@ encode model =
         ]
             |> List.map (Tuple.mapSecond Encode.string)
             |> ((::) encodedState)
+            |> ((::) encodedToken)
             |> Encode.object
 
 
@@ -121,8 +128,8 @@ type Msg
     | SubmitResponse (WebData (Result Api.FormErrors AuthStatus))
 
 
-update : Msg -> Form -> ( Form, Maybe AuthStatus, Cmd Msg )
-update msg form =
+update : Msg -> Form -> Maybe String -> ( Form, Maybe AuthStatus, Cmd Msg )
+update msg form maybeSessionToken =
     case msg of
         Email str ->
             { form | email = str }
@@ -184,7 +191,10 @@ update msg form =
                 , Ports.scrollToID "form-errors-text"
                 )
             else
-                ( { form | errors = Api.initialErrors }, Nothing, createNewAccount form )
+                ( { form | errors = Api.initialErrors }
+                , Nothing
+                , createNewAccount form maybeSessionToken
+                )
 
         -- TODO: Better error case handling/feedback
         SubmitResponse response ->
@@ -196,6 +206,7 @@ update msg form =
                         [ Routing.newUrl CreateAccountSuccess
                         , Ports.scrollToTop
                         , storeAuthDetails authStatus
+                        , Ports.removeCartSessionToken ()
                         ]
                     )
 
@@ -209,10 +220,10 @@ update msg form =
                     form |> noCommandOrStatus
 
 
-createNewAccount : Form -> Cmd Msg
-createNewAccount form =
+createNewAccount : Form -> Maybe String -> Cmd Msg
+createNewAccount form maybeSessionToken =
     Api.post Api.CustomerRegister
-        |> Api.withJsonBody (encode form)
+        |> Api.withJsonBody (encode form maybeSessionToken)
         |> Api.withJsonResponse User.decoder
         |> Api.withErrorHandler SubmitResponse
 

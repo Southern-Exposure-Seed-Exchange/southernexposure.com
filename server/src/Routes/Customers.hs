@@ -4,6 +4,7 @@
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 module Routes.Customers
     ( CustomerAPI
@@ -19,9 +20,15 @@ import Data.Maybe (fromMaybe)
 import Data.Monoid ((<>))
 import Data.Text.Encoding (encodeUtf8, decodeUtf8)
 import Data.Time.Clock (getCurrentTime, addUTCTime)
-import Database.Persist ((=.), (==.), Entity(..), get, getBy, insertUnique, insert_, update, delete, deleteWhere)
+import Database.Persist
+    ( (=.), (+=.), (==.), Entity(..), get, getBy, selectList, insertUnique
+    , insert_, update, upsert, delete, deleteWhere
+    )
 import Database.Persist.Sql (toSqlKey)
-import Servant ((:>), (:<|>)(..), AuthProtect, ReqBody, JSON, Get, Post, Put, errBody, err403, err500, throwError)
+import Servant
+    ( (:>), (:<|>)(..), AuthProtect, ReqBody, JSON, Get, Post, Put, errBody
+    , err403, err500, throwError
+    )
 
 import Auth
 import Models
@@ -187,6 +194,7 @@ data RegistrationParameters =
         , rpZipCode :: T.Text
         , rpCountry :: Country
         , rpTelephone :: T.Text
+        , rpCartToken :: Maybe T.Text
         } deriving (Show)
 
 instance FromJSON RegistrationParameters where
@@ -204,6 +212,7 @@ instance FromJSON RegistrationParameters where
                 <*> v .: "zipCode"
                 <*> v .: "country"
                 <*> v .: "telephone"
+                <*> v .:? "sessionToken"
 
 instance Validation RegistrationParameters where
     -- TODO: Better validation, validate emails, compare to Zencart
@@ -257,6 +266,7 @@ registrationRoute = validate >=> \parameters -> do
         Nothing ->
             lift $ throwError err500
         Just customerId ->
+            maybeMergeCarts customerId (rpCartToken parameters) >>
             Emails.send (Emails.AccountCreated customer) >>
             return AuthorizationData
                 { adId = customerId
@@ -295,6 +305,7 @@ data LoginParameters =
     LoginParameters
         { lpEmail :: T.Text
         , lpPassword :: T.Text
+        , lpCartToken :: Maybe T.Text
         }
 
 instance FromJSON LoginParameters where
@@ -303,27 +314,29 @@ instance FromJSON LoginParameters where
             LoginParameters
                 <$> v .: "email"
                 <*> v .: "password"
+                <*> v .:? "sessionToken"
 
 type LoginRoute =
        ReqBody '[JSON] LoginParameters
     :> Post '[JSON] AuthorizationData
 
 loginRoute :: LoginParameters -> App AuthorizationData
-loginRoute LoginParameters { lpEmail, lpPassword } =
+loginRoute LoginParameters { lpEmail, lpPassword, lpCartToken } =
     let
         authorizationError =
             V.singleError "Invalid Email or Password."
         resetRequiredError =
-            hashAnyways $ V.singleError
+            void . hashAnyways $ V.singleError
                 "Sorry, you need to reset your password before logging in."
     in do
         maybeCustomer <- runDB . getBy $ UniqueEmail lpEmail
         case maybeCustomer of
-            Just e@(Entity _ customer) -> do
+            Just e@(Entity customerId customer) -> do
                 isValid <- validatePassword e
                 when (customerEncryptedPassword customer == "") resetRequiredError
                 if isValid then
-                    return $ customerToAuthorizationData e
+                    maybeMergeCarts customerId lpCartToken >>
+                    return (customerToAuthorizationData e)
                 else
                     authorizationError
             Nothing ->
@@ -655,3 +668,37 @@ contactEditRoute token = validate >=> \parameters -> do
         , CustomerCountry =. cepCountry parameters
         , CustomerTelephone =. cepTelephone parameters
         ]
+
+
+-- UTILS
+
+
+maybeMergeCarts :: CustomerId -> Maybe T.Text -> App ()
+maybeMergeCarts customerId =
+    maybe (return ()) (mergeCarts customerId)
+
+mergeCarts :: CustomerId -> T.Text -> App ()
+mergeCarts customerId cartToken = runDB $ do
+    maybeCustomerCart <- getBy . UniqueCustomerCart $ Just customerId
+    maybeAnonymousCart <- getBy . UniqueAnonymousCart $ Just cartToken
+    case (maybeCustomerCart, maybeAnonymousCart) of
+        (Just (Entity cCartId _), Just (Entity aCartId _)) -> do
+            anonymousCartItems <- selectList [CartItemCartId ==. aCartId] []
+            mapM_ (upsertCartItem cCartId) anonymousCartItems
+            deleteWhere [CartItemCartId ==. aCartId] >> delete aCartId
+        (Nothing, Just (Entity cartId _)) ->
+            update cartId
+                [ CartSessionToken =. Nothing
+                , CartExpirationTime =. Nothing
+                , CartCustomerId =. Just customerId
+                ]
+        _ ->
+            return ()
+    where upsertCartItem cartId (Entity _ cartItem) =
+            upsert
+                CartItem
+                    { cartItemCartId = cartId
+                    , cartItemProductVariantId = cartItemProductVariantId cartItem
+                    , cartItemQuantity = cartItemQuantity cartItem
+                    }
+                [ CartItemQuantity +=. cartItemQuantity cartItem ]

@@ -41,11 +41,15 @@ initial =
     }
 
 
-encode : Form -> Value
-encode { email, password } =
+encode : Form -> Maybe String -> Value
+encode { email, password } maybeSessionToken =
     Encode.object
         [ ( "email", Encode.string email )
         , ( "password", Encode.string password )
+        , ( "sessionToken"
+          , Maybe.map Encode.string maybeSessionToken
+                |> Maybe.withDefault Encode.null
+          )
         ]
 
 
@@ -63,8 +67,8 @@ type Msg
     | SubmitResponse (WebData (Result Api.FormErrors AuthStatus))
 
 
-update : Msg -> Form -> ( Form, Maybe AuthStatus, Cmd Msg )
-update msg model =
+update : Msg -> Form -> Maybe String -> ( Form, Maybe AuthStatus, Cmd Msg )
+update msg model maybeSessionToken =
     case msg of
         Email email ->
             { model | email = email }
@@ -97,7 +101,10 @@ update msg model =
             )
 
         SubmitForm ->
-            ( { model | errors = Api.initialErrors }, Nothing, login model )
+            ( { model | errors = Api.initialErrors }
+            , Nothing
+            , login model maybeSessionToken
+            )
 
         -- TODO: Better error case handling/feedback
         SubmitResponse response ->
@@ -108,6 +115,7 @@ update msg model =
                     , Cmd.batch
                         [ Routing.newUrl <| PageDetails "home"
                         , rememberAuth model.remember authStatus
+                        , Ports.removeCartSessionToken ()
                         ]
                     )
 
@@ -141,10 +149,10 @@ debugResponse response model =
         model |> noCommandOrStatus
 
 
-login : Form -> Cmd Msg
-login form =
+login : Form -> Maybe String -> Cmd Msg
+login form maybeSessionToken =
     Api.post Api.CustomerLogin
-        |> Api.withJsonBody (encode form)
+        |> Api.withJsonBody (encode form maybeSessionToken)
         |> Api.withJsonResponse User.decoder
         |> Api.withErrorHandler SubmitResponse
 

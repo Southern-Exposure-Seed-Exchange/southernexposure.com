@@ -107,3 +107,8 @@ app.ports.removeAuthDetails.subscribe(function() {
 app.ports.storeCartSessionToken.subscribe(function(token) {
   localStorage.setItem(cartTokenKey, token);
 });
+
+/* Remove the Cart Session Token from Local Storage */
+app.ports.removeCartSessionToken.subscribe(function() {
+  localStorage.removeItem(cartTokenKey);
+});
