@@ -25,7 +25,7 @@ import SeedAttribute exposing (SeedAttribute)
 import SiteUI
 import SiteUI.Search as SiteSearch
 import StaticPage exposing (StaticPage)
-import Update.Utils exposing (withCommand, noCommand, discardCommand)
+import Update.Utils exposing (extraCommand, noCommand, discardCommand, updateAndCommand, withCommand)
 import User exposing (User, AuthStatus)
 import View exposing (view)
 
@@ -557,8 +557,8 @@ update msg ({ pageData } as model) =
                     { pageData | productDetails = response }
             in
                 ( { model | pageData = updatedPageData }, Cmd.none )
-                    |> withCommand setPageTitle
-                    |> withCommand (always Ports.scrollToTop)
+                    |> extraCommand setPageTitle
+                    |> extraCommand (always Ports.scrollToTop)
 
         GetNavigationData response ->
             ( { model | navigationData = logUnsuccessfulRequest response }, Cmd.none )
@@ -578,8 +578,8 @@ update msg ({ pageData } as model) =
                 ( { model | pageData = updatedPageData }
                 , Cmd.none
                 )
-                    |> withCommand setPageTitle
-                    |> withCommand (always Ports.scrollToTop)
+                    |> extraCommand setPageTitle
+                    |> extraCommand (always Ports.scrollToTop)
 
         GetLocationsData response ->
             let
@@ -626,8 +626,8 @@ update msg ({ pageData } as model) =
                    )
                 |> Tuple.mapFirst (\cd -> { pageData | categoryDetails = cd })
                 |> Tuple.mapFirst (\pd -> { model | pageData = pd })
-                |> withCommand setPageTitle
-                |> withCommand (always Ports.scrollToTop)
+                |> extraCommand setPageTitle
+                |> extraCommand (always Ports.scrollToTop)
 
         SearchPaginationMsg subMsg ->
             Paginate.update PageData.searchConfig subMsg pageData.searchResults
@@ -637,7 +637,7 @@ update msg ({ pageData } as model) =
                    )
                 |> Tuple.mapFirst (\sr -> { pageData | searchResults = sr })
                 |> Tuple.mapFirst (\pd -> { model | pageData = pd })
-                |> withCommand (always Ports.scrollToTop)
+                |> extraCommand (always Ports.scrollToTop)
 
 
 updatePageFromPagination : Route -> Paginated a b c -> Cmd msg
