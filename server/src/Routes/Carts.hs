@@ -8,13 +8,13 @@ module Routes.Carts
     , cartRoutes
     ) where
 
-import Control.Monad ((>=>), void)
+import Control.Monad ((>=>), void, join)
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Trans (lift)
 import Data.Aeson ((.:), (.:?), (.=), FromJSON(..), ToJSON(..), object, withObject)
 import Data.Int (Int64)
 import Data.List (intersect)
-import Data.Maybe (mapMaybe)
+import Data.Maybe (mapMaybe, fromMaybe, listToMaybe)
 import Data.Time.Clock (getCurrentTime, addUTCTime)
 import Database.Persist ( (+=.), (=.), (==.), Entity(..), SelectOpt(Asc), getBy
                         , insert, insertEntity, update, updateWhere, upsertBy
@@ -45,6 +45,7 @@ type CustomerCartAPI =
          "add" :> CustomerAddRoute
     :<|> "details" :> CustomerDetailsRoute
     :<|> "update" :> CustomerUpdateRoute
+    :<|> "count" :> CustomerCountRoute
 
 type AnonymousCartAPI =
          "add" :> AnonymousAddRoute
@@ -66,12 +67,14 @@ type CustomerCartRoutes =
          (AuthToken -> CustomerAddParameters -> App ())
     :<|> (AuthToken -> App CartDetailsData)
     :<|> (AuthToken -> CustomerUpdateParameters -> App CartDetailsData)
+    :<|> (AuthToken -> App ItemCountData)
 
 customerRoutes :: CustomerCartRoutes
 customerRoutes =
          customerAddRoute
     :<|> customerDetailsRoute
     :<|> customerUpdateRoute
+    :<|> customerCountRoute
 
 
 type AnonymousCartRoutes =
@@ -548,3 +551,33 @@ updateOrDeleteItems cartId =
                     [ CartItemQuantity =. val ]
         )
         (return ())
+
+
+-- COUNT
+
+
+newtype ItemCountData =
+    ItemCountData
+        { icdItemCount :: Int64
+        }
+
+instance ToJSON ItemCountData where
+    toJSON countData =
+        object [ "itemCount" .= icdItemCount countData
+               ]
+
+type CustomerCountRoute =
+       AuthProtect "auth-token"
+    :> Get '[JSON] ItemCountData
+
+customerCountRoute :: AuthToken -> App ItemCountData
+customerCountRoute = validateToken >=> \(Entity customerId _) ->
+    fmap (ItemCountData . round . fromMaybe (0 :: Rational) . join . fmap E.unValue . listToMaybe) . runDB $ do
+        maybeCart <- getBy . UniqueCustomerCart $ Just customerId
+        case maybeCart of
+            Nothing ->
+                return [E.Value Nothing]
+            Just (Entity cartId _) ->
+                E.select $ E.from $ \ci -> do
+                    E.where_ $ ci E.^. CartItemCartId E.==. E.val cartId
+                    return . E.sum_ $ ci E.^. CartItemQuantity
