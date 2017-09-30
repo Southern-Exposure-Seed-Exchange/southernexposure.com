@@ -48,6 +48,7 @@ type Endpoint
     | CartAddCustomer
     | CartDetailsCustomer
     | CartUpdateCustomer
+    | CartCountCustomer
     | CartAddAnonymous
     | CartDetailsAnonymous
     | CartUpdateAnonymous
@@ -113,6 +114,9 @@ toUrl endpoint =
 
                 CartUpdateCustomer ->
                     joinPath [ "carts", "customer", "update" ]
+
+                CartCountCustomer ->
+                    joinPath [ "carts", "customer", "count" ]
 
                 CartAddAnonymous ->
                     joinPath [ "carts", "anonymous", "add" ]

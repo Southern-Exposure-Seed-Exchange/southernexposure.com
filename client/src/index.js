@@ -3,22 +3,13 @@ var Elm = require('./Main.elm');
 const authTokenKey = 'authToken';
 const authUserIdKey = 'authUserId';
 const cartTokenKey = 'cartSessionToken';
+const cartItemCountKey = 'cartItemCount';
 
 
 /** FLAGS **/
 var cartToken = localStorage.getItem(cartTokenKey);
+var cartItemCount = localStorage.getItem(cartItemCountKey);
 var [userId, token] = getAuthData();
-function getAuthData() {
-  var token = localStorage.getItem(authTokenKey);
-  var userId = localStorage.getItem(authUserIdKey);
-  if (userId !== null) {
-    userId = parseInt(userId);
-    if (isNaN(userId)) {
-      userId = null;
-    }
-  }
-  return [userId, token];
-}
 
 
 /** ELM **/
@@ -29,6 +20,7 @@ var app = Elm.Main.embed(
     authToken: token,
     authUserId: userId,
     cartSessionToken: cartToken,
+    cartItemCount: intOrNull(cartItemCount),
   }
 );
 
@@ -57,6 +49,18 @@ window.addEventListener('storage', function(e) {
   if ((e.key === cartTokenKey) && e.oldValue !== e.newValue) {
     if (e.newValue !== null) {
        app.ports.newCartSessionToken.send(e.newValue);
+    }
+  }
+});
+
+/* Changes to Cart Item Count */
+window.addEventListener('storage', function(e) {
+  if ((e.key === cartItemCountKey) && e.oldValue !== e.newValue) {
+    if (e.newValue !== null) {
+      var itemCount = parseInt(e.newValue);
+      if (!isNaN(itemCount)) {
+        app.ports.cartItemCountChanged.send(itemCount);
+      }
     }
   }
 });
@@ -112,3 +116,27 @@ app.ports.storeCartSessionToken.subscribe(function(token) {
 app.ports.removeCartSessionToken.subscribe(function() {
   localStorage.removeItem(cartTokenKey);
 });
+
+/* Store the Number of Items in the Cart */
+app.ports.setCartItemCount.subscribe(function(itemCount) {
+  localStorage.setItem(cartItemCountKey, itemCount);
+});
+
+
+/** UTILITIES **/
+
+/* Parse an Int or return null */
+function intOrNull(intString) {
+  var maybeInt = parseInt(intString);
+  if (isNaN(maybeInt)) {
+    return null;
+  }
+  return maybeInt;
+}
+
+/* Return a list containing the User ID & Auth Token */
+function getAuthData() {
+  var token = localStorage.getItem(authTokenKey);
+  var userId = localStorage.getItem(authUserIdKey);
+  return [intOrNull(userId), token];
+}

@@ -34,6 +34,7 @@ type alias Model =
     , resetPasswordForm : ResetPassword.Form
     , addToCartForms : CartForms
     , editCartForm : Cart.Form
+    , cartItemCount : Int
     , maybeSessionToken : Maybe String
     , currentUser : AuthStatus
     }
@@ -57,6 +58,7 @@ initial route =
     , resetPasswordForm = ResetPassword.initial
     , addToCartForms = Dict.empty
     , editCartForm = Cart.initial
+    , cartItemCount = 0
     , maybeSessionToken = Nothing
     , currentUser = User.unauthorized
     }

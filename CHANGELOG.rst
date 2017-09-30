@@ -5,6 +5,8 @@ CHANGELOG
 v0.5.0
 ======
 
+* Instantly update the Cart counts in every tab & the Cart details in every
+  Shopping Cart tab when adding or removing Products.
 * Display Seasonal Item Surcharges on the Shopping Cart page for all Customers,
   as well as Tax & Shipping charges for registered Customers.
 * Disable the ``Update`` button on the Shopping Cart page if the Customer

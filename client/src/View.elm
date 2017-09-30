@@ -120,7 +120,7 @@ view ({ route, pageData, navigationData } as model) =
                     []
     in
         div []
-            [ SiteHeader.view SearchMsg model.searchData model.currentUser
+            [ SiteHeader.view SearchMsg model.searchData model.currentUser model.cartItemCount
             , SiteNavigation.view navigationData activeCategories model.searchData
             , SiteBreadcrumbs.view route pageData
             , middleContent

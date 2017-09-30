@@ -11,6 +11,8 @@ port module Ports
         , storeCartSessionToken
         , removeCartSessionToken
         , newCartSessionToken
+        , setCartItemCount
+        , cartItemCountChanged
         )
 
 -- Page Change
@@ -62,3 +64,13 @@ port removeCartSessionToken : () -> Cmd msg
 
 
 port newCartSessionToken : (String -> msg) -> Sub msg
+
+
+
+-- Cart Item Counts
+
+
+port setCartItemCount : Int -> Cmd msg
+
+
+port cartItemCountChanged : (Int -> msg) -> Sub msg

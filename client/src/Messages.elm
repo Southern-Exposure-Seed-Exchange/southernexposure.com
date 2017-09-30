@@ -34,10 +34,11 @@ type Msg
     | LogOut
     | OtherTabLoggedIn { userId : Int, token : String }
     | OtherTabNewCartToken String
+    | OtherTabCartItemCountChanged Int
     | ChangeCartFormVariantId ProductId ProductVariantId
     | ChangeCartFormQuantity ProductId Int
     | SubmitAddToCart ProductId ProductVariantId
-    | SubmitAddToCartResponse (WebData String)
+    | SubmitAddToCartResponse Int (WebData String)
     | SearchMsg SiteSearch.Msg
     | AdvancedSearchMsg AdvancedSearch.Msg
     | CreateAccountMsg CreateAccount.Msg
@@ -54,5 +55,6 @@ type Msg
     | GetLocationsData (WebData PageData.LocationData)
     | GetContactDetails (WebData PageData.ContactDetails)
     | GetCartDetails (WebData PageData.CartDetails)
+    | GetCartItemCount (WebData Int)
     | CategoryPaginationMsg (Paginate.Msg ProductData PageData.CategoryDetails)
     | SearchPaginationMsg (Paginate.Msg ProductData String)

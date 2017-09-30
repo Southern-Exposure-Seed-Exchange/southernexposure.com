@@ -11,13 +11,13 @@ import Views.Images as Images
 import Views.Utils exposing (routeLinkAttributes)
 
 
-view : (SiteSearch.Msg -> Msg) -> SiteSearch.Data -> AuthStatus -> Html Msg
-view searchTagger searchData authStatus =
+view : (SiteSearch.Msg -> Msg) -> SiteSearch.Data -> AuthStatus -> Int -> Html Msg
+view searchTagger searchData authStatus cartItemCount =
     div [ class "container" ]
         [ div [ id "site-header", class "row clearfix" ]
             [ div [ class "col-sm-7 col-lg-6" ] [ logoAndName ]
             , div [ class "col-auto ml-auto d-none d-md-block text-right" ] <|
-                linksAndSearch searchTagger searchData authStatus
+                linksAndSearch searchTagger searchData authStatus cartItemCount
             ]
         ]
 
@@ -45,8 +45,8 @@ logoAndName =
             ]
 
 
-linksAndSearch : (SiteSearch.Msg -> Msg) -> SiteSearch.Data -> AuthStatus -> List (Html Msg)
-linksAndSearch searchTagger searchData authStatus =
+linksAndSearch : (SiteSearch.Msg -> Msg) -> SiteSearch.Data -> AuthStatus -> Int -> List (Html Msg)
+linksAndSearch searchTagger searchData authStatus cartItemCount =
     let
         quickLinks =
             routeLink "Quick Order" (PageDetails "home")
@@ -57,14 +57,22 @@ linksAndSearch searchTagger searchData authStatus =
             case authStatus of
                 Anonymous ->
                     [ routeLink "Register" CreateAccount
+                    , cartLink
                     , routeLink "Log In" Login
                     ]
 
                 Authorized _ ->
                     [ routeLink "My Account" MyAccount
+                    , cartLink
                     , linkItem [ href "/account/logout/", onClickPreventDefault LogOut ]
                         "Log Out"
                     ]
+
+        cartLink =
+            if cartItemCount > 0 then
+                routeLink ("Cart (" ++ toString cartItemCount ++ ")") Cart
+            else
+                text ""
 
         routeLink content route =
             linkItem (routeLinkAttributes route) content

@@ -40,6 +40,7 @@ main =
                 [ Ports.loggedOut (always LogOut)
                 , Ports.loggedIn OtherTabLoggedIn
                 , Ports.newCartSessionToken OtherTabNewCartToken
+                , Ports.cartItemCountChanged OtherTabCartItemCountChanged
                 ]
                 |> always
         , view = view
@@ -50,6 +51,7 @@ type alias Flags =
     { authToken : Maybe String
     , authUserId : Maybe Int
     , cartSessionToken : Maybe String
+    , cartItemCount : Maybe Int
     }
 
 
@@ -65,7 +67,12 @@ init flags location =
 
         ( model, cmd ) =
             Model.initial route
-                |> (\m -> { m | maybeSessionToken = flags.cartSessionToken })
+                |> (\m ->
+                        { m
+                            | maybeSessionToken = flags.cartSessionToken
+                            , cartItemCount = Maybe.withDefault 0 flags.cartItemCount
+                        }
+                   )
                 |> fetchDataForRoute
 
         authorizationCmd =
@@ -363,7 +370,7 @@ addToCustomerCart token quantity (ProductVariantId variantId) =
             |> Api.withJsonBody body
             |> Api.withJsonResponse (Decode.succeed "")
             |> Api.withToken token
-            |> Api.sendRequest SubmitAddToCartResponse
+            |> Api.sendRequest (SubmitAddToCartResponse quantity)
 
 
 addToAnonymousCart : Maybe String -> Int -> ProductVariantId -> Cmd Msg
@@ -381,7 +388,15 @@ addToAnonymousCart maybeSessionToken quantity (ProductVariantId variantId) =
     in
         Api.post Api.CartAddAnonymous
             |> Api.withJsonBody body
-            |> Api.sendRequest SubmitAddToCartResponse
+            |> Api.sendRequest (SubmitAddToCartResponse quantity)
+
+
+getCustomerCartItemsCount : String -> Cmd Msg
+getCustomerCartItemsCount token =
+    Api.get Api.CartCountCustomer
+        |> Api.withJsonResponse (Decode.field "itemCount" Decode.int)
+        |> Api.withToken token
+        |> Api.sendRequest GetCartItemCount
 
 
 
@@ -397,16 +412,20 @@ update msg ({ pageData } as model) =
             { model | route = route }
                 |> fetchDataForRoute
                 |> clearSearchForm
-                |> withCommand setPageTitle
-                |> withCommand (always (Ports.collapseMobileMenus ()))
+                |> extraCommand setPageTitle
+                |> extraCommand (always (Ports.collapseMobileMenus ()))
 
         NavigateTo route ->
             ( model, Routing.newUrl route )
 
         -- TODO: Refetch or clear cart details on logout
         LogOut ->
-            ( { model | currentUser = User.unauthorized }
-            , Cmd.batch [ logoutRedirect model.route, Ports.removeAuthDetails () ]
+            ( { model | currentUser = User.unauthorized, cartItemCount = 0 }
+            , Cmd.batch
+                [ logoutRedirect model.route
+                , Ports.removeAuthDetails ()
+                , Ports.setCartItemCount 0
+                ]
             )
 
         OtherTabLoggedIn authData ->
@@ -415,6 +434,19 @@ update msg ({ pageData } as model) =
         OtherTabNewCartToken cartSessionToken ->
             { model | maybeSessionToken = Just cartSessionToken }
                 |> noCommand
+
+        OtherTabCartItemCountChanged quantity ->
+            let
+                fetchCommand m =
+                    case m.route of
+                        Cart ->
+                            fetchDataForRoute m
+
+                        _ ->
+                            ( m, Cmd.none )
+            in
+                { model | cartItemCount = quantity }
+                    |> fetchCommand
 
         ChangeCartFormVariantId productId variantId ->
             model
@@ -444,14 +476,26 @@ update msg ({ pageData } as model) =
                         performRequest (addToAnonymousCart model.maybeSessionToken)
 
         -- TODO: error/success alert
-        SubmitAddToCartResponse response ->
+        SubmitAddToCartResponse quantity response ->
             case response of
                 RemoteData.Success sessionToken ->
                     if String.isEmpty sessionToken then
-                        model |> noCommand
+                        model
+                            |> (\m -> { m | cartItemCount = m.cartItemCount + quantity })
+                            |> withCommand (\m -> Ports.setCartItemCount m.cartItemCount)
+                    else if Just sessionToken /= model.maybeSessionToken then
+                        ( { model
+                            | maybeSessionToken = Just sessionToken
+                            , cartItemCount = quantity
+                          }
+                        , Cmd.batch
+                            [ Ports.storeCartSessionToken sessionToken
+                            , Ports.setCartItemCount quantity
+                            ]
+                        )
                     else
-                        ( { model | maybeSessionToken = Just sessionToken }
-                        , Ports.storeCartSessionToken sessionToken
+                        ( { model | cartItemCount = model.cartItemCount + quantity }
+                        , Ports.setCartItemCount (model.cartItemCount + quantity)
                         )
 
                 _ ->
@@ -485,12 +529,20 @@ update msg ({ pageData } as model) =
             let
                 ( updatedForm, maybeAuthStatus, cmd ) =
                     Login.update subMsg model.loginForm model.maybeSessionToken
+
+                cartItemsCommand =
+                    case maybeAuthStatus of
+                        Just (User.Authorized user) ->
+                            getCustomerCartItemsCount user.authToken
+
+                        _ ->
+                            Cmd.none
             in
                 ( { model
                     | loginForm = updatedForm
                     , currentUser = maybeAuthStatus |> Maybe.withDefault model.currentUser
                   }
-                , Cmd.map LoginMsg cmd
+                , Cmd.batch [ Cmd.map LoginMsg cmd, cartItemsCommand ]
                 )
 
         ResetPasswordMsg subMsg ->
@@ -535,6 +587,7 @@ update msg ({ pageData } as model) =
                               }
                             , cmd
                             )
+                                |> updateAndCommand (updateCartItemCountFromDetails maybeDetails)
                        )
 
         ReAuthorize response ->
@@ -615,7 +668,11 @@ update msg ({ pageData } as model) =
             in
                 { model | pageData = updatedPageData }
                     |> resetEditCartForm response
-                    |> noCommand
+                    |> updateCartItemCountFromDetails (RemoteData.toMaybe response)
+
+        GetCartItemCount response ->
+            { model | cartItemCount = response |> RemoteData.toMaybe |> Maybe.withDefault 0 }
+                |> withCommand (\m -> Ports.setCartItemCount m.cartItemCount)
 
         CategoryPaginationMsg subMsg ->
             pageData.categoryDetails
@@ -727,6 +784,22 @@ resetEditCartForm response model =
 
         _ ->
             model
+
+
+updateCartItemCountFromDetails : Maybe PageData.CartDetails -> Model -> ( Model, Cmd Msg )
+updateCartItemCountFromDetails maybeCartDetails model =
+    case maybeCartDetails of
+        Nothing ->
+            ( model, Cmd.none )
+
+        Just cartDetails ->
+            let
+                itemCount =
+                    List.foldl (.quantity >> (+)) 0 cartDetails.items
+            in
+                ( { model | cartItemCount = itemCount }
+                , Ports.setCartItemCount itemCount
+                )
 
 
 logUnsuccessfulRequest : WebData a -> WebData a
