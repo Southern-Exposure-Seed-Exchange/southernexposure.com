@@ -65,6 +65,9 @@ main = do
     destroyAllResources psqlConn
 
 
+type OldIdMap a = IntMap.IntMap a
+
+
 -- DB Utility Functions
 
 connectToPostgres :: IO ConnectionPool
@@ -91,15 +94,14 @@ dropNewDatabaseRows =
 
 makeCategories :: MySQLConn -> IO [(Int, Int, Category)]
 makeCategories mysql = do
-    (_, categoryStream) <- query_ mysql . Query $
+    categories <- mysqlQuery mysql $
         "SELECT c.categories_id, categories_image, parent_id, sort_order,"
         <> "    categories_name, categories_description "
         <> "FROM categories as c "
         <> "LEFT JOIN categories_description as cd ON c.categories_id=cd.categories_id "
         <> "WHERE categories_status=1 "
         <> "ORDER BY parent_id ASC"
-    cs <- Streams.toList categoryStream
-    mapM toData cs
+    mapM toData categories
     where toData [ MySQLInt32 catId, nullableImageUrl
                  , MySQLInt32 parentId, MySQLInt32 catOrder
                  , MySQLText name, MySQLText description
@@ -122,19 +124,36 @@ makeCategories mysql = do
 
 makeProducts :: MySQLConn -> IO [(Int32, Int, T.Text, Scientific, Float, Float, Product)]
 makeProducts mysql = do
-    (_, productStream) <- query_ mysql
-        "SELECT products_id, master_categories_id, products_price, products_quantity, products_weight, products_model, products_image, products_status FROM products WHERE products_status=1"
-    ps <- Streams.toList productStream
-    forM ps $
-        \[MySQLInt32 prodId, MySQLInt32 catId, MySQLDecimal prodPrice, MySQLFloat prodQty, MySQLFloat prodWeight, MySQLText prodSKU, MySQLText prodImg, _] -> do
-            queryString <- prepareStmt mysql
-                "SELECT products_id, products_name, products_description FROM products_description WHERE products_id=?"
+    products <- mysqlQuery mysql $
+        "SELECT products_id, master_categories_id, products_price,"
+        <> "    products_quantity, products_weight, products_model,"
+        <> "    products_image, products_status "
+        <> "FROM products "
+        <> "WHERE products_status=1"
+    forM products $
+        \[ MySQLInt32 prodId, MySQLInt32 catId, MySQLDecimal prodPrice
+         , MySQLFloat prodQty, MySQLFloat prodWeight, MySQLText prodSKU
+         , MySQLText prodImg, _] -> do
+            queryString <- prepareStmt mysql . Query $
+                "SELECT products_id, products_name, products_description "
+                <> "FROM products_description WHERE products_id=?"
             (_, descriptionStream) <- queryStmt mysql queryString [MySQLInt32 prodId]
             [_, MySQLText name, MySQLText description] <- head <$> Streams.toList descriptionStream
             _ <- return prodId
             _ <- return prodQty
             let (baseSku, skuSuffix) = splitSku prodSKU
-            return (prodId, fromIntegral catId, skuSuffix, prodPrice, prodQty, prodWeight, Product name (slugify name) [] baseSku "" description (T.pack . takeFileName $ T.unpack prodImg))
+            return ( prodId, fromIntegral catId, skuSuffix
+                   , prodPrice, prodQty, prodWeight
+                   , Product
+                        { productName = name
+                        , productSlug = slugify name
+                        , productCategoryIds = []
+                        , productBaseSku = baseSku
+                        , productShortDescription = ""
+                        , productLongDescription = description
+                        , productImageUrl = T.pack . takeFileName $ T.unpack prodImg
+                        }
+                   )
 
 
 makeVariants :: [(Int32, Int, T.Text, Scientific, Float, Float, Product)] -> [(Int, T.Text, ProductVariant)]
@@ -153,18 +172,22 @@ makeVariants =
 
 makeSeedAttributes :: MySQLConn -> IO [(T.Text, SeedAttribute)]
 makeSeedAttributes mysql = do
-    (_, attributeStream) <- query_ mysql
-        "SELECT p.products_id, products_model, is_eco, is_organic, is_heirloom, is_southern FROM sese_products_icons as i RIGHT JOIN products AS p ON p.products_id=i.products_id WHERE p.products_status=1"
-    attrs <- Streams.toList attributeStream
-    return . nubBy (\a1 a2 -> fst a1 == fst a2) . flip map attrs $
-        \[MySQLInt32 _, MySQLText prodSku, MySQLInt8 isEco, MySQLInt8 isOrg, MySQLInt8 isHeir, MySQLInt8 isRegion] ->
-            let
-                (baseSku, _) = splitSku prodSku
-            in
-                (,) baseSku $
-                    SeedAttribute (toSqlKey 0) (toBool isOrg) (toBool isHeir)
-                        (toBool isEco) (toBool isRegion)
-            where toBool = (==) 1
+    attributes <- mysqlQuery mysql $
+        "SELECT p.products_id, products_model, is_eco,"
+        <> "    is_organic, is_heirloom, is_southern "
+        <> "FROM sese_products_icons as i "
+        <> "RIGHT JOIN products AS p "
+        <> "ON p.products_id=i.products_id "
+        <> "WHERE p.products_status=1"
+    nubBy (\a1 a2 -> fst a1 == fst a2) <$> mapM toData attributes
+    where toData [ MySQLInt32 _, MySQLText prodSku, MySQLInt8 isEco
+                 , MySQLInt8 isOrg, MySQLInt8 isHeir, MySQLInt8 isRegion
+                 ] =
+            return . (fst $ splitSku prodSku,) $
+                SeedAttribute (toSqlKey 0) (toBool isOrg) (toBool isHeir)
+                    (toBool isEco) (toBool isRegion)
+          toData r = print r >> error "seed attribute lambda did not match"
+          toBool = (==) 1
 
 
 splitSku :: T.Text -> (T.Text, T.Text)
@@ -297,7 +320,7 @@ makeCustomers mysql = do
     where generateToken = UUID.toText <$> UUID4.nextRandom
 
 
-makeCustomerCarts :: MySQLConn -> IO (IntMap.IntMap [(Int, Int64)])
+makeCustomerCarts :: MySQLConn -> IO (OldIdMap [(Int, Int64)])
 makeCustomerCarts mysql = do
     cartItems <- mysqlQuery mysql $
         "SELECT customers_id, products_id, customers_basket_quantity " <>
@@ -318,7 +341,7 @@ makeCustomerCarts mysql = do
 
 -- Persistent Model Saving Functions
 
-insertCategories :: [(Int, Int, Category)] -> SqlWriteT IO (IntMap.IntMap (Key Category))
+insertCategories :: [(Int, Int, Category)] -> SqlWriteT IO (OldIdMap CategoryId)
 insertCategories =
     foldM insertCategory IntMap.empty
     where insertCategory intMap (mysqlId, mysqlParentId, category) = do
@@ -330,7 +353,7 @@ insertCategories =
             return $ IntMap.insert mysqlId categoryId intMap
 
 
-insertProducts :: [(Int, Product)] -> IntMap.IntMap (Key Category) -> SqlWriteT IO ()
+insertProducts :: [(Int, Product)] -> OldIdMap CategoryId -> SqlWriteT IO ()
 insertProducts products categoryIdMap =
     mapM_ insertProduct products
     where insertProduct (mysqlCategoryId, prod) = do
@@ -340,7 +363,7 @@ insertProducts products categoryIdMap =
             insert product'
 
 
-insertVariants :: [(Int, T.Text, ProductVariant)] -> SqlWriteT IO (IntMap.IntMap ProductVariantId)
+insertVariants :: [(Int, T.Text, ProductVariant)] -> SqlWriteT IO (OldIdMap ProductVariantId)
 insertVariants =
     foldM insertVariant IntMap.empty
     where insertVariant intMap (oldProductId, baseSku, variant) = do
@@ -370,7 +393,7 @@ insertPages :: [Page] -> SqlWriteT IO ()
 insertPages = insertMany_
 
 
-insertCustomers :: [(Int, Customer)] -> SqlWriteT IO (IntMap.IntMap CustomerId)
+insertCustomers :: [(Int, Customer)] -> SqlWriteT IO (OldIdMap CustomerId)
 insertCustomers =
     foldM insertCustomer IntMap.empty
     where insertCustomer intMap (oldCustomerId, customer) =
@@ -429,9 +452,9 @@ insertCharges = do
             )
 
 
-insertCustomerCarts :: IntMap.IntMap ProductVariantId
-                    -> IntMap.IntMap CustomerId
-                    -> IntMap.IntMap [(Int, Int64)]
+insertCustomerCarts :: OldIdMap ProductVariantId
+                    -> OldIdMap CustomerId
+                    -> OldIdMap [(Int, Int64)]
                     -> SqlWriteT IO ()
 insertCustomerCarts variantMap customerMap =
     IntMap.foldlWithKey (\acc k c -> acc >> newCart k c) (return ())
@@ -474,6 +497,6 @@ mysqlQuery :: MySQLConn -> ByteString -> IO [[MySQLValue]]
 mysqlQuery conn queryString =
     query_ conn (Query queryString) >>= Streams.toList . snd
 
-insertIntoIdMap :: IntMap.IntMap a -> IntMap.Key -> a -> IntMap.IntMap a
+insertIntoIdMap :: OldIdMap a -> IntMap.Key -> a -> OldIdMap a
 insertIntoIdMap intMap key value =
     IntMap.insert key value intMap
