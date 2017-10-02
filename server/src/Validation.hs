@@ -1,7 +1,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE GADTs #-}
 module Validation
-    ( Validation(..)
+    ( Validators
+    , Validation(..)
     , singleError
     , validateMap
     , required
@@ -30,6 +31,7 @@ import qualified Data.Map.Strict as M
 
 type FieldName = T.Text
 type ErrorMessage = T.Text
+type Validators = [(FieldName, [(ErrorMessage, Bool)])]
 
 class Validation a where
     -- | Validate an item, returning a 500 error with a body containing the
@@ -54,7 +56,7 @@ class Validation a where
     -- | Return a list of validators by field name. Each field contains
     -- a list of messages and whether they are invalid. An empty field name
     -- corresponds to a general error.
-    validators :: a -> App [(FieldName, [(ErrorMessage, Bool)])]
+    validators :: a -> App Validators
     validators _ = return []
 
 -- | Return a single general error in the same format as the Validation
