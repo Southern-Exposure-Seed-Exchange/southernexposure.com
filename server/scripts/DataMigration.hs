@@ -1,12 +1,15 @@
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE Rank2Types #-}
+{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeFamilies #-}
+
 import Control.Monad (forM, foldM, void)
 import Control.Monad.Trans.Class (lift)
 import Control.Monad.Logger (runNoLoggingT)
+import Data.ByteString.Lazy (ByteString)
 import Data.Char (isAlpha)
-import Data.Int (Int32)
+import Data.Int (Int32, Int64)
 import Data.List (nubBy)
 import Data.Maybe (maybeToList)
 import Data.Monoid ((<>))
@@ -15,7 +18,7 @@ import Data.Scientific (Scientific)
 import Database.MySQL.Base
     ( MySQLConn, Query(..), query_, close, MySQLValue(..), prepareStmt, queryStmt )
 import Database.Persist
-    ((<-.), Entity(..), Filter, getBy, insert, insertMany_, deleteWhere, selectKeysList)
+    ((<-.), (+=.), Entity(..), Filter, getBy, insert, insertMany_, upsert, deleteWhere, selectKeysList)
 import Database.Persist.Postgresql
     (ConnectionPool, SqlWriteT, createPostgresqlPool, toSqlKey, runSqlPool)
 import System.FilePath (takeFileName)
@@ -47,15 +50,17 @@ main = do
     attributes <- makeSeedAttributes mysqlConn
     pages <- makePages mysqlConn
     customers <- makeCustomers mysqlConn
-    flip runSqlPool psqlConn
-        $ dropNewDatabaseRows
-        >> insertCategories categories
-        >>= insertProducts products
-        >> insertVariants variants
-        >> insertAttributes attributes
-        >> insertPages pages
-        >> insertCustomers customers
-        >> insertCharges
+    carts <- makeCustomerCarts mysqlConn
+    flip runSqlPool psqlConn $
+        dropNewDatabaseRows >>
+        insertCategories categories >>=
+        insertProducts products >>
+        insertVariants variants >>= \variantMap ->
+        insertAttributes attributes >>
+        insertPages pages >>
+        insertCustomers customers >>= \customerMap ->
+        insertCharges >>
+        insertCustomerCarts variantMap customerMap carts
     close mysqlConn
     destroyAllResources psqlConn
 
@@ -132,18 +137,18 @@ makeProducts mysql = do
             return (prodId, fromIntegral catId, skuSuffix, prodPrice, prodQty, prodWeight, Product name (slugify name) [] baseSku "" description (T.pack . takeFileName $ T.unpack prodImg))
 
 
-makeVariants :: [(Int32, Int, T.Text, Scientific, Float, Float, Product)] -> [(T.Text, ProductVariant)]
+makeVariants :: [(Int32, Int, T.Text, Scientific, Float, Float, Product)] -> [(Int, T.Text, ProductVariant)]
 makeVariants =
     map makeVariant
-    where makeVariant (_, _, suffix, price, qty, weight, prod) =
-            (,) (productBaseSku prod) $
-            ProductVariant
-                (toSqlKey 0)
-                suffix
-                (Cents . round $ 100 * price)
-                (floor qty)
-                (Milligrams . round $ 1000 * weight)
-                True
+    where makeVariant (productId, _, suffix, price, qty, weight, prod) =
+            (fromIntegral productId, productBaseSku prod,) $
+                ProductVariant
+                    (toSqlKey 0)
+                    suffix
+                    (Cents . round $ 100 * price)
+                    (floor qty)
+                    (Milligrams . round $ 1000 * weight)
+                    True
 
 
 makeSeedAttributes :: MySQLConn -> IO [(T.Text, SeedAttribute)]
@@ -160,7 +165,6 @@ makeSeedAttributes mysql = do
                     SeedAttribute (toSqlKey 0) (toBool isOrg) (toBool isHeir)
                         (toBool isEco) (toBool isRegion)
             where toBool = (==) 1
-
 
 
 splitSku :: T.Text -> (T.Text, T.Text)
@@ -185,14 +189,16 @@ makePages mysql = do
     return $ flip map pages $ \[MySQLText name, MySQLText content] ->
         Page name (slugify name) content
 
-makeCustomers :: MySQLConn -> IO [Customer]
+
+makeCustomers :: MySQLConn -> IO [(Int, Customer)]
 makeCustomers mysql = do
     customers <- Streams.toList . snd
         =<< (query_ mysql . Query
                 $ "SELECT c.customers_firstname, c.customers_lastname, c.customers_email_address,"
                 <> "      c.customers_telephone, c.customers_password, a.entry_street_address,"
                 <> "      a.entry_suburb, a.entry_postcode, a.entry_city,"
-                <> "      a.entry_state, z.zone_name, co.countries_iso_code_2 "
+                <> "      a.entry_state, z.zone_name, co.countries_iso_code_2,"
+                <> "      c.customers_id "
                 <> "FROM customers AS c "
                 <> "RIGHT JOIN address_book AS a "
                 <> "    ON c.customers_default_address_id=a.address_book_id "
@@ -207,6 +213,7 @@ makeCustomers mysql = do
          , MySQLText telephone, MySQLText _, MySQLText address
          , MySQLText addressTwo , MySQLText zipCode, MySQLText city
          , MySQLText state , nullableZoneName, MySQLText rawCountryCode
+         , MySQLInt32 customerId
          ] ->
         let
             zone =
@@ -272,7 +279,7 @@ makeCustomers mysql = do
 
         in do
             token <- generateToken
-            return Customer
+            return . (fromIntegral customerId,) $ Customer
                 { customerFirstName = firstName
                 , customerLastName = lastName
                 , customerAddressOne = address
@@ -290,7 +297,27 @@ makeCustomers mysql = do
     where generateToken = UUID.toText <$> UUID4.nextRandom
 
 
+makeCustomerCarts :: MySQLConn -> IO (IntMap.IntMap [(Int, Int64)])
+makeCustomerCarts mysql = do
+    cartItems <- mysqlQuery mysql $
+        "SELECT customers_id, products_id, customers_basket_quantity " <>
+        "FROM customers_basket ORDER BY customers_id"
+    return $ foldl
+        (\acc [MySQLInt32 customerId, MySQLText productsId, MySQLFloat quantity] ->
+            IntMap.insertWith (++) (fromIntegral customerId)
+                [(parseProductId productsId, round quantity)] acc
+        )
+        IntMap.empty cartItems
+    where parseProductId productId =
+            case T.split (== ':') productId of
+                [] ->
+                    error "makeCustomerCarts: T.split returned an empty list!"
+                integerPart : _ ->
+                    read $ T.unpack integerPart
+
+
 -- Persistent Model Saving Functions
+
 insertCategories :: [(Int, Int, Category)] -> SqlWriteT IO (IntMap.IntMap (Key Category))
 insertCategories =
     foldM insertCategory IntMap.empty
@@ -312,16 +339,20 @@ insertProducts products categoryIdMap =
                 product' = prod { productCategoryIds = categoryIds }
             insert product'
 
-insertVariants :: [(T.Text, ProductVariant)] -> SqlWriteT IO ()
+
+insertVariants :: [(Int, T.Text, ProductVariant)] -> SqlWriteT IO (IntMap.IntMap ProductVariantId)
 insertVariants =
-    mapM_ insertVariant
-    where insertVariant (baseSku, variant) = do
+    foldM insertVariant IntMap.empty
+    where insertVariant intMap (oldProductId, baseSku, variant) = do
             maybeProduct <- getBy $ UniqueBaseSku baseSku
             case maybeProduct of
                 Nothing ->
-                    lift . putStrLn $ "No product for: " ++ show variant
+                    lift (putStrLn $ "No product for: " ++ show variant)
+                        >> return intMap
                 Just (Entity prodId _) ->
-                    void . insert $ variant { productVariantProductId = prodId }
+                    insertIntoIdMap intMap oldProductId
+                        <$> insert variant { productVariantProductId = prodId }
+
 
 insertAttributes :: [(T.Text, SeedAttribute)] -> SqlWriteT IO ()
 insertAttributes =
@@ -334,11 +365,17 @@ insertAttributes =
                 Just (Entity prodId _) ->
                     void . insert $ attribute { seedAttributeProductId = prodId }
 
+
 insertPages :: [Page] -> SqlWriteT IO ()
 insertPages = insertMany_
 
-insertCustomers :: [Customer] -> SqlWriteT IO ()
-insertCustomers = insertMany_
+
+insertCustomers :: [(Int, Customer)] -> SqlWriteT IO (IntMap.IntMap CustomerId)
+insertCustomers =
+    foldM insertCustomer IntMap.empty
+    where insertCustomer intMap (oldCustomerId, customer) =
+            insertIntoIdMap intMap oldCustomerId <$> insert customer
+
 
 insertCharges :: SqlWriteT IO ()
 insertCharges = do
@@ -390,3 +427,53 @@ insertCharges = do
                 True
                 1
             )
+
+
+insertCustomerCarts :: IntMap.IntMap ProductVariantId
+                    -> IntMap.IntMap CustomerId
+                    -> IntMap.IntMap [(Int, Int64)]
+                    -> SqlWriteT IO ()
+insertCustomerCarts variantMap customerMap =
+    IntMap.foldlWithKey (\acc k c -> acc >> newCart k c) (return ())
+    where newCart oldCustomerId variantsAndQuantities =
+            let
+                maybeCustomerId = IntMap.lookup oldCustomerId customerMap
+            in
+                case maybeCustomerId of
+                    Nothing ->
+                        return ()
+                    Just customerId -> do
+                        cartId <- insertCart customerId
+                        mapM_ (insertCartItem cartId) variantsAndQuantities
+          insertCart customerId =
+            insert Cart
+                { cartCustomerId = Just customerId
+                , cartSessionToken = Nothing
+                , cartExpirationTime = Nothing
+                }
+          insertCartItem cartId (oldVariantId, quantity) =
+            let
+                maybeVariantId = IntMap.lookup oldVariantId variantMap
+            in
+                case maybeVariantId of
+                    Nothing ->
+                        return ()
+                    Just variantId ->
+                        void $ upsert
+                            CartItem
+                                { cartItemCartId = cartId
+                                , cartItemProductVariantId = variantId
+                                , cartItemQuantity = quantity
+                                }
+                            [ CartItemQuantity +=. quantity ]
+
+
+-- Utils
+
+mysqlQuery :: MySQLConn -> ByteString -> IO [[MySQLValue]]
+mysqlQuery conn queryString =
+    query_ conn (Query queryString) >>= Streams.toList . snd
+
+insertIntoIdMap :: IntMap.IntMap a -> IntMap.Key -> a -> IntMap.IntMap a
+insertIntoIdMap intMap key value =
+    IntMap.insert key value intMap
