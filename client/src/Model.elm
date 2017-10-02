@@ -15,6 +15,7 @@ import Auth.ResetPassword as ResetPassword
 import Cart
 import PageData exposing (PageData)
 import Product exposing (ProductVariantId)
+import QuickOrder
 import Routing exposing (Route)
 import Search
 import SiteUI exposing (NavigationData)
@@ -34,6 +35,7 @@ type alias Model =
     , resetPasswordForm : ResetPassword.Form
     , addToCartForms : CartForms
     , editCartForm : Cart.Form
+    , quickOrderForms : QuickOrder.Forms
     , cartItemCount : Int
     , maybeSessionToken : Maybe String
     , currentUser : AuthStatus
@@ -58,6 +60,7 @@ initial route =
     , resetPasswordForm = ResetPassword.initial
     , addToCartForms = Dict.empty
     , editCartForm = Cart.initial
+    , quickOrderForms = QuickOrder.initial
     , cartItemCount = 0
     , maybeSessionToken = Nothing
     , currentUser = User.unauthorized

@@ -49,9 +49,11 @@ type Endpoint
     | CartDetailsCustomer
     | CartUpdateCustomer
     | CartCountCustomer
+    | CartQuickOrderCustomer
     | CartAddAnonymous
     | CartDetailsAnonymous
     | CartUpdateAnonymous
+    | CartQuickOrderAnonymous
 
 
 toUrl : Endpoint -> String
@@ -118,6 +120,9 @@ toUrl endpoint =
                 CartCountCustomer ->
                     joinPath [ "carts", "customer", "count" ]
 
+                CartQuickOrderCustomer ->
+                    joinPath [ "carts", "customer", "quick-order" ]
+
                 CartAddAnonymous ->
                     joinPath [ "carts", "anonymous", "add" ]
 
@@ -126,6 +131,9 @@ toUrl endpoint =
 
                 CartUpdateAnonymous ->
                     joinPath [ "carts", "anonymous", "update" ]
+
+                CartQuickOrderAnonymous ->
+                    joinPath [ "carts", "anonymous", "quick-order" ]
     in
         "/api" ++ endpointUrl
 

@@ -5,6 +5,8 @@ CHANGELOG
 v0.5.0
 ======
 
+* Add a button to the Quick Order page for adding additional form rows to the
+  table.
 * Instantly update the Cart counts in every tab & the Cart details in every
   Shopping Cart tab when adding or removing Products.
 * Display Seasonal Item Surcharges on the Shopping Cart page for all Customers,

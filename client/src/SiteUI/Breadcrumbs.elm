@@ -90,6 +90,9 @@ view route pageData =
                 Cart ->
                     singleItem "Shopping Cart"
 
+                QuickOrder ->
+                    singleItem "Quick Order"
+
                 NotFound ->
                     singleItem "Page Not Found"
 

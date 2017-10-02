@@ -15,6 +15,7 @@ import Auth.ResetPassword as ResetPassword
 import StaticPage exposing (StaticPage)
 import PageData exposing (ProductData)
 import Product exposing (ProductId, ProductVariantId)
+import QuickOrder
 import Routing exposing (Route)
 import SiteUI exposing (NavigationData)
 import SiteUI.Search as SiteSearch
@@ -47,6 +48,7 @@ type Msg
     | EditLoginMsg EditLogin.Msg
     | EditContactMsg EditContact.Msg
     | EditCartMsg EditCartMessage
+    | QuickOrderMsg QuickOrder.Msg
     | ReAuthorize (WebData User.AuthStatus)
     | GetProductDetailsData (WebData PageData.ProductDetails)
     | GetNavigationData (WebData NavigationData)

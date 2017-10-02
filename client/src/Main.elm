@@ -19,6 +19,7 @@ import Model exposing (Model)
 import PageData exposing (PageData, ProductData, CartItemId(..))
 import Product exposing (ProductId(..), ProductVariantId(..))
 import Ports
+import QuickOrder
 import Routing exposing (Route(..), reverse, parseRoute)
 import Search exposing (UniqueSearch(..))
 import SeedAttribute exposing (SeedAttribute)
@@ -169,6 +170,9 @@ setPageTitle { route, pageData } =
             Cart ->
                 Ports.setPageTitle "Shopping Cart"
 
+            QuickOrder ->
+                Ports.setPageTitle "Quick Order"
+
             NotFound ->
                 Ports.setPageTitle "Page Not Found"
 
@@ -263,6 +267,9 @@ fetchDataForRoute ({ route, pageData } as model) =
                             ( { pageData | cartDetails = RemoteData.Loading }
                             , getCartDetails user.authToken
                             )
+
+                QuickOrder ->
+                    doNothing
 
                 NotFound ->
                     doNothing
@@ -479,24 +486,7 @@ update msg ({ pageData } as model) =
         SubmitAddToCartResponse quantity response ->
             case response of
                 RemoteData.Success sessionToken ->
-                    if String.isEmpty sessionToken then
-                        model
-                            |> (\m -> { m | cartItemCount = m.cartItemCount + quantity })
-                            |> withCommand (\m -> Ports.setCartItemCount m.cartItemCount)
-                    else if Just sessionToken /= model.maybeSessionToken then
-                        ( { model
-                            | maybeSessionToken = Just sessionToken
-                            , cartItemCount = quantity
-                          }
-                        , Cmd.batch
-                            [ Ports.storeCartSessionToken sessionToken
-                            , Ports.setCartItemCount quantity
-                            ]
-                        )
-                    else
-                        ( { model | cartItemCount = model.cartItemCount + quantity }
-                        , Ports.setCartItemCount (model.cartItemCount + quantity)
-                        )
+                    updateSessionTokenAndCartItemCount model quantity sessionToken
 
                 _ ->
                     model |> noCommand
@@ -589,6 +579,25 @@ update msg ({ pageData } as model) =
                             )
                                 |> updateAndCommand (updateCartItemCountFromDetails maybeDetails)
                        )
+
+        QuickOrderMsg subMsg ->
+            QuickOrder.update subMsg model.quickOrderForms model.currentUser model.maybeSessionToken
+                |> (\( forms, maybeQuantityAndToken, cmd ) ->
+                        let
+                            newQuantityAndToken m =
+                                maybeQuantityAndToken
+                                    |> Maybe.map (uncurry <| updateSessionTokenAndCartItemCount m)
+                                    |> Maybe.withDefault ( m, Cmd.none )
+                        in
+                            ( { model | quickOrderForms = forms }
+                            , Cmd.batch
+                                [ Cmd.map QuickOrderMsg cmd
+                                , Maybe.map (always <| Routing.newUrl Cart) maybeQuantityAndToken
+                                    |> Maybe.withDefault Cmd.none
+                                ]
+                            )
+                                |> updateAndCommand newQuantityAndToken
+                   )
 
         ReAuthorize response ->
             case response of
@@ -800,6 +809,27 @@ updateCartItemCountFromDetails maybeCartDetails model =
                 ( { model | cartItemCount = itemCount }
                 , Ports.setCartItemCount itemCount
                 )
+
+
+updateSessionTokenAndCartItemCount : Model -> Int -> String -> ( Model, Cmd msg )
+updateSessionTokenAndCartItemCount model quantity sessionToken =
+    if String.isEmpty sessionToken then
+        { model | cartItemCount = model.cartItemCount + quantity }
+            |> withCommand (\m -> Ports.setCartItemCount m.cartItemCount)
+    else if Just sessionToken /= model.maybeSessionToken then
+        ( { model
+            | maybeSessionToken = Just sessionToken
+            , cartItemCount = quantity
+          }
+        , Cmd.batch
+            [ Ports.storeCartSessionToken sessionToken
+            , Ports.setCartItemCount quantity
+            ]
+        )
+    else
+        ( { model | cartItemCount = model.cartItemCount + quantity }
+        , Ports.setCartItemCount (model.cartItemCount + quantity)
+        )
 
 
 logUnsuccessfulRequest : WebData a -> WebData a

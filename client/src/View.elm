@@ -20,6 +20,7 @@ import Model exposing (Model, CartForms)
 import PageData
 import Products.Pagination as Pagination
 import Products.Views as ProductViews
+import QuickOrder
 import Routing exposing (Route(..))
 import Search exposing (UniqueSearch(..))
 import SeedAttribute
@@ -100,6 +101,10 @@ view ({ route, pageData, navigationData } as model) =
 
                 Cart ->
                     withIntermediateText (Cart.view model.editCartForm) pageData.cartDetails
+
+                QuickOrder ->
+                    QuickOrder.view model.quickOrderForms
+                        |> List.map (Html.map QuickOrderMsg)
 
                 NotFound ->
                     notFoundView

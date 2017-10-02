@@ -29,6 +29,7 @@ type Route
     | EditLogin
     | EditContact
     | Cart
+    | QuickOrder
     | NotFound
 
 
@@ -79,6 +80,7 @@ parseRoute =
                     |> Pagination.fromQueryString
                 , Url.s "account" </> accountParser
                 , Url.map Cart (Url.s "cart")
+                , Url.map QuickOrder (Url.s "quick-order")
                 , Url.map PageDetails (Url.string)
                 ]
     in
@@ -162,6 +164,9 @@ reverse route =
         Cart ->
             joinPath [ "cart" ]
 
+        QuickOrder ->
+            joinPath [ "quick-order" ]
+
         NotFound ->
             joinPath [ "page-not-found" ]
 
@@ -206,6 +211,9 @@ authRequired route =
             True
 
         Cart ->
+            False
+
+        QuickOrder ->
             False
 
         NotFound ->

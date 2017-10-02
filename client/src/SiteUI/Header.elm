@@ -49,7 +49,7 @@ linksAndSearch : (SiteSearch.Msg -> Msg) -> SiteSearch.Data -> AuthStatus -> Int
 linksAndSearch searchTagger searchData authStatus cartItemCount =
     let
         quickLinks =
-            routeLink "Quick Order" (PageDetails "home")
+            routeLink "Quick Order" QuickOrder
                 :: authLinks
                 |> ul [ id "quick-links", class "list-unstyled" ]
 
