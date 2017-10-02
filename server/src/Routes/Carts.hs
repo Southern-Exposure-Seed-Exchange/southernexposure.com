@@ -46,11 +46,13 @@ type CustomerCartAPI =
     :<|> "details" :> CustomerDetailsRoute
     :<|> "update" :> CustomerUpdateRoute
     :<|> "count" :> CustomerCountRoute
+    :<|> "quick-order" :> CustomerQuickOrderRoute
 
 type AnonymousCartAPI =
          "add" :> AnonymousAddRoute
     :<|> "details" :> AnonymousDetailsRoute
     :<|> "update" :> AnonymousUpdateRoute
+    :<|> "quick-order" :> AnonymousQuickOrderRoute
 
 
 type CartRoutes =
@@ -68,6 +70,7 @@ type CustomerCartRoutes =
     :<|> (AuthToken -> App CartDetailsData)
     :<|> (AuthToken -> CustomerUpdateParameters -> App CartDetailsData)
     :<|> (AuthToken -> App ItemCountData)
+    :<|> (AuthToken -> CustomerQuickOrderParameters -> App ())
 
 customerRoutes :: CustomerCartRoutes
 customerRoutes =
@@ -75,18 +78,21 @@ customerRoutes =
     :<|> customerDetailsRoute
     :<|> customerUpdateRoute
     :<|> customerCountRoute
+    :<|> customerQuickOrderRoute
 
 
 type AnonymousCartRoutes =
          (AnonymousAddParameters -> App T.Text)
     :<|> (AnonymousDetailsParameters -> App CartDetailsData)
     :<|> (AnonymousUpdateParameters -> App CartDetailsData)
+    :<|> (AnonymousQuickOrderParameters -> App T.Text)
 
 anonymousRoutes :: AnonymousCartRoutes
 anonymousRoutes =
          anonymousAddRoute
     :<|> anonymousDetailsRoute
     :<|> anonymousUpdateRoute
+    :<|> anonymousQuickOrderRoute
 
 
 -- COMMON DATA
@@ -329,21 +335,9 @@ customerAddRoute token = validate >=> \parameters ->
                 }
     in do
         (Entity customerId _) <- validateToken token
-        maybeCart <- runDB . getBy . UniqueCustomerCart $ Just customerId
-        case maybeCart of
-            Just (Entity cartId _) ->
-                void . runDB $ upsertBy (UniqueCartItem cartId productVariant)
-                    (item cartId) [CartItemQuantity +=. quantity]
-            Nothing ->
-                let
-                    cart =
-                        Cart
-                            { cartCustomerId = Just customerId
-                            , cartSessionToken = Nothing
-                            , cartExpirationTime = Nothing
-                            }
-                in
-                    void . runDB $ insert cart >>= insert . item
+        (Entity cartId _) <- getOrCreateCustomerCart customerId
+        void . runDB $ upsertBy (UniqueCartItem cartId productVariant)
+            (item cartId) [CartItemQuantity +=. quantity]
 
 
 data AnonymousAddParameters =
@@ -393,44 +387,10 @@ anonymousAddRoute = validate >=> \parameters ->
                 , cartItemQuantity = quantity
                 }
     in do
-        (token, Entity cartId _) <- getOrCreateCart maybeSessionToken
+        (token, Entity cartId _) <- getOrCreateAnonymousCart maybeSessionToken
         void . runDB $ upsertBy (UniqueCartItem cartId productVariant)
             (item cartId) [CartItemQuantity +=. quantity]
         return token
-    where getOrCreateCart maybeToken =
-            case maybeToken of
-                Nothing ->
-                    createAnonymousCart
-                Just token -> do
-                    maybeCart <- runDB . getBy $ UniqueAnonymousCart maybeToken
-                    case maybeCart of
-                        Nothing ->
-                            createAnonymousCart
-                        Just cart@(Entity cartId _) -> do
-                            expirationTime <- getExpirationTime
-                            runDB $ update cartId [CartExpirationTime =. Just expirationTime]
-                            return (token, cart)
-          createAnonymousCart = do
-            token <- generateToken
-            expiration <- getExpirationTime
-            (,) token <$> runDB (insertEntity Cart
-                { cartCustomerId = Nothing
-                , cartSessionToken = Just token
-                , cartExpirationTime = Just expiration
-                })
-          getExpirationTime =
-            let
-                sixteenWeeksInSeconds = 16 * 7 * 24 * 60 * 60
-            in
-                addUTCTime sixteenWeeksInSeconds <$> liftIO getCurrentTime
-          generateToken = do
-            token <- UUID.toText <$> liftIO UUID4.nextRandom
-            maybeCart <- runDB . getBy . UniqueAnonymousCart $ Just token
-            case maybeCart of
-                Just _ ->
-                    generateToken
-                Nothing ->
-                    return token
 
 
 -- DETAILS
@@ -581,3 +541,171 @@ customerCountRoute = validateToken >=> \(Entity customerId _) ->
                 E.select $ E.from $ \ci -> do
                     E.where_ $ ci E.^. CartItemCartId E.==. E.val cartId
                     return . E.sum_ $ ci E.^. CartItemQuantity
+
+
+-- QUICK ORDER
+
+
+newtype CustomerQuickOrderParameters =
+    CustomerQuickOrderParameters
+        { cqopItems :: [QuickOrderItem]
+        }
+
+instance FromJSON CustomerQuickOrderParameters where
+    parseJSON = withObject "CustomerQuickOrderParameters" $ \v ->
+        CustomerQuickOrderParameters <$> v .: "items"
+
+instance Validation CustomerQuickOrderParameters where
+    validators parameters =
+        validateItems $ cqopItems parameters
+
+
+data QuickOrderItem =
+    QuickOrderItem
+        { qoiSku :: T.Text
+        , qoiQuantity :: Int64
+        , qoiIndex :: Int64
+        }
+
+instance FromJSON QuickOrderItem where
+    parseJSON = withObject "QuickOrderItem" $ \v ->
+        QuickOrderItem
+            <$> v .: "sku"
+            <*> v .: "quantity"
+            <*> v .: "index"
+
+type CustomerQuickOrderRoute =
+       AuthProtect "auth-token"
+    :> ReqBody '[JSON] CustomerQuickOrderParameters
+    :> Post '[JSON] ()
+
+customerQuickOrderRoute :: AuthToken -> CustomerQuickOrderParameters -> App ()
+customerQuickOrderRoute token parameters = do
+    (Entity customerId _) <- validateToken token
+    _ <- validate parameters
+    (Entity cartId _) <- getOrCreateCustomerCart customerId
+    mapM_ (upsertQuickOrderItem cartId) $ cqopItems parameters
+
+
+data AnonymousQuickOrderParameters =
+    AnonymousQuickOrderParameters
+        { aqopItems :: [QuickOrderItem]
+        , aqopSessionToken :: Maybe T.Text
+        }
+
+instance FromJSON AnonymousQuickOrderParameters where
+    parseJSON = withObject "AnonymousQuickOrderParameters" $ \v ->
+        AnonymousQuickOrderParameters
+            <$> v .: "items"
+            <*> v .:? "sessionToken"
+
+instance Validation AnonymousQuickOrderParameters where
+    validators parameters =
+        validateItems $ aqopItems parameters
+
+type AnonymousQuickOrderRoute =
+       ReqBody '[JSON] AnonymousQuickOrderParameters
+    :> Post '[PlainText] T.Text
+
+anonymousQuickOrderRoute :: AnonymousQuickOrderParameters -> App T.Text
+anonymousQuickOrderRoute = validate >=> \parameters -> do
+    (token, Entity cartId _) <- getOrCreateAnonymousCart $ aqopSessionToken parameters
+    mapM_ (upsertQuickOrderItem cartId) $ aqopItems parameters
+    return token
+
+
+validateItems :: [QuickOrderItem] -> App V.Validators
+validateItems =
+    mapM validateItem
+    where validateItem item = do
+            variants <- getVariantsByItem item
+            return
+                ( T.pack . show $ qoiIndex item
+                , [ ("Not a Valid Item Number", null variants) ]
+                )
+
+upsertQuickOrderItem :: CartId -> QuickOrderItem -> App ()
+upsertQuickOrderItem cartId item = do
+    variants <- getVariantsByItem item
+    case variants of
+        [] ->
+            return ()
+        Entity variantId _ : _ ->
+            let
+                quantity =
+                    qoiQuantity item
+                cartItem =
+                    CartItem
+                        { cartItemCartId = cartId
+                        , cartItemProductVariantId = variantId
+                        , cartItemQuantity = quantity
+                        }
+            in
+                void . runDB $ upsertBy (UniqueCartItem cartId variantId)
+                    cartItem [CartItemQuantity +=. quantity]
+
+getVariantsByItem :: QuickOrderItem -> App [Entity ProductVariant]
+getVariantsByItem item =
+    runDB $ E.select $ E.from $ \(v `E.InnerJoin` p) -> do
+        E.on $ v E.^. ProductVariantProductId E.==. p E.^. ProductId
+        let fullSku = E.lower_ $ p E.^. ProductBaseSku E.++. v E.^. ProductVariantSkuSuffix
+        E.where_ $ fullSku E.==. E.val (T.toLower $ qoiSku item)
+        return v
+
+
+-- UTILS
+
+
+getOrCreateCustomerCart :: CustomerId -> App (Entity Cart)
+getOrCreateCustomerCart customerId = runDB $ do
+    maybeCart <- getBy . UniqueCustomerCart $ Just customerId
+    case maybeCart of
+        Just cart ->
+            return cart
+        Nothing ->
+            let
+                cart =
+                    Cart
+                        { cartCustomerId = Just customerId
+                        , cartSessionToken = Nothing
+                        , cartExpirationTime = Nothing
+                        }
+            in
+            insert cart >>= \cartId -> return (Entity cartId cart)
+
+
+getOrCreateAnonymousCart :: Maybe T.Text -> App (T.Text, Entity Cart)
+getOrCreateAnonymousCart maybeToken =
+    case maybeToken of
+        Nothing ->
+            createAnonymousCart
+        Just token -> do
+            maybeCart <- runDB . getBy $ UniqueAnonymousCart maybeToken
+            case maybeCart of
+                Nothing ->
+                    createAnonymousCart
+                Just cart@(Entity cartId _) -> do
+                    expirationTime <- getExpirationTime
+                    runDB $ update cartId [CartExpirationTime =. Just expirationTime]
+                    return (token, cart)
+    where createAnonymousCart = do
+            token <- generateToken
+            expiration <- getExpirationTime
+            (,) token <$> runDB (insertEntity Cart
+                { cartCustomerId = Nothing
+                , cartSessionToken = Just token
+                , cartExpirationTime = Just expiration
+                })
+          getExpirationTime =
+            let
+                sixteenWeeksInSeconds = 16 * 7 * 24 * 60 * 60
+            in
+                addUTCTime sixteenWeeksInSeconds <$> liftIO getCurrentTime
+          generateToken = do
+            token <- UUID.toText <$> liftIO UUID4.nextRandom
+            maybeCart <- runDB . getBy . UniqueAnonymousCart $ Just token
+            case maybeCart of
+                Just _ ->
+                    generateToken
+                Nothing ->
+                    return token
