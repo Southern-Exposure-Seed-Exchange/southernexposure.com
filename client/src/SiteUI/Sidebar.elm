@@ -4,7 +4,7 @@ import Html exposing (..)
 import Html.Attributes exposing (id, class, href, target, src)
 import Messages exposing (Msg)
 import Products.Pagination as Pagination
-import Routing exposing (Route(PageDetails, SearchResults))
+import Routing exposing (Route(PageDetails, SearchResults, QuickOrder))
 import Search
 import SeedAttribute
 import Views.Images as Images
@@ -39,7 +39,8 @@ view route =
 
         pageLinks =
             ul [ class "nav nav-pills nav-fill flex-column text-center mb-2" ]
-                [ staticPageLink "about-us" "About Us"
+                [ pageLink QuickOrder "Quick Order"
+                , staticPageLink "about-us" "About Us"
                 , staticPageLink "growing-guides" "Growing Guides"
                 , staticPageLink "retail-stores" "Retail Stores"
                 , staticPageLink "events" "Events"
