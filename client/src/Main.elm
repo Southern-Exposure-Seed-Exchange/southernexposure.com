@@ -536,15 +536,27 @@ update msg ({ pageData } as model) =
                 )
 
         ResetPasswordMsg subMsg ->
-            ResetPassword.update subMsg model.resetPasswordForm
-                |> (\( form, maybeAuthStatus, cmd ) ->
-                        ( { model
-                            | resetPasswordForm = form
-                            , currentUser = maybeAuthStatus |> Maybe.withDefault model.currentUser
-                          }
-                        , Cmd.map ResetPasswordMsg cmd
-                        )
-                   )
+            let
+                cartItemsCommand maybeAuthStatus =
+                    case maybeAuthStatus of
+                        Just (User.Authorized user) ->
+                            getCustomerCartItemsCount user.authToken
+
+                        _ ->
+                            Cmd.none
+            in
+                ResetPassword.update subMsg model.resetPasswordForm
+                    |> (\( form, maybeAuthStatus, cmd ) ->
+                            ( { model
+                                | resetPasswordForm = form
+                                , currentUser = maybeAuthStatus |> Maybe.withDefault model.currentUser
+                              }
+                            , Cmd.batch
+                                [ Cmd.map ResetPasswordMsg cmd
+                                , cartItemsCommand maybeAuthStatus
+                                ]
+                            )
+                       )
 
         EditLoginMsg subMsg ->
             EditLogin.update subMsg model.editLoginForm model.currentUser
