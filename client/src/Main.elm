@@ -78,7 +78,7 @@ init flags location =
 
         authorizationCmd =
             Maybe.map2 reAuthorize flags.authUserId flags.authToken
-                |> Maybe.withDefault Cmd.none
+                |> Maybe.withDefault (redirectIfAuthRequired route)
     in
         ( model
         , Cmd.batch
@@ -429,7 +429,7 @@ update msg ({ pageData } as model) =
         LogOut ->
             ( { model | currentUser = User.unauthorized, cartItemCount = 0 }
             , Cmd.batch
-                [ logoutRedirect model.route
+                [ redirectIfAuthRequired model.route
                 , Ports.removeAuthDetails ()
                 , Ports.setCartItemCount 0
                 ]
@@ -607,7 +607,10 @@ update msg ({ pageData } as model) =
 
                 RemoteData.Failure _ ->
                     ( { model | currentUser = User.Anonymous }
-                    , Ports.removeAuthDetails ()
+                    , Cmd.batch
+                        [ Ports.removeAuthDetails ()
+                        , redirectIfAuthRequired model.route
+                        ]
                     )
 
                 _ ->
@@ -842,8 +845,8 @@ logUnsuccessfulRequest response =
             Debug.log "Unsuccessful Request Returned" response
 
 
-logoutRedirect : Route -> Cmd msg
-logoutRedirect route =
+redirectIfAuthRequired : Route -> Cmd msg
+redirectIfAuthRequired route =
     if Routing.authRequired route then
         Routing.newUrl <| PageDetails "home"
     else
