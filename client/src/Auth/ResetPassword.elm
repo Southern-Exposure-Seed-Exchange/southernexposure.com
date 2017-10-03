@@ -98,7 +98,11 @@ update msg model =
                 RemoteData.Success (Ok authStatus) ->
                     ( initial
                     , Just authStatus
-                    , Cmd.batch [ Routing.newUrl MyAccount, Ports.scrollToTop ]
+                    , Cmd.batch
+                        [ Routing.newUrl MyAccount
+                        , Ports.scrollToTop
+                        , User.storeDetails authStatus
+                        ]
                     )
 
                 RemoteData.Success (Err errors) ->
