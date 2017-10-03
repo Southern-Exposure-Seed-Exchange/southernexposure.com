@@ -5,9 +5,11 @@ module User
         , User
         , unauthorized
         , decoder
+        , storeDetails
         )
 
 import Json.Decode as Decode exposing (Decoder)
+import Ports
 
 
 type UserId
@@ -49,3 +51,17 @@ decoder =
             [ authorizedUserDecoder
             , Decode.succeed unauthorized
             ]
+
+
+storeDetails : AuthStatus -> Cmd msg
+storeDetails authStatus =
+    case authStatus of
+        Anonymous ->
+            Cmd.none
+
+        Authorized user ->
+            let
+                (UserId id) =
+                    user.id
+            in
+                Ports.storeAuthDetails ( user.authToken, id )

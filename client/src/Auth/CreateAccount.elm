@@ -205,7 +205,7 @@ update msg form maybeSessionToken =
                     , Cmd.batch
                         [ Routing.newUrl CreateAccountSuccess
                         , Ports.scrollToTop
-                        , storeAuthDetails authStatus
+                        , User.storeDetails authStatus
                         , Ports.removeCartSessionToken ()
                         ]
                     )
@@ -226,20 +226,6 @@ createNewAccount form maybeSessionToken =
         |> Api.withJsonBody (encode form maybeSessionToken)
         |> Api.withJsonResponse User.decoder
         |> Api.withErrorHandler SubmitResponse
-
-
-storeAuthDetails : AuthStatus -> Cmd msg
-storeAuthDetails authStatus =
-    case authStatus of
-        User.Anonymous ->
-            Cmd.none
-
-        User.Authorized user ->
-            let
-                (User.UserId id) =
-                    user.id
-            in
-                Ports.storeAuthDetails ( user.authToken, id )
 
 
 

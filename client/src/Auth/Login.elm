@@ -128,16 +128,10 @@ update msg model maybeSessionToken =
 
 rememberAuth : Bool -> AuthStatus -> Cmd msg
 rememberAuth remember authStatus =
-    case ( remember, authStatus ) of
-        ( True, User.Authorized user ) ->
-            let
-                (UserId id) =
-                    user.id
-            in
-                Ports.storeAuthDetails ( user.authToken, id )
-
-        _ ->
-            Cmd.none
+    if remember then
+        User.storeDetails authStatus
+    else
+        Cmd.none
 
 
 debugResponse : c -> a -> ( a, Maybe b, Cmd msg )
