@@ -148,7 +148,7 @@ makeProducts mysql = do
                         { productName = name
                         , productSlug = slugify name
                         , productCategoryIds = []
-                        , productBaseSku = baseSku
+                        , productBaseSku = T.toUpper baseSku
                         , productShortDescription = ""
                         , productLongDescription = description
                         , productImageUrl = T.pack . takeFileName $ T.unpack prodImg
@@ -163,7 +163,7 @@ makeVariants =
             (fromIntegral productId, productBaseSku prod,) $
                 ProductVariant
                     (toSqlKey 0)
-                    suffix
+                    (T.toUpper suffix)
                     (Cents . round $ 100 * price)
                     (floor qty)
                     (Milligrams . round $ 1000 * weight)
