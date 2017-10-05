@@ -48,5 +48,5 @@ fromQueryString pathParser =
         (pathParser
             <?> optionalIntParam "page" (default.page)
             <?> optionalIntParam "perPage" (default.perPage)
-            <?> Url.customParam "sortBy" (Maybe.withDefault "" >> Sorting.fromQueryValue)
         )
+        |> Sorting.fromQueryString
