@@ -9,7 +9,7 @@ import Control.Monad.Trans.Class (lift)
 import Control.Monad.Logger (runNoLoggingT)
 import Data.ByteString.Lazy (ByteString)
 import Data.Char (isAlpha)
-import Data.Int (Int32, Int64)
+import Data.Int (Int32)
 import Data.List (nubBy)
 import Data.Maybe (maybeToList)
 import Data.Monoid ((<>))
@@ -21,6 +21,7 @@ import Database.Persist
     ((<-.), (+=.), Entity(..), Filter, getBy, insert, insertMany_, upsert, deleteWhere, selectKeysList)
 import Database.Persist.Postgresql
     (ConnectionPool, SqlWriteT, createPostgresqlPool, toSqlKey, runSqlPool)
+import Numeric.Natural (Natural)
 import System.FilePath (takeFileName)
 import Text.Read (readMaybe)
 
@@ -320,7 +321,7 @@ makeCustomers mysql = do
     where generateToken = UUID.toText <$> UUID4.nextRandom
 
 
-makeCustomerCarts :: MySQLConn -> IO (OldIdMap [(Int, Int64)])
+makeCustomerCarts :: MySQLConn -> IO (OldIdMap [(Int, Natural)])
 makeCustomerCarts mysql = do
     cartItems <- mysqlQuery mysql $
         "SELECT customers_id, products_id, customers_basket_quantity " <>
@@ -454,7 +455,7 @@ insertCharges = do
 
 insertCustomerCarts :: OldIdMap ProductVariantId
                     -> OldIdMap CustomerId
-                    -> OldIdMap [(Int, Int64)]
+                    -> OldIdMap [(Int, Natural)]
                     -> SqlWriteT IO ()
 insertCustomerCarts variantMap customerMap =
     IntMap.foldlWithKey (\acc k c -> acc >> newCart k c) (return ())

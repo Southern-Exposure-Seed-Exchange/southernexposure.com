@@ -103,7 +103,7 @@ Cart
 CartItem
     cartId CartId
     productVariantId ProductVariantId
-    quantity Int64
+    quantity Natural
     UniqueCartItem cartId productVariantId
 
 
@@ -112,6 +112,7 @@ TaxRate
     rate Natural
     country Country
     state Region Maybe
+    excludedProductIds [ProductId]
     isActive Bool
     UniqueTaxRate country state !force
 

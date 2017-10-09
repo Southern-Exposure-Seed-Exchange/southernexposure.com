@@ -4,6 +4,7 @@ module Models.Utils
     , truncateDescription
     , getChildCategoryIds
     , getParentCategories
+    , applyTaxRate
     ) where
 
 import Data.Char (isAlphaNum)
@@ -12,6 +13,7 @@ import Database.Persist ((==.), Entity(..), Key(..), get, selectKeysList)
 import Text.HTML.TagSoup (parseTags, innerText)
 
 import Models.DB
+import Models.Fields
 import Server
 
 import qualified Data.Text as T
@@ -67,3 +69,16 @@ getParentCategories categoryId = do
                 return [Entity categoryId category]
             Just parentId ->
                 (Entity categoryId category :) <$> getParentCategories parentId
+
+
+-- | Apply a Tax Rate to an Amount for a Product, returning 0 if the
+-- Product is excluded from the Tax Rate.
+applyTaxRate :: Cents -> ProductId -> TaxRate -> Cents
+applyTaxRate amount productId taxRate =
+    if productId `notElem` taxRateExcludedProductIds taxRate then
+        Cents . round
+            $ (toRational . toInteger $ taxRateRate taxRate)
+            / 1000
+            * toRational (fromCents amount)
+    else
+        Cents 0
