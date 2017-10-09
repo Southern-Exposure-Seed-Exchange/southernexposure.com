@@ -145,3 +145,40 @@ data ShippingRate
     deriving (Show, Read, Generic)
 
 derivePersistField "ShippingRate"
+
+
+-- ADDRESSES
+
+data AddressType
+    = Billing
+    | Shipping
+    deriving (Show, Read, Generic)
+
+derivePersistField "AddressType"
+
+
+-- ORDERS
+
+
+data OrderStatus
+    = Pending
+    | Processing
+    | Delivered
+    | Update
+    deriving (Show, Read, Generic)
+
+instance ToJSON OrderStatus
+instance FromJSON OrderStatus
+
+derivePersistField "OrderStatus"
+
+
+data LineItemType
+    = ShippingLine
+    | SurchargeLine
+    deriving (Show, Read, Generic)
+
+instance ToJSON LineItemType
+instance FromJSON LineItemType
+
+derivePersistField "LineItemType"

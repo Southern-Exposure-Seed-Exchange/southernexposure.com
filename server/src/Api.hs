@@ -48,6 +48,7 @@ type API =
     :<|> "pages" :> StaticPageAPI
     :<|> "customers" :> CustomerAPI
     :<|> "carts" :> CartAPI
+    :<|> "checkout" :> CheckoutAPI
 
 -- | Return the Handler functions for the `API` type.
 server :: ServerT API App
@@ -57,3 +58,4 @@ server =
     :<|> staticPageRoutes
     :<|> customerRoutes
     :<|> cartRoutes
+    :<|> checkoutRoutes

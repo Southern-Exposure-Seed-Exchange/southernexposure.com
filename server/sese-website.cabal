@@ -30,6 +30,7 @@ library
                      , Routes
                      , Routes.Carts
                      , Routes.Categories
+                     , Routes.Checkout
                      , Routes.CommonData
                      , Routes.Customers
                      , Routes.Products
@@ -44,6 +45,7 @@ library
                      , blaze-html
                      , containers
                      , esqueleto
+                     , exceptions
                      , HaskellNet
                      , HaskellNet-SSL
                      , iso3166-country-codes

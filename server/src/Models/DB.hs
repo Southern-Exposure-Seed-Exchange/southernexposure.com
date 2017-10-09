@@ -131,4 +131,43 @@ ShippingMethod
     categoryIds [CategoryId]
     isActive Bool
     priority Natural
+
+
+Address
+    firstName T.Text
+    lastName T.Text
+    companyName T.Text
+    addressOne T.Text
+    addressTwo T.Text
+    city T.Text
+    state Region
+    zipCode T.Text
+    country Country
+    type AddressType
+    customerId CustomerId
+    isActive Bool
+    isDefault Bool
+
+Order json
+    customerId CustomerId
+    status OrderStatus
+    billingAddressId AddressId
+    shippingAddressId AddressId
+    taxDescription T.Text
+    customerComment T.Text
+    createdAt UTCTime
+
+OrderLineItem json
+    orderId OrderId
+    type LineItemType
+    description T.Text
+    amount Cents
+
+OrderProduct json
+    orderId OrderId
+    productVariantId ProductVariantId
+    quantity Natural
+    price Cents
+    tax Cents
+    UniqueOrderProduct orderId productVariantId
 |]

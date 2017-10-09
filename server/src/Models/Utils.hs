@@ -4,12 +4,13 @@ module Models.Utils
     , truncateDescription
     , getChildCategoryIds
     , getParentCategories
+    , getTaxRate
     , applyTaxRate
     ) where
 
 import Data.Char (isAlphaNum)
 import Data.Monoid ((<>))
-import Database.Persist ((==.), Entity(..), Key(..), get, selectKeysList)
+import Database.Persist ((==.), Entity(..), Key(..), get, getBy, selectKeysList)
 import Text.HTML.TagSoup (parseTags, innerText)
 
 import Models.DB
@@ -70,6 +71,19 @@ getParentCategories categoryId = do
             Just parentId ->
                 (Entity categoryId category :) <$> getParentCategories parentId
 
+
+-- | Return a TaxRate for a potential Country & Region. On failure, it will
+-- fallback to a TaxRate for just the Country if one exists.
+getTaxRate :: Maybe Country -> Maybe Region -> AppSQL (Maybe TaxRate)
+getTaxRate maybeCountry maybeRegion =
+    fmap (\(Entity _ e) -> e) <$> case (maybeCountry, maybeRegion) of
+        (Just country, Nothing) ->
+            getBy $ UniqueTaxRate country maybeRegion
+        (Just country, Just _) ->
+            getBy (UniqueTaxRate country maybeRegion)
+            >>= maybe (getBy $ UniqueTaxRate country Nothing) (return . Just)
+        _ ->
+            return Nothing
 
 -- | Apply a Tax Rate to an Amount for a Product, returning 0 if the
 -- Product is excluded from the Tax Rate.
