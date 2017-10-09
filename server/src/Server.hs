@@ -2,6 +2,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 module Server
     ( App
+    , AppSQL
     , runDB
     ) where
 
@@ -18,7 +19,10 @@ import Config
 type App =
     ReaderT Config Handler
 
+type AppSQL =
+    SqlPersistT Handler
+
 -- | Run & return a database query.
-runDB :: SqlPersistT Handler a -> App a
+runDB :: AppSQL a -> App a
 runDB query =
     asks getPool >>= lift . runSqlPool query
