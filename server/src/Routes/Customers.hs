@@ -13,7 +13,6 @@ module Routes.Customers
 
 import Control.Monad ((>=>), when, void)
 import Control.Monad.IO.Class (liftIO)
-import Control.Monad.Trans (lift)
 import Data.Aeson (ToJSON(..), FromJSON(..), (.=), (.:), (.:?), withObject, object)
 import Data.Int (Int64)
 import Data.Maybe (fromMaybe)
@@ -27,7 +26,7 @@ import Database.Persist
 import Database.Persist.Sql (toSqlKey)
 import Servant
     ( (:>), (:<|>)(..), AuthProtect, ReqBody, JSON, Get, Post, Put, errBody
-    , err403, err500, throwError
+    , err403, err500
     )
 
 import Auth
@@ -264,7 +263,7 @@ registrationRoute = validate >=> \parameters -> do
     maybeCustomerId <- runDB $ insertUnique customer
     case maybeCustomerId of
         Nothing ->
-            lift $ throwError err500
+            serverError err500
         Just customerId ->
             maybeMergeCarts customerId (rpCartToken parameters) >>
             Emails.send (Emails.AccountCreated customer) >>
@@ -292,8 +291,7 @@ hashPassword password = do
         $ encodeUtf8 password
     case maybePass of
         Nothing ->
-            lift . throwError
-                $ err500 { errBody = "Misconfigured Hashing Policy" }
+            serverError $ err500 { errBody = "Misconfigured Hashing Policy" }
         Just pass ->
             return $ decodeUtf8 pass
 
@@ -363,7 +361,7 @@ loginRoute LoginParameters { lpEmail, lpPassword, lpCartToken } =
                         BCrypt.slowerBcryptHashingPolicy
                         $ encodeUtf8 lpPassword
                     newHash <- maybe
-                        (lift . throwError $ err500 { errBody = "Misconfigured Hashing Policy" })
+                        (serverError $ err500 { errBody = "Misconfigured Hashing Policy" })
                         (return . decodeUtf8) maybeNewHash
                     runDB $ update customerId [CustomerEncryptedPassword =. newHash]
                     return True
@@ -401,9 +399,9 @@ authorizeRoute AuthorizeParameters { apUserId, apToken } =
                 if apToken == customerAuthToken customer then
                     return $ customerToAuthorizationData (Entity userId customer )
                 else
-                    lift $ throwError err403
+                    serverError err403
             Nothing ->
-                lift $ throwError err403
+                serverError err403
 
 
 -- RESET PASSWORD

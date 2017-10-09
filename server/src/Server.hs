@@ -4,11 +4,13 @@ module Server
     ( App
     , AppSQL
     , runDB
+    , serverError
     ) where
 
 import Control.Monad.Reader (ReaderT, asks, lift)
+import Control.Monad.Except (MonadError)
 import Database.Persist.Sql (SqlPersistT, runSqlPool)
-import Servant (Handler)
+import Servant (Handler, throwError)
 
 import Config
 
@@ -26,3 +28,7 @@ type AppSQL =
 runDB :: AppSQL a -> App a
 runDB query =
     asks getPool >>= lift . runSqlPool query
+
+serverError :: MonadError e Handler => e -> App a
+serverError =
+    lift . throwError

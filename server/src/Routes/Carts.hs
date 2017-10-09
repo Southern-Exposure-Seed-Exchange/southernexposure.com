@@ -10,7 +10,6 @@ module Routes.Carts
 
 import Control.Monad ((>=>), void, join)
 import Control.Monad.IO.Class (liftIO)
-import Control.Monad.Trans (lift)
 import Data.Aeson ((.:), (.:?), (.=), FromJSON(..), ToJSON(..), object, withObject)
 import Data.Int (Int64)
 import Data.List (intersect)
@@ -21,7 +20,7 @@ import Database.Persist ( (+=.), (=.), (==.), Entity(..), SelectOpt(Asc), getBy
                         , deleteWhere, selectList )
 import Database.Persist.Sql (toSqlKey)
 import Numeric.Natural (Natural)
-import Servant ((:>), (:<|>)(..), AuthProtect, ReqBody, JSON, PlainText, Get, Post, throwError, err404)
+import Servant ((:>), (:<|>)(..), AuthProtect, ReqBody, JSON, PlainText, Get, Post, err404)
 
 import Auth
 import Models
@@ -460,7 +459,7 @@ customerUpdateRoute token = validate >=> \parameters -> do
     maybeCart <- runDB . getBy . UniqueCustomerCart $ Just customerId
     case maybeCart of
         Nothing ->
-            lift . throwError $ err404
+            serverError err404
         Just (Entity cartId _) ->
             updateOrDeleteItems cartId $ cupQuantities parameters
     customerDetailsRoute token
@@ -492,7 +491,7 @@ anonymousUpdateRoute parameters = do
     maybeCart <- runDB . getBy . UniqueAnonymousCart $ Just token
     case maybeCart of
         Nothing ->
-            lift . throwError $ err404
+            serverError err404
         Just (Entity cartId _) ->
             updateOrDeleteItems cartId $ aupQuantities parameters
     anonymousDetailsRoute $ AnonymousDetailsParameters token

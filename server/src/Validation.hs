@@ -13,20 +13,25 @@ module Validation
     , zeroOrPositive
     ) where
 
-import Control.Monad.Trans (lift)
 import Control.Arrow (second)
 import Data.Aeson (ToJSON(..), encode, object)
 import Data.Maybe (isJust, isNothing)
 import Data.Monoid ((<>))
 import Database.Persist (PersistEntityBackend, PersistEntity, Unique, get, getBy)
 import Database.Persist.Sql (SqlBackend, Key)
-import Servant (throwError, err422, errBody)
+import Servant (err422, errBody)
 
 import Server
 
 import qualified Data.Text as T
 import qualified Data.HashMap.Strict as HM
 import qualified Data.Map.Strict as M
+
+
+-- | Force the server to return a 422 HTTP Validation Error with a JSON body.
+validationError :: ToJSON a => a -> App b
+validationError body =
+    serverError $ err422 { errBody = encode body }
 
 
 type FieldName = T.Text
@@ -46,8 +51,7 @@ class Validation a where
         if HM.null errorMap then
             return item
         else
-            lift . throwError $ err422
-                { errBody = encode errorMap }
+            validationError $ toJSON errorMap
         where processErrors =
                 map $ second concatErrors
               concatErrors =
@@ -63,8 +67,7 @@ class Validation a where
 -- typeclass.
 singleError :: T.Text -> App a
 singleError text =
-    lift . throwError $
-        err422 { errBody = encode $ object [ ( "", toJSON [ text ] ) ] }
+    validationError $ object [ ( "", toJSON [ text ] ) ]
 
 -- | Apply a list of validators to a Map, with each key of the Map as
 -- a separate field.

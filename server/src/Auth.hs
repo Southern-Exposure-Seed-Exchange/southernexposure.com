@@ -8,7 +8,6 @@ module Auth
     , validateToken
     ) where
 
-import Control.Monad.Trans (lift)
 import Data.Text.Encoding (decodeUtf8)
 import Database.Persist (Entity(..), getBy)
 import Network.Wai (Request, requestHeaders)
@@ -16,7 +15,7 @@ import Servant
 import Servant.Server.Experimental.Auth
 
 import Models.DB (Unique(UniqueToken), Customer)
-import Server (App, runDB)
+import Server (App, runDB, serverError)
 
 import qualified Data.Text as T
 
@@ -45,5 +44,5 @@ authServerContext = authHandler :. EmptyContext
 validateToken :: AuthToken -> App (Entity Customer)
 validateToken (AuthToken token) =
     runDB (getBy $ UniqueToken token)
-    >>= maybe (lift . throwError $ err403 { errBody = "Invalid Auth Token" })
+    >>= maybe (serverError $ err403 { errBody = "Invalid Auth Token" })
             return
