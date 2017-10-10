@@ -149,35 +149,12 @@ customerUpdateRequest user body =
 
 
 view : Form -> CartDetails -> List (Html Msg)
-view { quantities } { items, charges } =
+view { quantities } ({ items, charges } as cartDetails) =
     let
         itemCount =
             List.foldl (.quantity >> (+)) 0 items
 
         -- TODO: Add commas to format
-        totalAmount =
-            subTotal
-                |> centsMap2 (+) surchargeAmount
-                |> centsMap2 (+) shippingAmount
-                |> centsMap2 (+) taxAmount
-
-        subTotal =
-            List.foldl (itemTotal >> centsMap2 (+)) (Cents 0) items
-
-        shippingAmount =
-            charges.shippingMethod
-                |> Maybe.map .amount
-                |> Maybe.withDefault (Cents 0)
-
-        taxAmount =
-            charges.tax
-
-        surchargeAmount =
-            charges.surcharges |> List.foldl (\i -> centsMap2 (+) i.amount) (Cents 0)
-
-        itemTotal { variant, quantity } =
-            (centsMap <| (*) quantity) variant.price
-
         cartTable =
             table [ class "table table-striped table-sm cart-table" ]
                 [ tableHeader
@@ -246,12 +223,15 @@ view { quantities } { items, charges } =
 
         tableFooter =
             tfoot [] <|
-                [ footerRow "font-weight-bold" "Sub-Total" subTotal ]
+                [ footerRow "font-weight-bold" "Sub-Total" totals.subTotal ]
                     ++ List.map chargeRow charges.surcharges
                     ++ [ htmlOrBlank chargeRow charges.shippingMethod
                        , taxRow
                        , totalRow
                        ]
+
+        totals =
+            PageData.cartTotals cartDetails
 
         taxRow =
             if charges.tax.amount == Cents 0 then
@@ -270,8 +250,8 @@ view { quantities } { items, charges } =
             footerRow "" charge.description charge.amount
 
         totalRow =
-            if totalAmount /= subTotal then
-                footerRow "font-weight-bold" "Total" totalAmount
+            if totals.total /= totals.subTotal then
+                footerRow "font-weight-bold" "Total" totals.total
             else
                 text ""
 
@@ -283,7 +263,7 @@ view { quantities } { items, charges } =
             [ h1 [] [ text "Shopping Cart" ]
             , hr [] []
             , p [ class "text-center font-weight-bold" ]
-                [ text <| "Total Items: " ++ toString itemCount ++ " Amount: $" ++ centsToString totalAmount
+                [ text <| "Total Items: " ++ toString itemCount ++ " Amount: $" ++ centsToString totals.total
                 ]
             , form [ onSubmit <| EditCartMsg Submit ]
                 [ cartTable

@@ -303,6 +303,35 @@ cartDetailsDecoder =
         (Decode.field "charges" cartChargesDecoder)
 
 
+cartTotals : CartDetails -> { subTotal : Cents, total : Cents }
+cartTotals { items, charges } =
+    let
+        subTotal =
+            List.foldl (\item acc -> itemTotal item |> addCents acc) (Cents 0) items
+
+        shippingAmount =
+            charges.shippingMethod
+                |> Maybe.map .amount
+                |> Maybe.withDefault (Cents 0)
+
+        surchargeAmount =
+            charges.surcharges |> List.foldl (\i -> centsMap2 (+) i.amount) (Cents 0)
+
+        itemTotal { variant, quantity } =
+            (centsMap <| (*) quantity) variant.price
+
+        total =
+            subTotal
+                |> addCents surchargeAmount
+                |> addCents shippingAmount
+
+        addCents =
+            centsMap2 (+)
+    in
+        { subTotal = subTotal
+        , total = total
+        }
+
 
 -- Common Page Data
 
