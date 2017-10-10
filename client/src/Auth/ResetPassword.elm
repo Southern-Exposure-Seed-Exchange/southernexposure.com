@@ -15,9 +15,9 @@ import Json.Decode as Decode
 import Json.Encode as Encode
 import RemoteData exposing (WebData)
 import Api
-import Auth.Utils exposing (noCommandOrStatus)
 import Ports
 import Routing exposing (Route(MyAccount))
+import Update.Utils exposing (nothingAndNoCommand)
 import User exposing (AuthStatus)
 
 
@@ -58,15 +58,15 @@ update msg model =
     case msg of
         Email email ->
             { model | email = email }
-                |> noCommandOrStatus
+                |> nothingAndNoCommand
 
         Password password ->
             { model | password = password }
-                |> noCommandOrStatus
+                |> nothingAndNoCommand
 
         PasswordConfirm passwordConfirm ->
             { model | passwordConfirm = passwordConfirm }
-                |> noCommandOrStatus
+                |> nothingAndNoCommand
 
         SubmitRequest ->
             ( { model | requestSuccess = Nothing }
@@ -78,14 +78,14 @@ update msg model =
             case response of
                 RemoteData.Success () ->
                     { model | requestSuccess = Just True }
-                        |> noCommandOrStatus
+                        |> nothingAndNoCommand
 
                 RemoteData.Failure _ ->
                     { model | requestSuccess = Just False }
-                        |> noCommandOrStatus
+                        |> nothingAndNoCommand
 
                 _ ->
-                    model |> noCommandOrStatus
+                    model |> nothingAndNoCommand
 
         SubmitChange code ->
             ( { model | changeErrors = Api.initialErrors }
@@ -107,10 +107,10 @@ update msg model =
 
                 RemoteData.Success (Err errors) ->
                     { model | changeErrors = errors }
-                        |> noCommandOrStatus
+                        |> nothingAndNoCommand
 
                 _ ->
-                    model |> noCommandOrStatus
+                    model |> nothingAndNoCommand
 
 
 requestResetEmail : String -> Cmd Msg

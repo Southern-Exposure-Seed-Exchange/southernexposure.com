@@ -15,10 +15,10 @@ import Html.Events.Extra exposing (onClickPreventDefault)
 import Json.Encode as Encode exposing (Value)
 import RemoteData exposing (WebData)
 import Api
-import Auth.Utils exposing (noCommandOrStatus)
 import Ports
 import Routing exposing (Route(CreateAccount, ResetPassword, PageDetails), reverse)
 import User exposing (AuthStatus, UserId(..))
+import Update.Utils exposing (nothingAndNoCommand)
 
 
 -- MODEL
@@ -72,15 +72,15 @@ update msg model maybeSessionToken =
     case msg of
         Email email ->
             { model | email = email }
-                |> noCommandOrStatus
+                |> nothingAndNoCommand
 
         Password password ->
             { model | password = password }
-                |> noCommandOrStatus
+                |> nothingAndNoCommand
 
         Remember remember ->
             { model | remember = remember }
-                |> noCommandOrStatus
+                |> nothingAndNoCommand
 
         CreateAccountPage ->
             ( model
@@ -140,7 +140,7 @@ debugResponse response model =
         _ =
             Debug.log "Bad Response" response
     in
-        model |> noCommandOrStatus
+        model |> nothingAndNoCommand
 
 
 login : Form -> Maybe String -> Cmd Msg

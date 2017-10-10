@@ -20,6 +20,7 @@ import Api
 import Locations exposing (AddressLocations)
 import Models.Fields exposing (Cents(..), centsToString, centsMap2, centsMap, milligramsToString)
 import PageData
+import Update.Utils exposing (nothingAndNoCommand)
 import User exposing (AuthStatus)
 import Views.Images as Images
 
@@ -84,11 +85,6 @@ update msg model authStatus =
 
         SubmitResponse _ ->
             model |> nothingAndNoCommand
-
-
-nothingAndNoCommand : a -> ( a, Maybe b, Cmd msg )
-nothingAndNoCommand m =
-    ( m, Nothing, Cmd.none )
 
 
 placeOrder : Form -> AuthStatus -> Cmd Msg

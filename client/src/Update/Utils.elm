@@ -7,6 +7,7 @@ module Update.Utils
         , extraCommand
         , updateAndCommand
         , discardCommand
+        , nothingAndNoCommand
         )
 
 
@@ -44,3 +45,8 @@ updateAndCommand func ( model, cmd ) =
 discardCommand : (model -> ( model, Cmd msg )) -> ( model, Cmd msg ) -> ( model, Cmd msg )
 discardCommand updater ( model, _ ) =
     updater model
+
+
+nothingAndNoCommand : model -> ( model, Maybe a, Cmd msg )
+nothingAndNoCommand model =
+    ( model, Nothing, Cmd.none )

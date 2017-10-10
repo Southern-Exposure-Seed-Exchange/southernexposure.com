@@ -17,10 +17,10 @@ import Html.Events exposing (onInput, onSubmit, on, targetValue)
 import Json.Encode as Encode exposing (Value)
 import RemoteData exposing (WebData)
 import Api
-import Auth.Utils exposing (noCommandOrStatus)
 import Locations exposing (AddressLocations)
 import Ports
 import User exposing (AuthStatus)
+import Update.Utils exposing (nothingAndNoCommand)
 import Views.HorizontalForm as Form
 import Routing exposing (Route(CreateAccountSuccess), reverse)
 
@@ -133,51 +133,51 @@ update msg form maybeSessionToken =
     case msg of
         Email str ->
             { form | email = str }
-                |> noCommandOrStatus
+                |> nothingAndNoCommand
 
         Password str ->
             { form | password = str }
-                |> noCommandOrStatus
+                |> nothingAndNoCommand
 
         PasswordConfirm str ->
             { form | passwordConfirm = str }
-                |> noCommandOrStatus
+                |> nothingAndNoCommand
 
         FirstName str ->
             { form | firstName = str }
-                |> noCommandOrStatus
+                |> nothingAndNoCommand
 
         LastName str ->
             { form | lastName = str }
-                |> noCommandOrStatus
+                |> nothingAndNoCommand
 
         Street str ->
             { form | street = str }
-                |> noCommandOrStatus
+                |> nothingAndNoCommand
 
         AddressTwo str ->
             { form | addressTwo = str }
-                |> noCommandOrStatus
+                |> nothingAndNoCommand
 
         City str ->
             { form | city = str }
-                |> noCommandOrStatus
+                |> nothingAndNoCommand
 
         State str ->
             { form | state = str }
-                |> noCommandOrStatus
+                |> nothingAndNoCommand
 
         ZipCode str ->
             { form | zipCode = str }
-                |> noCommandOrStatus
+                |> nothingAndNoCommand
 
         Country str ->
             { form | country = str }
-                |> noCommandOrStatus
+                |> nothingAndNoCommand
 
         PhoneNumber str ->
             { form | phoneNumber = str }
-                |> noCommandOrStatus
+                |> nothingAndNoCommand
 
         SubmitForm ->
             if form.password /= form.passwordConfirm then
@@ -217,7 +217,7 @@ update msg form maybeSessionToken =
                     )
 
                 _ ->
-                    form |> noCommandOrStatus
+                    form |> nothingAndNoCommand
 
 
 createNewAccount : Form -> Maybe String -> Cmd Msg
