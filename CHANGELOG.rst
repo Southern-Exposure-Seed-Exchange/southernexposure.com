@@ -5,6 +5,9 @@ CHANGELOG
 v0.6.0
 ======
 
+* Show the Checkout on a single page instead of 4 separate pages.
+* Show the new Order's details on the Checkout Success page.
+
 
 v0.5.0
 ======
