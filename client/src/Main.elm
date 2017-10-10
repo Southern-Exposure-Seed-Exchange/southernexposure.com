@@ -244,16 +244,8 @@ fetchDataForRoute ({ route, pageData } as model) =
                         |> Tuple.mapSecond (\cmd -> Cmd.batch [ cmd, getContactDetails model.currentUser ])
 
                 Cart ->
-                    case model.currentUser of
-                        User.Anonymous ->
-                            ( { pageData | cartDetails = RemoteData.Loading }
-                            , getAnonymousCartDetails model.maybeSessionToken
-                            )
-
-                        User.Authorized user ->
-                            ( { pageData | cartDetails = RemoteData.Loading }
-                            , getCartDetails user.authToken
-                            )
+                    pageData
+                        |> fetchCartDetails model.currentUser model.maybeSessionToken
 
                 QuickOrder ->
                     doNothing
@@ -276,6 +268,20 @@ fetchLocationsOnce pageData =
         _ ->
             ( { pageData | locations = RemoteData.Loading }
             , getAddressLocations
+            )
+
+
+fetchCartDetails : AuthStatus -> Maybe String -> PageData -> ( PageData, Cmd Msg )
+fetchCartDetails authStatus maybeSessionToken pageData =
+    case authStatus of
+        User.Anonymous ->
+            ( { pageData | cartDetails = RemoteData.Loading }
+            , getAnonymousCartDetails maybeSessionToken
+            )
+
+        User.Authorized user ->
+            ( { pageData | cartDetails = RemoteData.Loading }
+            , getCartDetails user.authToken
             )
 
 
