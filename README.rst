@@ -2,6 +2,10 @@
 SESE E-Commerce Website
 =======================
 
+.. image:: https://travis-ci.org/Southern-Exposure-Seed-Exchange/southernexposure.com.svg?branch=master
+    :target: https://travis-ci.org/Southern-Exposure-Seed-Exchange/southernexposure.com
+
+
 This is a rebuild of the current Southern Exposure Seed Exchange website as a
 Single Page Application, using Haskell/Servant for the API Server & Elm for the
 Frontend.
