@@ -170,7 +170,7 @@ view { quantities } { items, charges } =
                 |> Maybe.withDefault (Cents 0)
 
         taxAmount =
-            charges.tax |> Maybe.map .amount |> Maybe.withDefault (Cents 0)
+            charges.tax
 
         surchargeAmount =
             charges.surcharges |> List.foldl (\i -> centsMap2 (+) i.amount) (Cents 0)
@@ -253,6 +253,12 @@ view { quantities } { items, charges } =
                        , totalRow
                        ]
 
+        taxRow =
+            if charges.tax.amount == Cents 0 then
+                text ""
+            else
+                chargeRow charges.tax
+
         footerRow rowClass content amount =
             tr [ class rowClass ]
                 [ td [ colspan 4, class "text-right" ] [ text <| content ++ ":" ]
@@ -262,10 +268,6 @@ view { quantities } { items, charges } =
 
         chargeRow charge =
             footerRow "" charge.description charge.amount
-
-        taxRow =
-            charges.tax
-                |> htmlOrBlank (\{ description } -> footerRow "" description taxAmount)
 
         totalRow =
             if totalAmount /= subTotal then

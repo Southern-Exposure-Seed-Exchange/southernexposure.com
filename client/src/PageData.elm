@@ -268,7 +268,7 @@ cartChargeDecoder =
 
 
 type alias CartCharges =
-    { tax : Maybe CartCharge
+    { tax : CartCharge
     , surcharges : List CartCharge
     , shippingMethod : Maybe CartCharge
     }
@@ -277,7 +277,7 @@ type alias CartCharges =
 cartChargesDecoder : Decoder CartCharges
 cartChargesDecoder =
     Decode.map3 CartCharges
-        (Decode.field "tax" <| Decode.nullable cartChargeDecoder)
+        (Decode.field "tax" cartChargeDecoder)
         (Decode.field "surcharges" <| Decode.list cartChargeDecoder)
         (Decode.field "shippingMethods" <|
             Decode.map List.head <|
@@ -293,7 +293,7 @@ type alias CartDetails =
 
 blankCartDetails : CartDetails
 blankCartDetails =
-    CartDetails [] (CartCharges Nothing [] Nothing)
+    CartDetails [] (CartCharges (CartCharge "" (Cents 0)) [] Nothing)
 
 
 cartDetailsDecoder : Decoder CartDetails
