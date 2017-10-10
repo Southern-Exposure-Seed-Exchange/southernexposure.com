@@ -18,7 +18,7 @@ import Api
 import Messages exposing (Msg(EditCartMsg), EditCartMessage(..))
 import Models.Fields exposing (Cents(..), centsToString, centsMap)
 import PageData exposing (CartDetails, CartItemId(..))
-import Routing exposing (Route(ProductDetails))
+import Routing exposing (Route(ProductDetails, Checkout))
 import User exposing (AuthStatus, User)
 import Views.Images as Images
 import Views.Utils exposing (icon, routeLinkAttributes, onIntInput, htmlOrBlank)
@@ -166,6 +166,8 @@ view { quantities } ({ items, charges } as cartDetails) =
             div [ class "form-group text-right" ]
                 [ button [ class "btn btn-success", type_ "submit", disabled formIsUnchanged ]
                     [ icon "refresh", text " Update" ]
+                , a (class "btn btn-primary ml-2" :: routeLinkAttributes Checkout)
+                    [ icon "shopping-cart", text " Checkout" ]
                 ]
 
         tableHeader =

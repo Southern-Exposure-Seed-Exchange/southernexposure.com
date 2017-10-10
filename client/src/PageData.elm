@@ -20,8 +20,13 @@ module PageData
         , CartItemId(..)
         , CartItem
         , CartDetails
+        , cartTotals
         , blankCartDetails
         , cartDetailsDecoder
+        , LineItemType(..)
+        , OrderDetails
+        , orderDetailsDecoder
+        , orderTotals
         )
 
 import Dict exposing (Dict)
@@ -29,10 +34,12 @@ import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode exposing (Value)
 import Paginate exposing (Paginated)
 import RemoteData exposing (WebData)
+import Time.DateTime as DateTime exposing (DateTime)
+import Address
 import Api
 import Category exposing (Category, CategoryId(..))
-import Models.Fields exposing (Cents(..))
 import Locations exposing (Region, regionDecoder, regionEncoder, AddressLocations)
+import Models.Fields exposing (Cents(..), centsMap, centsMap2, Milligrams(..))
 import StaticPage exposing (StaticPage)
 import Product exposing (Product, ProductVariant, ProductVariantId(..))
 import Products.Pagination as Pagination
@@ -53,6 +60,7 @@ type alias PageData =
     , locations : WebData AddressLocations
     , contactDetails : WebData ContactDetails
     , cartDetails : WebData CartDetails
+    , checkoutSuccess : WebData OrderDetails
     }
 
 
@@ -81,6 +89,7 @@ initial =
         , locations = RemoteData.NotAsked
         , contactDetails = RemoteData.NotAsked
         , cartDetails = RemoteData.NotAsked
+        , checkoutSuccess = RemoteData.NotAsked
         }
 
 
@@ -331,6 +340,164 @@ cartTotals { items, charges } =
         { subTotal = subTotal
         , total = total
         }
+
+
+
+-- Order Details
+
+
+type alias OrderDetails =
+    { order : Order
+    , lineItems : List OrderLineItem
+    , products : List OrderProduct
+    , shippingAddress : Address.Model
+    , billingAddress : Address.Model
+    }
+
+
+orderDetailsDecoder : Decoder OrderDetails
+orderDetailsDecoder =
+    Decode.map5 OrderDetails
+        (Decode.field "order" orderDecoder)
+        (Decode.field "lineItems" <| Decode.list lineItemDecoder)
+        (Decode.field "products" <| Decode.list orderProductDecoder)
+        (Decode.field "shippingAddress" Address.decode)
+        (Decode.field "billingAddress" Address.decode)
+
+
+orderTotals : OrderDetails -> { subTotal : Cents, tax : Cents, total : Cents }
+orderTotals { lineItems, products } =
+    let
+        ( subTotal, tax ) =
+            List.foldl
+                (\item ( runningTotal, runningTax ) ->
+                    ( centsMap ((*) item.quantity) item.price
+                        |> centsMap2 (+) runningTotal
+                    , centsMap2 (+) item.tax runningTax
+                    )
+                )
+                ( Cents 0, Cents 0 )
+                products
+
+        extraCharges =
+            List.foldl (\charge -> centsMap2 (+) charge.amount)
+                (Cents 0)
+                lineItems
+
+        total =
+            subTotal
+                |> centsMap2 (+) extraCharges
+                |> centsMap2 (+) tax
+    in
+        { subTotal = subTotal
+        , tax = tax
+        , total = total
+        }
+
+
+type alias Order =
+    { status : OrderStatus
+    , comment : String
+    , taxDescription : String
+    , createdAt : DateTime
+    }
+
+
+orderDecoder : Decoder Order
+orderDecoder =
+    let
+        resultToDecoder r =
+            case r of
+                Ok x ->
+                    Decode.succeed x
+
+                Err e ->
+                    Decode.fail e
+    in
+        Decode.map4 Order
+            (Decode.field "status" orderStatusDecoder)
+            (Decode.field "comment" Decode.string)
+            (Decode.field "taxDescription" Decode.string)
+            (Decode.field "createdAt" <|
+                Decode.andThen (resultToDecoder << DateTime.fromISO8601) <|
+                    Decode.string
+            )
+
+
+type OrderStatus
+    = Processing
+
+
+orderStatusDecoder : Decoder OrderStatus
+orderStatusDecoder =
+    decodeStringWith <|
+        \str ->
+            case str of
+                "Processing" ->
+                    Decode.succeed Processing
+
+                _ ->
+                    Decode.fail <| "Invalid OrderStatus: " ++ str
+
+
+type alias OrderLineItem =
+    { itemType : LineItemType
+    , description : String
+    , amount : Cents
+    }
+
+
+lineItemDecoder : Decoder OrderLineItem
+lineItemDecoder =
+    Decode.map3 OrderLineItem
+        (Decode.field "type" lineItemTypeDecoder)
+        (Decode.field "description" Decode.string)
+        (Decode.field "amount" <| Decode.map Cents Decode.int)
+
+
+type LineItemType
+    = Shipping
+    | Surcharge
+
+
+lineItemTypeDecoder : Decoder LineItemType
+lineItemTypeDecoder =
+    decodeStringWith <|
+        \str ->
+            case str of
+                "ShippingLine" ->
+                    Decode.succeed Shipping
+
+                "SurchargeLine" ->
+                    Decode.succeed Surcharge
+
+                _ ->
+                    Decode.fail <| "Invalid LineItemType: " ++ str
+
+
+decodeStringWith : (String -> Decoder a) -> Decoder a
+decodeStringWith f =
+    Decode.string |> Decode.andThen f
+
+
+type alias OrderProduct =
+    { name : String
+    , weight : Milligrams
+    , quantity : Int
+    , price : Cents
+    , tax : Cents
+    }
+
+
+orderProductDecoder : Decoder OrderProduct
+orderProductDecoder =
+    Decode.map5 OrderProduct
+        (Decode.field "name" Decode.string)
+        (Decode.field "weight" <| Decode.map Milligrams Decode.int)
+        (Decode.field "quantity" Decode.int)
+        (Decode.field "price" <| Decode.map Cents Decode.int)
+        (Decode.field "tax" <| Decode.map Cents Decode.int)
+
 
 
 -- Common Page Data

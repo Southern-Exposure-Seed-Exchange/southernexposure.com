@@ -13,6 +13,7 @@ import Auth.EditLogin as EditLogin
 import Auth.Login as Login
 import Auth.ResetPassword as ResetPassword
 import Cart
+import Checkout
 import PageData exposing (PageData)
 import Product exposing (ProductVariantId)
 import QuickOrder
@@ -36,6 +37,7 @@ type alias Model =
     , addToCartForms : CartForms
     , editCartForm : Cart.Form
     , quickOrderForms : QuickOrder.Forms
+    , checkoutForm : Checkout.Form
     , cartItemCount : Int
     , maybeSessionToken : Maybe String
     , currentUser : AuthStatus
@@ -61,6 +63,7 @@ initial route =
     , addToCartForms = Dict.empty
     , editCartForm = Cart.initial
     , quickOrderForms = QuickOrder.initial
+    , checkoutForm = Checkout.initial
     , cartItemCount = 0
     , maybeSessionToken = Nothing
     , currentUser = User.unauthorized

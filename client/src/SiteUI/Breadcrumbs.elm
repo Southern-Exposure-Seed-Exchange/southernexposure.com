@@ -93,6 +93,12 @@ view route pageData =
                 QuickOrder ->
                     singleItem "Quick Order"
 
+                Checkout ->
+                    singleItem "Checkout"
+
+                CheckoutSuccess _ ->
+                    singleItem "Order Complete"
+
                 NotFound ->
                     singleItem "Page Not Found"
 

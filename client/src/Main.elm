@@ -14,6 +14,7 @@ import Auth.EditLogin as EditLogin
 import Auth.Login as Login
 import Auth.ResetPassword as ResetPassword
 import Cart
+import Checkout
 import Locations
 import Messages exposing (Msg(..))
 import Model exposing (Model)
@@ -27,7 +28,7 @@ import SeedAttribute exposing (SeedAttribute)
 import SiteUI
 import SiteUI.Search as SiteSearch
 import StaticPage exposing (StaticPage)
-import Update.Utils exposing (extraCommand, noCommand, discardCommand, updateAndCommand, withCommand)
+import Update.Utils exposing (extraCommand, noCommand, discardCommand, updateAndCommand, withCommand, batchCommand, maybeCommand)
 import User exposing (User, AuthStatus)
 import View exposing (view)
 
@@ -174,6 +175,12 @@ setPageTitle { route, pageData } =
             QuickOrder ->
                 Ports.setPageTitle "Quick Order"
 
+            Checkout ->
+                Ports.setPageTitle "Checkout"
+
+            CheckoutSuccess _ ->
+                Ports.setPageTitle "Order Complete"
+
             NotFound ->
                 Ports.setPageTitle "Page Not Found"
 
@@ -249,6 +256,20 @@ fetchDataForRoute ({ route, pageData } as model) =
 
                 QuickOrder ->
                     doNothing
+
+                Checkout ->
+                    fetchLocationsOnce pageData
+                        |> updateAndCommand (fetchCartDetails model.currentUser model.maybeSessionToken)
+
+                CheckoutSuccess orderId ->
+                    case model.currentUser of
+                        User.Authorized user ->
+                            { pageData | checkoutSuccess = RemoteData.Loading }
+                                |> fetchLocationsOnce
+                                |> batchCommand (getCheckoutSuccessDetails user.authToken orderId)
+
+                        User.Anonymous ->
+                            doNothing
 
                 NotFound ->
                     doNothing
@@ -411,6 +432,15 @@ getCustomerCartItemsCount token =
         |> Api.sendRequest GetCartItemCount
 
 
+getCheckoutSuccessDetails : String -> Int -> Cmd Msg
+getCheckoutSuccessDetails token orderId =
+    Api.post Api.CheckoutSuccess
+        |> Api.withJsonBody (Encode.object [ ( "orderId", Encode.int orderId ) ])
+        |> Api.withJsonResponse PageData.orderDetailsDecoder
+        |> Api.withToken token
+        |> Api.sendRequest GetCheckoutSuccessDetails
+
+
 
 -- UPDATE
 
@@ -452,6 +482,9 @@ update msg ({ pageData } as model) =
                 fetchCommand m =
                     case m.route of
                         Cart ->
+                            fetchDataForRoute m
+
+                        Checkout ->
                             fetchDataForRoute m
 
                         _ ->
@@ -616,6 +649,24 @@ update msg ({ pageData } as model) =
                                 |> updateAndCommand newQuantityAndToken
                    )
 
+        CheckoutMsg subMsg ->
+            let
+                successCmds orderId =
+                    Cmd.batch
+                        [ Routing.newUrl <| CheckoutSuccess orderId
+                        , Ports.setCartItemCount 0
+                        ]
+            in
+                Checkout.update subMsg model.checkoutForm model.currentUser
+                    |> (\( form, maybeOrderId, cmd ) ->
+                            ( { model | checkoutForm = form }
+                            , Cmd.batch
+                                [ Cmd.map CheckoutMsg cmd
+                                , maybeCommand successCmds maybeOrderId
+                                ]
+                            )
+                       )
+
         ReAuthorize response ->
             case response of
                 RemoteData.Success authStatus ->
@@ -702,6 +753,13 @@ update msg ({ pageData } as model) =
         GetCartItemCount response ->
             { model | cartItemCount = response |> RemoteData.toMaybe |> Maybe.withDefault 0 }
                 |> withCommand (\m -> Ports.setCartItemCount m.cartItemCount)
+
+        GetCheckoutSuccessDetails response ->
+            let
+                updatedPageData =
+                    { pageData | checkoutSuccess = response }
+            in
+                { model | pageData = updatedPageData } |> noCommand
 
         CategoryPaginationMsg subMsg ->
             pageData.categoryDetails

@@ -12,6 +12,7 @@ import Auth.Login as Login
 import Auth.EditLogin as EditLogin
 import Auth.EditContact as EditContact
 import Auth.ResetPassword as ResetPassword
+import Checkout
 import StaticPage exposing (StaticPage)
 import Locations exposing (AddressLocations)
 import PageData exposing (ProductData)
@@ -50,6 +51,7 @@ type Msg
     | EditContactMsg EditContact.Msg
     | EditCartMsg EditCartMessage
     | QuickOrderMsg QuickOrder.Msg
+    | CheckoutMsg Checkout.Msg
     | ReAuthorize (WebData User.AuthStatus)
     | GetProductDetailsData (WebData PageData.ProductDetails)
     | GetNavigationData (WebData NavigationData)
@@ -59,5 +61,6 @@ type Msg
     | GetContactDetails (WebData PageData.ContactDetails)
     | GetCartDetails (WebData PageData.CartDetails)
     | GetCartItemCount (WebData Int)
+    | GetCheckoutSuccessDetails (WebData PageData.OrderDetails)
     | CategoryPaginationMsg (Paginate.Msg ProductData PageData.CategoryDetails)
     | SearchPaginationMsg (Paginate.Msg ProductData String)

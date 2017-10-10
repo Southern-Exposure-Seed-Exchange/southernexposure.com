@@ -14,6 +14,7 @@ import Auth.Login as Login
 import Auth.MyAccount as MyAccount
 import Auth.ResetPassword as ResetPassword
 import Cart
+import Checkout
 import Views.Category as CategoryViews
 import Messages exposing (Msg(..))
 import Model exposing (Model, CartForms)
@@ -36,12 +37,19 @@ view : Model -> Html Msg
 view ({ route, pageData, navigationData } as model) =
     let
         middleContent =
-            div [ class "container" ]
-                [ div [ class "row" ]
-                    [ div [ class "col order-md-2" ] pageContent
-                    , SiteSidebar.view route
+            if route == Checkout then
+                div [ class "container" ]
+                    [ div [ class "row justify-content-center" ]
+                        [ div [ class "col-md-10" ] pageContent
+                        ]
                     ]
-                ]
+            else
+                div [ class "container" ]
+                    [ div [ class "row" ]
+                        [ div [ class "col order-md-2" ] pageContent
+                        , SiteSidebar.view route
+                        ]
+                    ]
 
         pageContent =
             case route of
@@ -105,6 +113,15 @@ view ({ route, pageData, navigationData } as model) =
                 QuickOrder ->
                     QuickOrder.view model.quickOrderForms
                         |> List.map (Html.map QuickOrderMsg)
+
+                Checkout ->
+                    RemoteData.map2 (,) pageData.locations pageData.cartDetails
+                        |> withIntermediateText (uncurry <| Checkout.view model.checkoutForm)
+                        |> List.map (Html.map CheckoutMsg)
+
+                CheckoutSuccess orderId ->
+                    RemoteData.map2 (,) pageData.locations pageData.checkoutSuccess
+                        |> withIntermediateText (uncurry <| Checkout.successView orderId)
 
                 NotFound ->
                     notFoundView

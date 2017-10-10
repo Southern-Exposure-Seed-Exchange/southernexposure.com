@@ -54,6 +54,8 @@ type Endpoint
     | CartDetailsAnonymous
     | CartUpdateAnonymous
     | CartQuickOrderAnonymous
+    | CheckoutPlaceOrderCustomer
+    | CheckoutSuccess
 
 
 toUrl : Endpoint -> String
@@ -134,6 +136,12 @@ toUrl endpoint =
 
                 CartQuickOrderAnonymous ->
                     joinPath [ "carts", "anonymous", "quick-order" ]
+
+                CheckoutPlaceOrderCustomer ->
+                    joinPath [ "checkout", "customer-place-order" ]
+
+                CheckoutSuccess ->
+                    joinPath [ "checkout", "success" ]
     in
         "/api" ++ endpointUrl
 

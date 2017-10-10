@@ -30,6 +30,8 @@ type Route
     | EditContact
     | Cart
     | QuickOrder
+    | Checkout
+    | CheckoutSuccess Int
     | NotFound
 
 
@@ -81,6 +83,8 @@ parseRoute =
                 , Url.s "account" </> accountParser
                 , Url.map Cart (Url.s "cart")
                 , Url.map QuickOrder (Url.s "quick-order")
+                , Url.map Checkout (Url.s "checkout")
+                , Url.map CheckoutSuccess (Url.s "checkout" </> Url.s "success" </> Url.int)
                 , Url.map PageDetails (Url.string)
                 ]
     in
@@ -167,6 +171,12 @@ reverse route =
         QuickOrder ->
             joinPath [ "quick-order" ]
 
+        Checkout ->
+            joinPath [ "checkout" ]
+
+        CheckoutSuccess orderId ->
+            joinPath [ "checkout", "success", toString orderId ]
+
         NotFound ->
             joinPath [ "page-not-found" ]
 
@@ -215,6 +225,12 @@ authRequired route =
 
         QuickOrder ->
             False
+
+        Checkout ->
+            False
+
+        CheckoutSuccess _ ->
+            True
 
         NotFound ->
             False

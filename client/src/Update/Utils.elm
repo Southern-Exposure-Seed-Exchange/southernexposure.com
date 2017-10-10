@@ -2,6 +2,8 @@ module Update.Utils
     exposing
         ( noCommand
         , withCommand
+        , batchCommand
+        , maybeCommand
         , extraCommand
         , updateAndCommand
         , discardCommand
@@ -16,6 +18,16 @@ noCommand =
 withCommand : (model -> Cmd msg) -> model -> ( model, Cmd msg )
 withCommand cmdFunction model =
     ( model, cmdFunction model )
+
+
+batchCommand : Cmd msg -> ( model, Cmd msg ) -> ( model, Cmd msg )
+batchCommand cmd =
+    Tuple.mapSecond (\c -> Cmd.batch [ c, cmd ])
+
+
+maybeCommand : (a -> Cmd msg) -> Maybe a -> Cmd msg
+maybeCommand cmdConstructor =
+    Maybe.map cmdConstructor >> Maybe.withDefault Cmd.none
 
 
 extraCommand : (model -> Cmd msg) -> ( model, Cmd msg ) -> ( model, Cmd msg )
