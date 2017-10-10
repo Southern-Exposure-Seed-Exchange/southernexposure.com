@@ -78,7 +78,7 @@ app.ports.setPageTitle.subscribe(function(pageTitle) {
 
 /* Scroll to Top of Element if it's not in view */
 app.ports.scrollToSelector.subscribe(function(selector) {
-  $selector = $(selector);
+  var $selector = $(selector);
   if ($selector.length > 0) {
     var elementTop = $selector.offset().top;
     if (elementTop < $(window).scrollTop()) {
