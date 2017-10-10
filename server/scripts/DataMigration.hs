@@ -408,8 +408,8 @@ insertCustomers =
 insertCharges :: SqlWriteT IO ()
 insertCharges = do
     void . insert $
-        TaxRate "VA Sales Tax" 53 (Country CountryCodes.US)
-            (Just $ USState StateCodes.VA) True
+        TaxRate "VA Sales Tax (5.3%)" 53 (Country CountryCodes.US)
+            (Just $ USState StateCodes.VA) [] True
     getBy (UniqueCategorySlug "potatoes") >>=
         maybe (return ()) (\(Entity catId _) -> void . insert $
             Surcharge "Potato Fee" (Cents 200) (Cents 400) [catId] True)
