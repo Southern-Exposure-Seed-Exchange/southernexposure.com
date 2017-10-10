@@ -2,6 +2,8 @@ module Models.Fields
     exposing
         ( Cents(..)
         , centsToString
+        , centsMap
+        , centsMap2
         , Milligrams(..)
         , milligramsToString
         )
@@ -19,6 +21,16 @@ centsToString (Cents i) =
         |> Decimal.mul (Decimal.unsafeFromString "0.01")
         |> Decimal.round -2
         |> Decimal.toString
+
+
+centsMap : (Int -> Int) -> Cents -> Cents
+centsMap f (Cents c) =
+    f c |> Cents
+
+
+centsMap2 : (Int -> Int -> Int) -> Cents -> Cents -> Cents
+centsMap2 f (Cents a) (Cents b) =
+    f a b |> Cents
 
 
 type Milligrams

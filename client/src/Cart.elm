@@ -16,7 +16,7 @@ import Json.Encode as Encode
 import RemoteData
 import Api
 import Messages exposing (Msg(EditCartMsg), EditCartMessage(..))
-import Models.Fields exposing (Cents(..), centsToString)
+import Models.Fields exposing (Cents(..), centsToString, centsMap)
 import PageData exposing (CartDetails, CartItemId(..))
 import Routing exposing (Route(ProductDetails))
 import User exposing (AuthStatus, User)
@@ -276,12 +276,6 @@ view { quantities } { items, charges } =
         formIsUnchanged =
             changedQuantities quantities items
                 |> List.isEmpty
-
-        centsMap f (Cents c) =
-            f c |> Cents
-
-        centsMap2 f (Cents a) (Cents b) =
-            f a b |> Cents
     in
         if not (List.isEmpty items) then
             [ h1 [] [ text "Shopping Cart" ]
