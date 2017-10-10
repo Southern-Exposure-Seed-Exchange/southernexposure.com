@@ -14,12 +14,6 @@ module PageData
         , productDataDecoder
         , AdvancedSearch
         , advancedSearchDecoder
-        , Location
-        , LocationData
-        , locationDataDecoder
-        , Region(..)
-        , regionEncoder
-        , regionDecoder
         , ContactDetails
         , contactDetailsDecoder
         , contactDetailsEncoder
@@ -38,6 +32,7 @@ import RemoteData exposing (WebData)
 import Api
 import Category exposing (Category, CategoryId(..))
 import Models.Fields exposing (Cents(..))
+import Locations exposing (Region, regionDecoder, regionEncoder, AddressLocations)
 import StaticPage exposing (StaticPage)
 import Product exposing (Product, ProductVariant, ProductVariantId(..))
 import Products.Pagination as Pagination
@@ -55,7 +50,7 @@ type alias PageData =
     , advancedSearch : WebData AdvancedSearch
     , searchResults : Paginated ProductData { data : Search.Data, sorting : Sorting.Option } String
     , pageDetails : WebData StaticPage
-    , locations : WebData LocationData
+    , locations : WebData AddressLocations
     , contactDetails : WebData ContactDetails
     , cartDetails : WebData CartDetails
     }
@@ -182,81 +177,7 @@ searchConfig =
 
 
 -- Locations
-
-
-type alias Location =
-    { code : String
-    , name : String
-    }
-
-
-locationDecoder : Decoder Location
-locationDecoder =
-    Decode.map2 Location
-        (Decode.field "code" Decode.string)
-        (Decode.field "name" Decode.string)
-
-
-type alias LocationData =
-    { countries : List Location
-    , states : List Location
-    , armedForces : List Location
-    , provinces : List Location
-    }
-
-
-locationDataDecoder : Decoder LocationData
-locationDataDecoder =
-    Decode.map4 LocationData
-        (Decode.field "countries" <| Decode.list locationDecoder)
-        (Decode.field "states" <| Decode.list locationDecoder)
-        (Decode.field "armedForces" <| Decode.list locationDecoder)
-        (Decode.field "provinces" <| Decode.list locationDecoder)
-
-
-
 -- Contact Details
-
-
-type Region
-    = USState String
-    | ArmedForces String
-    | CAProvince String
-    | Custom String
-
-
-regionDecoder : Decoder Region
-regionDecoder =
-    [ ( USState, "state" )
-    , ( ArmedForces, "armedForces" )
-    , ( CAProvince, "province" )
-    , ( Custom, "custom" )
-    ]
-        |> List.map
-            (\( constructor, field ) ->
-                Decode.map constructor (Decode.field field Decode.string)
-            )
-        |> Decode.oneOf
-
-
-regionEncoder : Region -> Value
-regionEncoder region =
-    let
-        regionObject key value =
-            Encode.object [ ( key, Encode.string value ) ]
-    in
-        case region of
-            USState code ->
-                regionObject "state" code
-
-            ArmedForces code ->
-                regionObject "armedForces" code
-
-            CAProvince code ->
-                regionObject "province" code
-
-            Custom str ->
-                regionObject "custom" str
 
 
 type alias ContactDetails =

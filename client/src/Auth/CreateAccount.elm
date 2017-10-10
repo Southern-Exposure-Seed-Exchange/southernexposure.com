@@ -18,7 +18,7 @@ import Json.Encode as Encode exposing (Value)
 import RemoteData exposing (WebData)
 import Api
 import Auth.Utils exposing (noCommandOrStatus)
-import PageData
+import Locations exposing (AddressLocations)
 import Ports
 import User exposing (AuthStatus)
 import Views.HorizontalForm as Form
@@ -70,7 +70,7 @@ encode model maybeSessionToken =
             (,) "state" <|
                 case model.country of
                     "US" ->
-                        if List.member model.state [ "AA", "AE", "AP" ] then
+                        if List.member model.state Locations.armedForcesCodes then
                             stateWithKey "armedForces"
                         else
                             stateWithKey "state"
@@ -236,7 +236,7 @@ createNewAccount form maybeSessionToken =
 -- commonalities? Brainstorm a bit.
 
 
-view : (Msg -> msg) -> Form -> PageData.LocationData -> List (Html msg)
+view : (Msg -> msg) -> Form -> AddressLocations -> List (Html msg)
 view tagger model locations =
     let
         requiredField s msg =

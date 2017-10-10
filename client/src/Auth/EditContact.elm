@@ -17,7 +17,8 @@ import Json.Encode exposing (encode)
 import RemoteData exposing (WebData)
 import Api
 import Views.HorizontalForm as Form
-import PageData exposing (ContactDetails, Region(..))
+import PageData exposing (ContactDetails)
+import Locations exposing (Region(..), AddressLocations)
 import Ports
 import Routing exposing (Route(MyAccount))
 import Update.Utils exposing (noCommand)
@@ -155,7 +156,7 @@ updateContactDetails details authStatus =
 -- VIEW
 
 
-view : (Msg -> msg) -> Form -> PageData.LocationData -> List (Html msg)
+view : (Msg -> msg) -> Form -> AddressLocations -> List (Html msg)
 view tagger { details, errors } locations =
     let
         inputRow selector msg =
@@ -189,7 +190,7 @@ view tagger { details, errors } locations =
 
         regionSelect labelText =
             List.map regionOption
-                >> selectRow (Decode.decodeString PageData.regionDecoder)
+                >> selectRow (Decode.decodeString Locations.regionDecoder)
                     State
                     labelText
                     True
@@ -198,7 +199,7 @@ view tagger { details, errors } locations =
             option
                 [ value
                     << encode 0
-                    << PageData.regionEncoder
+                    << Locations.regionEncoder
                   <|
                     locationCodeToRegion code
                 , selected <| code == regionToCode details.state
@@ -208,7 +209,7 @@ view tagger { details, errors } locations =
         locationCodeToRegion code =
             case details.country of
                 "US" ->
-                    if List.member code [ "AA", "AE", "AP" ] then
+                    if List.member code Locations.armedForcesCodes then
                         ArmedForces code
                     else
                         USState code

@@ -14,6 +14,7 @@ import Auth.EditLogin as EditLogin
 import Auth.Login as Login
 import Auth.ResetPassword as ResetPassword
 import Cart
+import Locations
 import Messages exposing (Msg(..))
 import Model exposing (Model)
 import PageData exposing (PageData, ProductData, CartItemId(..))
@@ -221,14 +222,7 @@ fetchDataForRoute ({ route, pageData } as model) =
                     )
 
                 CreateAccount ->
-                    case pageData.locations of
-                        RemoteData.Success _ ->
-                            ( pageData, Cmd.none )
-
-                        _ ->
-                            ( { pageData | locations = RemoteData.Loading }
-                            , getLocationsData
-                            )
+                    fetchLocationsOnce pageData
 
                 CreateAccountSuccess ->
                     doNothing
@@ -246,15 +240,8 @@ fetchDataForRoute ({ route, pageData } as model) =
                     doNothing
 
                 EditContact ->
-                    if RemoteData.isSuccess pageData.locations then
-                        ( pageData, getContactDetails model.currentUser )
-                    else
-                        ( pageData
-                        , Cmd.batch
-                            [ getContactDetails model.currentUser
-                            , getLocationsData
-                            ]
-                        )
+                    fetchLocationsOnce pageData
+                        |> Tuple.mapSecond (\cmd -> Cmd.batch [ cmd, getContactDetails model.currentUser ])
 
                 Cart ->
                     case model.currentUser of
@@ -278,6 +265,18 @@ fetchDataForRoute ({ route, pageData } as model) =
             ( pageData, Cmd.none )
     in
         ( { model | pageData = data }, cmd )
+
+
+fetchLocationsOnce : PageData -> ( PageData, Cmd Msg )
+fetchLocationsOnce pageData =
+    case pageData.locations of
+        RemoteData.Success _ ->
+            ( pageData, Cmd.none )
+
+        _ ->
+            ( { pageData | locations = RemoteData.Loading }
+            , getAddressLocations
+            )
 
 
 getProductDetailsData : String -> Cmd Msg
@@ -308,11 +307,11 @@ getPageDetails slug =
         |> Api.sendRequest GetPageDetailsData
 
 
-getLocationsData : Cmd Msg
-getLocationsData =
+getAddressLocations : Cmd Msg
+getAddressLocations =
     Api.get Api.CustomerLocations
-        |> Api.withJsonResponse PageData.locationDataDecoder
-        |> Api.sendRequest GetLocationsData
+        |> Api.withJsonResponse Locations.addressLocationsDecoder
+        |> Api.sendRequest GetAddressLocations
 
 
 getContactDetails : AuthStatus -> Cmd Msg
@@ -658,7 +657,7 @@ update msg ({ pageData } as model) =
                     |> extraCommand setPageTitle
                     |> extraCommand (always Ports.scrollToTop)
 
-        GetLocationsData response ->
+        GetAddressLocations response ->
             let
                 updatedPageData =
                     { pageData | locations = response }

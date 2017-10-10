@@ -13,6 +13,7 @@ import Auth.EditLogin as EditLogin
 import Auth.EditContact as EditContact
 import Auth.ResetPassword as ResetPassword
 import StaticPage exposing (StaticPage)
+import Locations exposing (AddressLocations)
 import PageData exposing (ProductData)
 import Product exposing (ProductId, ProductVariantId)
 import QuickOrder
@@ -54,7 +55,7 @@ type Msg
     | GetNavigationData (WebData NavigationData)
     | GetAdvancedSearchData (WebData PageData.AdvancedSearch)
     | GetPageDetailsData (WebData StaticPage)
-    | GetLocationsData (WebData PageData.LocationData)
+    | GetAddressLocations (WebData AddressLocations)
     | GetContactDetails (WebData PageData.ContactDetails)
     | GetCartDetails (WebData PageData.CartDetails)
     | GetCartItemCount (WebData Int)
