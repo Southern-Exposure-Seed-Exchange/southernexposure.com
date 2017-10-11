@@ -5,8 +5,9 @@
 {-# LANGUAGE TemplateHaskell #-}
 module Models.Fields where
 
-import Control.Monad (fail, join)
-import Data.Aeson (ToJSON(..), FromJSON(..), (.=), (.:?), object, withObject, withText)
+import Control.Applicative ((<|>))
+import Control.Monad (fail)
+import Data.Aeson (ToJSON(..), FromJSON(..), (.=), (.:), object, withObject, withText)
 import Data.ISO3166_CountryCodes (CountryCode)
 import Data.StateCodes (StateCode)
 import Database.Persist (PersistField(..))
@@ -77,33 +78,31 @@ instance ToJSON Region where
         object [ "custom" .= toJSON region ]
 
 instance FromJSON Region where
-    -- TODO: Cleaner way to do this.. Use Either type instead of Maybe?
-    parseJSON = withObject "Region" $ \v -> do
-        maybeState <- v .:? "state"
-        case maybeState of
-            Just state ->
-                maybe (fail "Invalid US State Code") (return . USState)
-                    $ StateCodes.fromMText state
-            Nothing -> do
-                maybeAF <- v .:? "armedForces"
-                case maybeAF of
-                    Just afCode ->
-                        maybe (fail $ "Invalid US Armed Forces Code: " ++ afCode)
-                            (return . USArmedForces)
-                            $ readMaybe afCode
-                    Nothing -> do
-                        maybeProvince <- join . fmap readMaybe
-                                            <$> (v .:? "province")
-                        case maybeProvince of
-                            Just province ->
-                                return $ CAProvince province
-                            Nothing -> do
-                                maybeCustom <- v .:? "custom"
-                                case maybeCustom of
-                                    Just custom ->
-                                        return $ CustomRegion custom
-                                    Nothing ->
-                                        fail "Invalid Region Format, No Matching Key"
+    parseJSON u =
+        parseState u
+        <|> parseArmedForces u
+        <|> parseProvince u
+        <|> parseCustom u
+        where parseState =
+                withObject "State" $ \v ->
+                    v .: "state"
+                    >>= maybeM "Invalid US State Code" USState
+                        . StateCodes.fromMText
+              parseArmedForces =
+                withObject "USArmedForces" $ \v ->
+                    v .: "armedForces"
+                    >>= maybeM "Invalid US Armed Forces Code" USArmedForces
+                        . readMaybe
+              parseProvince =
+                  withObject "CAProvince" $ \v ->
+                    v .: "province"
+                    >>= maybeM "Invalid CA Province Code" CAProvince
+                        . readMaybe
+              parseCustom =
+                  withObject "CustomRegion" $ \v ->
+                    CustomRegion <$> v .: "custom"
+              maybeM errorStr constructor =
+                  maybe (fail errorStr) (return . constructor)
 
 
 newtype Country =
