@@ -151,7 +151,7 @@ derivePersistField "ShippingRate"
 data AddressType
     = Billing
     | Shipping
-    deriving (Show, Read, Generic)
+    deriving (Show, Read, Eq, Generic)
 
 derivePersistField "AddressType"
 

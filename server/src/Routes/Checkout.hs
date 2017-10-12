@@ -9,18 +9,20 @@ module Routes.Checkout
     , checkoutRoutes
     ) where
 
+import Control.Applicative ((<|>))
 import Control.Arrow (first)
-import Control.Monad ((>=>), (<=<))
+import Control.Monad ((>=>), (<=<), when)
 import Control.Monad.Catch (throwM, Exception, try)
 import Control.Monad.IO.Class (liftIO)
-import Data.Aeson ((.:), (.=), FromJSON(..), ToJSON(..), withObject, object)
+import Data.Aeson ((.:), (.:?), (.=), FromJSON(..), ToJSON(..), withObject, object)
 import Data.Int (Int64)
+import Data.List (partition)
 import Data.Maybe (listToMaybe)
 import Data.Time.Clock (getCurrentTime, UTCTime)
 import Data.Typeable (Typeable)
 import Database.Persist
-    ( (==.), Entity(..), insert, insert_, insertEntity, getBy, selectList, deleteBy
-    , deleteWhere
+    ( (==.), (=.), Entity(..), insert, insert_, insertEntity, get, getBy
+    , selectList, update, updateWhere, deleteBy, deleteWhere
     )
 import Numeric.Natural (Natural)
 import Servant ((:<|>)(..), (:>), AuthProtect, JSON, Post, ReqBody, err404)
@@ -39,16 +41,19 @@ import qualified Validation as V
 
 
 type CheckoutAPI =
-         "customer-place-order" :> CustomerPlaceOrderRoute
+         "customer-details" :> CustomerDetailsRoute
+    :<|> "customer-place-order" :> CustomerPlaceOrderRoute
     :<|> "success" :> SuccessRoute
 
 type CheckoutRoutes =
-         (AuthToken -> CustomerPlaceOrderParameters -> App PlaceOrderData)
+         (AuthToken -> CheckoutDetailsParameters -> App CheckoutDetailsData)
+    :<|> (AuthToken -> CustomerPlaceOrderParameters -> App PlaceOrderData)
     :<|> (AuthToken -> SuccessParameters -> App OrderDetails)
 
 checkoutRoutes :: CheckoutRoutes
 checkoutRoutes =
-         customerPlaceOrderRoute
+         customerDetailsRoute
+    :<|> customerPlaceOrderRoute
     :<|> customerSuccessRoute
 
 
@@ -57,7 +62,8 @@ checkoutRoutes =
 
 data CheckoutAddress =
     CheckoutAddress
-        { caFirstName :: T.Text
+        { caId :: AddressId
+        , caFirstName :: T.Text
         , caLastName :: T.Text
         , caCompanyName :: T.Text
         , caAddressOne :: T.Text
@@ -66,12 +72,14 @@ data CheckoutAddress =
         , caState :: Region
         , caZipCode :: T.Text
         , caCountry :: Country
+        , caIsDefault :: Bool
         }
 
 instance FromJSON CheckoutAddress where
     parseJSON = withObject "CheckoutAddress" $ \v ->
         CheckoutAddress
-            <$> v .: "firstName"
+            <$> v .: "id"
+            <*> v .: "firstName"
             <*> v .: "lastName"
             <*> v .: "companyName"
             <*> v .: "addressOne"
@@ -80,11 +88,13 @@ instance FromJSON CheckoutAddress where
             <*> v .: "state"
             <*> v .: "zipCode"
             <*> v .: "country"
+            <*> v .: "isDefault"
 
 instance ToJSON CheckoutAddress where
     toJSON address =
         object
-            [ "firstName" .= caFirstName address
+            [ "id" .= caId address
+            , "firstName" .= caFirstName address
             , "lastName" .= caLastName address
             , "companyName" .= caCompanyName address
             , "addressOne" .= caAddressOne address
@@ -93,6 +103,7 @@ instance ToJSON CheckoutAddress where
             , "state" .= caState address
             , "zipCode" .= caZipCode address
             , "country" .= caCountry address
+            , "isDefault" .= caIsDefault address
             ]
 
 instance Validation CheckoutAddress where
@@ -134,16 +145,17 @@ fromCheckoutAddress type_ customerId address =
         , addressState = caState address
         , addressZipCode = caZipCode address
         , addressCountry = caCountry address
+        , addressIsDefault = caIsDefault address
         , addressType = type_
         , addressCustomerId = customerId
         , addressIsActive = True
-        , addressIsDefault = False
         }
 
-toCheckoutAddress :: Address -> CheckoutAddress
-toCheckoutAddress address =
+toCheckoutAddress :: Entity Address -> CheckoutAddress
+toCheckoutAddress (Entity addressId address) =
     CheckoutAddress
-        { caFirstName = addressFirstName address
+        { caId = addressId
+        , caFirstName = addressFirstName address
         , caLastName = addressLastName address
         , caCompanyName = addressCompanyName address
         , caAddressOne = addressAddressOne address
@@ -152,16 +164,104 @@ toCheckoutAddress address =
         , caState = addressState address
         , caZipCode = addressZipCode address
         , caCountry = addressCountry address
+        , caIsDefault = addressIsDefault address
         }
+
+
+-- CART/ADDRESS DETAILS
+
+
+data CheckoutDetailsParameters =
+    CheckoutDetailsParameters
+        { cdpShippingRegion :: Maybe Region
+        , cdpShippingCountry :: Maybe Country
+        }
+
+instance FromJSON CheckoutDetailsParameters where
+    parseJSON = withObject "CheckoutDetailsParameters" $ \v ->
+        CheckoutDetailsParameters
+            <$> v .:? "region"
+            <*> v .:? "country"
+
+data CheckoutDetailsData =
+    CheckoutDetailsData
+        { cddShippingAddresses :: [CheckoutAddress]
+        , cddBillingAddresses :: [CheckoutAddress]
+        , cddItems :: [CartItemData]
+        , cddCharges :: CartCharges
+        }
+
+instance ToJSON CheckoutDetailsData where
+    toJSON details =
+        object
+            [ "shippingAddresses" .= cddShippingAddresses details
+            , "billingAddresses" .= cddBillingAddresses details
+            , "items" .= cddItems details
+            , "charges" .= cddCharges details
+            ]
+
+type CustomerDetailsRoute =
+       AuthProtect "auth-token"
+    :> ReqBody '[JSON] CheckoutDetailsParameters
+    :> Post '[JSON] CheckoutDetailsData
+
+customerDetailsRoute :: AuthToken -> CheckoutDetailsParameters -> App CheckoutDetailsData
+customerDetailsRoute token parameters = do
+    (Entity customerId _) <- validateToken token
+    runDB $ do
+        customerAddresses <- selectList
+            [AddressCustomerId ==. customerId, AddressIsActive ==. True] []
+        let (shippingAddresses, billingAddresses) =
+                partition (\a -> addressType (entityVal a) == Shipping)
+                    customerAddresses
+            (maybeCountry, maybeRegion) =
+                getShippingArea parameters shippingAddresses
+        maybeTaxRate <- getTaxRate maybeCountry maybeRegion
+        items <- getCartItems maybeTaxRate $ \c ->
+            c E.^. CartCustomerId E.==. E.just (E.val customerId)
+        charges <- getCharges maybeTaxRate maybeCountry items
+        return CheckoutDetailsData
+            { cddShippingAddresses = map toCheckoutAddress shippingAddresses
+            , cddBillingAddresses = map toCheckoutAddress billingAddresses
+            , cddItems = items
+            , cddCharges = charges
+            }
+    where getShippingArea ps addrs =
+            case addrs of
+                [] ->
+                    (cdpShippingCountry parameters, cdpShippingRegion parameters)
+                Entity _ addr : as ->
+                    if addressIsDefault addr then
+                        ( Just $ addressCountry addr
+                        , Just $ addressState addr
+                        )
+                    else
+                        getShippingArea ps as
 
 
 -- PLACE ORDER
 
+data CustomerAddress
+    = NewAddress CheckoutAddress
+    | ExistingAddress AddressId Bool
+
+instance FromJSON CustomerAddress where
+    parseJSON v =
+            parseExisting v
+        <|> parseNew v
+        where parseExisting =
+                withObject "ExistingAddress" $ \w ->
+                    ExistingAddress
+                        <$> w .: "id"
+                        <*> w .: "makeDefault"
+              parseNew =
+                fmap NewAddress . parseJSON
+
 
 data CustomerPlaceOrderParameters =
     CustomerPlaceOrderParameters
-        { cpopShippingAddress :: CheckoutAddress
-        , cpopBillingAddress :: CheckoutAddress
+        { cpopShippingAddress :: CustomerAddress
+        , cpopBillingAddress :: CustomerAddress
         , cpopComment :: T.Text
         }
 
@@ -174,11 +274,25 @@ instance FromJSON CustomerPlaceOrderParameters where
 
 instance Validation CustomerPlaceOrderParameters where
     validators parameters = do
-        shippingValidators <- validators $ cpopShippingAddress parameters
-        billingValidators <- validators $ cpopBillingAddress parameters
+        shippingValidators <- validateAddress $ cpopShippingAddress parameters
+        billingValidators <- validateAddress $ cpopBillingAddress parameters
         return $
             map (first $ T.append "shipping-") shippingValidators
                 ++ map (first $ T.append "billing-") billingValidators
+        where validateAddress a =
+                case a of
+                    NewAddress f ->
+                        validators f
+                    ExistingAddress addrId _ -> do
+                        invalidAddress <- not <$> V.exists addrId
+                        return
+                            [ ( ""
+                              , [ ( "Please re-select your address or try adding a new one."
+                                  , invalidAddress
+                                  )
+                                ]
+                              )
+                            ]
 
 newtype PlaceOrderData =
     PlaceOrderData
@@ -198,33 +312,31 @@ type CustomerPlaceOrderRoute =
 customerPlaceOrderRoute :: AuthToken -> CustomerPlaceOrderParameters -> App PlaceOrderData
 customerPlaceOrderRoute token = validate >=> \parameters -> do
     (Entity customerId _) <- validateToken token
-    let shippingAddress = fromCheckoutAddress Shipping customerId
-            $ cpopShippingAddress parameters
-        billingAddress = fromCheckoutAddress Billing customerId
-            $ cpopBillingAddress parameters
-        comment = cpopComment parameters
+    let comment = cpopComment parameters
     currentTime <- liftIO getCurrentTime
     eitherM handleError <=< try . runDB $ do
-        maybeTaxRate <- getTaxRate (Just $ addressCountry shippingAddress)
-            (Just $ addressState shippingAddress)
-        (cartId, items) <- getBy (UniqueCustomerCart $ Just customerId)
-            >>= maybe (throwM CartNotFound)
-                    (\(Entity cartId _) ->
-                        fmap (cartId, ) . getCartItems maybeTaxRate
-                            $ \c -> c E.^. CartId E.==. E.val cartId
-                    )
-        shippingId <- insert shippingAddress
-        billingId <- insert billingAddress
+        shippingAddress <- getOrInsertAddress Shipping customerId
+            $ cpopShippingAddress parameters
+        billingAddress <- getOrInsertAddress Billing customerId
+            $ cpopBillingAddress parameters
+        maybeTaxRate <- getTaxRate (Just . addressCountry $ entityVal shippingAddress)
+            (Just . addressState $ entityVal shippingAddress)
+        (cartId, items) <- getBy (UniqueCustomerCart $ Just customerId) >>=
+            maybe (throwM CartNotFound)
+                (\(Entity cartId _) ->
+                    fmap (cartId, ) . getCartItems maybeTaxRate
+                        $ \c -> c E.^. CartId E.==. E.val cartId
+                )
         orderId <- insert Order
             { orderCustomerId = customerId
             , orderStatus = Processing
-            , orderBillingAddressId = billingId
-            , orderShippingAddressId = shippingId
+            , orderBillingAddressId = entityKey billingAddress
+            , orderShippingAddressId = entityKey shippingAddress
             , orderCustomerComment = comment
             , orderTaxDescription = maybe "" taxRateDescription maybeTaxRate
             , orderCreatedAt = currentTime
             }
-        createLineItems maybeTaxRate shippingAddress items orderId
+        createLineItems maybeTaxRate (entityVal shippingAddress) items orderId
             >> createProducts maybeTaxRate items orderId
             >> deleteWhere [CartItemCartId ==. cartId]
             >> deleteBy (UniqueCustomerCart $ Just customerId)
@@ -234,9 +346,36 @@ customerPlaceOrderRoute token = validate >=> \parameters -> do
                 serverError err404
             NoShippingMethod ->
                 V.singleError "Sorry, we only ship to North America."
+            AddressNotFound Shipping ->
+                V.singleFieldError "shipping-" "Please choose again or try adding a new address."
+            AddressNotFound Billing ->
+                V.singleFieldError "billing-" "Please choose again or try adding a new address."
+          getOrInsertAddress :: AddressType -> CustomerId -> CustomerAddress -> AppSQL (Entity Address)
+          getOrInsertAddress addrType customerId = \case
+            ExistingAddress addrId makeDefault -> do
+                let noAddress = throwM $ AddressNotFound addrType
+                address <- get addrId >>= maybe noAddress return
+                when (addressCustomerId address /= customerId) noAddress
+                when makeDefault $
+                    updateWhere [AddressCustomerId ==. customerId, AddressType ==. addrType]
+                        [AddressIsDefault =. False]
+                    >> update addrId [AddressIsDefault =. True]
+                return $ Entity addrId address
+            NewAddress ca ->
+                let
+                    newAddress = fromCheckoutAddress addrType customerId ca
+                in do
+                    when (addressIsDefault newAddress)
+                        $ updateWhere
+                            [ AddressType ==. addrType
+                            , AddressCustomerId ==. customerId ]
+                            [ AddressIsDefault =. False ]
+                    addrId <- insert newAddress
+                    return $ Entity addrId newAddress
 
 data PlaceOrderError
     = CartNotFound
+    | AddressNotFound AddressType
     | NoShippingMethod
     deriving (Show, Typeable)
 
@@ -369,7 +508,7 @@ customerSuccessRoute :: AuthToken -> SuccessParameters -> App OrderDetails
 customerSuccessRoute token parameters = do
     (Entity customerId _) <- validateToken token
     eitherM handleError <=< try . runDB $ do
-        (Entity orderId order, Entity _ shipping, Entity _ billing) <-
+        (Entity orderId order, shipping, billing) <-
             getOrderAndAddress customerId (E.toSqlKey $ cspOrderId parameters)
                 >>= maybe (throwM OrderNotFound) return
         lineItems <-
