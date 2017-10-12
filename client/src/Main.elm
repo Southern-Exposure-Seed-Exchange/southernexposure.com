@@ -659,7 +659,12 @@ update msg ({ pageData } as model) =
             in
                 Checkout.update subMsg model.checkoutForm model.currentUser
                     |> (\( form, maybeOrderId, cmd ) ->
-                            ( { model | checkoutForm = form }
+                            ( { model
+                                | checkoutForm = form
+                                , cartItemCount =
+                                    Maybe.map (always 0) maybeOrderId
+                                        |> Maybe.withDefault model.cartItemCount
+                              }
                             , Cmd.batch
                                 [ Cmd.map CheckoutMsg cmd
                                 , maybeCommand successCmds maybeOrderId
