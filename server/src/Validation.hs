@@ -4,6 +4,7 @@ module Validation
     ( Validators
     , Validation(..)
     , singleError
+    , singleFieldError
     , validateMap
     , required
     , doesntExist
@@ -66,8 +67,14 @@ class Validation a where
 -- | Return a single general error in the same format as the Validation
 -- typeclass.
 singleError :: T.Text -> App a
-singleError text =
-    validationError $ object [ ( "", toJSON [ text ] ) ]
+singleError =
+    singleFieldError ""
+
+-- | Return a Validation error for a single field in the same format as the
+-- Validation typeclass.
+singleFieldError :: T.Text -> T.Text -> App a
+singleFieldError field text =
+    validationError $ object [ ( field, toJSON [ text ] ) ]
 
 -- | Apply a list of validators to a Map, with each key of the Map as
 -- a separate field.
