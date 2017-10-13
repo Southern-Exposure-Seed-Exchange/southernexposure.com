@@ -62,7 +62,7 @@ checkoutRoutes =
 
 data CheckoutAddress =
     CheckoutAddress
-        { caId :: AddressId
+        { caId :: Maybe AddressId
         , caFirstName :: T.Text
         , caLastName :: T.Text
         , caCompanyName :: T.Text
@@ -78,7 +78,7 @@ data CheckoutAddress =
 instance FromJSON CheckoutAddress where
     parseJSON = withObject "CheckoutAddress" $ \v ->
         CheckoutAddress
-            <$> v .: "id"
+            <$> v .:? "id"
             <*> v .: "firstName"
             <*> v .: "lastName"
             <*> v .: "companyName"
@@ -154,7 +154,7 @@ fromCheckoutAddress type_ customerId address =
 toCheckoutAddress :: Entity Address -> CheckoutAddress
 toCheckoutAddress (Entity addressId address) =
     CheckoutAddress
-        { caId = addressId
+        { caId = Just addressId
         , caFirstName = addressFirstName address
         , caLastName = addressLastName address
         , caCompanyName = addressCompanyName address
@@ -284,7 +284,7 @@ instance Validation CustomerPlaceOrderParameters where
                     NewAddress f ->
                         validators f
                     ExistingAddress addrId _ -> do
-                        invalidAddress <- not <$> V.exists addrId
+                        invalidAddress <- V.exists addrId
                         return
                             [ ( ""
                               , [ ( "Please re-select your address or try adding a new one."
