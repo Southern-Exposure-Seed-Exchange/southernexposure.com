@@ -1,8 +1,9 @@
 module Address
     exposing
         ( Model
+        , AddressId(..)
         , initial
-        , decode
+        , decoder
         , Form
         , initialForm
         , encode
@@ -25,8 +26,13 @@ import Locations exposing (Region(..), regionDecoder, regionEncoder, Location, A
 -- Model
 
 
+type AddressId
+    = AddressId Int
+
+
 type alias Model =
-    { firstName : String
+    { id : Maybe AddressId
+    , firstName : String
     , lastName : String
     , companyName : String
     , street : String
@@ -35,12 +41,14 @@ type alias Model =
     , state : Region
     , zipCode : String
     , country : String
+    , isDefault : Bool
     }
 
 
 initial : Model
 initial =
-    { firstName = ""
+    { id = Nothing
+    , firstName = ""
     , lastName = ""
     , companyName = ""
     , street = ""
@@ -49,12 +57,14 @@ initial =
     , state = USState "AL"
     , zipCode = ""
     , country = "US"
+    , isDefault = True
     }
 
 
-decode : Decoder Model
-decode =
+decoder : Decoder Model
+decoder =
     Decode.map8 Model
+        (Decode.field "id" <| Decode.map (Just << AddressId) Decode.int)
         (Decode.field "firstName" Decode.string)
         (Decode.field "lastName" Decode.string)
         (Decode.field "companyName" Decode.string)
@@ -62,11 +72,12 @@ decode =
         (Decode.field "addressTwo" Decode.string)
         (Decode.field "city" Decode.string)
         (Decode.field "state" regionDecoder)
-        (Decode.field "zipCode" Decode.string)
         |> Decode.andThen
             (\constr ->
-                Decode.map constr
+                Decode.map3 constr
+                    (Decode.field "zipCode" Decode.string)
                     (Decode.field "country" Decode.string)
+                    (Decode.field "isDefault" Decode.bool)
             )
 
 
@@ -100,6 +111,7 @@ encode { model } =
         ]
             |> List.map (Tuple.mapSecond Encode.string)
             |> ((::) ( "state", encodedState ))
+            |> ((::) ( "isDefault", Encode.bool model.isDefault ))
             |> Encode.object
 
 

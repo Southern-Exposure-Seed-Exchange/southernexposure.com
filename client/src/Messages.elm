@@ -61,6 +61,7 @@ type Msg
     | GetContactDetails (WebData PageData.ContactDetails)
     | GetCartDetails (WebData PageData.CartDetails)
     | GetCartItemCount (WebData Int)
+    | GetCheckoutDetails (WebData PageData.CheckoutDetails)
     | GetCheckoutSuccessDetails (WebData PageData.OrderDetails)
     | CategoryPaginationMsg (Paginate.Msg ProductData PageData.CategoryDetails)
     | SearchPaginationMsg (Paginate.Msg ProductData String)

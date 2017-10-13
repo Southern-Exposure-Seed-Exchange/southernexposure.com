@@ -258,8 +258,14 @@ fetchDataForRoute ({ route, pageData } as model) =
                     doNothing
 
                 Checkout ->
-                    fetchLocationsOnce pageData
-                        |> updateAndCommand (fetchCartDetails model.currentUser model.maybeSessionToken)
+                    case model.currentUser of
+                        User.Authorized user ->
+                            { pageData | checkoutDetails = RemoteData.Loading }
+                                |> fetchLocationsOnce
+                                |> batchCommand (getCustomerCheckoutDetails user.authToken)
+
+                        User.Anonymous ->
+                            fetchLocationsOnce pageData
 
                 CheckoutSuccess orderId ->
                     case model.currentUser of
@@ -430,6 +436,15 @@ getCustomerCartItemsCount token =
         |> Api.withJsonResponse (Decode.field "itemCount" Decode.int)
         |> Api.withToken token
         |> Api.sendRequest GetCartItemCount
+
+
+getCustomerCheckoutDetails : String -> Cmd Msg
+getCustomerCheckoutDetails token =
+    Api.post Api.CheckoutDetailsCustomer
+        |> Api.withJsonBody (Encode.object [])
+        |> Api.withJsonResponse PageData.checkoutDetailsDecoder
+        |> Api.withToken token
+        |> Api.sendRequest GetCheckoutDetails
 
 
 getCheckoutSuccessDetails : String -> Int -> Cmd Msg
@@ -758,6 +773,30 @@ update msg ({ pageData } as model) =
         GetCartItemCount response ->
             { model | cartItemCount = response |> RemoteData.toMaybe |> Maybe.withDefault 0 }
                 |> withCommand (\m -> Ports.setCartItemCount m.cartItemCount)
+
+        GetCheckoutDetails response ->
+            let
+                updatedPageData =
+                    { pageData | checkoutDetails = response }
+            in
+                case ( pageData.checkoutDetails, response ) of
+                    ( RemoteData.Success _, RemoteData.Success _ ) ->
+                        { model | pageData = updatedPageData }
+                            |> noCommand
+
+                    ( _, RemoteData.Success details ) ->
+                        { model
+                            | pageData = updatedPageData
+                            , checkoutForm =
+                                Checkout.initialWithDefaults
+                                    details.shippingAddresses
+                                    details.billingAddresses
+                        }
+                            |> noCommand
+
+                    _ ->
+                        { model | pageData = updatedPageData }
+                            |> noCommand
 
         GetCheckoutSuccessDetails response ->
             let

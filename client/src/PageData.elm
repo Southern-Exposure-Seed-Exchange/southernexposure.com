@@ -2,7 +2,6 @@ module PageData
     exposing
         ( PageData
         , initial
-        , PredecessorCategory
         , CategoryDetails
         , categoryDetailsDecoder
         , categoryConfig
@@ -10,23 +9,26 @@ module PageData
         , productDetailsDecoder
         , SearchResults
         , searchConfig
-        , ProductData
-        , productDataDecoder
-        , AdvancedSearch
-        , advancedSearchDecoder
         , ContactDetails
         , contactDetailsDecoder
         , contactDetailsEncoder
-        , CartItemId(..)
-        , CartItem
         , CartDetails
         , cartTotals
         , blankCartDetails
         , cartDetailsDecoder
+        , CheckoutDetails
+        , checkoutDetailsDecoder
         , LineItemType(..)
         , OrderDetails
         , orderDetailsDecoder
         , orderTotals
+        , PredecessorCategory
+        , ProductData
+        , productDataDecoder
+        , AdvancedSearch
+        , advancedSearchDecoder
+        , CartItemId(..)
+        , CartItem
         )
 
 import Dict exposing (Dict)
@@ -60,6 +62,7 @@ type alias PageData =
     , locations : WebData AddressLocations
     , contactDetails : WebData ContactDetails
     , cartDetails : WebData CartDetails
+    , checkoutDetails : WebData CheckoutDetails
     , checkoutSuccess : WebData OrderDetails
     }
 
@@ -89,6 +92,7 @@ initial =
         , locations = RemoteData.NotAsked
         , contactDetails = RemoteData.NotAsked
         , cartDetails = RemoteData.NotAsked
+        , checkoutDetails = RemoteData.NotAsked
         , checkoutSuccess = RemoteData.NotAsked
         }
 
@@ -240,60 +244,6 @@ contactDetailsEncoder details =
 -- Carts
 
 
-type CartItemId
-    = CartItemId Int
-
-
-type alias CartItem =
-    { id : CartItemId
-    , product : Product
-    , variant : ProductVariant
-    , maybeSeedAttribute : Maybe SeedAttribute
-    , quantity : Int
-    }
-
-
-cartItemDecoder : Decoder CartItem
-cartItemDecoder =
-    Decode.map5 CartItem
-        (Decode.field "id" <| Decode.map CartItemId Decode.int)
-        (Decode.field "product" Product.decoder)
-        (Decode.field "variant" Product.variantDecoder)
-        (Decode.field "seedAttribute" <| Decode.nullable SeedAttribute.decoder)
-        (Decode.field "quantity" Decode.int)
-
-
-type alias CartCharge =
-    { description : String
-    , amount : Cents
-    }
-
-
-cartChargeDecoder : Decoder CartCharge
-cartChargeDecoder =
-    Decode.map2 CartCharge
-        (Decode.field "description" Decode.string)
-        (Decode.field "amount" <| Decode.map Cents Decode.int)
-
-
-type alias CartCharges =
-    { tax : CartCharge
-    , surcharges : List CartCharge
-    , shippingMethod : Maybe CartCharge
-    }
-
-
-cartChargesDecoder : Decoder CartCharges
-cartChargesDecoder =
-    Decode.map3 CartCharges
-        (Decode.field "tax" cartChargeDecoder)
-        (Decode.field "surcharges" <| Decode.list cartChargeDecoder)
-        (Decode.field "shippingMethods" <|
-            Decode.map List.head <|
-                Decode.list cartChargeDecoder
-        )
-
-
 type alias CartDetails =
     { items : List CartItem
     , charges : CartCharges
@@ -312,7 +262,7 @@ cartDetailsDecoder =
         (Decode.field "charges" cartChargesDecoder)
 
 
-cartTotals : CartDetails -> { subTotal : Cents, total : Cents }
+cartTotals : { a | items : List CartItem, charges : CartCharges } -> { subTotal : Cents, total : Cents }
 cartTotals { items, charges } =
     let
         subTotal =
@@ -343,6 +293,27 @@ cartTotals { items, charges } =
 
 
 
+-- Checkout Details
+
+
+type alias CheckoutDetails =
+    { shippingAddresses : List Address.Model
+    , billingAddresses : List Address.Model
+    , items : List CartItem
+    , charges : CartCharges
+    }
+
+
+checkoutDetailsDecoder : Decoder CheckoutDetails
+checkoutDetailsDecoder =
+    Decode.map4 CheckoutDetails
+        (Decode.field "shippingAddresses" <| Decode.list Address.decoder)
+        (Decode.field "billingAddresses" <| Decode.list Address.decoder)
+        (Decode.field "items" <| Decode.list cartItemDecoder)
+        (Decode.field "charges" cartChargesDecoder)
+
+
+
 -- Order Details
 
 
@@ -361,8 +332,8 @@ orderDetailsDecoder =
         (Decode.field "order" orderDecoder)
         (Decode.field "lineItems" <| Decode.list lineItemDecoder)
         (Decode.field "products" <| Decode.list orderProductDecoder)
-        (Decode.field "shippingAddress" Address.decode)
-        (Decode.field "billingAddress" Address.decode)
+        (Decode.field "shippingAddress" Address.decoder)
+        (Decode.field "billingAddress" Address.decoder)
 
 
 orderTotals : OrderDetails -> { subTotal : Cents, tax : Cents, total : Cents }
@@ -557,3 +528,57 @@ advancedSearchDecoder =
             Decode.map2 AdvancedSearchCategory
                 (Decode.field "id" <| Decode.map CategoryId Decode.int)
                 (Decode.field "name" Decode.string)
+
+
+type CartItemId
+    = CartItemId Int
+
+
+type alias CartItem =
+    { id : CartItemId
+    , product : Product
+    , variant : ProductVariant
+    , maybeSeedAttribute : Maybe SeedAttribute
+    , quantity : Int
+    }
+
+
+cartItemDecoder : Decoder CartItem
+cartItemDecoder =
+    Decode.map5 CartItem
+        (Decode.field "id" <| Decode.map CartItemId Decode.int)
+        (Decode.field "product" Product.decoder)
+        (Decode.field "variant" Product.variantDecoder)
+        (Decode.field "seedAttribute" <| Decode.nullable SeedAttribute.decoder)
+        (Decode.field "quantity" Decode.int)
+
+
+type alias CartCharge =
+    { description : String
+    , amount : Cents
+    }
+
+
+cartChargeDecoder : Decoder CartCharge
+cartChargeDecoder =
+    Decode.map2 CartCharge
+        (Decode.field "description" Decode.string)
+        (Decode.field "amount" <| Decode.map Cents Decode.int)
+
+
+type alias CartCharges =
+    { tax : CartCharge
+    , surcharges : List CartCharge
+    , shippingMethod : Maybe CartCharge
+    }
+
+
+cartChargesDecoder : Decoder CartCharges
+cartChargesDecoder =
+    Decode.map3 CartCharges
+        (Decode.field "tax" cartChargeDecoder)
+        (Decode.field "surcharges" <| Decode.list cartChargeDecoder)
+        (Decode.field "shippingMethods" <|
+            Decode.map List.head <|
+                Decode.list cartChargeDecoder
+        )

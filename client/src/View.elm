@@ -115,7 +115,7 @@ view ({ route, pageData, navigationData } as model) =
                         |> List.map (Html.map QuickOrderMsg)
 
                 Checkout ->
-                    RemoteData.map2 (,) pageData.locations pageData.cartDetails
+                    RemoteData.map2 (,) pageData.locations pageData.checkoutDetails
                         |> withIntermediateText (uncurry <| Checkout.view model.checkoutForm)
                         |> List.map (Html.map CheckoutMsg)
 

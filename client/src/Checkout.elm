@@ -2,6 +2,7 @@ module Checkout
     exposing
         ( Form
         , initial
+        , initialWithDefaults
         , Msg
         , update
         , view
@@ -9,13 +10,13 @@ module Checkout
         )
 
 import Html exposing (..)
-import Html.Attributes exposing (class, type_, colspan, src, for, id, rows, value, href, target)
-import Html.Events exposing (onSubmit, onInput)
+import Html.Attributes exposing (class, type_, colspan, src, for, id, rows, value, href, target, selected, checked)
+import Html.Events exposing (onSubmit, onInput, onCheck, targetValue, on)
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode
 import RemoteData exposing (WebData)
 import Time.DateTime as DateTime
-import Address
+import Address exposing (AddressId)
 import Api
 import Locations exposing (AddressLocations)
 import Models.Fields exposing (Cents(..), centsToString, centsMap2, centsMap, milligramsToString)
@@ -28,19 +29,61 @@ import Views.Images as Images
 -- Model
 
 
+type CheckoutAddress
+    = ExistingAddress AddressId
+    | NewAddress Address.Form
+
+
 type alias Form =
-    { shippingForm : Address.Form
-    , billingForm : Address.Form
+    { shippingAddress : CheckoutAddress
+    , makeShippingDefault : Bool
+    , billingAddress : CheckoutAddress
+    , makeBillingDefault : Bool
+    , billingSameAsShipping : Bool
     , comment : String
     }
 
 
 initial : Form
 initial =
-    { shippingForm = Address.initialForm
-    , billingForm = Address.initialForm
+    { shippingAddress = NewAddress Address.initialForm
+    , makeShippingDefault = False
+    , billingAddress = NewAddress Address.initialForm
+    , makeBillingDefault = False
+    , billingSameAsShipping = False
     , comment = ""
     }
+
+
+initialWithDefaults : List Address.Model -> List Address.Model -> Form
+initialWithDefaults shippingAddresses billingAddresses =
+    let
+        withDefault addrs =
+            findBy .isDefault addrs
+                |> Maybe.andThen (.id >> Maybe.map ExistingAddress)
+                |> Maybe.withDefault (NewAddress Address.initialForm)
+
+        shippingAddress =
+            withDefault shippingAddresses
+
+        billingAddress =
+            withDefault billingAddresses
+
+        isNew a =
+            case a of
+                NewAddress _ ->
+                    True
+
+                ExistingAddress _ ->
+                    False
+    in
+        { shippingAddress = shippingAddress
+        , makeShippingDefault = isNew shippingAddress
+        , billingAddress = billingAddress
+        , makeBillingDefault = isNew billingAddress
+        , billingSameAsShipping = False
+        , comment = ""
+        }
 
 
 
@@ -48,8 +91,13 @@ initial =
 
 
 type Msg
-    = ShippingMsg Address.Msg
+    = SelectShipping Int
+    | ToggleShippingDefault Bool
+    | ShippingMsg Address.Msg
+    | SelectBilling Int
+    | ToggleBillingDefault Bool
     | BillingMsg Address.Msg
+    | BillingSameAsShipping Bool
     | Comment String
     | Submit
     | SubmitResponse (WebData (Result Api.FormErrors Int))
@@ -58,17 +106,43 @@ type Msg
 update : Msg -> Form -> AuthStatus -> ( Form, Maybe Int, Cmd Msg )
 update msg model authStatus =
     case msg of
+        SelectShipping addressId ->
+            { model
+                | shippingAddress = selectAddress addressId
+                , makeShippingDefault = False
+            }
+                |> nothingAndNoCommand
+
+        ToggleShippingDefault makeDefault ->
+            { model | makeShippingDefault = makeDefault }
+                |> nothingAndNoCommand
+
         ShippingMsg subMsg ->
-            Address.update subMsg model.shippingForm
-                |> \f ->
-                    { model | shippingForm = f }
-                        |> nothingAndNoCommand
+            updateAddressForm model.shippingAddress
+                subMsg
+                model
+                (\f -> { model | shippingAddress = f })
+
+        SelectBilling addressId ->
+            { model
+                | billingAddress = selectAddress addressId
+                , makeBillingDefault = False
+            }
+                |> nothingAndNoCommand
+
+        ToggleBillingDefault makeDefault ->
+            { model | makeBillingDefault = makeDefault }
+                |> nothingAndNoCommand
 
         BillingMsg subMsg ->
-            Address.update subMsg model.billingForm
-                |> \f ->
-                    { model | billingForm = f }
-                        |> nothingAndNoCommand
+            updateAddressForm model.billingAddress
+                subMsg
+                model
+                (\f -> { model | billingAddress = f })
+
+        BillingSameAsShipping isSame ->
+            { model | billingSameAsShipping = isSame }
+                |> nothingAndNoCommand
 
         Comment comment ->
             { model | comment = comment } |> nothingAndNoCommand
@@ -87,15 +161,79 @@ update msg model authStatus =
             model |> nothingAndNoCommand
 
 
+selectAddress : Int -> CheckoutAddress
+selectAddress addressId =
+    if addressId == 0 then
+        NewAddress Address.initialForm
+    else
+        ExistingAddress (Address.AddressId addressId)
+
+
+updateAddressForm : CheckoutAddress -> Address.Msg -> Form -> (CheckoutAddress -> Form) -> ( Form, Maybe a, Cmd msg )
+updateAddressForm addr msg model updater =
+    case addr of
+        ExistingAddress _ ->
+            model
+                |> nothingAndNoCommand
+
+        NewAddress form ->
+            Address.update msg form
+                |> (NewAddress >> updater)
+                |> nothingAndNoCommand
+
+
+findBy : (a -> Bool) -> List a -> Maybe a
+findBy pred l =
+    case l of
+        [] ->
+            Nothing
+
+        x :: xs ->
+            if pred x then
+                Just x
+            else
+                findBy pred xs
+
+
 placeOrder : Form -> AuthStatus -> Cmd Msg
 placeOrder model authStatus =
     let
         data =
             Encode.object
-                [ ( "shippingAddress", Address.encode model.shippingForm )
-                , ( "billingAddress", Address.encode model.billingForm )
+                [ ( "shippingAddress", encodedShippingAddress )
+                , ( "billingAddress", encodedBillingAddress )
                 , ( "comment", Encode.string model.comment )
                 ]
+
+        encodedShippingAddress =
+            encodeAddress model.shippingAddress model.makeShippingDefault
+
+        encodedBillingAddress =
+            if model.billingSameAsShipping then
+                encodedShippingAddress
+            else
+                encodeAddress model.billingAddress model.makeBillingDefault
+
+        encodeAddress addr makeDefault =
+            case addr of
+                ExistingAddress (Address.AddressId id) ->
+                    Encode.object
+                        [ ( "id", Encode.int id )
+                        , ( "makeDefault", Encode.bool makeDefault )
+                        ]
+
+                NewAddress form ->
+                    let
+                        formModel =
+                            form.model
+
+                        formModelWithDefault =
+                            { formModel | isDefault = makeDefault }
+
+                        formWithDefault =
+                            { form | model = formModelWithDefault }
+                    in
+                        Address.encode formWithDefault
 
         decoder =
             Decode.field "orderId" Decode.int
@@ -116,50 +254,245 @@ placeOrder model authStatus =
 -- View
 
 
-view : Form -> AddressLocations -> PageData.CartDetails -> List (Html Msg)
-view model locations cartDetails =
-    [ h1 [] [ text "Checkout" ]
-    , hr [] []
-    , form [ onSubmit Submit ]
-        [ div [ class "row mb-3" ]
-            [ addressForm "Shipping Details" ShippingMsg model.shippingForm "shipping" locations
-            , addressForm "Billing Details" BillingMsg model.billingForm "billing" locations
+view : Form -> AddressLocations -> PageData.CheckoutDetails -> List (Html Msg)
+view model locations checkoutDetails =
+    let
+        billingCard =
+            if model.billingSameAsShipping then
+                addressCard
+                    [ h4 [ class "card-title" ]
+                        [ span [ class "mr-4" ] [ text "Billing Details" ]
+                        , sameAddressesCheckbox model.billingSameAsShipping
+                        ]
+                    , billingAddressText
+                    ]
+            else
+                addressForm
+                    { cardTitle = "Billing Details"
+                    , msg = BillingMsg
+                    , selectMsg = SelectBilling
+                    , defaultMsg = ToggleBillingDefault
+                    , model = model.billingAddress
+                    , makeDefault = model.makeBillingDefault
+                    , billingSameAsShipping = model.billingSameAsShipping
+                    , prefix = "billing"
+                    , locations = locations
+                    , selectAddresses = checkoutDetails.billingAddresses
+                    }
+
+        billingAddressText =
+            case model.shippingAddress of
+                NewAddress form ->
+                    Address.card form.model locations
+
+                ExistingAddress id ->
+                    findBy (\a -> a.id == Just id) checkoutDetails.shippingAddresses
+                        |> Maybe.map (flip Address.card locations)
+                        |> Maybe.withDefault (text "")
+    in
+        [ h1 [] [ text "Checkout" ]
+        , hr [] []
+        , form [ onSubmit Submit ]
+            [ div [ class "row mb-3" ]
+                [ addressForm
+                    { cardTitle = "Shipping Details"
+                    , msg = ShippingMsg
+                    , selectMsg = SelectShipping
+                    , defaultMsg = ToggleShippingDefault
+                    , model = model.shippingAddress
+                    , makeDefault = model.makeShippingDefault
+                    , billingSameAsShipping = model.billingSameAsShipping
+                    , prefix = "shipping"
+                    , locations = locations
+                    , selectAddresses = checkoutDetails.shippingAddresses
+                    }
+                , billingCard
+                ]
+            , div [ class "mb-3" ]
+                [ h4 [] [ text "Order Summary" ]
+                , summaryTable checkoutDetails
+                ]
+            , div [ class "form-group" ]
+                [ label [ class "h4", for "commentsTextarea" ]
+                    [ text "Additional Comments" ]
+                , textarea
+                    [ id "commentsTextarea"
+                    , class "form-control"
+                    , rows 4
+                    , onInput Comment
+                    , value model.comment
+                    ]
+                    []
+                ]
+            , div [ class "form-group text-right" ]
+                [ button [ class "btn btn-primary", type_ "submit" ]
+                    [ text "Place Order" ]
+                ]
             ]
-        , div [ class "mb-3" ]
-            [ h4 [] [ text "Order Summary" ]
-            , summaryTable cartDetails
+        ]
+
+
+type alias AddressFormConfig =
+    { cardTitle : String
+    , msg : Address.Msg -> Msg
+    , selectMsg : Int -> Msg
+    , defaultMsg : Bool -> Msg
+    , model : CheckoutAddress
+    , makeDefault : Bool
+    , billingSameAsShipping : Bool
+    , prefix : String
+    , locations : AddressLocations
+    , selectAddresses : List Address.Model
+    }
+
+
+addressForm : AddressFormConfig -> Html Msg
+addressForm config =
+    let
+        sameAsShippingCheckbox =
+            if config.prefix == "billing" then
+                sameAddressesCheckbox config.billingSameAsShipping
+            else
+                text ""
+
+        selectHtml =
+            if not (List.isEmpty config.selectAddresses) then
+                addressSelect
+            else
+                text ""
+
+        ( newAddress, addressId, addressHtml ) =
+            case config.model of
+                NewAddress addr ->
+                    ( True
+                    , Nothing
+                    , Address.form addr config.prefix config.locations
+                        |> Html.map config.msg
+                        |> withDefaultCheckbox addr.model
+                    )
+
+                ExistingAddress id ->
+                    ( False
+                    , Just id
+                    , findBy (\a -> a.id == Just id) config.selectAddresses
+                        |> Maybe.map (\a -> Address.card a config.locations |> withDefaultCheckbox a)
+                        |> Maybe.withDefault (text "")
+                    )
+
+        withDefaultCheckbox address content =
+            let
+                isNewAddressWithExistingAddresses =
+                    address.id == Nothing && not (List.isEmpty config.selectAddresses)
+
+                shouldShow =
+                    isNewAddressWithExistingAddresses || not address.isDefault
+
+                checkbox =
+                    div [ class "form-check" ]
+                        [ label [ class "form-check-label" ]
+                            [ input
+                                [ class "form-check-input"
+                                , type_ "checkbox"
+                                , checked config.makeDefault
+                                , onCheck config.defaultMsg
+                                ]
+                                []
+                            , text "Set as Default Address"
+                            ]
+                        ]
+            in
+                div []
+                    [ content
+                    , if shouldShow then
+                        checkbox
+                      else
+                        text ""
+                    ]
+
+        addressSelect =
+            config.selectAddresses
+                |> List.map
+                    (\a ->
+                        option
+                            [ value <| toString <| fromAddressId a.id
+                            , isSelected a
+                            ]
+                            (addressDescription a)
+                    )
+                |> (::) (option [ selected newAddress, value "0" ] [ text "Add a New Address..." ])
+                |> select [ class "form-control", onSelectInt config.selectMsg ]
+                |> List.singleton
+                |> div [ class "form-group" ]
+
+        fromAddressId a =
+            case a of
+                Just (Address.AddressId i) ->
+                    i
+
+                _ ->
+                    0
+
+        isSelected addr =
+            selected <| addr.id == addressId
+
+        addressDescription addr =
+            [ b [] [ text <| addr.firstName ++ " " ++ addr.lastName ]
+            , text " - "
+            , text <|
+                String.join ", " <|
+                    List.filter (not << String.isEmpty) <|
+                        [ addr.companyName
+                        , addr.street
+                        , addr.addressTwo
+                        , addr.city
+                        , addr.zipCode ++ " " ++ addr.country
+                        ]
             ]
-        , div [ class "form-group" ]
-            [ label [ class "h4", for "commentsTextarea" ] [ text "Additional Comments" ]
-            , textarea
-                [ id "commentsTextarea"
-                , class "form-control"
-                , rows 4
-                , onInput Comment
-                , value model.comment
+
+        onSelectInt msg =
+            targetValue
+                |> Decode.andThen
+                    (String.toInt
+                        >> Result.map Decode.succeed
+                        >> Result.withDefault (Decode.fail "")
+                    )
+                |> Decode.map msg
+                |> on "change"
+    in
+        addressCard
+            [ h4 [ class "card-title" ]
+                [ span [ class "mr-4" ] [ text config.cardTitle ]
+                , sameAsShippingCheckbox
+                ]
+            , selectHtml
+            , addressHtml
+            ]
+
+
+addressCard : List (Html msg) -> Html msg
+addressCard contents =
+    div [ class "col-6" ]
+        [ div [ class "card" ] [ div [ class "card-body pt-3" ] contents ] ]
+
+
+sameAddressesCheckbox : Bool -> Html Msg
+sameAddressesCheckbox billingSameAsShipping =
+    small [ class "d-inline form-check" ]
+        [ label [ class "form-check-label" ]
+            [ input
+                [ class "form-check-input"
+                , type_ "checkbox"
+                , checked billingSameAsShipping
+                , onCheck BillingSameAsShipping
                 ]
                 []
-            ]
-        , div [ class "form-group text-right" ]
-            [ button [ class "btn btn-primary", type_ "submit" ] [ text "Place Order" ] ]
-        ]
-    ]
-
-
-addressForm : String -> (Address.Msg -> msg) -> Address.Form -> String -> AddressLocations -> Html msg
-addressForm cardTitle msg model prefix locations =
-    div [ class "col-6" ]
-        [ div [ class "card" ]
-            [ div [ class "card-body pt-3" ]
-                [ h4 [ class "card-title" ] [ text cardTitle ]
-                , Html.map msg <| Address.form model prefix locations
-                ]
+            , text "Same as Shipping Address"
             ]
         ]
 
 
-summaryTable : PageData.CartDetails -> Html msg
-summaryTable ({ items, charges } as cartDetails) =
+summaryTable : PageData.CheckoutDetails -> Html msg
+summaryTable ({ items, charges } as checkoutDetails) =
     let
         tableHeader =
             thead [ class "font-weight-bold" ]
@@ -221,7 +554,7 @@ summaryTable ({ items, charges } as cartDetails) =
                 ]
 
         totals =
-            PageData.cartTotals cartDetails
+            PageData.cartTotals checkoutDetails
 
         centsMap f (Cents c) =
             Cents (f c)

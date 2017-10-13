@@ -54,6 +54,7 @@ type Endpoint
     | CartDetailsAnonymous
     | CartUpdateAnonymous
     | CartQuickOrderAnonymous
+    | CheckoutDetailsCustomer
     | CheckoutPlaceOrderCustomer
     | CheckoutSuccess
 
@@ -136,6 +137,9 @@ toUrl endpoint =
 
                 CartQuickOrderAnonymous ->
                     joinPath [ "carts", "anonymous", "quick-order" ]
+
+                CheckoutDetailsCustomer ->
+                    joinPath [ "checkout", "customer-details" ]
 
                 CheckoutPlaceOrderCustomer ->
                     joinPath [ "checkout", "customer-place-order" ]
