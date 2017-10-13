@@ -189,7 +189,6 @@ searchConfig =
 
 
 
--- Locations
 -- Contact Details
 
 
@@ -274,7 +273,10 @@ cartTotals { items, charges } =
                 |> Maybe.withDefault (Cents 0)
 
         surchargeAmount =
-            charges.surcharges |> List.foldl (\i -> centsMap2 (+) i.amount) (Cents 0)
+            charges.surcharges |> List.foldl (\i -> addCents i.amount) (Cents 0)
+
+        taxAmount =
+            List.foldl (\item acc -> item.tax |> addCents acc) (Cents 0) items
 
         itemTotal { variant, quantity } =
             (centsMap <| (*) quantity) variant.price
@@ -283,6 +285,7 @@ cartTotals { items, charges } =
             subTotal
                 |> addCents surchargeAmount
                 |> addCents shippingAmount
+                |> addCents taxAmount
 
         addCents =
             centsMap2 (+)
@@ -540,17 +543,19 @@ type alias CartItem =
     , variant : ProductVariant
     , maybeSeedAttribute : Maybe SeedAttribute
     , quantity : Int
+    , tax : Cents
     }
 
 
 cartItemDecoder : Decoder CartItem
 cartItemDecoder =
-    Decode.map5 CartItem
+    Decode.map6 CartItem
         (Decode.field "id" <| Decode.map CartItemId Decode.int)
         (Decode.field "product" Product.decoder)
         (Decode.field "variant" Product.variantDecoder)
         (Decode.field "seedAttribute" <| Decode.nullable SeedAttribute.decoder)
         (Decode.field "quantity" Decode.int)
+        (Decode.field "tax" <| Decode.map Cents Decode.int)
 
 
 type alias CartCharge =

@@ -4,7 +4,9 @@ module Checkout
         , initial
         , initialWithDefaults
         , Msg
+        , OutMsg(..)
         , update
+        , getCustomerDetails
         , view
         , successView
         )
@@ -16,9 +18,9 @@ import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode
 import RemoteData exposing (WebData)
 import Time.DateTime as DateTime
-import Address exposing (AddressId)
+import Address exposing (AddressId(..))
 import Api
-import Locations exposing (AddressLocations)
+import Locations exposing (AddressLocations, Region)
 import Models.Fields exposing (Cents(..), centsToString, centsMap2, centsMap, milligramsToString)
 import PageData
 import Update.Utils exposing (nothingAndNoCommand)
@@ -101,9 +103,15 @@ type Msg
     | Comment String
     | Submit
     | SubmitResponse (WebData (Result Api.FormErrors Int))
+    | RefreshDetails (WebData PageData.CheckoutDetails)
 
 
-update : Msg -> Form -> AuthStatus -> ( Form, Maybe Int, Cmd Msg )
+type OutMsg
+    = OrderCompleted Int
+    | DetailsRefreshed PageData.CheckoutDetails
+
+
+update : Msg -> Form -> AuthStatus -> ( Form, Maybe OutMsg, Cmd Msg )
 update msg model authStatus =
     case msg of
         SelectShipping addressId ->
@@ -111,7 +119,7 @@ update msg model authStatus =
                 | shippingAddress = selectAddress addressId
                 , makeShippingDefault = False
             }
-                |> nothingAndNoCommand
+                |> refreshDetails authStatus model
 
         ToggleShippingDefault makeDefault ->
             { model | makeShippingDefault = makeDefault }
@@ -122,6 +130,7 @@ update msg model authStatus =
                 subMsg
                 model
                 (\f -> { model | shippingAddress = f })
+                |> refreshDetails authStatus model
 
         SelectBilling addressId ->
             { model
@@ -139,6 +148,7 @@ update msg model authStatus =
                 subMsg
                 model
                 (\f -> { model | billingAddress = f })
+                |> nothingAndNoCommand
 
         BillingSameAsShipping isSame ->
             { model | billingSameAsShipping = isSame }
@@ -151,13 +161,19 @@ update msg model authStatus =
             ( model, Nothing, placeOrder model authStatus )
 
         SubmitResponse (RemoteData.Success (Ok orderId)) ->
-            ( initial, Just orderId, Cmd.none )
+            ( initial, Just (OrderCompleted orderId), Cmd.none )
 
         -- TODO: Split address errors & update nested models
         SubmitResponse (RemoteData.Success (Err errors)) ->
             model |> nothingAndNoCommand
 
         SubmitResponse _ ->
+            model |> nothingAndNoCommand
+
+        RefreshDetails (RemoteData.Success details) ->
+            ( model, Just (DetailsRefreshed details), Cmd.none )
+
+        RefreshDetails _ ->
             model |> nothingAndNoCommand
 
 
@@ -169,17 +185,66 @@ selectAddress addressId =
         ExistingAddress (Address.AddressId addressId)
 
 
-updateAddressForm : CheckoutAddress -> Address.Msg -> Form -> (CheckoutAddress -> Form) -> ( Form, Maybe a, Cmd msg )
+updateAddressForm : CheckoutAddress -> Address.Msg -> Form -> (CheckoutAddress -> Form) -> Form
 updateAddressForm addr msg model updater =
     case addr of
         ExistingAddress _ ->
             model
-                |> nothingAndNoCommand
 
         NewAddress form ->
             Address.update msg form
                 |> (NewAddress >> updater)
-                |> nothingAndNoCommand
+
+
+refreshDetails : AuthStatus -> Form -> Form -> ( Form, Maybe a, Cmd Msg )
+refreshDetails authStatus oldModel newModel =
+    let
+        fetchCommand token =
+            case ( oldModel.shippingAddress, newModel.shippingAddress ) of
+                ( ExistingAddress id1, ExistingAddress id2 ) ->
+                    if id1 /= id2 then
+                        getCustomerDetails RefreshDetails token Nothing Nothing (Just id2)
+                    else
+                        Cmd.none
+
+                ( NewAddress oldForm, NewAddress newForm ) ->
+                    if oldForm.model.country == newForm.model.country then
+                        case ( oldForm.model.state, newForm.model.state ) of
+                            ( Locations.Custom _, Locations.Custom _ ) ->
+                                Cmd.none
+
+                            ( oldState, newState ) ->
+                                if oldState /= newState then
+                                    getCustomerDetails RefreshDetails
+                                        token
+                                        (Just newForm.model.country)
+                                        (Just newState)
+                                        Nothing
+                                else
+                                    Cmd.none
+                    else
+                        getCustomerDetails RefreshDetails
+                            token
+                            (Just newForm.model.country)
+                            (Just newForm.model.state)
+                            Nothing
+
+                ( _, ExistingAddress id ) ->
+                    getCustomerDetails RefreshDetails token Nothing Nothing (Just id)
+
+                ( _, NewAddress form ) ->
+                    getCustomerDetails RefreshDetails
+                        token
+                        (Just form.model.country)
+                        (Just form.model.state)
+                        Nothing
+    in
+        case authStatus of
+            User.Anonymous ->
+                ( newModel, Nothing, Cmd.none )
+
+            User.Authorized user ->
+                ( newModel, Nothing, fetchCommand user.authToken )
 
 
 findBy : (a -> Bool) -> List a -> Maybe a
@@ -193,6 +258,32 @@ findBy pred l =
                 Just x
             else
                 findBy pred xs
+
+
+getCustomerDetails :
+    (WebData PageData.CheckoutDetails -> msg)
+    -> String
+    -> Maybe String
+    -> Maybe Region
+    -> Maybe AddressId
+    -> Cmd msg
+getCustomerDetails msg token maybeCountry maybeRegion maybeAddressId =
+    let
+        data =
+            Encode.object
+                [ ( "region", encodeMaybe Locations.regionEncoder maybeRegion )
+                , ( "country", encodeMaybe Encode.string maybeCountry )
+                , ( "addressId", encodeMaybe (\(AddressId i) -> Encode.int i) maybeAddressId )
+                ]
+
+        encodeMaybe encoder =
+            Maybe.map encoder >> Maybe.withDefault Encode.null
+    in
+        Api.post Api.CheckoutDetailsCustomer
+            |> Api.withJsonBody data
+            |> Api.withJsonResponse PageData.checkoutDetailsDecoder
+            |> Api.withToken token
+            |> Api.sendRequest msg
 
 
 placeOrder : Form -> AuthStatus -> Cmd Msg

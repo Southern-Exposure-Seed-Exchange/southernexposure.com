@@ -262,7 +262,13 @@ fetchDataForRoute ({ route, pageData } as model) =
                         User.Authorized user ->
                             { pageData | checkoutDetails = RemoteData.Loading }
                                 |> fetchLocationsOnce
-                                |> batchCommand (getCustomerCheckoutDetails user.authToken)
+                                |> batchCommand
+                                    (Checkout.getCustomerDetails GetCheckoutDetails
+                                        user.authToken
+                                        Nothing
+                                        Nothing
+                                        Nothing
+                                    )
 
                         User.Anonymous ->
                             fetchLocationsOnce pageData
@@ -436,15 +442,6 @@ getCustomerCartItemsCount token =
         |> Api.withJsonResponse (Decode.field "itemCount" Decode.int)
         |> Api.withToken token
         |> Api.sendRequest GetCartItemCount
-
-
-getCustomerCheckoutDetails : String -> Cmd Msg
-getCustomerCheckoutDetails token =
-    Api.post Api.CheckoutDetailsCustomer
-        |> Api.withJsonBody (Encode.object [])
-        |> Api.withJsonResponse PageData.checkoutDetailsDecoder
-        |> Api.withToken token
-        |> Api.sendRequest GetCheckoutDetails
 
 
 getCheckoutSuccessDetails : String -> Int -> Cmd Msg
@@ -666,25 +663,40 @@ update msg ({ pageData } as model) =
 
         CheckoutMsg subMsg ->
             let
-                successCmds orderId =
-                    Cmd.batch
-                        [ Routing.newUrl <| CheckoutSuccess orderId
-                        , Ports.setCartItemCount 0
-                        ]
-            in
-                Checkout.update subMsg model.checkoutForm model.currentUser
-                    |> (\( form, maybeOrderId, cmd ) ->
-                            ( { model
-                                | checkoutForm = form
-                                , cartItemCount =
-                                    Maybe.map (always 0) maybeOrderId
-                                        |> Maybe.withDefault model.cartItemCount
-                              }
+                handleOutMsg msg ( model, cmd ) =
+                    case msg of
+                        Just (Checkout.OrderCompleted orderId) ->
+                            ( { model | cartItemCount = 0 }
                             , Cmd.batch
-                                [ Cmd.map CheckoutMsg cmd
-                                , maybeCommand successCmds maybeOrderId
+                                [ cmd
+                                , Routing.newUrl <| CheckoutSuccess orderId
+                                , Ports.setCartItemCount 0
                                 ]
                             )
+
+                        Just (Checkout.DetailsRefreshed checkoutDetails) ->
+                            let
+                                updatedPageData =
+                                    { pageData
+                                        | checkoutDetails =
+                                            RemoteData.Success checkoutDetails
+                                    }
+                            in
+                                ( { model | pageData = updatedPageData }
+                                , cmd
+                                )
+
+                        Nothing ->
+                            ( model, cmd )
+            in
+                Checkout.update subMsg model.checkoutForm model.currentUser
+                    |> (\( form, maybeOutMsg, cmd ) ->
+                            ( { model
+                                | checkoutForm = form
+                              }
+                            , Cmd.map CheckoutMsg cmd
+                            )
+                                |> handleOutMsg maybeOutMsg
                        )
 
         ReAuthorize response ->
