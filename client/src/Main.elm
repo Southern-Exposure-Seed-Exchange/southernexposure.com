@@ -130,16 +130,16 @@ setPageTitle { route, pageData } =
                                 AllProducts ->
                                     "All Products"
 
-                                AttributeSearch SeedAttribute.Organic ->
+                                AttributeSearch (SeedAttribute.Organic) ->
                                     "Organic Products"
 
-                                AttributeSearch SeedAttribute.Heirloom ->
+                                AttributeSearch (SeedAttribute.Heirloom) ->
                                     "Heirloom Products"
 
-                                AttributeSearch SeedAttribute.Regional ->
+                                AttributeSearch (SeedAttribute.Regional) ->
                                     "South-Eastern Products"
 
-                                AttributeSearch SeedAttribute.Ecological ->
+                                AttributeSearch (SeedAttribute.Ecological) ->
                                     "Ecologically Grown Products"
 
             PageDetails _ ->
