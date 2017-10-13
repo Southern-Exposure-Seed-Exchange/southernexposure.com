@@ -15,9 +15,10 @@ import Control.Monad ((>=>), (<=<), when)
 import Control.Monad.Catch (throwM, Exception, try)
 import Control.Monad.IO.Class (liftIO)
 import Data.Aeson ((.:), (.:?), (.=), FromJSON(..), ToJSON(..), withObject, object)
+import Data.Foldable (asum)
 import Data.Int (Int64)
-import Data.List (partition)
-import Data.Maybe (listToMaybe)
+import Data.List (partition, find)
+import Data.Maybe (listToMaybe, fromMaybe)
 import Data.Time.Clock (getCurrentTime, UTCTime)
 import Data.Typeable (Typeable)
 import Database.Persist
@@ -175,6 +176,7 @@ data CheckoutDetailsParameters =
     CheckoutDetailsParameters
         { cdpShippingRegion :: Maybe Region
         , cdpShippingCountry :: Maybe Country
+        , cdpExistingAddress :: Maybe AddressId
         }
 
 instance FromJSON CheckoutDetailsParameters where
@@ -182,6 +184,7 @@ instance FromJSON CheckoutDetailsParameters where
         CheckoutDetailsParameters
             <$> v .:? "region"
             <*> v .:? "country"
+            <*> v .:? "addressId"
 
 data CheckoutDetailsData =
     CheckoutDetailsData
@@ -227,19 +230,28 @@ customerDetailsRoute token parameters = do
             , cddCharges = charges
             }
     where getShippingArea ps addrs =
-            case addrs of
-                [] ->
-                    (cdpShippingCountry parameters, cdpShippingRegion parameters)
-                Entity _ addr : as ->
-                    if addressIsDefault addr then
-                        ( Just $ addressCountry addr
-                        , Just $ addressState addr
-                        )
-                    else
-                        getShippingArea ps as
+            let
+                maybeFromAddress =
+                    fmap fromAddress
+                    $ (\a -> find (\(Entity addrId _) -> addrId == a) addrs)
+                    =<< cdpExistingAddress ps
+                maybeFromParams =
+                    case (cdpShippingCountry ps, cdpShippingRegion ps) of
+                        (Nothing, Nothing) ->
+                            Nothing
+                        (c, r) ->
+                            Just (c, r)
+                maybeFromDefault =
+                    fromAddress <$> find (addressIsDefault . entityVal) addrs
+                fromAddress (Entity _ addr) =
+                    (Just $ addressCountry addr, Just $ addressState addr)
+            in
+                fromMaybe (Nothing, Nothing)
+                    $ asum [maybeFromAddress, maybeFromParams, maybeFromDefault]
 
 
 -- PLACE ORDER
+
 
 data CustomerAddress
     = NewAddress CheckoutAddress
