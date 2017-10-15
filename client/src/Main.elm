@@ -6,6 +6,7 @@ import Json.Encode as Encode
 import Navigation
 import Paginate exposing (Paginated)
 import RemoteData exposing (WebData)
+import Address
 import AdvancedSearch
 import Api
 import Auth.CreateAccount as CreateAccount
@@ -271,7 +272,23 @@ fetchDataForRoute ({ route, pageData } as model) =
                                     )
 
                         User.Anonymous ->
-                            fetchLocationsOnce pageData
+                            let
+                                getDetails =
+                                    case model.maybeSessionToken of
+                                        Nothing ->
+                                            identity
+
+                                        Just token ->
+                                            batchCommand
+                                                (Checkout.getAnonymousDetails GetCheckoutDetails
+                                                    token
+                                                    (Just <| .country Address.initial)
+                                                    (Just <| .state Address.initial)
+                                                )
+                            in
+                                { pageData | checkoutDetails = RemoteData.Loading }
+                                    |> fetchLocationsOnce
+                                    |> getDetails
 
                 CheckoutSuccess orderId ->
                     case model.currentUser of
@@ -689,7 +706,7 @@ update msg ({ pageData } as model) =
                         Nothing ->
                             ( model, cmd )
             in
-                Checkout.update subMsg model.checkoutForm model.currentUser
+                Checkout.update subMsg model.checkoutForm model.currentUser model.maybeSessionToken
                     |> (\( form, maybeOutMsg, cmd ) ->
                             ( { model
                                 | checkoutForm = form

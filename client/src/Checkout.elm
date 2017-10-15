@@ -7,6 +7,7 @@ module Checkout
         , OutMsg(..)
         , update
         , getCustomerDetails
+        , getAnonymousDetails
         , view
         , successView
         )
@@ -15,7 +16,7 @@ import Html exposing (..)
 import Html.Attributes exposing (class, type_, colspan, src, for, id, rows, value, href, target, selected, checked)
 import Html.Events exposing (onSubmit, onInput, onCheck, targetValue, on)
 import Json.Decode as Decode exposing (Decoder)
-import Json.Encode as Encode
+import Json.Encode as Encode exposing (Value)
 import RemoteData exposing (WebData)
 import Time.DateTime as DateTime
 import Address exposing (AddressId(..))
@@ -111,15 +112,15 @@ type OutMsg
     | DetailsRefreshed PageData.CheckoutDetails
 
 
-update : Msg -> Form -> AuthStatus -> ( Form, Maybe OutMsg, Cmd Msg )
-update msg model authStatus =
+update : Msg -> Form -> AuthStatus -> Maybe String -> ( Form, Maybe OutMsg, Cmd Msg )
+update msg model authStatus maybeSessionToken =
     case msg of
         SelectShipping addressId ->
             { model
                 | shippingAddress = selectAddress addressId
                 , makeShippingDefault = False
             }
-                |> refreshDetails authStatus model
+                |> refreshDetails authStatus maybeSessionToken model
 
         ToggleShippingDefault makeDefault ->
             { model | makeShippingDefault = makeDefault }
@@ -130,7 +131,7 @@ update msg model authStatus =
                 subMsg
                 model
                 (\f -> { model | shippingAddress = f })
-                |> refreshDetails authStatus model
+                |> refreshDetails authStatus maybeSessionToken model
 
         SelectBilling addressId ->
             { model
@@ -196,55 +197,81 @@ updateAddressForm addr msg model updater =
                 |> (NewAddress >> updater)
 
 
-refreshDetails : AuthStatus -> Form -> Form -> ( Form, Maybe a, Cmd Msg )
-refreshDetails authStatus oldModel newModel =
+refreshDetails : AuthStatus -> Maybe String -> Form -> Form -> ( Form, Maybe a, Cmd Msg )
+refreshDetails authStatus maybeSessionToken oldModel newModel =
     let
-        fetchCommand token =
+        refreshCommand =
+            case authStatus of
+                User.Anonymous ->
+                    applyArguments anonymousCommand
+
+                User.Authorized user ->
+                    applyArguments
+                        (\( maybeCountry, maybeRegion, maybeAddressId ) ->
+                            getCustomerDetails RefreshDetails
+                                user.authToken
+                                maybeCountry
+                                maybeRegion
+                                maybeAddressId
+                        )
+
+        applyArguments cmdFunction =
+            case commandArguments of
+                Just args ->
+                    cmdFunction args
+
+                Nothing ->
+                    Cmd.none
+
+        anonymousCommand ( maybeCountry, maybeRegion, _ ) =
+            case maybeSessionToken of
+                Nothing ->
+                    Cmd.none
+
+                Just token ->
+                    getAnonymousDetails RefreshDetails token maybeCountry maybeRegion
+
+        commandArguments =
             case ( oldModel.shippingAddress, newModel.shippingAddress ) of
                 ( ExistingAddress id1, ExistingAddress id2 ) ->
                     if id1 /= id2 then
-                        getCustomerDetails RefreshDetails token Nothing Nothing (Just id2)
+                        Just ( Nothing, Nothing, Just id2 )
                     else
-                        Cmd.none
+                        Nothing
 
                 ( NewAddress oldForm, NewAddress newForm ) ->
                     if oldForm.model.country == newForm.model.country then
                         case ( oldForm.model.state, newForm.model.state ) of
                             ( Locations.Custom _, Locations.Custom _ ) ->
-                                Cmd.none
+                                Nothing
 
                             ( oldState, newState ) ->
                                 if oldState /= newState then
-                                    getCustomerDetails RefreshDetails
-                                        token
-                                        (Just newForm.model.country)
-                                        (Just newState)
-                                        Nothing
+                                    Just
+                                        ( Just newForm.model.country
+                                        , Just newState
+                                        , Nothing
+                                        )
                                 else
-                                    Cmd.none
+                                    Nothing
                     else
-                        getCustomerDetails RefreshDetails
-                            token
-                            (Just newForm.model.country)
-                            (Just newForm.model.state)
-                            Nothing
+                        Just
+                            ( Just newForm.model.country
+                            , Just newForm.model.state
+                            , Nothing
+                            )
 
                 ( _, ExistingAddress id ) ->
-                    getCustomerDetails RefreshDetails token Nothing Nothing (Just id)
+                    Just ( Nothing, Nothing, Just id )
 
                 ( _, NewAddress form ) ->
-                    getCustomerDetails RefreshDetails
-                        token
-                        (Just form.model.country)
-                        (Just form.model.state)
-                        Nothing
+                    Just
+                        ( Just form.model.country
+                        , Just form.model.state
+                        , Nothing
+                        )
     in
-        case authStatus of
-            User.Anonymous ->
-                ( newModel, Nothing, Cmd.none )
-
-            User.Authorized user ->
-                ( newModel, Nothing, fetchCommand user.authToken )
+        ( newModel, Nothing, refreshCommand )
 
 
 findBy : (a -> Bool) -> List a -> Maybe a
@@ -275,15 +302,40 @@ getCustomerDetails msg token maybeCountry maybeRegion maybeAddressId =
                 , ( "country", encodeMaybe Encode.string maybeCountry )
                 , ( "addressId", encodeMaybe (\(AddressId i) -> Encode.int i) maybeAddressId )
                 ]
-
-        encodeMaybe encoder =
-            Maybe.map encoder >> Maybe.withDefault Encode.null
     in
         Api.post Api.CheckoutDetailsCustomer
             |> Api.withJsonBody data
             |> Api.withJsonResponse PageData.checkoutDetailsDecoder
             |> Api.withToken token
             |> Api.sendRequest msg
+
+
+getAnonymousDetails :
+    (WebData PageData.CheckoutDetails -> msg)
+    -> String
+    -> Maybe String
+    -> Maybe Region
+    -> Cmd msg
+getAnonymousDetails msg sessionToken maybeCountry maybeRegion =
+    let
+        data =
+            Encode.object
+                [ ( "region", encodeMaybe Locations.regionEncoder maybeRegion )
+                , ( "country", encodeMaybe Encode.string maybeCountry )
+                , ( "sessionToken", Encode.string sessionToken )
+                ]
+    in
+        Api.post Api.CheckoutDetailsAnonymous
+            |> Api.withJsonBody data
+            |> Api.withJsonResponse PageData.checkoutDetailsDecoder
+            |> Api.sendRequest msg
+
+
+{-| TODO: This is probably repeated other places, stick in a Json.Utils module.
+-}
+encodeMaybe : (a -> Value) -> Maybe a -> Value
+encodeMaybe encoder =
+    Maybe.map encoder >> Maybe.withDefault Encode.null
 
 
 placeOrder : Form -> AuthStatus -> Cmd Msg
