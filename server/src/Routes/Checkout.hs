@@ -44,17 +44,20 @@ import qualified Validation as V
 type CheckoutAPI =
          "customer-details" :> CustomerDetailsRoute
     :<|> "customer-place-order" :> CustomerPlaceOrderRoute
+    :<|> "anonymous-details" :> AnonymousDetailsRoute
     :<|> "success" :> SuccessRoute
 
 type CheckoutRoutes =
-         (AuthToken -> CheckoutDetailsParameters -> App CheckoutDetailsData)
+         (AuthToken -> CustomerDetailsParameters -> App CheckoutDetailsData)
     :<|> (AuthToken -> CustomerPlaceOrderParameters -> App PlaceOrderData)
+    :<|> (AnonymousDetailsParameters -> App CheckoutDetailsData)
     :<|> (AuthToken -> SuccessParameters -> App OrderDetails)
 
 checkoutRoutes :: CheckoutRoutes
 checkoutRoutes =
          customerDetailsRoute
     :<|> customerPlaceOrderRoute
+    :<|> anonymousDetailsRoute
     :<|> customerSuccessRoute
 
 
@@ -172,16 +175,16 @@ toCheckoutAddress (Entity addressId address) =
 -- CART/ADDRESS DETAILS
 
 
-data CheckoutDetailsParameters =
-    CheckoutDetailsParameters
+data CustomerDetailsParameters =
+    CustomerDetailsParameters
         { cdpShippingRegion :: Maybe Region
         , cdpShippingCountry :: Maybe Country
         , cdpExistingAddress :: Maybe AddressId
         }
 
-instance FromJSON CheckoutDetailsParameters where
-    parseJSON = withObject "CheckoutDetailsParameters" $ \v ->
-        CheckoutDetailsParameters
+instance FromJSON CustomerDetailsParameters where
+    parseJSON = withObject "CustomerDetailsParameters" $ \v ->
+        CustomerDetailsParameters
             <$> v .:? "region"
             <*> v .:? "country"
             <*> v .:? "addressId"
@@ -205,10 +208,10 @@ instance ToJSON CheckoutDetailsData where
 
 type CustomerDetailsRoute =
        AuthProtect "auth-token"
-    :> ReqBody '[JSON] CheckoutDetailsParameters
+    :> ReqBody '[JSON] CustomerDetailsParameters
     :> Post '[JSON] CheckoutDetailsData
 
-customerDetailsRoute :: AuthToken -> CheckoutDetailsParameters -> App CheckoutDetailsData
+customerDetailsRoute :: AuthToken -> CustomerDetailsParameters -> App CheckoutDetailsData
 customerDetailsRoute token parameters = do
     (Entity customerId _) <- validateToken token
     runDB $ do
@@ -248,6 +251,42 @@ customerDetailsRoute token parameters = do
             in
                 fromMaybe (Nothing, Nothing)
                     $ asum [maybeFromAddress, maybeFromParams, maybeFromDefault]
+
+
+data AnonymousDetailsParameters =
+    AnonymousDetailsParameters
+        { adpShippingCountry :: Maybe Country
+        , adpShippingRegion :: Maybe Region
+        , adpCartToken :: T.Text
+        }
+
+instance FromJSON AnonymousDetailsParameters where
+    parseJSON = withObject "AnonymousDetailsParameters" $ \v ->
+        AnonymousDetailsParameters
+            <$> v .:? "country"
+            <*> v .:? "region"
+            <*> v .: "sessionToken"
+
+type AnonymousDetailsRoute =
+       ReqBody '[JSON] AnonymousDetailsParameters
+    :> Post '[JSON] CheckoutDetailsData
+
+anonymousDetailsRoute :: AnonymousDetailsParameters -> App CheckoutDetailsData
+anonymousDetailsRoute parameters =
+    let
+        maybeCountry = adpShippingCountry parameters
+    in
+        runDB $ do
+            maybeTaxRate <- getTaxRate maybeCountry $ adpShippingRegion parameters
+            items <- getCartItems maybeTaxRate $ \c ->
+                c E.^. CartSessionToken E.==. E.just (E.val $ adpCartToken parameters)
+            charges <- getCharges maybeTaxRate maybeCountry items
+            return CheckoutDetailsData
+                { cddShippingAddresses = []
+                , cddBillingAddresses = []
+                , cddItems = items
+                , cddCharges = charges
+                }
 
 
 -- PLACE ORDER
