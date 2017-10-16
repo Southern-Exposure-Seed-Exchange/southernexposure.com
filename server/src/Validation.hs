@@ -40,7 +40,7 @@ type ErrorMessage = T.Text
 type Validators = [(FieldName, [(ErrorMessage, Bool)])]
 
 class Validation a where
-    -- | Validate an item, returning a 500 error with a body containing the
+    -- | Validate an item, returning a 422 error with a body containing the
     -- error messages. The default implementation transforms the list of
     -- validators returned by `validators` into a JSON object.
     validate :: a -> App a
@@ -61,6 +61,8 @@ class Validation a where
     -- | Return a list of validators by field name. Each field contains
     -- a list of messages and whether they are invalid. An empty field name
     -- corresponds to a general error.
+    -- TODO: Switch bool is mean a field is valid, it's confusing the other
+    -- way.
     validators :: a -> App Validators
     validators _ = return []
 
