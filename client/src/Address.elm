@@ -283,7 +283,7 @@ form { model, errors } inputPrefix locations =
             , field .companyName CompanyName "Company Name" "companyName" "organization" False
             , field .street Street "Street Address" "addressOne" "street-address" True
             , field .addressTwo AddressTwo "Address Line 2" "addressTwo" "address-line2" False
-            , field .city City "City" "address-level2" "on" True
+            , field .city City "City" "city" "address-level2" True
             , regionField
             , field .zipCode ZipCode "Zip Code" "zipCode" "postal-code" True
             , selectField .country Country locations.countries "Country" "country"
