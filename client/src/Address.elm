@@ -302,7 +302,7 @@ inputField errors prefix inputValue inputMsg labelText inputName autocompleteTyp
                 ]
                 [ text labelText
                 , if not isRequired then
-                    small [] [ text " (optional)" ]
+                    small [ class "text-muted" ] [ text " (optional)" ]
                   else
                     text ""
                 ]
