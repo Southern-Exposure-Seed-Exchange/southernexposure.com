@@ -460,7 +460,10 @@ view model authStatus locations checkoutDetails =
         billingAddressText =
             case model.shippingAddress of
                 NewAddress form ->
-                    Address.card form.model locations
+                    if form.model /= Address.initial then
+                        Address.card form.model locations
+                    else
+                        text ""
 
                 ExistingAddress id ->
                     findBy (\a -> a.id == Just id) checkoutDetails.shippingAddresses
