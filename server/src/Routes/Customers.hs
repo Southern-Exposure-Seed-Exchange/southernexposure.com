@@ -32,6 +32,7 @@ import Servant
 import Auth
 import Models
 import Models.Fields (Country(..), Region, ArmedForcesRegionCode, armedForcesRegion)
+import Routes.CommonData (AuthorizationData, toAuthorizationData)
 import Server
 import Validation (Validation(..))
 
@@ -79,38 +80,6 @@ customerRoutes =
     :<|> editDetailsRoute
     :<|> contactDetailsRoute
     :<|> contactEditRoute
-
-
--- AUTHORIZATION DATA
-
-
-data AuthorizationData =
-    AuthorizationData
-        { adId :: CustomerId
-        , adFirstName :: T.Text
-        , adLastName :: T.Text
-        , adEmail :: T.Text
-        , adToken :: T.Text
-        } deriving (Show)
-
-instance ToJSON AuthorizationData where
-    toJSON authData =
-        object [ "id" .= toJSON (adId authData)
-               , "firstName" .= toJSON (adFirstName authData)
-               , "lastName" .= toJSON (adLastName authData)
-               , "email" .= toJSON (adEmail authData)
-               , "token" .= toJSON (adToken authData)
-               ]
-
-customerToAuthorizationData :: Entity Customer -> AuthorizationData
-customerToAuthorizationData (Entity customerId customer) =
-    AuthorizationData
-        { adId = customerId
-        , adFirstName = customerFirstName customer
-        , adLastName = customerLastName customer
-        , adEmail = customerEmail customer
-        , adToken = customerAuthToken customer
-        }
 
 
 -- LOCATIONS
@@ -265,15 +234,9 @@ registrationRoute = validate >=> \parameters -> do
         Nothing ->
             serverError err500
         Just customerId ->
-            maybeMergeCarts customerId (rpCartToken parameters) >>
+            runDB (maybeMergeCarts customerId $ rpCartToken parameters) >>
             Emails.send (Emails.AccountCreated customer) >>
-            return AuthorizationData
-                { adId = customerId
-                , adFirstName = rpFirstName parameters
-                , adLastName = rpLastName parameters
-                , adEmail = rpEmail parameters
-                , adToken = authToken
-                }
+            return (toAuthorizationData $ Entity customerId customer)
 
 generateToken :: App T.Text
 generateToken = do
@@ -334,7 +297,7 @@ loginRoute LoginParameters { lpEmail, lpPassword, lpCartToken } =
                 when (customerEncryptedPassword customer == "") resetRequiredError
                 if isValid then
                     runDB (maybeMergeCarts customerId lpCartToken) >>
-                    return (customerToAuthorizationData e)
+                    return (toAuthorizationData e)
                 else
                     authorizationError
             Nothing ->
@@ -397,7 +360,7 @@ authorizeRoute AuthorizeParameters { apUserId, apToken } =
         case maybeCustomer of
             Just customer ->
                 if apToken == customerAuthToken customer then
-                    return $ customerToAuthorizationData (Entity userId customer )
+                    return $ toAuthorizationData (Entity userId customer )
                 else
                     serverError err403
             Nothing ->
@@ -498,7 +461,7 @@ resetPasswordRoute = validate >=> \parameters ->
                     maybeCustomer <- runDB $ get customerId
                     flip (maybe invalidCodeError) maybeCustomer $ \customer -> do
                         void . Emails.send $ Emails.PasswordResetSuccess customer
-                        return . customerToAuthorizationData
+                        return . toAuthorizationData
                             $ Entity customerId customer
                 else
                     runDB (delete resetId) >> invalidCodeError

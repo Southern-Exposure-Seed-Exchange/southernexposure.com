@@ -5,6 +5,8 @@ module Routes.CommonData
     , getProductData
     , PredecessorCategory
     , categoryToPredecessor
+    , AuthorizationData
+    , toAuthorizationData
     , CartItemData(..)
     , getCartItems
     , CartCharges(..)
@@ -72,6 +74,32 @@ instance ToJSON PredecessorCategory where
 categoryToPredecessor :: Entity Category -> PredecessorCategory
 categoryToPredecessor (Entity categoryId category) =
     PredecessorCategory categoryId (categoryName category) (categorySlug category)
+
+
+-- Customers
+
+
+data AuthorizationData =
+    AuthorizationData
+        { adId :: CustomerId
+        , adEmail :: T.Text
+        , adToken :: T.Text
+        } deriving (Show)
+
+instance ToJSON AuthorizationData where
+    toJSON authData =
+        object [ "id" .= toJSON (adId authData)
+               , "email" .= toJSON (adEmail authData)
+               , "token" .= toJSON (adToken authData)
+               ]
+
+toAuthorizationData :: Entity Customer -> AuthorizationData
+toAuthorizationData (Entity customerId customer) =
+    AuthorizationData
+        { adId = customerId
+        , adEmail = customerEmail customer
+        , adToken = customerAuthToken customer
+        }
 
 
 -- Carts
