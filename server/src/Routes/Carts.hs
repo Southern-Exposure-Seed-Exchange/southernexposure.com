@@ -24,13 +24,12 @@ import Servant ((:>), (:<|>)(..), AuthProtect, ReqBody, JSON, PlainText, Get, Po
 import Auth
 import Models
 import Routes.CommonData (CartItemData(..), CartCharges(..), getCartItems, getCharges)
+import Routes.Utils (generateUniqueToken)
 import Server
 import Validation (Validation(..))
 
 import qualified Data.Map.Strict as M
 import qualified Data.Text as T
-import qualified Data.UUID as UUID
-import qualified Data.UUID.V4 as UUID4
 import qualified Database.Esqueleto as E
 import qualified Validation as V
 
@@ -514,7 +513,7 @@ getOrCreateAnonymousCart maybeToken =
                     runDB $ update cartId [CartExpirationTime =. Just expirationTime]
                     return (token, cart)
     where createAnonymousCart = do
-            token <- generateToken
+            token <- generateUniqueToken (UniqueAnonymousCart . Just)
             expiration <- getExpirationTime
             (,) token <$> runDB (insertEntity Cart
                 { cartCustomerId = Nothing
@@ -526,11 +525,3 @@ getOrCreateAnonymousCart maybeToken =
                 sixteenWeeksInSeconds = 16 * 7 * 24 * 60 * 60
             in
                 addUTCTime sixteenWeeksInSeconds <$> liftIO getCurrentTime
-          generateToken = do
-            token <- UUID.toText <$> liftIO UUID4.nextRandom
-            maybeCart <- runDB . getBy . UniqueAnonymousCart $ Just token
-            case maybeCart of
-                Just _ ->
-                    generateToken
-                Nothing ->
-                    return token

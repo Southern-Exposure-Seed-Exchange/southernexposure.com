@@ -33,6 +33,7 @@ import Auth
 import Models
 import Models.Fields (Country(..), Region, ArmedForcesRegionCode, armedForcesRegion)
 import Routes.CommonData (AuthorizationData, toAuthorizationData)
+import Routes.Utils (generateUniqueToken, hashPassword)
 import Server
 import Validation (Validation(..))
 
@@ -213,7 +214,7 @@ type RegisterRoute =
 registrationRoute :: RegistrationParameters -> App AuthorizationData
 registrationRoute = validate >=> \parameters -> do
     encryptedPass <- hashPassword $ rpPassword parameters
-    authToken <- generateToken
+    authToken <- generateUniqueToken UniqueToken
     let customer = Customer
             { customerEmail = rpEmail parameters
             , customerEncryptedPassword = encryptedPass
@@ -237,26 +238,6 @@ registrationRoute = validate >=> \parameters -> do
             runDB (maybeMergeCarts customerId $ rpCartToken parameters) >>
             Emails.send (Emails.AccountCreated customer) >>
             return (toAuthorizationData $ Entity customerId customer)
-
-generateToken :: App T.Text
-generateToken = do
-    token <- UUID.toText <$> liftIO UUID4.nextRandom
-    maybeCustomer <- runDB . getBy $ UniqueToken token
-    case maybeCustomer of
-        Just _ ->
-            generateToken
-        Nothing ->
-            return token
-
-hashPassword :: T.Text -> App T.Text
-hashPassword password = do
-    maybePass <- liftIO . BCrypt.hashPasswordUsingPolicy BCrypt.slowerBcryptHashingPolicy
-        $ encodeUtf8 password
-    case maybePass of
-        Nothing ->
-            serverError $ err500 { errBody = "Misconfigured Hashing Policy" }
-        Just pass ->
-            return $ decodeUtf8 pass
 
 
 -- LOGIN
@@ -450,7 +431,7 @@ resetPasswordRoute = validate >=> \parameters ->
             Just (Entity resetId passwordReset) -> do
                 currentTime <- liftIO getCurrentTime
                 if currentTime < passwordResetExpirationTime passwordReset then do
-                    token <- generateToken
+                    token <- generateUniqueToken UniqueToken
                     newHash <- hashPassword $ rppPassword parameters
                     let customerId = passwordResetCustomerId passwordReset
                     runDB $ update customerId

@@ -1,18 +1,32 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TypeFamilies #-}
 module Routes.Utils
     ( paginatedSelect
+    , generateUniqueToken
+    , hashPassword
     ) where
 
+import Control.Monad.Trans (liftIO)
 import Data.Int (Int64)
 import Data.Maybe (fromMaybe)
-import Database.Persist (Entity(..))
+import Data.Text.Encoding (encodeUtf8, decodeUtf8)
+import Database.Persist (Entity(..), getBy, PersistEntityBackend, PersistEntity)
+import Database.Persist.Sql (SqlBackend)
+import Servant (errBody, err500)
 
 import Models
 import Models.Fields (Cents(..))
 import Server
 
+import qualified Crypto.BCrypt as BCrypt
 import qualified Data.Text as T
+import qualified Data.UUID as UUID
+import qualified Data.UUID.V4 as UUID4
 import qualified Database.Esqueleto as E
+
+
+-- PRODUCTS
+
 
 paginatedSelect :: Maybe T.Text -> Maybe Int -> Maybe Int
                 -> (E.SqlExpr (Entity Product) -> E.SqlExpr (Maybe (Entity SeedAttribute)) -> E.SqlExpr (E.Value Bool))
@@ -74,3 +88,28 @@ variantSorted ordering offset perPage filters = runDB $ do
         return (E.countRows :: E.SqlExpr (E.Value Int))
     let (ps, _) = unzip productsAndPrice
     return (ps, E.unValue $ head pCount)
+
+
+-- CUSTOMERS
+
+
+generateUniqueToken :: (PersistEntityBackend r ~ SqlBackend, PersistEntity r)
+                    => (T.Text -> Unique r) -> App T.Text
+generateUniqueToken uniqueConstraint = do
+    token <- UUID.toText <$> liftIO UUID4.nextRandom
+    maybeCustomer <- runDB . getBy $ uniqueConstraint token
+    case maybeCustomer of
+        Just _ ->
+            generateUniqueToken uniqueConstraint
+        Nothing ->
+            return token
+
+hashPassword :: T.Text -> App T.Text
+hashPassword password = do
+    maybePass <- liftIO . BCrypt.hashPasswordUsingPolicy BCrypt.slowerBcryptHashingPolicy
+        $ encodeUtf8 password
+    case maybePass of
+        Nothing ->
+            serverError $ err500 { errBody = "Misconfigured Hashing Policy" }
+        Just pass ->
+            return $ decodeUtf8 pass
