@@ -2,7 +2,6 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeOperators #-}
 module Routes.Checkout
     ( CheckoutAPI
@@ -23,7 +22,7 @@ import Data.Time.Clock (getCurrentTime, UTCTime)
 import Data.Typeable (Typeable)
 import Database.Persist
     ( (==.), (=.), Entity(..), insert, insert_, insertEntity, get, getBy
-    , selectList, update, updateWhere, deleteBy, deleteWhere
+    , selectList, update, updateWhere, delete, deleteWhere
     )
 import Numeric.Natural (Natural)
 import Servant ((:<|>)(..), (:>), AuthProtect, JSON, Post, ReqBody, err404)
@@ -399,34 +398,16 @@ type CustomerPlaceOrderRoute =
 customerPlaceOrderRoute :: AuthToken -> CustomerPlaceOrderParameters -> App PlaceOrderData
 customerPlaceOrderRoute token = validate >=> \parameters -> do
     (Entity customerId _) <- validateToken token
-    let comment = cpopComment parameters
     currentTime <- liftIO getCurrentTime
     withPlaceOrderErrors (cpopShippingAddress parameters) . runDB $ do
         shippingAddress <- getOrInsertAddress Shipping customerId
             $ cpopShippingAddress parameters
         billingAddress <- getOrInsertAddress Billing customerId
             $ cpopBillingAddress parameters
-        maybeTaxRate <- getTaxRate (Just . addressCountry $ entityVal shippingAddress)
-            (Just . addressState $ entityVal shippingAddress)
-        (cartId, items) <- getBy (UniqueCustomerCart $ Just customerId) >>=
-            maybe (throwM CartNotFound)
-                (\(Entity cartId _) ->
-                    fmap (cartId, ) . getCartItems maybeTaxRate
-                        $ \c -> c E.^. CartId E.==. E.val cartId
-                )
-        orderId <- insert Order
-            { orderCustomerId = customerId
-            , orderStatus = Processing
-            , orderBillingAddressId = entityKey billingAddress
-            , orderShippingAddressId = entityKey shippingAddress
-            , orderCustomerComment = comment
-            , orderTaxDescription = maybe "" taxRateDescription maybeTaxRate
-            , orderCreatedAt = currentTime
-            }
-        createLineItems maybeTaxRate (entityVal shippingAddress) items orderId
-            >> createProducts maybeTaxRate items orderId
-            >> deleteWhere [CartItemCartId ==. cartId]
-            >> deleteBy (UniqueCustomerCart $ Just customerId)
+        (Entity cartId _) <- getBy (UniqueCustomerCart $ Just customerId) >>=
+            maybe (throwM CartNotFound) return
+        orderId <- createOrder customerId cartId shippingAddress
+            (entityKey billingAddress) (cpopComment parameters) currentTime
         return $ PlaceOrderData orderId
     where getOrInsertAddress :: AddressType -> CustomerId -> CustomerAddress -> AppSQL (Entity Address)
           getOrInsertAddress addrType customerId = \case
@@ -453,11 +434,30 @@ customerPlaceOrderRoute token = validate >=> \parameters -> do
 
 
 
+createOrder :: CustomerId -> CartId -> Entity Address -> AddressId -> T.Text -> UTCTime -> AppSQL OrderId
+createOrder customerId cartId shippingEntity billingId comment currentTime = do
+    let (Entity shippingId shippingAddress) = shippingEntity
+    maybeTaxRate <- getTaxRate (Just $ addressCountry shippingAddress)
+        (Just $ addressState shippingAddress)
+    items <- getCartItems maybeTaxRate $ \c -> c E.^. CartId E.==. E.val cartId
+    orderId <- insert Order
+        { orderCustomerId = customerId
+        , orderStatus = Processing
+        , orderBillingAddressId = billingId
+        , orderShippingAddressId = shippingId
+        , orderCustomerComment = comment
+        , orderTaxDescription = maybe "" taxRateDescription maybeTaxRate
+        , orderCreatedAt = currentTime
+        }
+    createLineItems maybeTaxRate shippingAddress items orderId
+        >> createProducts maybeTaxRate items orderId
+        >> deleteWhere [CartItemCartId ==. cartId]
+        >> delete cartId
+    return orderId
 
 createLineItems :: Maybe TaxRate -> Address -> [CartItemData] -> OrderId -> AppSQL ()
 createLineItems maybeTaxRate shippingAddress items orderId = do
-    charges <- getCharges maybeTaxRate
-        (Just $ addressCountry shippingAddress) items
+    charges <- getCharges maybeTaxRate (Just $ addressCountry shippingAddress) items
     shippingCharge <-
         case ccShippingMethods charges of
             [] ->
