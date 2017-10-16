@@ -31,7 +31,11 @@ import Auth
 import Models
 import Models.Fields
 import Server
-import Routes.CommonData (CartItemData(..), CartCharges(..), CartCharge(..), getCartItems, getCharges)
+import Routes.CommonData
+    ( AuthorizationData, toAuthorizationData, CartItemData(..), CartCharges(..)
+    , CartCharge(..), getCartItems, getCharges
+    )
+import Routes.Utils (hashPassword, generateUniqueToken)
 import Validation (Validation(..))
 
 import qualified Data.ISO3166_CountryCodes as CountryCodes
@@ -44,12 +48,14 @@ type CheckoutAPI =
          "customer-details" :> CustomerDetailsRoute
     :<|> "customer-place-order" :> CustomerPlaceOrderRoute
     :<|> "anonymous-details" :> AnonymousDetailsRoute
+    :<|> "anonymous-place-order" :> AnonymousPlaceOrderRoute
     :<|> "success" :> SuccessRoute
 
 type CheckoutRoutes =
          (AuthToken -> CustomerDetailsParameters -> App CheckoutDetailsData)
     :<|> (AuthToken -> CustomerPlaceOrderParameters -> App PlaceOrderData)
     :<|> (AnonymousDetailsParameters -> App CheckoutDetailsData)
+    :<|> (AnonymousPlaceOrderParameters -> App AnonymousPlaceOrderData)
     :<|> (AuthToken -> SuccessParameters -> App OrderDetails)
 
 checkoutRoutes :: CheckoutRoutes
@@ -57,6 +63,7 @@ checkoutRoutes =
          customerDetailsRoute
     :<|> customerPlaceOrderRoute
     :<|> anonymousDetailsRoute
+    :<|> anonymousPlaceOrderRoute
     :<|> customerSuccessRoute
 
 
@@ -432,6 +439,93 @@ customerPlaceOrderRoute token = validate >=> \parameters -> do
                     addrId <- insert newAddress
                     return $ Entity addrId newAddress
 
+
+data AnonymousPlaceOrderParameters =
+    AnonymousPlaceOrderParameters
+        { apopEmail :: T.Text
+        , apopPassword :: T.Text
+        , apopShippingAddress :: CheckoutAddress
+        , apopBillingAddress :: CheckoutAddress
+        , apopComment :: T.Text
+        , apopCartToken :: T.Text
+        }
+
+instance FromJSON AnonymousPlaceOrderParameters where
+    parseJSON = withObject "AnonymousPlaceOrderParameters" $ \v ->
+        AnonymousPlaceOrderParameters
+            <$> v .: "email"
+            <*> v .: "password"
+            <*> v .: "shippingAddress"
+            <*> v .: "billingAddress"
+            <*> v .: "comment"
+            <*> v .: "sessionToken"
+
+instance Validation AnonymousPlaceOrderParameters where
+    validators parameters = do
+        emailDoesntExist <- V.doesntExist . UniqueEmail $ apopEmail parameters
+        shippingValidators <- validators $ apopShippingAddress parameters
+        billingValidators <- validators $ apopBillingAddress parameters
+        return $
+            [ ( "email"
+              , [ V.required $ apopEmail parameters
+                , ( "An Account with this Email already exists."
+                  , emailDoesntExist
+                  )
+                ]
+              )
+            , ( "password"
+              , [ V.required $ apopPassword parameters
+                , V.minimumLength 8 $ apopPassword parameters
+                ]
+              )
+            ]
+            ++ map (first $ T.append "shipping-") shippingValidators
+            ++ map (first $ T.append "billing-") billingValidators
+
+data AnonymousPlaceOrderData =
+    AnonymousPlaceOrderData
+        { apodOrderId :: OrderId
+        , apodAuthorizationData :: AuthorizationData
+        }
+
+instance ToJSON AnonymousPlaceOrderData where
+    toJSON orderData =
+        object
+            [ "orderId" .= apodOrderId orderData
+            , "authData" .= apodAuthorizationData orderData
+            ]
+
+type AnonymousPlaceOrderRoute =
+       ReqBody '[JSON] AnonymousPlaceOrderParameters
+    :> Post '[JSON] AnonymousPlaceOrderData
+
+anonymousPlaceOrderRoute :: AnonymousPlaceOrderParameters -> App AnonymousPlaceOrderData
+anonymousPlaceOrderRoute = validate >=> \parameters -> do
+    encryptedPass <- hashPassword $ apopPassword parameters
+    authToken <- generateUniqueToken UniqueToken
+    currentTime <- liftIO getCurrentTime
+    let customer = Customer
+            { customerEmail = apopEmail parameters
+            , customerEncryptedPassword = encryptedPass
+            , customerAuthToken = authToken
+            , customerIsAdmin = False
+            , customerTelephone = ""
+            }
+    withPlaceOrderErrors (NewAddress $ apopShippingAddress parameters) . runDB $ do
+        customerId <- insert customer
+        let shippingAddress = fromCheckoutAddress Shipping customerId
+                $ apopShippingAddress parameters
+        mergeCarts (apopCartToken parameters) customerId
+        (Entity cartId _) <- getBy (UniqueCustomerCart $ Just customerId)
+            >>= maybe (throwM CartNotFound) return
+        shippingId <- insert shippingAddress
+        billingId <- insert . fromCheckoutAddress Billing customerId
+            $ apopBillingAddress parameters
+        orderId <- createOrder customerId cartId (Entity shippingId shippingAddress)
+            billingId (apopComment parameters) currentTime
+        return . AnonymousPlaceOrderData orderId
+            . toAuthorizationData
+            $ Entity customerId customer
 
 
 createOrder :: CustomerId -> CartId -> Entity Address -> AddressId -> T.Text -> UTCTime -> AppSQL OrderId
