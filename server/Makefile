@@ -9,5 +9,8 @@ build: ghc sese-website.cabal src app
 watch: build
 	stack -j${CORE_COUNT} build --pedantic --file-watch --ghc-options="-j${CORE_COUNT}"
 
+repl: ghc
+	stack -j${CORE_COUNT} repl --main-is sese-website-exe
+
 ghc: stack.yaml
 	stack -j${CORE_COUNT} setup
