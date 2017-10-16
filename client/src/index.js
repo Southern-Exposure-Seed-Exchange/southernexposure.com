@@ -78,14 +78,16 @@ app.ports.setPageTitle.subscribe(function(pageTitle) {
 
 /* Scroll to Top of Element if it's not in view */
 app.ports.scrollToSelector.subscribe(function(selector) {
-  var $selector = $(selector);
-  if ($selector.length > 0) {
-    var elementTop = $selector.offset().top;
-    if (elementTop < $(window).scrollTop()) {
-      $('html, body').animate({ scrollTop: elementTop }, 500);
+  requestAnimationFrame(function() {
+    var $selector = $(selector);
+    if ($selector.length > 0) {
+      var elementTop = $selector.offset().top;
+      if (elementTop < $(window).scrollTop()) {
+        $('html, body').animate({ scrollTop: elementTop }, 300);
+      }
     }
-  }
-  $(':focus').blur();
+    $(':focus').blur();
+  });
 });
 
 /* Collapse the Mobile Menus */
