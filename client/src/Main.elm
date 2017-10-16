@@ -680,14 +680,25 @@ update msg ({ pageData } as model) =
 
         CheckoutMsg subMsg ->
             let
-                handleOutMsg msg ( model, cmd ) =
-                    case msg of
-                        Just (Checkout.OrderCompleted orderId) ->
+                handleOutMsg maybeMsg ( model, cmd ) =
+                    case maybeMsg of
+                        Just (Checkout.CustomerOrderCompleted orderId) ->
                             ( { model | cartItemCount = 0 }
                             , Cmd.batch
                                 [ cmd
                                 , Routing.newUrl <| CheckoutSuccess orderId
                                 , Ports.setCartItemCount 0
+                                ]
+                            )
+
+                        Just (Checkout.AnonymousOrderCompleted orderId newAuthStatus) ->
+                            ( { model | cartItemCount = 0, currentUser = newAuthStatus }
+                            , Cmd.batch
+                                [ cmd
+                                , Routing.newUrl <| CheckoutSuccess orderId
+                                , Ports.setCartItemCount 0
+                                , Ports.removeCartSessionToken ()
+                                , User.storeDetails newAuthStatus
                                 ]
                             )
 

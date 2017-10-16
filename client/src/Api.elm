@@ -60,6 +60,7 @@ type Endpoint
     | CheckoutDetailsCustomer
     | CheckoutPlaceOrderCustomer
     | CheckoutDetailsAnonymous
+    | CheckoutPlaceOrderAnonymous
     | CheckoutSuccess
 
 
@@ -150,6 +151,9 @@ toUrl endpoint =
 
                 CheckoutDetailsAnonymous ->
                     joinPath [ "checkout", "anonymous-details" ]
+
+                CheckoutPlaceOrderAnonymous ->
+                    joinPath [ "checkout", "anonymous-place-order" ]
 
                 CheckoutSuccess ->
                     joinPath [ "checkout", "success" ]

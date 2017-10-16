@@ -120,12 +120,13 @@ type Msg
     | BillingSameAsShipping Bool
     | Comment String
     | Submit
-    | SubmitResponse (WebData (Result Api.FormErrors Int))
+    | SubmitResponse (WebData (Result Api.FormErrors ( Int, AuthStatus )))
     | RefreshDetails (WebData PageData.CheckoutDetails)
 
 
 type OutMsg
-    = OrderCompleted Int
+    = AnonymousOrderCompleted Int AuthStatus
+    | CustomerOrderCompleted Int
     | DetailsRefreshed PageData.CheckoutDetails
 
 
@@ -198,8 +199,15 @@ update msg model authStatus maybeSessionToken =
             else
                 ( model, Nothing, placeOrder model authStatus maybeSessionToken )
 
-        SubmitResponse (RemoteData.Success (Ok orderId)) ->
-            ( initial, Just (OrderCompleted orderId), Cmd.none )
+        SubmitResponse (RemoteData.Success (Ok ( orderId, newAuthStatus ))) ->
+            let
+                outMsg =
+                    if authStatus == User.Anonymous && newAuthStatus /= authStatus then
+                        AnonymousOrderCompleted orderId newAuthStatus
+                    else
+                        CustomerOrderCompleted orderId
+            in
+                ( initial, Just outMsg, Cmd.none )
 
         SubmitResponse (RemoteData.Success (Err errors)) ->
             let
@@ -427,21 +435,24 @@ getAnonymousDetails msg sessionToken maybeCountry maybeRegion =
             |> Api.sendRequest msg
 
 
-{-| TODO: This is probably repeated other places, stick in a Json.Utils module.
--}
-encodeMaybe : (a -> Value) -> Maybe a -> Value
-encodeMaybe encoder =
-    Maybe.map encoder >> Maybe.withDefault Encode.null
-
-
-placeOrder : Form -> AuthStatus -> Cmd Msg
-placeOrder model authStatus =
+placeOrder : Form -> AuthStatus -> Maybe String -> Cmd Msg
+placeOrder model authStatus maybeSessionToken =
     let
-        data =
+        customerData =
             Encode.object
                 [ ( "shippingAddress", encodedShippingAddress )
                 , ( "billingAddress", encodedBillingAddress )
                 , ( "comment", Encode.string model.comment )
+                ]
+
+        anonymousData =
+            Encode.object
+                [ ( "shippingAddress", encodedShippingAddress )
+                , ( "billingAddress", encodedBillingAddress )
+                , ( "comment", Encode.string model.comment )
+                , ( "sessionToken", encodeMaybe Encode.string maybeSessionToken )
+                , ( "email", Encode.string model.email )
+                , ( "password", Encode.string model.password )
                 ]
 
         encodedShippingAddress =
@@ -475,18 +486,36 @@ placeOrder model authStatus =
                         Address.encode formWithDefault
 
         decoder =
-            Decode.field "orderId" Decode.int
+            case authStatus of
+                User.Anonymous ->
+                    Decode.map2 (,)
+                        (Decode.field "orderId" Decode.int)
+                        (Decode.field "authData" User.decoder)
+
+                User.Authorized _ ->
+                    Decode.map (\orderId -> ( orderId, authStatus ))
+                        (Decode.field "orderId" Decode.int)
     in
         case authStatus of
             User.Anonymous ->
-                Cmd.none
+                Api.post Api.CheckoutPlaceOrderAnonymous
+                    |> Api.withJsonBody anonymousData
+                    |> Api.withJsonResponse decoder
+                    |> Api.withErrorHandler SubmitResponse
 
             User.Authorized user ->
                 Api.post Api.CheckoutPlaceOrderCustomer
                     |> Api.withToken user.authToken
-                    |> Api.withJsonBody data
+                    |> Api.withJsonBody customerData
                     |> Api.withJsonResponse decoder
                     |> Api.withErrorHandler SubmitResponse
+
+
+{-| TODO: This is probably repeated other places, stick in a Json.Utils module.
+-}
+encodeMaybe : (a -> Value) -> Maybe a -> Value
+encodeMaybe encoder =
+    Maybe.map encoder >> Maybe.withDefault Encode.null
 
 
 
