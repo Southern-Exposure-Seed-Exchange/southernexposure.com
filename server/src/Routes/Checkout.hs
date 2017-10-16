@@ -125,16 +125,24 @@ instance Validation CheckoutAddress where
                         False
                     _ ->
                         True
+            customRegionValidator =
+                case caState address of
+                    CustomRegion region ->
+                        V.required region
+                    _ ->
+                        ("", False)
         in
             return
-                [ ( "firstName", [ V.required $ caFirstName address ])
-                , ( "lastName", [ V.required $ caLastName address ])
-                , ( "addressOne", [ V.required $ caAddressOne address ])
-                , ( "city", [ V.required $ caCity address ])
+                [ ( "firstName", [ V.required $ caFirstName address ] )
+                , ( "lastName", [ V.required $ caLastName address ] )
+                , ( "addressOne", [ V.required $ caAddressOne address ] )
+                , ( "city", [ V.required $ caCity address ] )
                 , ( "state"
-                  , [ ("Invalid region for the selected Country.", invalidRegionForCountry) ]
+                  , [ ( "Invalid region for the selected Country.", invalidRegionForCountry )
+                    , customRegionValidator
+                    ]
                   )
-                , ( "zipCode", [ V.required $ caZipCode address ])
+                , ( "zipCode", [ V.required $ caZipCode address ] )
                 ]
 
 fromCheckoutAddress :: AddressType -> CustomerId -> CheckoutAddress -> Address
