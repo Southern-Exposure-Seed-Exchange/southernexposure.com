@@ -333,7 +333,7 @@ loginRoute LoginParameters { lpEmail, lpPassword, lpCartToken } =
                 isValid <- validatePassword e
                 when (customerEncryptedPassword customer == "") resetRequiredError
                 if isValid then
-                    maybeMergeCarts customerId lpCartToken >>
+                    runDB (maybeMergeCarts customerId lpCartToken) >>
                     return (customerToAuthorizationData e)
                 else
                     authorizationError
@@ -671,32 +671,6 @@ contactEditRoute token = validate >=> \parameters -> do
 -- UTILS
 
 
-maybeMergeCarts :: CustomerId -> Maybe T.Text -> App ()
+maybeMergeCarts :: CustomerId -> Maybe T.Text -> AppSQL ()
 maybeMergeCarts customerId =
-    maybe (return ()) (mergeCarts customerId)
-
-mergeCarts :: CustomerId -> T.Text -> App ()
-mergeCarts customerId cartToken = runDB $ do
-    maybeCustomerCart <- getBy . UniqueCustomerCart $ Just customerId
-    maybeAnonymousCart <- getBy . UniqueAnonymousCart $ Just cartToken
-    case (maybeCustomerCart, maybeAnonymousCart) of
-        (Just (Entity cCartId _), Just (Entity aCartId _)) -> do
-            anonymousCartItems <- selectList [CartItemCartId ==. aCartId] []
-            mapM_ (upsertCartItem cCartId) anonymousCartItems
-            deleteWhere [CartItemCartId ==. aCartId] >> delete aCartId
-        (Nothing, Just (Entity cartId _)) ->
-            update cartId
-                [ CartSessionToken =. Nothing
-                , CartExpirationTime =. Nothing
-                , CartCustomerId =. Just customerId
-                ]
-        _ ->
-            return ()
-    where upsertCartItem cartId (Entity _ cartItem) =
-            upsert
-                CartItem
-                    { cartItemCartId = cartId
-                    , cartItemProductVariantId = cartItemProductVariantId cartItem
-                    , cartItemQuantity = cartItemQuantity cartItem
-                    }
-                [ CartItemQuantity +=. cartItemQuantity cartItem ]
+    maybe (return ()) (`mergeCarts` customerId)

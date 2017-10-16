@@ -6,11 +6,15 @@ module Models.Utils
     , getParentCategories
     , getTaxRate
     , applyTaxRate
+    , mergeCarts
     ) where
 
 import Data.Char (isAlphaNum)
 import Data.Monoid ((<>))
-import Database.Persist ((==.), Entity(..), Key(..), get, getBy, selectKeysList)
+import Database.Persist
+    ( (==.), (=.), (+=.), Entity(..), Key(..), get, getBy, update, upsert
+    , delete, deleteWhere, selectList, selectKeysList
+    )
 import Text.HTML.TagSoup (parseTags, innerText)
 
 import Models.DB
@@ -96,3 +100,33 @@ applyTaxRate amount productId taxRate =
             * toRational (fromCents amount)
     else
         Cents 0
+
+
+-- | Merge an Anonymous Cart into a Customer's Cart, removing the Anonymous
+-- Cart.
+mergeCarts :: T.Text -> CustomerId -> AppSQL ()
+mergeCarts cartToken customerId = do
+    maybeCustomerCart <- getBy . UniqueCustomerCart $ Just customerId
+    maybeAnonymousCart <- getBy . UniqueAnonymousCart $ Just cartToken
+    case (maybeCustomerCart, maybeAnonymousCart) of
+        (Just (Entity customerCartId _), Just (Entity anonCartId _)) -> do
+            anonymousCartItems <- selectList [CartItemCartId ==. anonCartId] []
+            mapM_ (upsertCartItem customerCartId) anonymousCartItems
+            deleteWhere [CartItemCartId ==. anonCartId] >> delete anonCartId
+        (Nothing, Just (Entity cartId _)) ->
+            update cartId
+                [ CartSessionToken =. Nothing
+                , CartExpirationTime =. Nothing
+                , CartCustomerId =. Just customerId
+                ]
+        _ ->
+            return ()
+    where upsertCartItem :: CartId -> Entity CartItem -> AppSQL (Entity CartItem)
+          upsertCartItem customerCartId (Entity _ anonymousCartItem) =
+            upsert
+                CartItem
+                    { cartItemCartId = customerCartId
+                    , cartItemProductVariantId = cartItemProductVariantId anonymousCartItem
+                    , cartItemQuantity = cartItemQuantity anonymousCartItem
+                    }
+                [ CartItemQuantity +=. cartItemQuantity anonymousCartItem ]
