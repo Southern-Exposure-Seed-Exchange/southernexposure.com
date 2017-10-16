@@ -20,8 +20,8 @@ import Data.Monoid ((<>))
 import Data.Text.Encoding (encodeUtf8, decodeUtf8)
 import Data.Time.Clock (getCurrentTime, addUTCTime)
 import Database.Persist
-    ( (=.), (+=.), (==.), Entity(..), get, getBy, selectList, insertUnique
-    , insert_, update, upsert, delete, deleteWhere
+    ( (=.), (==.), Entity(..), get, getBy, insertUnique, insert_, update
+    , delete, deleteWhere
     )
 import Database.Persist.Sql (toSqlKey)
 import Servant
