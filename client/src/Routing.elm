@@ -10,7 +10,7 @@ module Routing
 import Navigation
 import UrlParser as Url exposing ((</>), (<?>))
 import Products.Pagination as Pagination
-import Routing.Utils exposing (joinPath, withQueryStrings)
+import Routing.Utils exposing (parseFlag, joinPath, withQueryStrings, queryFlag)
 import SeedAttribute
 import Search exposing (UniqueSearch(..))
 
@@ -31,7 +31,7 @@ type Route
     | Cart
     | QuickOrder
     | Checkout
-    | CheckoutSuccess Int
+    | CheckoutSuccess Int Bool
     | NotFound
 
 
@@ -84,7 +84,7 @@ parseRoute =
                 , Url.map Cart (Url.s "cart")
                 , Url.map QuickOrder (Url.s "quick-order")
                 , Url.map Checkout (Url.s "checkout")
-                , Url.map CheckoutSuccess (Url.s "checkout" </> Url.s "success" </> Url.int)
+                , Url.map CheckoutSuccess (Url.s "checkout" </> Url.s "success" </> Url.int <?> parseFlag "newAccount")
                 , Url.map PageDetails (Url.string)
                 ]
     in
@@ -174,8 +174,9 @@ reverse route =
         Checkout ->
             joinPath [ "checkout" ]
 
-        CheckoutSuccess orderId ->
+        CheckoutSuccess orderId newAccount ->
             joinPath [ "checkout", "success", toString orderId ]
+                ++ withQueryStrings [ queryFlag "newAccount" newAccount ]
 
         NotFound ->
             joinPath [ "page-not-found" ]
@@ -229,7 +230,7 @@ authRequired route =
         Checkout ->
             False
 
-        CheckoutSuccess _ ->
+        CheckoutSuccess _ _ ->
             True
 
         NotFound ->

@@ -96,7 +96,7 @@ view route pageData =
                 Checkout ->
                     singleItem "Checkout"
 
-                CheckoutSuccess _ ->
+                CheckoutSuccess _ _ ->
                     singleItem "Order Complete"
 
                 NotFound ->

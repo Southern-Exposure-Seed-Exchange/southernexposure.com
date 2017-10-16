@@ -119,9 +119,9 @@ view ({ route, pageData, navigationData } as model) =
                         |> withIntermediateText (uncurry <| Checkout.view model.checkoutForm model.currentUser)
                         |> List.map (Html.map CheckoutMsg)
 
-                CheckoutSuccess orderId ->
+                CheckoutSuccess orderId newAccount ->
                     RemoteData.map2 (,) pageData.locations pageData.checkoutSuccess
-                        |> withIntermediateText (uncurry <| Checkout.successView orderId)
+                        |> withIntermediateText (uncurry <| Checkout.successView LogOut orderId newAccount)
 
                 NotFound ->
                     notFoundView

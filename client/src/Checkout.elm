@@ -15,7 +15,7 @@ module Checkout
 import Dict
 import Html exposing (..)
 import Html.Attributes exposing (attribute, class, type_, colspan, src, for, id, rows, value, href, target, selected, checked, name, required, minlength)
-import Html.Events exposing (onSubmit, onInput, onCheck, targetValue, on)
+import Html.Events exposing (onSubmit, onInput, onCheck, onClick, targetValue, on)
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode exposing (Value)
 import RemoteData exposing (WebData)
@@ -980,9 +980,22 @@ summaryTable ({ items, charges } as checkoutDetails) =
             ]
 
 
-successView : Int -> AddressLocations -> PageData.OrderDetails -> List (Html msg)
-successView orderId locations orderDetails =
+successView : msg -> Int -> Bool -> AddressLocations -> PageData.OrderDetails -> List (Html msg)
+successView logoutMsg orderId newAccountCreated locations orderDetails =
     let
+        newAccountAlert =
+            if not newAccountCreated then
+                text ""
+            else
+                div [ class "alert alert-info clearfix" ]
+                    [ button [ class "btn btn-primary float-right ml-3", onClick logoutMsg ]
+                        [ text "Log Out" ]
+                    , text <|
+                        "You have been automatically logged into "
+                            ++ "your new account. If you are using a public computer, "
+                            ++ "please log out to keep your account details private."
+                    ]
+
         contactLink =
             a
                 [ href <|
@@ -1025,6 +1038,7 @@ successView orderId locations orderDetails =
         [ h1 [] [ text "Order Complete" ]
         , hr [] []
         , h2 [] [ text "Thanks for your order!" ]
+        , newAccountAlert
         , p [] [ text "We will review your order today & will get in touch with you if we need any clarifications." ]
         , p []
             [ text "Please "

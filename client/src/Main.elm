@@ -179,7 +179,7 @@ setPageTitle { route, pageData } =
             Checkout ->
                 Ports.setPageTitle "Checkout"
 
-            CheckoutSuccess _ ->
+            CheckoutSuccess _ _ ->
                 Ports.setPageTitle "Order Complete"
 
             NotFound ->
@@ -290,7 +290,7 @@ fetchDataForRoute ({ route, pageData } as model) =
                                     |> fetchLocationsOnce
                                     |> getDetails
 
-                CheckoutSuccess orderId ->
+                CheckoutSuccess orderId _ ->
                     case model.currentUser of
                         User.Authorized user ->
                             { pageData | checkoutSuccess = RemoteData.Loading }
@@ -686,7 +686,7 @@ update msg ({ pageData } as model) =
                             ( { model | cartItemCount = 0 }
                             , Cmd.batch
                                 [ cmd
-                                , Routing.newUrl <| CheckoutSuccess orderId
+                                , Routing.newUrl <| CheckoutSuccess orderId False
                                 , Ports.setCartItemCount 0
                                 ]
                             )
@@ -695,7 +695,7 @@ update msg ({ pageData } as model) =
                             ( { model | cartItemCount = 0, currentUser = newAuthStatus }
                             , Cmd.batch
                                 [ cmd
-                                , Routing.newUrl <| CheckoutSuccess orderId
+                                , Routing.newUrl <| CheckoutSuccess orderId True
                                 , Ports.setCartItemCount 0
                                 , Ports.removeCartSessionToken ()
                                 , User.storeDetails newAuthStatus
