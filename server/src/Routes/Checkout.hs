@@ -300,6 +300,34 @@ anonymousDetailsRoute parameters =
 -- PLACE ORDER
 
 
+data PlaceOrderError
+    = CartNotFound
+    | AddressNotFound AddressType
+    | NoShippingMethod
+    deriving (Show, Typeable)
+
+instance Exception PlaceOrderError
+
+withPlaceOrderErrors :: CustomerAddress -> App a -> App a
+withPlaceOrderErrors shippingAddress =
+    eitherM handle <=< try
+    where handle = \case
+            CartNotFound ->
+                serverError err404
+            NoShippingMethod ->
+                case shippingAddress of
+                    ExistingAddress _ _ ->
+                        V.singleFieldError "shipping-" "Sorry, we only ship to North America."
+                    NewAddress _ ->
+                        V.singleFieldError "shipping-country" "Sorry, we only ship to North America."
+            AddressNotFound Shipping ->
+                V.singleFieldError "shipping-"
+                    "Please choose again or try adding a new address."
+            AddressNotFound Billing ->
+                V.singleFieldError "billing-"
+                    "Please choose again or try adding a new address."
+
+
 data CustomerAddress
     = NewAddress CheckoutAddress
     | ExistingAddress AddressId Bool
@@ -373,7 +401,7 @@ customerPlaceOrderRoute token = validate >=> \parameters -> do
     (Entity customerId _) <- validateToken token
     let comment = cpopComment parameters
     currentTime <- liftIO getCurrentTime
-    eitherM handleError <=< try . runDB $ do
+    withPlaceOrderErrors (cpopShippingAddress parameters) . runDB $ do
         shippingAddress <- getOrInsertAddress Shipping customerId
             $ cpopShippingAddress parameters
         billingAddress <- getOrInsertAddress Billing customerId
@@ -400,16 +428,7 @@ customerPlaceOrderRoute token = validate >=> \parameters -> do
             >> deleteWhere [CartItemCartId ==. cartId]
             >> deleteBy (UniqueCustomerCart $ Just customerId)
         return $ PlaceOrderData orderId
-    where handleError = \case
-            CartNotFound ->
-                serverError err404
-            NoShippingMethod ->
-                V.singleError "Sorry, we only ship to North America."
-            AddressNotFound Shipping ->
-                V.singleFieldError "shipping-" "Please choose again or try adding a new address."
-            AddressNotFound Billing ->
-                V.singleFieldError "billing-" "Please choose again or try adding a new address."
-          getOrInsertAddress :: AddressType -> CustomerId -> CustomerAddress -> AppSQL (Entity Address)
+    where getOrInsertAddress :: AddressType -> CustomerId -> CustomerAddress -> AppSQL (Entity Address)
           getOrInsertAddress addrType customerId = \case
             ExistingAddress addrId makeDefault -> do
                 let noAddress = throwM $ AddressNotFound addrType
@@ -432,13 +451,7 @@ customerPlaceOrderRoute token = validate >=> \parameters -> do
                     addrId <- insert newAddress
                     return $ Entity addrId newAddress
 
-data PlaceOrderError
-    = CartNotFound
-    | AddressNotFound AddressType
-    | NoShippingMethod
-    deriving (Show, Typeable)
 
-instance Exception PlaceOrderError
 
 
 createLineItems :: Maybe TaxRate -> Address -> [CartItemData] -> OrderId -> AppSQL ()
