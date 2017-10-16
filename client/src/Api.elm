@@ -14,9 +14,12 @@ module Api
         , initialErrors
         , formErrorsDecoder
         , addError
+        , getErrorHtml
         )
 
 import Dict exposing (Dict)
+import Html
+import Html.Attributes exposing (class)
 import Http
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode exposing (Value)
@@ -296,3 +299,14 @@ addError field message errors =
 
                 Just es ->
                     Just <| message :: es
+
+
+getErrorHtml : Field -> FormErrors -> Html.Html msg
+getErrorHtml field errors =
+    Dict.get field errors
+        |> Maybe.map
+            (List.map Html.text
+                >> List.intersperse (Html.br [] [])
+                >> Html.div [ class "text-danger" ]
+            )
+        |> Maybe.withDefault (Html.text "")

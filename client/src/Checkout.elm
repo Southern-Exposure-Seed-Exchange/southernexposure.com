@@ -12,8 +12,9 @@ module Checkout
         , successView
         )
 
+import Dict
 import Html exposing (..)
-import Html.Attributes exposing (class, type_, colspan, src, for, id, rows, value, href, target, selected, checked)
+import Html.Attributes exposing (attribute, class, type_, colspan, src, for, id, rows, value, href, target, selected, checked, name, required, minlength)
 import Html.Events exposing (onSubmit, onInput, onCheck, targetValue, on)
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode exposing (Value)
@@ -24,6 +25,7 @@ import Api
 import Locations exposing (AddressLocations, Region)
 import Models.Fields exposing (Cents(..), centsToString, centsMap2, centsMap, milligramsToString)
 import PageData
+import Ports
 import Update.Utils exposing (nothingAndNoCommand)
 import User exposing (AuthStatus)
 import Views.Images as Images
@@ -47,6 +49,7 @@ type alias Form =
     , makeBillingDefault : Bool
     , billingSameAsShipping : Bool
     , comment : String
+    , errors : Api.FormErrors
     }
 
 
@@ -61,6 +64,7 @@ initial =
     , makeBillingDefault = False
     , billingSameAsShipping = False
     , comment = ""
+    , errors = Api.initialErrors
     }
 
 
@@ -95,6 +99,7 @@ initialWithDefaults shippingAddresses billingAddresses =
         , makeBillingDefault = isNew billingAddress
         , billingSameAsShipping = False
         , comment = ""
+        , errors = Api.initialErrors
         }
 
 
@@ -180,14 +185,84 @@ update msg model authStatus maybeSessionToken =
             { model | comment = comment } |> nothingAndNoCommand
 
         Submit ->
-            ( model, Nothing, placeOrder model authStatus )
+            if model.password /= model.passwordConfirm then
+                ( { model
+                    | errors =
+                        Dict.update "passwordConfirm"
+                            (always <| Just [ "Your passwords do not match." ])
+                            model.errors
+                  }
+                , Nothing
+                , Ports.scrollToTop
+                )
+            else
+                ( model, Nothing, placeOrder model authStatus maybeSessionToken )
 
         SubmitResponse (RemoteData.Success (Ok orderId)) ->
             ( initial, Just (OrderCompleted orderId), Cmd.none )
 
-        -- TODO: Split address errors & update nested models
         SubmitResponse (RemoteData.Success (Err errors)) ->
-            model |> nothingAndNoCommand
+            let
+                ( generalErrors, shippingErrors, billingErrors ) =
+                    List.foldl
+                        (\( field, fieldErrors ) ( generalErrors, shippingErrors, billingErrors ) ->
+                            case String.split "-" field of
+                                "shipping" :: xs ->
+                                    ( generalErrors
+                                    , ( String.join "" xs, fieldErrors ) :: shippingErrors
+                                    , billingErrors
+                                    )
+
+                                "billing" :: xs ->
+                                    ( generalErrors
+                                    , shippingErrors
+                                    , ( String.join "" xs, fieldErrors ) :: billingErrors
+                                    )
+
+                                _ ->
+                                    ( ( field, fieldErrors ) :: generalErrors
+                                    , shippingErrors
+                                    , billingErrors
+                                    )
+                        )
+                        ( [], [], [] )
+                        (Dict.toList errors)
+
+                updatedShippingForm =
+                    case model.shippingAddress of
+                        ExistingAddress _ ->
+                            model.shippingAddress
+
+                        NewAddress addressForm ->
+                            NewAddress { addressForm | errors = Dict.fromList shippingErrors }
+
+                updatedBillingForm =
+                    case model.billingAddress of
+                        ExistingAddress _ ->
+                            model.billingAddress
+
+                        NewAddress addressForm ->
+                            NewAddress { addressForm | errors = Dict.fromList billingErrors }
+
+                addAddresErrorIfExisting prefix address =
+                    case address of
+                        ExistingAddress _ ->
+                            Dict.update prefix (always <| Dict.get (prefix ++ "-") errors)
+
+                        NewAddress _ ->
+                            identity
+            in
+                ( { model
+                    | shippingAddress = updatedShippingForm
+                    , billingAddress = updatedBillingForm
+                    , errors =
+                        Dict.fromList generalErrors
+                            |> addAddresErrorIfExisting "shipping" model.shippingAddress
+                            |> addAddresErrorIfExisting "billing" model.billingAddress
+                  }
+                , Nothing
+                , Ports.scrollToTop
+                )
 
         SubmitResponse _ ->
             model |> nothingAndNoCommand
@@ -421,6 +496,9 @@ placeOrder model authStatus =
 view : Form -> AuthStatus -> AddressLocations -> PageData.CheckoutDetails -> List (Html Msg)
 view model authStatus locations checkoutDetails =
     let
+        generalErrors =
+            Api.getErrorHtml "" model.errors
+
         registrationCard =
             case authStatus of
                 User.Authorized _ ->
@@ -455,6 +533,9 @@ view model authStatus locations checkoutDetails =
                     , prefix = "billing"
                     , locations = locations
                     , selectAddresses = checkoutDetails.billingAddresses
+                    , generalErrors =
+                        Dict.get "billing" model.errors
+                            |> Maybe.withDefault []
                     }
 
         billingAddressText =
@@ -473,7 +554,8 @@ view model authStatus locations checkoutDetails =
         [ h1 [] [ text "Checkout" ]
         , hr [] []
         , form [ onSubmit Submit ]
-            [ registrationCard
+            [ generalErrors
+            , registrationCard
             , div [ class "row mb-3" ]
                 [ addressForm
                     { cardTitle = "Shipping Details"
@@ -486,6 +568,9 @@ view model authStatus locations checkoutDetails =
                     , prefix = "shipping"
                     , locations = locations
                     , selectAddresses = checkoutDetails.shippingAddresses
+                    , generalErrors =
+                        Dict.get "shipping" model.errors
+                            |> Maybe.withDefault []
                     }
                 , billingCard
                 ]
@@ -632,6 +717,7 @@ type alias AddressFormConfig =
     , prefix : String
     , locations : AddressLocations
     , selectAddresses : List Address.Model
+    , generalErrors : List String
     }
 
 
@@ -667,6 +753,15 @@ addressForm config =
                         |> Maybe.map (\a -> Address.card a config.locations |> withDefaultCheckbox a)
                         |> Maybe.withDefault (text "")
                     )
+
+        errorHtml =
+            if List.isEmpty config.generalErrors then
+                text ""
+            else
+                config.generalErrors
+                    |> List.map text
+                    |> List.intersperse (br [] [])
+                    |> div [ class "text-danger" ]
 
         withDefaultCheckbox address content =
             let
@@ -754,6 +849,7 @@ addressForm config =
                 , sameAsShippingCheckbox
                 ]
             , selectHtml
+            , errorHtml
             , addressHtml
             ]
 

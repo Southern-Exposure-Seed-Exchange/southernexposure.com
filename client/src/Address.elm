@@ -15,7 +15,7 @@ module Address
 
 import Dict
 import Html exposing (..)
-import Html.Attributes exposing (attribute, id, class, for, type_, required, value, name, selected)
+import Html.Attributes exposing (attribute, id, class, for, type_, required, value, name, selected, classList)
 import Html.Events exposing (onInput, on, targetValue)
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode exposing (Value)
@@ -253,11 +253,14 @@ card address locations =
 form : Form -> String -> AddressLocations -> Html Msg
 form { model, errors } inputPrefix locations =
     let
+        generalErrors =
+            Api.getErrorHtml "" errors
+
         field selector =
             inputField errors inputPrefix (selector model)
 
         selectField selector =
-            locationSelect inputPrefix (selector model)
+            locationSelect errors inputPrefix (selector model)
 
         regionField =
             case model.country of
@@ -278,7 +281,8 @@ form { model, errors } inputPrefix locations =
             .state >> Locations.fromRegion
     in
         div []
-            [ field .firstName FirstName "First Name" "firstName" "given-name" True
+            [ generalErrors
+            , field .firstName FirstName "First Name" "firstName" "given-name" True
             , field .lastName LastName "Last Name" "lastName" "family-name" True
             , field .companyName CompanyName "Company Name" "companyName" "organization" False
             , field .street Street "Street Address" "addressOne" "street-address" True
@@ -290,7 +294,7 @@ form { model, errors } inputPrefix locations =
             ]
 
 
-{-| TODO: Refactor into separate Views.Form module
+{-| TODO: Refactor into separate Views.Form module. Turn parameters into a Config type.
 -}
 inputField : Api.FormErrors -> String -> String -> (String -> msg) -> String -> String -> String -> Bool -> Html msg
 inputField errors prefix inputValue inputMsg labelText inputName autocompleteType isRequired =
@@ -311,13 +315,19 @@ inputField errors prefix inputValue inputMsg labelText inputName autocompleteTyp
             attribute "autocomplete" <| prefix ++ " " ++ str
 
         errorHtml =
-            if List.isEmpty fieldErrors then
-                text ""
-            else
+            if hasErrors then
                 fieldErrors
                     |> List.map text
                     |> List.intersperse (br [] [])
                     |> div [ class "invalid-feedback" ]
+            else
+                text ""
+
+        hasErrors =
+            not (Dict.isEmpty errors) && not (List.isEmpty fieldErrors)
+
+        isValid =
+            not (Dict.isEmpty errors) && List.isEmpty fieldErrors
 
         fieldErrors =
             Dict.get inputName errors |> Maybe.withDefault []
@@ -326,7 +336,11 @@ inputField errors prefix inputValue inputMsg labelText inputName autocompleteTyp
             [ fieldLabel
             , input
                 [ id <| prefix ++ "-" ++ inputName ++ "Input"
-                , class "form-control"
+                , classList
+                    [ ( "form-control", True )
+                    , ( "is-invalid", hasErrors )
+                    , ( "is-valid", isValid )
+                    ]
                 , name inputName
                 , type_ "text"
                 , required isRequired
@@ -341,24 +355,51 @@ inputField errors prefix inputValue inputMsg labelText inputName autocompleteTyp
 
 {-| TODO: Refactor into Locations module? Or Views.Form if can't combine w/ HorizontalForm.
 -}
-locationSelect : String -> String -> (String -> msg) -> List Location -> String -> String -> Html msg
-locationSelect prefix selectedValue selectMsg locations labelText inputName =
+locationSelect : Api.FormErrors -> String -> String -> (String -> msg) -> List Location -> String -> String -> Html msg
+locationSelect errors prefix selectedValue selectMsg locations labelText inputName =
     let
         fieldLabel =
             label [ class "mb-0", for inputId ]
                 [ text labelText ]
 
-        inputId =
-            prefix ++ "-" ++ inputName ++ "Input"
-
         toOption { code, name } =
             option [ value code, selected <| selectedValue == code ] [ text name ]
 
+        inputId =
+            prefix ++ "-" ++ inputName ++ "Input"
+
         onSelect =
             on "change" (targetValue |> Decode.map selectMsg)
+
+        errorHtml =
+            if fieldHasErrors then
+                fieldErrors
+                    |> List.map text
+                    |> List.intersperse (br [] [])
+                    |> div [ class "invalid-feedback" ]
+            else
+                text ""
+
+        fieldHasErrors =
+            not <| List.isEmpty fieldErrors
+
+        fieldErrors =
+            Dict.get inputName errors |> Maybe.withDefault []
+
+        formHasErrors =
+            not <| Dict.isEmpty errors
     in
         div [ class "form-group mb-2" ]
             [ fieldLabel
             , List.map toOption locations
-                |> select [ id inputId, class "form-control", onSelect ]
+                |> select
+                    [ id inputId
+                    , classList
+                        [ ( "form-control", True )
+                        , ( "is-invalid", fieldHasErrors )
+                        , ( "is-valid", formHasErrors && not fieldHasErrors )
+                        ]
+                    , onSelect
+                    ]
+            , errorHtml
             ]
