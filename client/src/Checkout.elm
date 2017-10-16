@@ -38,7 +38,10 @@ type CheckoutAddress
 
 
 type alias Form =
-    { shippingAddress : CheckoutAddress
+    { email : String
+    , password : String
+    , passwordConfirm : String
+    , shippingAddress : CheckoutAddress
     , makeShippingDefault : Bool
     , billingAddress : CheckoutAddress
     , makeBillingDefault : Bool
@@ -49,7 +52,10 @@ type alias Form =
 
 initial : Form
 initial =
-    { shippingAddress = NewAddress Address.initialForm
+    { email = ""
+    , password = ""
+    , passwordConfirm = ""
+    , shippingAddress = NewAddress Address.initialForm
     , makeShippingDefault = False
     , billingAddress = NewAddress Address.initialForm
     , makeBillingDefault = False
@@ -80,7 +86,10 @@ initialWithDefaults shippingAddresses billingAddresses =
                 ExistingAddress _ ->
                     False
     in
-        { shippingAddress = shippingAddress
+        { email = ""
+        , password = ""
+        , passwordConfirm = ""
+        , shippingAddress = shippingAddress
         , makeShippingDefault = isNew shippingAddress
         , billingAddress = billingAddress
         , makeBillingDefault = isNew billingAddress
@@ -94,7 +103,10 @@ initialWithDefaults shippingAddresses billingAddresses =
 
 
 type Msg
-    = SelectShipping Int
+    = Email String
+    | Password String
+    | PasswordConfirm String
+    | SelectShipping Int
     | ToggleShippingDefault Bool
     | ShippingMsg Address.Msg
     | SelectBilling Int
@@ -115,6 +127,15 @@ type OutMsg
 update : Msg -> Form -> AuthStatus -> Maybe String -> ( Form, Maybe OutMsg, Cmd Msg )
 update msg model authStatus maybeSessionToken =
     case msg of
+        Email email ->
+            { model | email = email } |> nothingAndNoCommand
+
+        Password password ->
+            { model | password = password } |> nothingAndNoCommand
+
+        PasswordConfirm passwordConfirm ->
+            { model | passwordConfirm = passwordConfirm } |> nothingAndNoCommand
+
         SelectShipping addressId ->
             { model
                 | shippingAddress = selectAddress addressId
@@ -397,9 +418,22 @@ placeOrder model authStatus =
 -- View
 
 
-view : Form -> AddressLocations -> PageData.CheckoutDetails -> List (Html Msg)
-view model locations checkoutDetails =
+view : Form -> AuthStatus -> AddressLocations -> PageData.CheckoutDetails -> List (Html Msg)
+view model authStatus locations checkoutDetails =
     let
+        registrationCard =
+            case authStatus of
+                User.Authorized _ ->
+                    text ""
+
+                User.Anonymous ->
+                    div [ class "mb-3" ]
+                        [ div [ class "" ]
+                            [ h4 [] [ text "Login Details" ]
+                            , registrationForm model
+                            ]
+                        ]
+
         billingCard =
             if model.billingSameAsShipping then
                 addressCard
@@ -436,7 +470,8 @@ view model locations checkoutDetails =
         [ h1 [] [ text "Checkout" ]
         , hr [] []
         , form [ onSubmit Submit ]
-            [ div [ class "row mb-3" ]
+            [ registrationCard
+            , div [ class "row mb-3" ]
                 [ addressForm
                     { cardTitle = "Shipping Details"
                     , msg = ShippingMsg
@@ -473,6 +508,114 @@ view model locations checkoutDetails =
                 ]
             ]
         ]
+
+
+registrationForm : Form -> Html Msg
+registrationForm model =
+    let
+        -- TODO: Use Views.Form when we pull it out of the Address module.
+        fieldLabel inputId content =
+            label [ class "mb-0", for inputId ] [ text content ]
+
+        hasErrors =
+            not (Dict.isEmpty model.errors)
+
+        inputClass errors =
+            if hasErrors && List.isEmpty errors then
+                class "form-control is-valid"
+            else if hasErrors && not (List.isEmpty errors) then
+                class "form-control is-invalid"
+            else
+                class "form-control"
+
+        emailInput =
+            input
+                [ id "emailInput"
+                , inputClass emailErrors
+                , name "email"
+                , type_ "email"
+                , required True
+                , onInput Email
+                , value model.email
+                , autocomplete "email"
+                ]
+                []
+
+        emailErrors =
+            Dict.get "email" model.errors |> Maybe.withDefault []
+
+        passwordInput =
+            input
+                [ id "passwordInput"
+                , inputClass passwordErrors
+                , name "password"
+                , type_ "password"
+                , required True
+                , onInput Password
+                , value model.password
+                , autocomplete "new-password"
+                , minlength 8
+                ]
+                []
+
+        passwordErrors =
+            Dict.get "password" model.errors |> Maybe.withDefault []
+
+        passwordConfirmInput =
+            input
+                [ id "passwordConfirmInput"
+                , inputClass confirmErrors
+                , name "passwordConfirm"
+                , type_ "password"
+                , required True
+                , onInput PasswordConfirm
+                , value model.passwordConfirm
+                , autocomplete "new-password"
+                , minlength 8
+                ]
+                []
+
+        confirmErrors =
+            Dict.get "passwordConfirm" model.errors |> Maybe.withDefault []
+
+        errorHtml errors =
+            if List.isEmpty errors then
+                text ""
+            else
+                errors
+                    |> List.map text
+                    |> List.intersperse (br [] [])
+                    |> div [ class "invalid-feedback" ]
+
+        wrapper content =
+            div [ class "form-group mb-2" ] content
+
+        autocomplete =
+            attribute "autocomplete"
+    in
+        div [ class "row" ]
+            [ div [ class "col-md-4" ]
+                [ wrapper
+                    [ fieldLabel "emailInput" "Email"
+                    , emailInput
+                    , errorHtml emailErrors
+                    ]
+                ]
+            , div [ class "col-md-4" ]
+                [ wrapper
+                    [ fieldLabel "passwordInput" "Password"
+                    , passwordInput
+                    , errorHtml passwordErrors
+                    ]
+                ]
+            , div [ class "col-md-4" ]
+                [ wrapper
+                    [ fieldLabel "passwordConfirmInput" "Confirm Password"
+                    , passwordConfirmInput
+                    , errorHtml confirmErrors
+                    ]
+                ]
+            ]
 
 
 type alias AddressFormConfig =

@@ -116,7 +116,7 @@ view ({ route, pageData, navigationData } as model) =
 
                 Checkout ->
                     RemoteData.map2 (,) pageData.locations pageData.checkoutDetails
-                        |> withIntermediateText (uncurry <| Checkout.view model.checkoutForm)
+                        |> withIntermediateText (uncurry <| Checkout.view model.checkoutForm model.currentUser)
                         |> List.map (Html.map CheckoutMsg)
 
                 CheckoutSuccess orderId ->
