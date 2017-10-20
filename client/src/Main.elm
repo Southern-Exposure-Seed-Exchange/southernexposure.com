@@ -242,7 +242,14 @@ fetchDataForRoute ({ route, pageData } as model) =
                     doNothing
 
                 MyAccount ->
-                    doNothing
+                    case model.currentUser of
+                        User.Authorized user ->
+                            { pageData | myAccount = RemoteData.Loading }
+                                |> fetchLocationsOnce
+                                |> batchCommand (getMyAccountDetails user.authToken)
+
+                        User.Anonymous ->
+                            doNothing
 
                 EditLogin ->
                     doNothing
@@ -368,6 +375,14 @@ getAddressLocations =
     Api.get Api.CustomerLocations
         |> Api.withJsonResponse Locations.addressLocationsDecoder
         |> Api.sendRequest GetAddressLocations
+
+
+getMyAccountDetails : String -> Cmd Msg
+getMyAccountDetails token =
+    Api.get Api.CustomerMyAccount
+        |> Api.withToken token
+        |> Api.withJsonResponse PageData.myAccountDecoder
+        |> Api.sendRequest GetMyAccountDetails
 
 
 getContactDetails : AuthStatus -> Cmd Msg
@@ -778,6 +793,13 @@ update msg ({ pageData } as model) =
             let
                 updatedPageData =
                     { pageData | locations = response }
+            in
+                ( { model | pageData = updatedPageData }, Cmd.none )
+
+        GetMyAccountDetails response ->
+            let
+                updatedPageData =
+                    { pageData | myAccount = response }
             in
                 ( { model | pageData = updatedPageData }, Cmd.none )
 

@@ -97,7 +97,8 @@ view ({ route, pageData, navigationData } as model) =
                     ResetPassword.view ResetPasswordMsg model.resetPasswordForm maybeCode
 
                 MyAccount ->
-                    MyAccount.view
+                    RemoteData.map2 (,) pageData.locations pageData.myAccount
+                        |> withIntermediateText (uncurry MyAccount.view)
 
                 EditLogin ->
                     EditLogin.view EditLoginMsg model.editLoginForm model.currentUser

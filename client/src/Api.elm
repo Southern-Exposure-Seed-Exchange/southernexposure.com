@@ -45,6 +45,7 @@ type Endpoint
     | CustomerResetRequest
     | CustomerPasswordReset
     | CustomerLocations
+    | CustomerMyAccount
     | CustomerContactDetails
     | CustomerEditLogin
     | CustomerEditContact
@@ -106,6 +107,9 @@ toUrl endpoint =
 
                 CustomerLocations ->
                     joinPath [ "customers", "locations" ]
+
+                CustomerMyAccount ->
+                    joinPath [ "customers", "my-account" ]
 
                 CustomerContactDetails ->
                     joinPath [ "customers", "contact" ]

@@ -58,6 +58,7 @@ type Msg
     | GetAdvancedSearchData (WebData PageData.AdvancedSearch)
     | GetPageDetailsData (WebData StaticPage)
     | GetAddressLocations (WebData AddressLocations)
+    | GetMyAccountDetails (WebData PageData.MyAccount)
     | GetContactDetails (WebData PageData.ContactDetails)
     | GetCartDetails (WebData PageData.CartDetails)
     | GetCartItemCount (WebData Int)

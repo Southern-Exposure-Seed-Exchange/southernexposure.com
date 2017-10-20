@@ -9,6 +9,9 @@ module PageData
         , productDetailsDecoder
         , SearchResults
         , searchConfig
+        , MyAccount
+        , myAccountDecoder
+        , OrderSummary
         , ContactDetails
         , contactDetailsDecoder
         , contactDetailsEncoder
@@ -60,6 +63,7 @@ type alias PageData =
     , searchResults : Paginated ProductData { data : Search.Data, sorting : Sorting.Option } String
     , pageDetails : WebData StaticPage
     , locations : WebData AddressLocations
+    , myAccount : WebData MyAccount
     , contactDetails : WebData ContactDetails
     , cartDetails : WebData CartDetails
     , checkoutDetails : WebData CheckoutDetails
@@ -90,6 +94,7 @@ initial =
         , searchResults = searchPaginate
         , pageDetails = RemoteData.NotAsked
         , locations = RemoteData.NotAsked
+        , myAccount = RemoteData.NotAsked
         , contactDetails = RemoteData.NotAsked
         , cartDetails = RemoteData.NotAsked
         , checkoutDetails = RemoteData.NotAsked
@@ -186,6 +191,39 @@ searchConfig =
                 |> Api.toRequest
     in
         Paginate.makeConfig request
+
+
+
+-- My Account
+
+
+type alias MyAccount =
+    { orderSummaries : List OrderSummary }
+
+
+myAccountDecoder : Decoder MyAccount
+myAccountDecoder =
+    Decode.map MyAccount
+        (Decode.field "orderDetails" <| Decode.list orderSummaryDecoder)
+
+
+type alias OrderSummary =
+    { id : Int
+    , shippingAddress : Address.Model
+    , status : OrderStatus
+    , total : Cents
+    , created : DateTime
+    }
+
+
+orderSummaryDecoder : Decoder OrderSummary
+orderSummaryDecoder =
+    Decode.map5 OrderSummary
+        (Decode.field "id" Decode.int)
+        (Decode.field "shippingAddress" Address.decoder)
+        (Decode.field "status" orderStatusDecoder)
+        (Decode.field "total" <| Decode.map Cents Decode.int)
+        (Decode.field "created" dateTimeDecoder)
 
 
 
