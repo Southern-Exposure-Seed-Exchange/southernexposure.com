@@ -42,6 +42,7 @@ type Msg
     | ChangeCartFormQuantity ProductId Int
     | SubmitAddToCart ProductId ProductVariantId
     | SubmitAddToCartResponse Int (WebData String)
+    | ShowAllOrders
     | SearchMsg SiteSearch.Msg
     | AdvancedSearchMsg AdvancedSearch.Msg
     | CreateAccountMsg CreateAccount.Msg

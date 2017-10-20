@@ -1,13 +1,23 @@
-module Auth.MyAccount exposing (view)
+module Auth.MyAccount exposing (getDetails, view)
 
 import Html exposing (..)
 import Html.Attributes exposing (class)
-import Messages exposing (Msg)
+import Html.Events exposing (onClick)
+import Api
+import Messages exposing (Msg(GetMyAccountDetails, ShowAllOrders))
 import Views.Format as Format
 import Views.Utils exposing (routeLinkAttributes)
 import Routing exposing (Route(EditLogin, EditContact))
 import PageData exposing (MyAccount)
 import Locations exposing (AddressLocations)
+
+
+getDetails : String -> Maybe Int -> Cmd Msg
+getDetails token maybeLimit =
+    Api.get (Api.CustomerMyAccount maybeLimit)
+        |> Api.withToken token
+        |> Api.withJsonResponse PageData.myAccountDecoder
+        |> Api.sendRequest GetMyAccountDetails
 
 
 view : AddressLocations -> MyAccount -> List (Html Msg)
@@ -40,7 +50,7 @@ view locations { orderSummaries } =
         ]
 
 
-orderTable : AddressLocations -> List PageData.OrderSummary -> Html msg
+orderTable : AddressLocations -> List PageData.OrderSummary -> Html Msg
 orderTable locations orderSummaries =
     let
         orderRow { id, shippingAddress, status, total, created } =
@@ -49,6 +59,12 @@ orderTable locations orderSummaries =
                 , td [ class "text-center" ] [ text <| toString id ]
                 , td [] [ addressInfo shippingAddress ]
                 , td [ class "text-right" ] [ text <| Format.cents total ]
+                ]
+
+        showAllButton =
+            div [ class "form-group text-right" ]
+                [ button [ class "btn btn-default", onClick ShowAllOrders ]
+                    [ text "Show All Orders" ]
                 ]
 
         addressInfo { firstName, lastName, street, city, state, zipCode } =
@@ -64,14 +80,17 @@ orderTable locations orderSummaries =
                 , text zipCode
                 ]
     in
-        table [ class "table table-sm table-striped" ]
-            [ thead []
-                [ tr []
-                    [ th [ class "text-center" ] [ text "Date" ]
-                    , th [ class "text-center" ] [ text "Order #" ]
-                    , th [] [ text "Shipping Address" ]
-                    , th [ class "text-right" ] [ text "Total" ]
+        div []
+            [ table [ class "table table-sm table-striped" ]
+                [ thead []
+                    [ tr []
+                        [ th [ class "text-center" ] [ text "Date" ]
+                        , th [ class "text-center" ] [ text "Order #" ]
+                        , th [] [ text "Shipping Address" ]
+                        , th [ class "text-right" ] [ text "Total" ]
+                        ]
                     ]
+                , tbody [] <| List.map orderRow orderSummaries
                 ]
-            , tbody [] <| List.map orderRow orderSummaries
+            , showAllButton
             ]

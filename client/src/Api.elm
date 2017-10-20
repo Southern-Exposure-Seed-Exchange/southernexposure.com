@@ -26,7 +26,7 @@ import Json.Encode exposing (Value)
 import RemoteData
 import Time
 import Products.Pagination as Pagination
-import Routing.Utils exposing (joinPath, withQueryStrings)
+import Routing.Utils exposing (joinPath, queryParameter, withQueryStrings)
 
 
 -- API ENDPOINTS
@@ -45,7 +45,7 @@ type Endpoint
     | CustomerResetRequest
     | CustomerPasswordReset
     | CustomerLocations
-    | CustomerMyAccount
+    | CustomerMyAccount (Maybe Int)
     | CustomerContactDetails
     | CustomerEditLogin
     | CustomerEditContact
@@ -108,8 +108,13 @@ toUrl endpoint =
                 CustomerLocations ->
                     joinPath [ "customers", "locations" ]
 
-                CustomerMyAccount ->
+                CustomerMyAccount Nothing ->
                     joinPath [ "customers", "my-account" ]
+
+                CustomerMyAccount (Just limit) ->
+                    joinPath [ "customers", "my-account" ]
+                        ++ withQueryStrings
+                            [ queryParameter ( "limit", toString limit ) ]
 
                 CustomerContactDetails ->
                     joinPath [ "customers", "contact" ]

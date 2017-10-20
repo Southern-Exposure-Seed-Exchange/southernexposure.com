@@ -13,6 +13,7 @@ import Auth.CreateAccount as CreateAccount
 import Auth.EditContact as EditContact
 import Auth.EditLogin as EditLogin
 import Auth.Login as Login
+import Auth.MyAccount as MyAccount
 import Auth.ResetPassword as ResetPassword
 import Cart
 import Checkout
@@ -246,7 +247,7 @@ fetchDataForRoute ({ route, pageData } as model) =
                         User.Authorized user ->
                             { pageData | myAccount = RemoteData.Loading }
                                 |> fetchLocationsOnce
-                                |> batchCommand (getMyAccountDetails user.authToken)
+                                |> batchCommand (MyAccount.getDetails user.authToken Nothing)
 
                         User.Anonymous ->
                             doNothing
@@ -375,14 +376,6 @@ getAddressLocations =
     Api.get Api.CustomerLocations
         |> Api.withJsonResponse Locations.addressLocationsDecoder
         |> Api.sendRequest GetAddressLocations
-
-
-getMyAccountDetails : String -> Cmd Msg
-getMyAccountDetails token =
-    Api.get Api.CustomerMyAccount
-        |> Api.withToken token
-        |> Api.withJsonResponse PageData.myAccountDecoder
-        |> Api.sendRequest GetMyAccountDetails
 
 
 getContactDetails : AuthStatus -> Cmd Msg
@@ -572,6 +565,14 @@ update msg ({ pageData } as model) =
 
                 _ ->
                     model |> noCommand
+
+        ShowAllOrders ->
+            case model.currentUser of
+                User.Authorized user ->
+                    ( model, MyAccount.getDetails user.authToken (Just 0) )
+
+                User.Anonymous ->
+                    ( model, Cmd.none )
 
         SearchMsg subMsg ->
             let
