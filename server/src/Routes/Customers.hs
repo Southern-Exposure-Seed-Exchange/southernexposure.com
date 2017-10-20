@@ -18,7 +18,7 @@ import Data.Int (Int64)
 import Data.Maybe (fromMaybe)
 import Data.Monoid ((<>))
 import Data.Text.Encoding (encodeUtf8, decodeUtf8)
-import Data.Time.Clock (getCurrentTime, addUTCTime)
+import Data.Time.Clock (UTCTime, getCurrentTime, addUTCTime)
 import Database.Persist
     ( (=.), (==.), Entity(..), get, getBy, insertUnique, insert_, update
     , delete, deleteWhere
@@ -31,8 +31,8 @@ import Servant
 
 import Auth
 import Models
-import Models.Fields (Country(..), Region, ArmedForcesRegionCode, armedForcesRegion)
-import Routes.CommonData (AuthorizationData, toAuthorizationData)
+import Models.Fields (Country(..), Region, ArmedForcesRegionCode, armedForcesRegion, Cents(..))
+import Routes.CommonData (AuthorizationData, toAuthorizationData, AddressData, toAddressData)
 import Routes.Utils (generateUniqueToken, hashPassword)
 import Server
 import Validation (Validation(..))
@@ -43,7 +43,9 @@ import qualified Data.StateCodes as StateCodes
 import qualified Data.Text as T
 import qualified Data.UUID as UUID
 import qualified Data.UUID.V4 as UUID4
+import qualified Database.Esqueleto as E
 import qualified Emails
+import qualified Models.Fields as Fields
 import qualified Models.ProvinceCodes as ProvinceCodes
 import qualified Validation as V
 
@@ -55,6 +57,7 @@ type CustomerAPI =
     :<|> "authorize" :> AuthorizeRoute
     :<|> "reset-request" :> ResetRequestRoute
     :<|> "reset-password" :> ResetPasswordRoute
+    :<|> "my-account" :> MyAccountRoute
     :<|> "edit" :> EditDetailsRoute
     :<|> "contact" :> ContactDetailsRoute
     :<|> "contact-edit" :> ContactEditRoute
@@ -66,6 +69,7 @@ type CustomerRoutes =
     :<|> (AuthorizeParameters -> App AuthorizationData)
     :<|> (ResetRequestParameters -> App ())
     :<|> (ResetPasswordParameters -> App AuthorizationData)
+    :<|> (AuthToken -> App MyAccountDetails)
     :<|> (AuthToken -> EditDetailsParameters -> App ())
     :<|> (AuthToken -> App ContactDetailsData)
     :<|> (AuthToken -> ContactEditParameters -> App ())
@@ -78,6 +82,7 @@ customerRoutes =
     :<|> authorizeRoute
     :<|> resetRequestRoute
     :<|> resetPasswordRoute
+    :<|> myAccountRoute
     :<|> editDetailsRoute
     :<|> contactDetailsRoute
     :<|> contactEditRoute
@@ -446,6 +451,89 @@ resetPasswordRoute = validate >=> \parameters ->
                             $ Entity customerId customer
                 else
                     runDB (delete resetId) >> invalidCodeError
+
+
+-- MY ACCOUNT
+
+
+newtype MyAccountDetails =
+    MyAccountDetails
+        { madOrderDetails :: [MyAccountOrderDetails]
+        }
+
+instance ToJSON MyAccountDetails where
+    toJSON details =
+        object
+            [ "orderDetails" .= madOrderDetails details
+            ]
+
+data MyAccountOrderDetails =
+    MyAccountOrderDetails
+        { maodId :: OrderId
+        , maodShippingAddress :: AddressData
+        , maodOrderStatus :: Fields.OrderStatus
+        , maodOrderTotal :: Cents
+        , maodCreated :: UTCTime
+        }
+
+instance ToJSON MyAccountOrderDetails where
+    toJSON details =
+        object
+            [ "id" .= maodId details
+            , "shippingAddress" .= maodShippingAddress details
+            , "status" .= maodOrderStatus details
+            , "total" .= maodOrderTotal details
+            , "created" .= maodCreated details
+            ]
+
+type MyAccountRoute =
+       AuthProtect "auth-token"
+    :> Get '[JSON] MyAccountDetails
+
+myAccountRoute :: AuthToken -> App MyAccountDetails
+myAccountRoute = validateToken >=> \(Entity customerId _) ->
+    MyAccountDetails <$> getOrderDetails customerId
+    where getOrderDetails customerId = runDB $ do
+            orderData <- E.select $ E.from $
+                \(o `E.InnerJoin` op `E.InnerJoin` ol `E.InnerJoin` sa) -> do
+                    E.on $ sa E.^. AddressId E.==. o E.^. OrderShippingAddressId
+                    E.on $ ol E.^. OrderLineItemOrderId E.==. o E.^. OrderId
+                    E.on $ op E.^. OrderProductOrderId E.==. o E.^. OrderId
+                    E.groupBy (o E.^. OrderId, sa E.^. AddressId)
+                    E.where_ $ o E.^. OrderCustomerId E.==. E.val customerId
+                    E.orderBy [E.desc $ o E.^. OrderCreatedAt]
+                    E.limit 4
+                    return
+                        ( o E.^. OrderId
+                        , sa
+                        , o E.^. OrderStatus
+                        , calculateTotal op ol
+                        , o E.^. OrderCreatedAt
+                        )
+            return $ map makeDetails orderData
+          calculateTotal orderProduct orderLineItem =
+            let
+                productTax =
+                    orderProduct E.^. OrderProductTax
+                productQuantity =
+                    orderProduct E.^. OrderProductQuantity
+                productPrice =
+                    orderProduct E.^. OrderProductPrice
+                subTotal =
+                    E.sum_ $ productTax E.+.
+                        (E.castNum productQuantity E.*.  productPrice)
+                surchargeTotal =
+                    E.sum_ $ orderLineItem E.^. OrderLineItemAmount
+            in
+                subTotal E.+. surchargeTotal
+          makeDetails (orderId, shippingAddress, status, total, createdAt) =
+              MyAccountOrderDetails
+                { maodId = E.unValue orderId
+                , maodShippingAddress = toAddressData shippingAddress
+                , maodOrderStatus = E.unValue status
+                , maodOrderTotal = Cents . maybe 0 round $ (E.unValue total :: Maybe Rational)
+                , maodCreated = E.unValue createdAt
+                }
 
 
 -- EDIT DETAILS
