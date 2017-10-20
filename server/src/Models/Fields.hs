@@ -27,7 +27,7 @@ import qualified Data.Text as T
 -- as arbitrary-percision numbers.
 newtype Cents =
     Cents { fromCents :: Natural }
-    deriving (Show, Read, Eq, Ord, ToJSON, FromJSON, PersistField, PersistFieldSql)
+    deriving (Show, Read, Eq, Ord, Num, ToJSON, FromJSON, PersistField, PersistFieldSql)
 
 -- | Milligrams are used to do any weight-related arithmetic & are
 -- represented as arbitrary-percision numbers.

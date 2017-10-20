@@ -33,12 +33,12 @@ import Models.Fields
 import Server
 import Routes.CommonData
     ( AuthorizationData, toAuthorizationData, CartItemData(..), CartCharges(..)
-    , CartCharge(..), getCartItems, getCharges
+    , CartCharge(..), getCartItems, getCharges, AddressData(..), toAddressData
+    , fromAddressData
     )
 import Routes.Utils (hashPassword, generateUniqueToken)
 import Validation (Validation(..))
 
-import qualified Data.ISO3166_CountryCodes as CountryCodes
 import qualified Data.Text as T
 import qualified Database.Esqueleto as E
 import qualified Validation as V
@@ -67,125 +67,6 @@ checkoutRoutes =
     :<|> customerSuccessRoute
 
 
--- COMMON DATA
-
-
-data CheckoutAddress =
-    CheckoutAddress
-        { caId :: Maybe AddressId
-        , caFirstName :: T.Text
-        , caLastName :: T.Text
-        , caCompanyName :: T.Text
-        , caAddressOne :: T.Text
-        , caAddressTwo :: T.Text
-        , caCity :: T.Text
-        , caState :: Region
-        , caZipCode :: T.Text
-        , caCountry :: Country
-        , caIsDefault :: Bool
-        }
-
-instance FromJSON CheckoutAddress where
-    parseJSON = withObject "CheckoutAddress" $ \v ->
-        CheckoutAddress
-            <$> v .:? "id"
-            <*> v .: "firstName"
-            <*> v .: "lastName"
-            <*> v .: "companyName"
-            <*> v .: "addressOne"
-            <*> v .: "addressTwo"
-            <*> v .: "city"
-            <*> v .: "state"
-            <*> v .: "zipCode"
-            <*> v .: "country"
-            <*> v .: "isDefault"
-
-instance ToJSON CheckoutAddress where
-    toJSON address =
-        object
-            [ "id" .= caId address
-            , "firstName" .= caFirstName address
-            , "lastName" .= caLastName address
-            , "companyName" .= caCompanyName address
-            , "addressOne" .= caAddressOne address
-            , "addressTwo" .= caAddressTwo address
-            , "city" .= caCity address
-            , "state" .= caState address
-            , "zipCode" .= caZipCode address
-            , "country" .= caCountry address
-            , "isDefault" .= caIsDefault address
-            ]
-
-instance Validation CheckoutAddress where
-    validators address =
-        let
-            invalidRegionForCountry =
-                case (fromCountry (caCountry address), caState address) of
-                    (CountryCodes.US, USState _) ->
-                        False
-                    (CountryCodes.US, USArmedForces _) ->
-                        False
-                    (CountryCodes.CA, CAProvince _) ->
-                        False
-                    (_, CustomRegion _) ->
-                        False
-                    _ ->
-                        True
-            customRegionValidator =
-                case caState address of
-                    CustomRegion region ->
-                        V.required region
-                    _ ->
-                        ("", False)
-        in
-            return
-                [ ( "firstName", [ V.required $ caFirstName address ] )
-                , ( "lastName", [ V.required $ caLastName address ] )
-                , ( "addressOne", [ V.required $ caAddressOne address ] )
-                , ( "city", [ V.required $ caCity address ] )
-                , ( "state"
-                  , [ ( "Invalid region for the selected Country.", invalidRegionForCountry )
-                    , customRegionValidator
-                    ]
-                  )
-                , ( "zipCode", [ V.required $ caZipCode address ] )
-                ]
-
-fromCheckoutAddress :: AddressType -> CustomerId -> CheckoutAddress -> Address
-fromCheckoutAddress type_ customerId address =
-    Address
-        { addressFirstName = caFirstName address
-        , addressLastName = caLastName address
-        , addressCompanyName = caCompanyName address
-        , addressAddressOne = caAddressOne address
-        , addressAddressTwo = caAddressTwo address
-        , addressCity = caCity address
-        , addressState = caState address
-        , addressZipCode = caZipCode address
-        , addressCountry = caCountry address
-        , addressIsDefault = caIsDefault address
-        , addressType = type_
-        , addressCustomerId = customerId
-        , addressIsActive = True
-        }
-
-toCheckoutAddress :: Entity Address -> CheckoutAddress
-toCheckoutAddress (Entity addressId address) =
-    CheckoutAddress
-        { caId = Just addressId
-        , caFirstName = addressFirstName address
-        , caLastName = addressLastName address
-        , caCompanyName = addressCompanyName address
-        , caAddressOne = addressAddressOne address
-        , caAddressTwo = addressAddressTwo address
-        , caCity = addressCity address
-        , caState = addressState address
-        , caZipCode = addressZipCode address
-        , caCountry = addressCountry address
-        , caIsDefault = addressIsDefault address
-        }
-
-
 -- CART/ADDRESS DETAILS
 
 
@@ -205,8 +86,8 @@ instance FromJSON CustomerDetailsParameters where
 
 data CheckoutDetailsData =
     CheckoutDetailsData
-        { cddShippingAddresses :: [CheckoutAddress]
-        , cddBillingAddresses :: [CheckoutAddress]
+        { cddShippingAddresses :: [AddressData]
+        , cddBillingAddresses :: [AddressData]
         , cddItems :: [CartItemData]
         , cddCharges :: CartCharges
         }
@@ -241,8 +122,8 @@ customerDetailsRoute token parameters = do
             c E.^. CartCustomerId E.==. E.just (E.val customerId)
         charges <- getCharges maybeTaxRate maybeCountry items
         return CheckoutDetailsData
-            { cddShippingAddresses = map toCheckoutAddress shippingAddresses
-            , cddBillingAddresses = map toCheckoutAddress billingAddresses
+            { cddShippingAddresses = map toAddressData shippingAddresses
+            , cddBillingAddresses = map toAddressData billingAddresses
             , cddItems = items
             , cddCharges = charges
             }
@@ -335,7 +216,7 @@ withPlaceOrderErrors shippingAddress =
 
 
 data CustomerAddress
-    = NewAddress CheckoutAddress
+    = NewAddress AddressData
     | ExistingAddress AddressId Bool
 
 instance FromJSON CustomerAddress where
@@ -429,7 +310,7 @@ customerPlaceOrderRoute token = validate >=> \parameters -> do
                 return $ Entity addrId address
             NewAddress ca ->
                 let
-                    newAddress = fromCheckoutAddress addrType customerId ca
+                    newAddress = fromAddressData addrType customerId ca
                 in do
                     when (addressIsDefault newAddress)
                         $ updateWhere
@@ -444,8 +325,8 @@ data AnonymousPlaceOrderParameters =
     AnonymousPlaceOrderParameters
         { apopEmail :: T.Text
         , apopPassword :: T.Text
-        , apopShippingAddress :: CheckoutAddress
-        , apopBillingAddress :: CheckoutAddress
+        , apopShippingAddress :: AddressData
+        , apopBillingAddress :: AddressData
         , apopComment :: T.Text
         , apopCartToken :: T.Text
         }
@@ -513,13 +394,13 @@ anonymousPlaceOrderRoute = validate >=> \parameters -> do
             }
     withPlaceOrderErrors (NewAddress $ apopShippingAddress parameters) . runDB $ do
         customerId <- insert customer
-        let shippingAddress = fromCheckoutAddress Shipping customerId
+        let shippingAddress = fromAddressData Shipping customerId
                 $ apopShippingAddress parameters
         mergeCarts (apopCartToken parameters) customerId
         (Entity cartId _) <- getBy (UniqueCustomerCart $ Just customerId)
             >>= maybe (throwM CartNotFound) return
         shippingId <- insert shippingAddress
-        billingId <- insert . fromCheckoutAddress Billing customerId
+        billingId <- insert . fromAddressData Billing customerId
             $ apopBillingAddress parameters
         orderId <- createOrder customerId cartId (Entity shippingId shippingAddress)
             billingId (apopComment parameters) currentTime
@@ -597,8 +478,8 @@ data OrderDetails =
         { odOrder :: CheckoutOrder
         , odLineItems :: [Entity OrderLineItem]
         , odProducts :: [CheckoutProduct]
-        , odShippingAddress :: CheckoutAddress
-        , odBillingAddress :: CheckoutAddress
+        , odShippingAddress :: AddressData
+        , odBillingAddress :: AddressData
         }
 
 instance ToJSON OrderDetails where
@@ -684,8 +565,8 @@ customerSuccessRoute token parameters = do
             { odOrder = toCheckoutOrder order
             , odLineItems = lineItems
             , odProducts = products
-            , odShippingAddress = toCheckoutAddress shipping
-            , odBillingAddress = toCheckoutAddress billing
+            , odShippingAddress = toAddressData shipping
+            , odBillingAddress = toAddressData billing
             }
     where handleError = \case
             OrderNotFound ->

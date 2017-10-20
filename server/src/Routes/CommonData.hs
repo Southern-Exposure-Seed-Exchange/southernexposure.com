@@ -12,9 +12,12 @@ module Routes.CommonData
     , CartCharges(..)
     , getCharges
     , CartCharge(..)
+    , AddressData(..)
+    , fromAddressData
+    , toAddressData
     ) where
 
-import Data.Aeson ((.=), ToJSON(..), object)
+import Data.Aeson ((.=), (.:), (.:?), ToJSON(..), FromJSON(..), object, withObject)
 import Data.List (intersect)
 import Data.Maybe (mapMaybe)
 import Database.Persist ((==.), Entity(..), SelectOpt(Asc), selectList, getBy)
@@ -23,10 +26,13 @@ import Numeric.Natural (Natural)
 import Models
 import Models.Fields
 import Server
+import Validation (Validation(..))
 
+import qualified Data.ISO3166_CountryCodes as CountryCodes
 import qualified Data.Map.Strict as M
 import qualified Data.Text as T
 import qualified Database.Esqueleto as E
+import qualified Validation as V
 
 
 -- Products
@@ -278,3 +284,122 @@ getShippingMethods maybeCountry items subTotal =
                         . thresholdAmount $ shippingMethodRates method
                 else
                     Nothing
+
+
+-- Addresses
+
+
+data AddressData =
+    AddressData
+        { adAddressId :: Maybe AddressId
+        , adFirstName :: T.Text
+        , adLastName :: T.Text
+        , adCompanyName :: T.Text
+        , adAddressOne :: T.Text
+        , adAddressTwo :: T.Text
+        , adCity :: T.Text
+        , adState :: Region
+        , adZipCode :: T.Text
+        , adCountry :: Country
+        , adIsDefault :: Bool
+        }
+
+instance FromJSON AddressData where
+    parseJSON = withObject "AddressData" $ \v ->
+        AddressData
+            <$> v .:? "id"
+            <*> v .: "firstName"
+            <*> v .: "lastName"
+            <*> v .: "companyName"
+            <*> v .: "addressOne"
+            <*> v .: "addressTwo"
+            <*> v .: "city"
+            <*> v .: "state"
+            <*> v .: "zipCode"
+            <*> v .: "country"
+            <*> v .: "isDefault"
+
+instance ToJSON AddressData where
+    toJSON address =
+        object
+            [ "id" .= adAddressId address
+            , "firstName" .= adFirstName address
+            , "lastName" .= adLastName address
+            , "companyName" .= adCompanyName address
+            , "addressOne" .= adAddressOne address
+            , "addressTwo" .= adAddressTwo address
+            , "city" .= adCity address
+            , "state" .= adState address
+            , "zipCode" .= adZipCode address
+            , "country" .= adCountry address
+            , "isDefault" .= adIsDefault address
+            ]
+
+instance Validation AddressData where
+    validators address =
+        let
+            invalidRegionForCountry =
+                case (fromCountry (adCountry address), adState address) of
+                    (CountryCodes.US, USState _) ->
+                        False
+                    (CountryCodes.US, USArmedForces _) ->
+                        False
+                    (CountryCodes.CA, CAProvince _) ->
+                        False
+                    (_, CustomRegion _) ->
+                        False
+                    _ ->
+                        True
+            customRegionValidator =
+                case adState address of
+                    CustomRegion region ->
+                        V.required region
+                    _ ->
+                        ("", False)
+        in
+            return
+                [ ( "firstName", [ V.required $ adFirstName address ] )
+                , ( "lastName", [ V.required $ adLastName address ] )
+                , ( "addressOne", [ V.required $ adAddressOne address ] )
+                , ( "city", [ V.required $ adCity address ] )
+                , ( "state"
+                  , [ ( "Invalid region for the selected Country.", invalidRegionForCountry )
+                    , customRegionValidator
+                    ]
+                  )
+                , ( "zipCode", [ V.required $ adZipCode address ] )
+                ]
+
+fromAddressData :: AddressType -> CustomerId -> AddressData -> Address
+fromAddressData type_ customerId address =
+    Address
+        { addressFirstName = adFirstName address
+        , addressLastName = adLastName address
+        , addressCompanyName = adCompanyName address
+        , addressAddressOne = adAddressOne address
+        , addressAddressTwo = adAddressTwo address
+        , addressCity = adCity address
+        , addressState = adState address
+        , addressZipCode = adZipCode address
+        , addressCountry = adCountry address
+        , addressIsDefault = adIsDefault address
+        , addressType = type_
+        , addressCustomerId = customerId
+        , addressIsActive = True
+        }
+
+toAddressData :: Entity Address -> AddressData
+toAddressData (Entity addressId address) =
+    AddressData
+        { adAddressId = Just addressId
+        , adFirstName = addressFirstName address
+        , adLastName = addressLastName address
+        , adCompanyName = addressCompanyName address
+        , adAddressOne = addressAddressOne address
+        , adAddressTwo = addressAddressTwo address
+        , adCity = addressCity address
+        , adState = addressState address
+        , adZipCode = addressZipCode address
+        , adCountry = addressCountry address
+        , adIsDefault = addressIsDefault address
+        }
