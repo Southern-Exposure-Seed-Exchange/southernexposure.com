@@ -16,10 +16,11 @@ import Json.Encode as Encode
 import RemoteData
 import Api
 import Messages exposing (Msg(EditCartMsg), EditCartMessage(..))
-import Models.Fields exposing (Cents(..), centsToString, centsMap)
+import Models.Fields exposing (Cents(..), centsMap)
 import PageData exposing (CartDetails, CartItemId(..))
 import Routing exposing (Route(ProductDetails, Checkout))
 import User exposing (AuthStatus, User)
+import Views.Format as Format
 import Views.Images as Images
 import Views.Utils exposing (icon, routeLinkAttributes, onIntInput, htmlOrBlank)
 
@@ -214,9 +215,9 @@ view { quantities } ({ items, charges } as cartDetails) =
                         [ text <| "Item #" ++ product.baseSKU ++ variant.skuSuffix ]
                     ]
                 , td [ class "text-right align-middle" ]
-                    [ text <| "$" ++ centsToString variant.price ]
+                    [ text <| Format.cents variant.price ]
                 , td [ class "text-right align-middle" ]
-                    [ text <| "$" ++ centsToString (centsMap ((*) quantity) variant.price) ]
+                    [ text <| Format.cents (centsMap ((*) quantity) variant.price) ]
                 , td [ class "text-center align-middle" ]
                     [ a [ class "text-danger", href "#", onClickPreventDefault <| EditCartMsg <| Remove id ]
                         [ icon "times" ]
@@ -244,7 +245,7 @@ view { quantities } ({ items, charges } as cartDetails) =
         footerRow rowClass content amount =
             tr [ class rowClass ]
                 [ td [ colspan 4, class "text-right" ] [ text <| content ++ ":" ]
-                , td [ class "text-right" ] [ text <| "$" ++ centsToString amount ]
+                , td [ class "text-right" ] [ text <| Format.cents amount ]
                 , td [] []
                 ]
 
@@ -265,7 +266,7 @@ view { quantities } ({ items, charges } as cartDetails) =
             [ h1 [] [ text "Shopping Cart" ]
             , hr [] []
             , p [ class "text-center font-weight-bold" ]
-                [ text <| "Total Items: " ++ toString itemCount ++ " Amount: $" ++ centsToString totals.total
+                [ text <| "Total Items: " ++ toString itemCount ++ " Amount: " ++ Format.cents totals.total
                 ]
             , form [ onSubmit <| EditCartMsg Submit ]
                 [ cartTable

@@ -1,7 +1,6 @@
 module Models.Fields
     exposing
         ( Cents(..)
-        , centsToString
         , centsMap
         , centsMap2
         , Milligrams(..)
@@ -13,14 +12,6 @@ import Decimal
 
 type Cents
     = Cents Int
-
-
-centsToString : Cents -> String
-centsToString (Cents i) =
-    Decimal.fromInt i
-        |> Decimal.mul (Decimal.unsafeFromString "0.01")
-        |> Decimal.round -2
-        |> Decimal.toString
 
 
 centsMap : (Int -> Int) -> Cents -> Cents

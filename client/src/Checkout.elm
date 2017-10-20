@@ -22,13 +22,13 @@ import RemoteData exposing (WebData)
 import Address exposing (AddressId(..))
 import Api
 import Locations exposing (AddressLocations, Region)
-import Models.Fields exposing (Cents(..), centsToString, centsMap2, centsMap, milligramsToString)
+import Models.Fields exposing (Cents(..), centsMap2, centsMap, milligramsToString)
 import PageData
 import Ports
 import Update.Utils exposing (nothingAndNoCommand)
 import User exposing (AuthStatus)
-import Views.Images as Images
 import Views.Format as Format
+import Views.Images as Images
 
 
 -- Model
@@ -930,8 +930,8 @@ summaryTable ({ items, charges } as checkoutDetails) =
                         [ text <| "Item #" ++ product.baseSKU ++ variant.skuSuffix ]
                     ]
                 , td [ class "text-center" ] [ text <| toString quantity ]
-                , td [ class "text-right" ] [ text <| "$" ++ centsToString variant.price ]
-                , td [ class "text-right" ] [ text <| "$" ++ centsToString (centsMap ((*) quantity) variant.price) ]
+                , td [ class "text-right" ] [ text <| Format.cents variant.price ]
+                , td [ class "text-right" ] [ text <| Format.cents (centsMap ((*) quantity) variant.price) ]
                 ]
 
         tableFooter =
@@ -964,7 +964,7 @@ summaryTable ({ items, charges } as checkoutDetails) =
         footerRow content amount rowClass =
             tr [ class rowClass ]
                 [ td [ colspan 4, class "text-right" ] [ text <| content ++ ":" ]
-                , td [ class "text-right" ] [ text <| "$" ++ centsToString amount ]
+                , td [ class "text-right" ] [ text <| Format.cents amount ]
                 ]
 
         totals =
@@ -1062,8 +1062,8 @@ orderTable ({ order, lineItems, products } as details) =
             tr []
                 [ td [] [ text <| product.name ++ " " ++ milligramsToString product.weight ++ "g" ]
                 , td [ class "text-right" ] [ text <| toString product.quantity ]
-                , td [ class "text-right" ] [ text <| "$" ++ centsToString product.price ]
-                , td [ class "text-right" ] [ text <| "$" ++ centsToString (productTotal product) ]
+                , td [ class "text-right" ] [ text <| Format.cents product.price ]
+                , td [ class "text-right" ] [ text <| Format.cents (productTotal product) ]
                 ]
 
         productTotal product =
@@ -1106,7 +1106,7 @@ orderTable ({ order, lineItems, products } as details) =
         footerRow rowClass description amount =
             tr [ class rowClass ]
                 [ td [ class "text-right", colspan 3 ] [ text <| description ++ ":" ]
-                , td [ class "text-right" ] [ text <| "$" ++ centsToString amount ]
+                , td [ class "text-right" ] [ text <| Format.cents amount ]
                 ]
 
         htmlOrBlank f maybe =

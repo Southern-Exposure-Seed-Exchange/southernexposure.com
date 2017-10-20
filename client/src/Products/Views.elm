@@ -9,13 +9,14 @@ import Markdown
 import Paginate exposing (Paginated)
 import Messages exposing (Msg(..))
 import Model exposing (CartForms)
-import Models.Fields exposing (Cents(..), centsToString, Milligrams(..), milligramsToString)
+import Models.Fields exposing (Cents(..), Milligrams(..), milligramsToString)
 import PageData exposing (ProductData)
 import Product exposing (ProductId(..), Product, ProductVariantId(..), ProductVariant)
 import Products.Pagination as Pagination
 import Products.Sorting as Sorting
 import Routing exposing (Route(..))
 import SeedAttribute
+import Views.Format as Format
 import Views.Images as Images
 import Views.Utils exposing (routeLinkAttributes, onIntInput, htmlOrBlank)
 
@@ -267,7 +268,7 @@ cartForm addToCartForms product variants =
 
         selectedPrice =
             maybeSelectedVariant
-                |> htmlOrBlank (\v -> h4 [] [ text <| "$" ++ centsToString v.price ])
+                |> htmlOrBlank (\v -> h4 [] [ text <| Format.cents v.price ])
 
         hasMultipleVariants =
             Dict.size variants > 1
@@ -340,7 +341,7 @@ cartForm addToCartForms product variants =
 
         variantOption variant =
             [ milligramsToString variant.weight ++ "g"
-            , "$" ++ centsToString variant.price
+            , Format.cents variant.price
             ]
                 |> String.join " - "
                 |> text
