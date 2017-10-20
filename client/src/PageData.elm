@@ -379,23 +379,11 @@ type alias Order =
 
 orderDecoder : Decoder Order
 orderDecoder =
-    let
-        resultToDecoder r =
-            case r of
-                Ok x ->
-                    Decode.succeed x
-
-                Err e ->
-                    Decode.fail e
-    in
-        Decode.map4 Order
-            (Decode.field "status" orderStatusDecoder)
-            (Decode.field "comment" Decode.string)
-            (Decode.field "taxDescription" Decode.string)
-            (Decode.field "createdAt" <|
-                Decode.andThen (resultToDecoder << DateTime.fromISO8601) <|
-                    Decode.string
-            )
+    Decode.map4 Order
+        (Decode.field "status" orderStatusDecoder)
+        (Decode.field "comment" Decode.string)
+        (Decode.field "taxDescription" Decode.string)
+        (Decode.field "createdAt" dateTimeDecoder)
 
 
 type OrderStatus
@@ -587,3 +575,22 @@ cartChargesDecoder =
             Decode.map List.head <|
                 Decode.list cartChargeDecoder
         )
+
+
+
+-- Utils
+
+
+resultToDecoder : Result String a -> Decoder a
+resultToDecoder r =
+    case r of
+        Ok x ->
+            Decode.succeed x
+
+        Err e ->
+            Decode.fail e
+
+
+dateTimeDecoder : Decoder DateTime
+dateTimeDecoder =
+    Decode.string |> Decode.andThen (DateTime.fromISO8601 >> resultToDecoder)
