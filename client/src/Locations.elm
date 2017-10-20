@@ -2,10 +2,12 @@ module Locations
     exposing
         ( Location
         , locationDecoder
+        , findName
         , AddressLocations
         , addressLocationsDecoder
         , Region(..)
         , fromRegion
+        , regionName
         , armedForcesCodes
         , regionDecoder
         , regionEncoder
@@ -28,6 +30,21 @@ locationDecoder =
         (Decode.field "name" Decode.string)
 
 
+findName : List Location -> String -> Maybe String
+findName locations code =
+    case locations of
+        [] ->
+            Nothing
+
+        x :: xs ->
+            if x.code == code then
+                Just x.name
+            else
+                findName xs code
+
+
+{-| TODO: Use type instead of alias, maybe keep a dict for fast lookups as well
+-}
 type alias AddressLocations =
     { countries : List Location
     , states : List Location
@@ -70,6 +87,22 @@ fromRegion region =
 
         Custom s ->
             s
+
+
+regionName : AddressLocations -> Region -> Maybe String
+regionName locations region =
+    case region of
+        USState code ->
+            findName locations.states code
+
+        ArmedForces code ->
+            findName locations.armedForces code
+
+        CAProvince code ->
+            findName locations.provinces code
+
+        Custom str ->
+            Just str
 
 
 armedForcesCodes : List String

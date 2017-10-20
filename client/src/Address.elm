@@ -206,37 +206,15 @@ card address locations =
                 Nothing
 
         stateString =
-            Maybe.withDefault "" <|
-                case address.state of
-                    USState code ->
-                        findLocation code locations.states
-
-                    ArmedForces code ->
-                        findLocation code locations.armedForces
-
-                    CAProvince code ->
-                        findLocation code locations.provinces
-
-                    Custom str ->
-                        Just str
+            Locations.regionName locations address.state
+                |> Maybe.withDefault ""
 
         countryHtml =
             if address.country == "US" then
                 Nothing
             else
-                findLocation address.country locations.countries
+                Locations.findName locations.countries address.country
                     |> Maybe.map text
-
-        findLocation code ls =
-            case ls of
-                [] ->
-                    Nothing
-
-                x :: xs ->
-                    if x.code == code then
-                        Just x.name
-                    else
-                        findLocation code xs
     in
         [ Just <| b [] [ text <| address.firstName ++ " " ++ address.lastName ]
         , notBlank address.companyName
