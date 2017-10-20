@@ -19,7 +19,6 @@ import Html.Events exposing (onSubmit, onInput, onCheck, onClick, targetValue, o
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode exposing (Value)
 import RemoteData exposing (WebData)
-import Time.DateTime as DateTime
 import Address exposing (AddressId(..))
 import Api
 import Locations exposing (AddressLocations, Region)
@@ -29,6 +28,7 @@ import Ports
 import Update.Utils exposing (nothingAndNoCommand)
 import User exposing (AuthStatus)
 import Views.Images as Images
+import Views.Format as Format
 
 
 -- Model
@@ -1024,14 +1024,6 @@ successView logoutMsg orderId newAccountCreated locations orderDetails =
             else
                 text ""
 
-        formattedDate =
-            [ DateTime.month orderDate
-            , DateTime.day orderDate
-            , DateTime.year orderDate % 100
-            ]
-                |> List.map toString
-                |> String.join "/"
-
         orderDate =
             orderDetails.order.createdAt
     in
@@ -1050,7 +1042,7 @@ successView logoutMsg orderId newAccountCreated locations orderDetails =
             ]
         , h3 []
             [ text <| "Order #" ++ toString orderId
-            , small [] [ text <| " " ++ formattedDate ]
+            , small [] [ text <| " " ++ Format.date orderDate ]
             ]
         , div [ class "row mb-3" ]
             [ div [ class "col-6" ]
