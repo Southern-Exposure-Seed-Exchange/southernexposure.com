@@ -26,7 +26,7 @@ import Database.Persist
 import Database.Persist.Sql (toSqlKey)
 import Servant
     ( (:>), (:<|>)(..), AuthProtect, ReqBody, JSON, Get, Post, Put, errBody
-    , err403, err500
+    , err403, err500, QueryParam
     )
 
 import Auth
@@ -69,7 +69,7 @@ type CustomerRoutes =
     :<|> (AuthorizeParameters -> App AuthorizationData)
     :<|> (ResetRequestParameters -> App ())
     :<|> (ResetPasswordParameters -> App AuthorizationData)
-    :<|> (AuthToken -> App MyAccountDetails)
+    :<|> (AuthToken -> Maybe Int64 -> App MyAccountDetails)
     :<|> (AuthToken -> EditDetailsParameters -> App ())
     :<|> (AuthToken -> App ContactDetailsData)
     :<|> (AuthToken -> ContactEditParameters -> App ())
@@ -488,12 +488,15 @@ instance ToJSON MyAccountOrderDetails where
 
 type MyAccountRoute =
        AuthProtect "auth-token"
+    :> QueryParam "limit" Int64
     :> Get '[JSON] MyAccountDetails
 
-myAccountRoute :: AuthToken -> App MyAccountDetails
-myAccountRoute = validateToken >=> \(Entity customerId _) ->
+myAccountRoute :: AuthToken -> Maybe Int64 -> App MyAccountDetails
+myAccountRoute authToken maybeLimit = do
+    (Entity customerId _) <- validateToken authToken
     MyAccountDetails <$> getOrderDetails customerId
     where getOrderDetails customerId = runDB $ do
+            let limit = fromMaybe 4 maybeLimit
             orderData <- E.select $ E.from $
                 \(o `E.InnerJoin` op `E.InnerJoin` ol `E.InnerJoin` sa) -> do
                     E.on $ sa E.^. AddressId E.==. o E.^. OrderShippingAddressId
@@ -502,7 +505,7 @@ myAccountRoute = validateToken >=> \(Entity customerId _) ->
                     E.groupBy (o E.^. OrderId, sa E.^. AddressId)
                     E.where_ $ o E.^. OrderCustomerId E.==. E.val customerId
                     E.orderBy [E.desc $ o E.^. OrderCreatedAt]
-                    E.limit 4
+                    when (limit > 0) $ E.limit limit
                     return
                         ( o E.^. OrderId
                         , sa
