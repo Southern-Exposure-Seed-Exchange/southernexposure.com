@@ -18,6 +18,7 @@ import Checkout
 import Views.Category as CategoryViews
 import Messages exposing (Msg(..))
 import Model exposing (Model, CartForms)
+import OrderDetails
 import PageData
 import Products.Pagination as Pagination
 import Products.Views as ProductViews
@@ -108,6 +109,10 @@ view ({ route, pageData, navigationData } as model) =
                         (EditContact.view EditContactMsg model.editContactForm)
                         pageData.locations
 
+                OrderDetails orderId ->
+                    RemoteData.map2 (,) pageData.locations pageData.orderDetails
+                        |> withIntermediateText (uncurry <| OrderDetails.view orderId)
+
                 Cart ->
                     withIntermediateText (Cart.view model.editCartForm) pageData.cartDetails
 
@@ -121,7 +126,7 @@ view ({ route, pageData, navigationData } as model) =
                         |> List.map (Html.map CheckoutMsg)
 
                 CheckoutSuccess orderId newAccount ->
-                    RemoteData.map2 (,) pageData.locations pageData.checkoutSuccess
+                    RemoteData.map2 (,) pageData.locations pageData.orderDetails
                         |> withIntermediateText (uncurry <| Checkout.successView LogOut orderId newAccount)
 
                 NotFound ->

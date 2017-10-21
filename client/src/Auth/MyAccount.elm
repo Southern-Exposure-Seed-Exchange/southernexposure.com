@@ -4,10 +4,10 @@ import Html exposing (..)
 import Html.Attributes exposing (class)
 import Html.Events exposing (onClick)
 import Api
-import Messages exposing (Msg(GetMyAccountDetails, ShowAllOrders))
+import Messages exposing (Msg(NavigateTo, GetMyAccountDetails, ShowAllOrders))
 import Views.Format as Format
 import Views.Utils exposing (routeLinkAttributes)
-import Routing exposing (Route(EditLogin, EditContact))
+import Routing exposing (Route(EditLogin, EditContact, OrderDetails))
 import PageData exposing (MyAccount)
 import Locations exposing (AddressLocations)
 
@@ -59,11 +59,18 @@ orderTable locations orderSummaries =
                 , td [ class "text-center" ] [ text <| toString id ]
                 , td [] [ addressInfo shippingAddress ]
                 , td [ class "text-right" ] [ text <| Format.cents total ]
+                , td [ class "text-center" ]
+                    [ button
+                        [ class "btn btn-light btn-sm"
+                        , onClick <| NavigateTo (OrderDetails id)
+                        ]
+                        [ text "View" ]
+                    ]
                 ]
 
         showAllButton =
             div [ class "form-group text-right" ]
-                [ button [ class "btn btn-default", onClick ShowAllOrders ]
+                [ button [ class "btn btn-light", onClick ShowAllOrders ]
                     [ text "Show All Orders" ]
                 ]
 
@@ -88,6 +95,7 @@ orderTable locations orderSummaries =
                         , th [ class "text-center" ] [ text "Order #" ]
                         , th [] [ text "Shipping Address" ]
                         , th [ class "text-right" ] [ text "Total" ]
+                        , th [] []
                         ]
                     ]
                 , tbody [] <| List.map orderRow orderSummaries

@@ -171,6 +171,9 @@ setPageTitle { route, pageData } =
             EditContact ->
                 Ports.setPageTitle "Edit Contact Details"
 
+            OrderDetails orderId ->
+                Ports.setPageTitle <| "Order #" ++ toString orderId
+
             Cart ->
                 Ports.setPageTitle "Shopping Cart"
 
@@ -259,6 +262,16 @@ fetchDataForRoute ({ route, pageData } as model) =
                     fetchLocationsOnce pageData
                         |> Tuple.mapSecond (\cmd -> Cmd.batch [ cmd, getContactDetails model.currentUser ])
 
+                OrderDetails orderId ->
+                    case model.currentUser of
+                        User.Authorized user ->
+                            { pageData | orderDetails = RemoteData.Loading }
+                                |> fetchLocationsOnce
+                                |> batchCommand (getCheckoutSuccessDetails user.authToken orderId)
+
+                        User.Anonymous ->
+                            doNothing
+
                 Cart ->
                     pageData
                         |> fetchCartDetails model.currentUser model.maybeSessionToken
@@ -301,7 +314,7 @@ fetchDataForRoute ({ route, pageData } as model) =
                 CheckoutSuccess orderId _ ->
                     case model.currentUser of
                         User.Authorized user ->
-                            { pageData | checkoutSuccess = RemoteData.Loading }
+                            { pageData | orderDetails = RemoteData.Loading }
                                 |> fetchLocationsOnce
                                 |> batchCommand (getCheckoutSuccessDetails user.authToken orderId)
 
@@ -864,7 +877,7 @@ update msg ({ pageData } as model) =
         GetCheckoutSuccessDetails response ->
             let
                 updatedPageData =
-                    { pageData | checkoutSuccess = response }
+                    { pageData | orderDetails = response }
             in
                 { model | pageData = updatedPageData } |> noCommand
 

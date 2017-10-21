@@ -28,6 +28,7 @@ type Route
     | MyAccount
     | EditLogin
     | EditContact
+    | OrderDetails Int
     | Cart
     | QuickOrder
     | Checkout
@@ -67,6 +68,7 @@ parseRoute =
                 , Url.map MyAccount Url.top
                 , Url.map EditLogin (Url.s "edit")
                 , Url.map EditContact (Url.s "edit-contact")
+                , Url.map OrderDetails (Url.s "order" </> Url.int)
                 ]
 
         routeParser =
@@ -165,6 +167,9 @@ reverse route =
         EditContact ->
             joinPath [ "account", "edit-contact" ]
 
+        OrderDetails orderId ->
+            joinPath [ "account", "order", toString orderId ]
+
         Cart ->
             joinPath [ "cart" ]
 
@@ -219,6 +224,9 @@ authRequired route =
             True
 
         EditContact ->
+            True
+
+        OrderDetails _ ->
             True
 
         Cart ->

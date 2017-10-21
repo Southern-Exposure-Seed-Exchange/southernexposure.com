@@ -67,7 +67,7 @@ type alias PageData =
     , contactDetails : WebData ContactDetails
     , cartDetails : WebData CartDetails
     , checkoutDetails : WebData CheckoutDetails
-    , checkoutSuccess : WebData OrderDetails
+    , orderDetails : WebData OrderDetails
     }
 
 
@@ -98,7 +98,7 @@ initial =
         , contactDetails = RemoteData.NotAsked
         , cartDetails = RemoteData.NotAsked
         , checkoutDetails = RemoteData.NotAsked
-        , checkoutSuccess = RemoteData.NotAsked
+        , orderDetails = RemoteData.NotAsked
         }
 
 

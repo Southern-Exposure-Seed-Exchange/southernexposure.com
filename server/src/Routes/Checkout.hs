@@ -471,6 +471,8 @@ createProducts maybeTaxRate items orderId =
 
 
 -- SUCCESS DETAILS
+-- TODO: Move to Customers Module or make Orders Module
+-- (used for My Account Order Details page as well)
 
 
 data OrderDetails =

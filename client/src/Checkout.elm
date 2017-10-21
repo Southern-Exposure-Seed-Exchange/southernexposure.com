@@ -23,6 +23,7 @@ import Address exposing (AddressId(..))
 import Api
 import Locations exposing (AddressLocations, Region)
 import Models.Fields exposing (Cents(..), centsMap2, centsMap, milligramsToString)
+import OrderDetails
 import PageData
 import Ports
 import Update.Utils exposing (nothingAndNoCommand)
@@ -1007,14 +1008,6 @@ successView logoutMsg orderId newAccountCreated locations orderDetails =
                 ]
                 [ text "contact us" ]
 
-        addressCard titleText address =
-            div [ class "card h-100" ]
-                [ div [ class "card-body" ]
-                    [ h4 [ class "card-title" ] [ text titleText ]
-                    , Address.card address locations
-                    ]
-                ]
-
         commentHtml =
             if not (String.isEmpty orderDetails.order.comment) then
                 p []
@@ -1046,93 +1039,16 @@ successView logoutMsg orderId newAccountCreated locations orderDetails =
             ]
         , div [ class "row mb-3" ]
             [ div [ class "col-6" ]
-                [ addressCard "Shipping Details" orderDetails.shippingAddress ]
+                [ OrderDetails.addressCard locations
+                    "Shipping Details"
+                    orderDetails.shippingAddress
+                ]
             , div [ class "col-6" ]
-                [ addressCard "Billing Details" orderDetails.billingAddress ]
+                [ OrderDetails.addressCard locations
+                    "Billing Details"
+                    orderDetails.billingAddress
+                ]
             ]
         , commentHtml
-        , orderTable orderDetails
+        , OrderDetails.orderTable orderDetails
         ]
-
-
-orderTable : PageData.OrderDetails -> Html msg
-orderTable ({ order, lineItems, products } as details) =
-    let
-        productRow product =
-            tr []
-                [ td [] [ text <| product.name ++ " " ++ milligramsToString product.weight ++ "g" ]
-                , td [ class "text-right" ] [ text <| toString product.quantity ]
-                , td [ class "text-right" ] [ text <| Format.cents product.price ]
-                , td [ class "text-right" ] [ text <| Format.cents (productTotal product) ]
-                ]
-
-        productTotal product =
-            centsMap ((*) product.quantity) product.price
-
-        orderTotals =
-            PageData.orderTotals details
-
-        subTotal =
-            orderTotals.subTotal
-
-        ( maybeShippingCharge, surcharges ) =
-            List.foldl
-                (\lineItem ( maybeShipping, ss ) ->
-                    case lineItem.itemType of
-                        PageData.Shipping ->
-                            ( Just lineItem, ss )
-
-                        PageData.Surcharge ->
-                            ( maybeShipping, lineItem :: ss )
-                )
-                ( Nothing, [] )
-                lineItems
-
-        total =
-            orderTotals.total
-
-        maybeAddCents maybeCents =
-            centsMap2 (+) (Maybe.map .amount maybeCents |> Maybe.withDefault (Cents 0))
-
-        taxRow =
-            if orderTotals.tax == Cents 0 then
-                text ""
-            else
-                footerRow "" order.taxDescription orderTotals.tax
-
-        chargeRow { description, amount } =
-            footerRow "" description amount
-
-        footerRow rowClass description amount =
-            tr [ class rowClass ]
-                [ td [ class "text-right", colspan 3 ] [ text <| description ++ ":" ]
-                , td [ class "text-right" ] [ text <| Format.cents amount ]
-                ]
-
-        htmlOrBlank f maybe =
-            case maybe of
-                Nothing ->
-                    text ""
-
-                Just a ->
-                    f a
-    in
-        table [ class "table table-striped table-sm" ]
-            [ thead []
-                [ tr [ class "font-weight-bold" ]
-                    [ th [] [ text "Product" ]
-                    , th [ class "text-right" ] [ text "Quantity" ]
-                    , th [ class "text-right" ] [ text "Price" ]
-                    , th [ class "text-right" ] [ text "Total" ]
-                    ]
-                ]
-            , tbody [] <| List.map productRow products
-            , tfoot [] <|
-                [ footerRow "font-weight-bold" "Sub-Total" subTotal
-                , htmlOrBlank chargeRow maybeShippingCharge
-                ]
-                    ++ List.map chargeRow surcharges
-                    ++ [ taxRow
-                       , footerRow "font-weight-bold" "Total" total
-                       ]
-            ]
