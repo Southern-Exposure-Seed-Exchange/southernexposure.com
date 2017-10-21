@@ -18,16 +18,15 @@ Frontend.
 Quickstart
 ==========
 
-.. code:: bash
+You will need to have `Stack <https://haskellstack.org>`_ & either `NVM
+<https://github.com/creationix/nvm>`_ or ``node``/``npm`` installed.
 
-    # Client
-    cd client
-    npm install
-    npm run watch
+You can start the Client & Server in watch mode by running ``./manage.hs`` or
+``./manage.hs watch``. This will rebuild the Client & Server when their source
+files change, then hot update the Client code(refreshing open tabs if
+necessary) & restart the Server.
 
-    # Server
-    cd server
-    make
+To see all available commands, run ``./manage.hs help``.
 
 
 License

@@ -30,22 +30,5 @@ before_install:
     - travis_retry curl -L https://www.stackage.org/stack/linux-x86_64 |
       tar xz --wildcards --strip-components=1 -C ~/.local/bin '*/stack'
 
-install:
-    # Install Client Dependencies
-    - cd client
-    - npm install
-    - cd ..
-    # Install Server Dependencies
-    - cd server
-    - stack --no-terminal --install-ghc install --only-dependencies
-    - cd ..
-
 script:
-    # Build Client
-    - cd client
-    - $TRAVIS_BUILD_DIR/sysconfcpus/bin/sysconfcpus -n 2 npm run build
-    - cd ..
-    # Build Server
-    - cd server
-    - stack --no-terminal build
-    - cd ..
+    - $TRAVIS_BUILD_DIR/sysconfcpus/bin/sysconfcpus -n 2 ./manage.hs build
