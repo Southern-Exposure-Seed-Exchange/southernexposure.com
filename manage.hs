@@ -221,7 +221,8 @@ productionBuild = do
     serverDirectory <- getServerDirectory
     jobCount <- stackJobCount
     serverResult <- liftIO $
-        run "stack" ["build", "--pedantic", jobCount] serverDirectory printServerOutput
+        run "stack" ["build", "--pedantic", jobCount, "--ghc-options", "-O2"]
+            serverDirectory printServerOutput
             >>= waitForProcess
     case serverResult of
         ExitSuccess ->
