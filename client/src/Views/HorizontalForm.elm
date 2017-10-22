@@ -28,20 +28,12 @@ genericErrorText hasErrors =
         text ""
 
 
-submitButton : String -> Bool -> Html msg
-submitButton content showRequiredLabel =
-    let
-        requiredLabel =
-            if showRequiredLabel then
-                small [ class "font-weight-bold text-danger" ] [ text "* Required Fields" ]
-            else
-                text ""
-    in
-        div [ class "form-group clearfix" ]
-            [ requiredLabel
-            , button [ class "btn btn-primary float-right", type_ "submit" ]
-                [ text content ]
-            ]
+submitButton : String -> Html msg
+submitButton content =
+    div [ class "form-group clearfix" ]
+        [ button [ class "btn btn-primary float-right", type_ "submit" ]
+            [ text content ]
+        ]
 
 
 {-| TODO: Have users define a Field type w/ functions to convert to required
@@ -120,9 +112,10 @@ withLabel labelText isRequired input =
         inputId =
             String.filter (\c -> c /= ' ') labelText
 
-        requiredHtml isRequired =
-            if isRequired then
-                span [ class "text-danger" ] [ text "*" ]
+        optionalHtml =
+            if not isRequired then
+                small [ class "horizontal-optional-text d-block text-muted mr-1" ]
+                    [ text "(optional)" ]
             else
                 text ""
     in
@@ -131,6 +124,6 @@ withLabel labelText isRequired input =
                 [ class "col-sm-3 col-form-label text-right font-weight-bold"
                 , for <| "input" ++ inputId
                 ]
-                [ requiredHtml isRequired, text " ", text <| labelText ++ ":" ]
+                [ text <| labelText ++ ":", optionalHtml ]
             , div [ class "col" ] input
             ]

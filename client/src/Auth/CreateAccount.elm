@@ -295,7 +295,7 @@ view tagger model locations =
                 , countrySelect
                 , requiredField .phoneNumber PhoneNumber "Phone Number" "telephone" "tel"
                 ]
-            , Form.submitButton "Register" True
+            , Form.submitButton "Register"
             ]
         ]
 

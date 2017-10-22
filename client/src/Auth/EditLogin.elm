@@ -158,7 +158,7 @@ view tagger model authStatus =
             , inputRow (always email) Email False "Email" "email" "email"
             , inputRow (.password >> Maybe.withDefault "") Password False "Password" "password" "password"
             , inputRow (.passwordConfirm >> Maybe.withDefault "") PasswordConfirm False "Confirm Password" "passwordConfirm" "password"
-            , Form.submitButton "Update" False
+            , Form.submitButton "Update"
             ]
     in
         [ h1 [] [ text "Edit Login Details" ]

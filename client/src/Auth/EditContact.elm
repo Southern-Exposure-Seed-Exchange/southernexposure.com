@@ -250,6 +250,6 @@ view tagger { details, errors } locations =
             , inputRow .zipCode ZipCode True "Zip Code" "zipCode" "text"
             , countryField
             , inputRow .phoneNumber PhoneNumber True "Phone Number" "phoneNumber" "text"
-            , Form.submitButton "Update" True
+            , Form.submitButton "Update"
             ]
         ]
