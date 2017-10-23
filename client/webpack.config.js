@@ -38,6 +38,7 @@ module.exports = {
               warn: true,
               verbose: true,
               debug: !isProduction,
+              cwd: __dirname,
             },
           },
         ],
