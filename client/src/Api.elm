@@ -4,6 +4,7 @@ module Api
         , get
         , post
         , put
+        , delete
         , withToken
         , withJsonBody
         , withJsonResponse
@@ -197,19 +198,29 @@ initialRequest =
     }
 
 
+initialMethod : String -> Endpoint -> Request String
+initialMethod method endpoint =
+    { initialRequest | method = method, url = toUrl endpoint }
+
+
 get : Endpoint -> Request String
-get endpoint =
-    { initialRequest | method = "GET", url = toUrl endpoint }
+get =
+    initialMethod "GET"
 
 
 post : Endpoint -> Request String
-post endpoint =
-    { initialRequest | method = "POST", url = toUrl endpoint }
+post =
+    initialMethod "POST"
 
 
 put : Endpoint -> Request String
-put endpoint =
-    { initialRequest | method = "PUT", url = toUrl endpoint }
+put =
+    initialMethod "PUT"
+
+
+delete : Endpoint -> Request String
+delete =
+    initialMethod "DELETE"
 
 
 withToken : String -> Request a -> Request a
