@@ -197,7 +197,7 @@ instance Exception PlaceOrderError
 
 withPlaceOrderErrors :: CustomerAddress -> App a -> App a
 withPlaceOrderErrors shippingAddress =
-    eitherM handle <=< try
+    try >=> eitherM handle
     where handle = \case
             CartNotFound ->
                 serverError err404
