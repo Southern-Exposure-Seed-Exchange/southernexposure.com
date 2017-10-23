@@ -201,7 +201,7 @@ view : Form -> AddressLocations -> PageData.AddressDetails -> List (Html Msg)
 view model locations { shippingAddresses, billingAddresses } =
     let
         addressSelect titleText msg addresses =
-            div [ class "d-inline-block text-center form-group" ]
+            div [ class "text-center form-group" ]
                 [ label []
                     [ span [ class "font-weight-bold" ] [ text titleText ]
                     , Address.select (AddressId >> msg)
