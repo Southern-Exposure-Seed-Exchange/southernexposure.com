@@ -9,7 +9,6 @@ import RemoteData exposing (WebData)
 import AdvancedSearch
 import Auth.CreateAccount as CreateAccount
 import Auth.EditAddress as EditAddress
-import Auth.EditContact as EditContact
 import Auth.EditLogin as EditLogin
 import Auth.Login as Login
 import Auth.MyAccount as MyAccount
@@ -104,11 +103,6 @@ view ({ route, pageData, navigationData } as model) =
 
                 EditLogin ->
                     EditLogin.view EditLoginMsg model.editLoginForm model.currentUser
-
-                EditContact ->
-                    withIntermediateText
-                        (EditContact.view EditContactMsg model.editContactForm)
-                        pageData.locations
 
                 EditAddress ->
                     RemoteData.map2 (,) pageData.locations pageData.addressDetails

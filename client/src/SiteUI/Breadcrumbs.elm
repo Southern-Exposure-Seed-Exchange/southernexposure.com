@@ -82,11 +82,6 @@ view route pageData =
                     , activeItem "Edit Login Details"
                     ]
 
-                EditContact ->
-                    [ inactiveItem "My Account" MyAccount
-                    , activeItem "Edit Contact Details"
-                    ]
-
                 EditAddress ->
                     [ inactiveItem "My Account" MyAccount
                     , activeItem "Edit Addresses"

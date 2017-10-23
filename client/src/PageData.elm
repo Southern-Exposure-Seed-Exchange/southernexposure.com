@@ -12,9 +12,6 @@ module PageData
         , MyAccount
         , myAccountDecoder
         , OrderSummary
-        , ContactDetails
-        , contactDetailsDecoder
-        , contactDetailsEncoder
         , AddressDetails
         , addressDetailsDecoder
         , CartDetails
@@ -38,7 +35,6 @@ module PageData
 
 import Dict exposing (Dict)
 import Json.Decode as Decode exposing (Decoder)
-import Json.Encode as Encode exposing (Value)
 import Paginate exposing (Paginated)
 import RemoteData exposing (WebData)
 import Time.DateTime as DateTime exposing (DateTime)
@@ -66,7 +62,6 @@ type alias PageData =
     , pageDetails : WebData StaticPage
     , locations : WebData AddressLocations
     , myAccount : WebData MyAccount
-    , contactDetails : WebData ContactDetails
     , addressDetails : WebData AddressDetails
     , cartDetails : WebData CartDetails
     , checkoutDetails : WebData CheckoutDetails
@@ -98,7 +93,6 @@ initial =
         , pageDetails = RemoteData.NotAsked
         , locations = RemoteData.NotAsked
         , myAccount = RemoteData.NotAsked
-        , contactDetails = RemoteData.NotAsked
         , addressDetails = RemoteData.NotAsked
         , cartDetails = RemoteData.NotAsked
         , checkoutDetails = RemoteData.NotAsked
@@ -228,57 +222,6 @@ orderSummaryDecoder =
         (Decode.field "status" orderStatusDecoder)
         (Decode.field "total" <| Decode.map Cents Decode.int)
         (Decode.field "created" dateTimeDecoder)
-
-
-
--- Contact Details
-
-
-type alias ContactDetails =
-    { firstName : String
-    , lastName : String
-    , street : String
-    , addressTwo : String
-    , city : String
-    , state : Region
-    , zipCode : String
-    , country : String
-    , phoneNumber : String
-    }
-
-
-contactDetailsDecoder : Decoder ContactDetails
-contactDetailsDecoder =
-    Decode.map8 ContactDetails
-        (Decode.field "firstName" Decode.string)
-        (Decode.field "lastName" Decode.string)
-        (Decode.field "addressOne" Decode.string)
-        (Decode.field "addressTwo" Decode.string)
-        (Decode.field "city" Decode.string)
-        (Decode.field "state" regionDecoder)
-        (Decode.field "zipCode" Decode.string)
-        (Decode.field "country" Decode.string)
-        |> Decode.andThen
-            (\constr ->
-                Decode.map constr
-                    (Decode.field "telephone" Decode.string)
-            )
-
-
-contactDetailsEncoder : ContactDetails -> Value
-contactDetailsEncoder details =
-    [ ( "firstName", details.firstName )
-    , ( "lastName", details.lastName )
-    , ( "addressOne", details.street )
-    , ( "addressTwo", details.addressTwo )
-    , ( "city", details.city )
-    , ( "zipCode", details.zipCode )
-    , ( "country", details.country )
-    , ( "telephone", details.phoneNumber )
-    ]
-        |> List.map (Tuple.mapSecond Encode.string)
-        |> ((::) <| ( "state", regionEncoder details.state ))
-        |> Encode.object
 
 
 

@@ -27,7 +27,6 @@ type Route
     | ResetPassword (Maybe String)
     | MyAccount
     | EditLogin
-    | EditContact
     | EditAddress
     | OrderDetails Int
     | Cart
@@ -68,7 +67,6 @@ parseRoute =
                 , Url.map ResetPassword (Url.s "reset-password" <?> Url.stringParam "code")
                 , Url.map MyAccount Url.top
                 , Url.map EditLogin (Url.s "edit")
-                , Url.map EditContact (Url.s "edit-contact")
                 , Url.map EditAddress (Url.s "addresses")
                 , Url.map OrderDetails (Url.s "order" </> Url.int)
                 ]
@@ -166,9 +164,6 @@ reverse route =
         EditLogin ->
             joinPath [ "account", "edit" ]
 
-        EditContact ->
-            joinPath [ "account", "edit-contact" ]
-
         EditAddress ->
             joinPath [ "account", "addresses" ]
 
@@ -226,9 +221,6 @@ authRequired route =
             True
 
         EditLogin ->
-            True
-
-        EditContact ->
             True
 
         EditAddress ->

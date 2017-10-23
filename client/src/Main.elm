@@ -11,7 +11,6 @@ import AdvancedSearch
 import Api
 import Auth.CreateAccount as CreateAccount
 import Auth.EditAddress as EditAddress
-import Auth.EditContact as EditContact
 import Auth.EditLogin as EditLogin
 import Auth.Login as Login
 import Auth.MyAccount as MyAccount
@@ -169,9 +168,6 @@ setPageTitle { route, pageData } =
             EditLogin ->
                 Ports.setPageTitle "Edit Login Details"
 
-            EditContact ->
-                Ports.setPageTitle "Edit Contact Details"
-
             EditAddress ->
                 Ports.setPageTitle "Edit Addresses"
 
@@ -261,10 +257,6 @@ fetchDataForRoute ({ route, pageData } as model) =
 
                 EditLogin ->
                     doNothing
-
-                EditContact ->
-                    fetchLocationsOnce pageData
-                        |> Tuple.mapSecond (\cmd -> Cmd.batch [ cmd, getContactDetails model.currentUser ])
 
                 EditAddress ->
                     getAddressDetails model.currentUser pageData
@@ -396,19 +388,6 @@ getAddressLocations =
     Api.get Api.CustomerLocations
         |> Api.withJsonResponse Locations.addressLocationsDecoder
         |> Api.sendRequest GetAddressLocations
-
-
-getContactDetails : AuthStatus -> Cmd Msg
-getContactDetails authStatus =
-    case authStatus of
-        User.Anonymous ->
-            Cmd.none
-
-        User.Authorized user ->
-            Api.get Api.CustomerContactDetails
-                |> Api.withJsonResponse PageData.contactDetailsDecoder
-                |> Api.withToken user.authToken
-                |> Api.sendRequest GetContactDetails
 
 
 getAddressDetails : AuthStatus -> PageData -> ( PageData, Cmd Msg )
@@ -689,11 +668,6 @@ update msg ({ pageData } as model) =
                 |> Tuple.mapFirst (\form -> { model | editLoginForm = form })
                 |> Tuple.mapSecond (Cmd.map EditLoginMsg)
 
-        EditContactMsg subMsg ->
-            EditContact.update subMsg model.editContactForm model.currentUser
-                |> Tuple.mapFirst (\form -> { model | editContactForm = form })
-                |> Tuple.mapSecond (Cmd.map EditContactMsg)
-
         EditAddressMsg subMsg ->
             EditAddress.update subMsg model.editAddressForm model.currentUser pageData.addressDetails
                 |> Tuple.mapFirst (\form -> { model | editAddressForm = form })
@@ -851,26 +825,6 @@ update msg ({ pageData } as model) =
                     { pageData | myAccount = response }
             in
                 ( { model | pageData = updatedPageData }, Cmd.none )
-
-        GetContactDetails response ->
-            let
-                updatedPageData =
-                    { pageData
-                        | contactDetails = response
-                    }
-
-                updatedForm =
-                    response
-                        |> RemoteData.toMaybe
-                        |> Maybe.map EditContact.fromContactDetails
-                        |> Maybe.withDefault model.editContactForm
-            in
-                ( { model
-                    | pageData = updatedPageData
-                    , editContactForm = updatedForm
-                  }
-                , Cmd.none
-                )
 
         GetAddressDetails response ->
             let

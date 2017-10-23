@@ -11,7 +11,6 @@ import Auth.CreateAccount as CreateAccount
 import Auth.Login as Login
 import Auth.EditAddress as EditAddress
 import Auth.EditLogin as EditLogin
-import Auth.EditContact as EditContact
 import Auth.ResetPassword as ResetPassword
 import Checkout
 import StaticPage exposing (StaticPage)
@@ -50,7 +49,6 @@ type Msg
     | LoginMsg Login.Msg
     | ResetPasswordMsg ResetPassword.Msg
     | EditLoginMsg EditLogin.Msg
-    | EditContactMsg EditContact.Msg
     | EditAddressMsg EditAddress.Msg
     | EditCartMsg EditCartMessage
     | QuickOrderMsg QuickOrder.Msg
@@ -62,7 +60,6 @@ type Msg
     | GetPageDetailsData (WebData StaticPage)
     | GetAddressLocations (WebData AddressLocations)
     | GetMyAccountDetails (WebData PageData.MyAccount)
-    | GetContactDetails (WebData PageData.ContactDetails)
     | GetAddressDetails (WebData PageData.AddressDetails)
     | GetCartDetails (WebData PageData.CartDetails)
     | GetCartItemCount (WebData Int)

@@ -48,9 +48,7 @@ type Endpoint
     | CustomerPasswordReset
     | CustomerLocations
     | CustomerMyAccount (Maybe Int)
-    | CustomerContactDetails
     | CustomerEditLogin
-    | CustomerEditContact
     | CustomerAddressDetails
     | CustomerEditAddress Int
     | CustomerDeleteAddress Int
@@ -121,14 +119,8 @@ toUrl endpoint =
                         ++ withQueryStrings
                             [ queryParameter ( "limit", toString limit ) ]
 
-                CustomerContactDetails ->
-                    joinPath [ "customers", "contact" ]
-
                 CustomerEditLogin ->
                     joinPath [ "customers", "edit" ]
-
-                CustomerEditContact ->
-                    joinPath [ "customers", "contact-edit" ]
 
                 CustomerAddressDetails ->
                     joinPath [ "customers", "addresses" ]
