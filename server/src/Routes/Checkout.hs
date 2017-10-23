@@ -261,7 +261,7 @@ instance Validation CustomerPlaceOrderParameters where
                         invalidAddress <- V.exists addrId
                         return
                             [ ( ""
-                              , [ ( "Please re-select your address or try adding a new one."
+                              , [ ( "Please refresh the page or try adding a new address instead."
                                   , invalidAddress
                                   )
                                 ]
