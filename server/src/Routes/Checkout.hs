@@ -390,7 +390,6 @@ anonymousPlaceOrderRoute = validate >=> \parameters -> do
             , customerEncryptedPassword = encryptedPass
             , customerAuthToken = authToken
             , customerIsAdmin = False
-            , customerTelephone = ""
             }
     withPlaceOrderErrors (NewAddress $ apopShippingAddress parameters) . runDB $ do
         customerId <- insert customer

@@ -159,15 +159,6 @@ data RegistrationParameters =
     RegistrationParameters
         { rpEmail :: T.Text
         , rpPassword :: T.Text
-        , rpFirstName :: T.Text
-        , rpLastName :: T.Text
-        , rpAddressOne :: T.Text
-        , rpAddressTwo :: T.Text
-        , rpCity :: T.Text
-        , rpState :: Region
-        , rpZipCode :: T.Text
-        , rpCountry :: Country
-        , rpTelephone :: T.Text
         , rpCartToken :: Maybe T.Text
         } deriving (Show)
 
@@ -177,15 +168,6 @@ instance FromJSON RegistrationParameters where
             RegistrationParameters
                 <$> v .: "email"
                 <*> v .: "password"
-                <*> v .: "firstName"
-                <*> v .: "lastName"
-                <*> v .: "addressOne"
-                <*> v .: "addressTwo"
-                <*> v .: "city"
-                <*> v .: "state"
-                <*> v .: "zipCode"
-                <*> v .: "country"
-                <*> v .: "telephone"
                 <*> v .:? "sessionToken"
 
 instance Validation RegistrationParameters where
@@ -204,12 +186,6 @@ instance Validation RegistrationParameters where
                 , V.minimumLength 8 $ rpPassword parameters
                 ]
               )
-            , ( "firstName", [ V.required $ rpFirstName parameters ])
-            , ( "lastName", [ V.required $ rpLastName parameters ])
-            , ( "addressOne", [ V.required $ rpAddressOne parameters ])
-            , ( "city", [ V.required $ rpCity parameters ])
-            , ( "zipCode", [ V.required $ rpZipCode parameters ])
-            , ( "telephone", [ V.required $ rpTelephone parameters ])
             ]
 
 type RegisterRoute =
@@ -225,15 +201,6 @@ registrationRoute = validate >=> \parameters -> do
             , customerEncryptedPassword = encryptedPass
             , customerAuthToken = authToken
             , customerIsAdmin = False
-            , customerFirstName = rpFirstName parameters
-            , customerLastName = rpLastName parameters
-            , customerAddressOne = rpAddressOne parameters
-            , customerAddressTwo = rpAddressTwo parameters
-            , customerCity = rpCity parameters
-            , customerState = rpState parameters
-            , customerZipCode = rpZipCode parameters
-            , customerCountry = rpCountry parameters
-            , customerTelephone = rpTelephone parameters
             }
     maybeCustomerId <- runDB $ insertUnique customer
     case maybeCustomerId of

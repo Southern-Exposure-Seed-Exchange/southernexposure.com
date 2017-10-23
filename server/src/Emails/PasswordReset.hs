@@ -6,16 +6,16 @@ import Data.Monoid ((<>))
 import qualified Data.Text.Lazy as L
 
 
-get :: L.Text -> L.Text -> L.Text -> (String, L.Text)
-get firstName domainName resetCode =
+get :: L.Text -> L.Text -> (String, L.Text)
+get domainName resetCode =
     ( "Southern Exposure Seed Exchange - Password Reset Link"
-    , render firstName domainName resetCode
+    , render domainName resetCode
     )
 
 
-render :: L.Text -> L.Text -> L.Text -> L.Text
-render firstName domainName resetCode =
-    "Hello " <> firstName <> ",\n\n" <>
+render :: L.Text -> L.Text -> L.Text
+render domainName resetCode =
+    "Hello,\n\n" <>
     "We have received a Password Reset request for your [Southern Exposure][1] " <>
     "account. You can change your password by following [this link to our Password " <>
     "Reset Page][2].\n\n" <>
@@ -26,15 +26,15 @@ render firstName domainName resetCode =
         <> "[2]: " <> domainName <> "/account/reset-password/?code=" <> resetCode <> "\n"
 
 
-getSuccess :: L.Text -> (String, L.Text)
-getSuccess firstName =
+getSuccess :: (String, L.Text)
+getSuccess =
     ( "Your Password was Successfully Reset"
-    , renderSuccess firstName
+    , renderSuccess
     )
 
-renderSuccess :: L.Text -> L.Text
-renderSuccess firstName =
-    "Hello " <> firstName  <> ",\n\n" <>
+renderSuccess :: L.Text
+renderSuccess =
+    "Hello,\n\n" <>
     "The password for your [Southern Exposure][1] account has been changed by " <>
     "a password reset request. If you did not initiate this request, we recommend " <>
     "changing the password for both your email account & your Southern Exposure account, " <>

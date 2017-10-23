@@ -65,17 +65,13 @@ send email = ask >>= \cfg ->
 
         (subject, message) =
             case email of
-                AccountCreated customer ->
+                AccountCreated _ ->
                     AccountCreated.get
-                        (L.fromStrict $ customerFirstName customer)
-                PasswordReset customer passwordReset ->
-                    PasswordReset.get
-                        (L.fromStrict $ customerFirstName customer)
-                        domainName
+                PasswordReset _ passwordReset ->
+                    PasswordReset.get domainName
                         (L.fromStrict $ passwordResetCode passwordReset)
-                PasswordResetSuccess customer ->
+                PasswordResetSuccess _ ->
                     PasswordReset.getSuccess
-                        (L.fromStrict $ customerFirstName customer)
     in
         liftIO $ async $ withResource (getSmtpPool cfg) $ \conn -> do
             authSucceeded <- authenticate PLAIN (getSmtpUser cfg) (getSmtpPass cfg) conn

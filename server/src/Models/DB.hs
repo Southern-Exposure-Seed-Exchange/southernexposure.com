@@ -69,15 +69,6 @@ Page json
 
 
 Customer json
-    firstName T.Text
-    lastName T.Text
-    addressOne T.Text
-    addressTwo T.Text
-    city T.Text
-    state Region
-    zipCode T.Text
-    country Country
-    telephone T.Text
     email T.Text
     encryptedPassword T.Text
     authToken T.Text

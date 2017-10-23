@@ -18,9 +18,13 @@ import Data.Scientific (Scientific)
 import Database.MySQL.Base
     ( MySQLConn, Query(..), query_, close, MySQLValue(..), prepareStmt, queryStmt )
 import Database.Persist
-    ((<-.), (+=.), Entity(..), Filter, getBy, insert, insertMany_, upsert, deleteWhere, selectKeysList)
+    ( (<-.), (+=.), Entity(..), Filter, getBy, insert, insertMany_, upsert
+    , deleteWhere, selectKeysList, insert_
+    )
 import Database.Persist.Postgresql
-    (ConnectionPool, SqlWriteT, createPostgresqlPool, toSqlKey, runSqlPool)
+    ( ConnectionPool, SqlWriteT, createPostgresqlPool, toSqlKey, fromSqlKey
+    , runSqlPool
+    )
 import Numeric.Natural (Natural)
 import System.FilePath (takeFileName)
 import Text.Read (readMaybe)
@@ -51,6 +55,7 @@ main = do
     attributes <- makeSeedAttributes mysqlConn
     pages <- makePages mysqlConn
     customers <- makeCustomers mysqlConn
+    addresses <- makeAddresses mysqlConn
     carts <- makeCustomerCarts mysqlConn
     flip runSqlPool psqlConn $
         dropNewDatabaseRows >>
@@ -60,6 +65,7 @@ main = do
         insertAttributes attributes >>
         insertPages pages >>
         insertCustomers customers >>= \customerMap ->
+        insertAddresses customerMap addresses >>
         insertCharges >>
         insertCustomerCarts variantMap customerMap carts
     close mysqlConn
@@ -220,28 +226,44 @@ makePages mysql = do
 
 makeCustomers :: MySQLConn -> IO [(Int, Customer)]
 makeCustomers mysql = do
-    customers <- Streams.toList . snd
-        =<< (query_ mysql . Query
-                $ "SELECT c.customers_firstname, c.customers_lastname, c.customers_email_address,"
-                <> "      c.customers_telephone, c.customers_password, a.entry_street_address,"
-                <> "      a.entry_suburb, a.entry_postcode, a.entry_city,"
-                <> "      a.entry_state, z.zone_name, co.countries_iso_code_2,"
-                <> "      c.customers_id "
-                <> "FROM customers AS c "
-                <> "RIGHT JOIN address_book AS a "
-                <> "    ON c.customers_default_address_id=a.address_book_id "
-                <> "LEFT JOIN zones AS z "
-                <> "    ON a.entry_zone_id=z.zone_id "
-                <> "RIGHT JOIN countries as co "
-                <> "    ON entry_country_id=co.countries_id "
-                <> "WHERE c.COWOA_account=0"
-            )
-    forM customers $
-        \[ MySQLText firstName, MySQLText lastName, MySQLText email
-         , MySQLText telephone, MySQLText _, MySQLText address
-         , MySQLText addressTwo , MySQLText zipCode, MySQLText city
-         , MySQLText state , nullableZoneName, MySQLText rawCountryCode
-         , MySQLInt32 customerId
+    customers <- mysqlQuery mysql
+        $ "SELECT c.customers_id, c.customers_email_address "
+        <> "FROM customers AS c "
+        <> "WHERE c.COWOA_account=0"
+    forM customers $ \[ MySQLInt32 customerId, MySQLText email ] -> do
+        token <- generateToken
+        return . (fromIntegral customerId,) $ Customer
+            { customerEmail = email
+            , customerEncryptedPassword = ""
+            , customerAuthToken = token
+            , customerIsAdmin = email == "gardens@southernexposure.com"
+            }
+    where generateToken = UUID.toText <$> UUID4.nextRandom
+
+
+-- | Build the Shipping Addresses for Customers.
+makeAddresses :: MySQLConn -> IO [Address]
+makeAddresses mysql = do
+    customersAndAddresses <- mysqlQuery mysql
+        $ "SELECT a.address_book_id, a.entry_firstname, a.entry_lastname,"
+        <> "      a.entry_company, a.entry_street_address, a.entry_suburb,"
+        <> "      a.entry_postcode, a.entry_city, a.entry_state,"
+        <> "      z.zone_name, co.countries_iso_code_2, c.customers_id,"
+        <> "      c.customers_default_address_id "
+        <> "FROM customers AS c "
+        <> "RIGHT JOIN address_book AS a "
+        <> "    ON c.customers_default_address_id=a.address_book_id "
+        <> "LEFT JOIN zones AS z "
+        <> "    ON a.entry_zone_id=z.zone_id "
+        <> "RIGHT JOIN countries as co "
+        <> "    ON entry_country_id=co.countries_id "
+        <> "WHERE c.COWOA_account=0"
+    forM customersAndAddresses $
+        \[ MySQLInt32 addressId, MySQLText firstName, MySQLText lastName
+         , MySQLText companyName, MySQLText street, MySQLText addressTwo
+         , MySQLText zipCode, MySQLText city, MySQLText state
+         , nullableZoneName, MySQLText rawCountryCode, MySQLInt32 customerId
+         , MySQLInt32 defaultAddress
          ] ->
         let
             zone =
@@ -304,25 +326,22 @@ makeCustomers mysql = do
                                         error $ "Invalid Canadian Province: " ++ T.unpack zone
                     _ ->
                         CustomRegion zone
-
-        in do
-            token <- generateToken
-            return . (fromIntegral customerId,) $ Customer
-                { customerFirstName = firstName
-                , customerLastName = lastName
-                , customerAddressOne = address
-                , customerAddressTwo = addressTwo
-                , customerCity = city
-                , customerState = region
-                , customerZipCode = zipCode
-                , customerCountry = country
-                , customerTelephone = telephone
-                , customerEmail = email
-                , customerEncryptedPassword = ""
-                , customerAuthToken = token
-                , customerIsAdmin = email == "gardens@southernexposure.com"
+        in
+            return Address
+                { addressFirstName = firstName
+                , addressLastName = lastName
+                , addressCompanyName = companyName
+                , addressAddressOne = street
+                , addressAddressTwo = addressTwo
+                , addressCity = city
+                , addressState = region
+                , addressZipCode = zipCode
+                , addressCountry = country
+                , addressIsDefault = defaultAddress == addressId
+                , addressType = Shipping
+                , addressCustomerId = toSqlKey $ fromIntegral customerId
+                , addressIsActive = True
                 }
-    where generateToken = UUID.toText <$> UUID4.nextRandom
 
 
 makeCustomerCarts :: MySQLConn -> IO (OldIdMap [(Int, Natural)])
@@ -403,6 +422,23 @@ insertCustomers =
     foldM insertCustomer IntMap.empty
     where insertCustomer intMap (oldCustomerId, customer) =
             insertIntoIdMap intMap oldCustomerId <$> insert customer
+
+
+-- | Replace the CustomerIds & insert the Addresses.
+insertAddresses :: OldIdMap CustomerId -> [Address] -> SqlWriteT IO ()
+insertAddresses customerMap =
+    mapM_ insertAddress
+    where insertAddress address =
+            let
+                oldCustomerId =
+                    fromIntegral . fromSqlKey $ addressCustomerId address
+            in
+                case IntMap.lookup oldCustomerId customerMap of
+                    Nothing ->
+                        error $ "insertAddress: Could Not Find Customer "
+                                ++ show oldCustomerId
+                    Just customerId ->
+                        insert_ $ address { addressCustomerId = customerId }
 
 
 insertCharges :: SqlWriteT IO ()
