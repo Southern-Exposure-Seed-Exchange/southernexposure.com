@@ -824,54 +824,9 @@ addressForm config =
                     ]
 
         addressSelect =
-            config.selectAddresses
-                |> List.map
-                    (\a ->
-                        option
-                            [ value <| toString <| fromAddressId a.id
-                            , isSelected a
-                            ]
-                            (addressDescription a)
-                    )
-                |> (::) (option [ selected newAddress, value "0" ] [ text "Add a New Address..." ])
-                |> select [ class "form-control", onSelectInt config.selectMsg ]
+            Address.select config.selectMsg addressId config.selectAddresses True
                 |> List.singleton
                 |> div [ class "form-group" ]
-
-        fromAddressId a =
-            case a of
-                Just (Address.AddressId i) ->
-                    i
-
-                _ ->
-                    0
-
-        isSelected addr =
-            selected <| addr.id == addressId
-
-        addressDescription addr =
-            [ b [] [ text <| addr.firstName ++ " " ++ addr.lastName ]
-            , text " - "
-            , text <|
-                String.join ", " <|
-                    List.filter (not << String.isEmpty) <|
-                        [ addr.companyName
-                        , addr.street
-                        , addr.addressTwo
-                        , addr.city
-                        , addr.zipCode ++ " " ++ addr.country
-                        ]
-            ]
-
-        onSelectInt msg =
-            targetValue
-                |> Decode.andThen
-                    (String.toInt
-                        >> Result.map Decode.succeed
-                        >> Result.withDefault (Decode.fail "")
-                    )
-                |> Decode.map msg
-                |> on "change"
     in
         addressCard
             [ h4 [ class "card-title" ]

@@ -3,6 +3,7 @@ module Address
         ( Model
         , AddressId(..)
         , initial
+        , fromModel
         , decoder
         , Form
         , initialForm
@@ -10,7 +11,9 @@ module Address
         , Msg
         , update
         , card
+        , select
         , form
+        , horizontalForm
         )
 
 import Dict
@@ -21,6 +24,7 @@ import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode exposing (Value)
 import Api
 import Locations exposing (Region(..), regionDecoder, regionEncoder, Location, AddressLocations)
+import Views.HorizontalForm as Form
 
 
 -- Model
@@ -92,6 +96,11 @@ initialForm =
     { model = initial
     , errors = Api.initialErrors
     }
+
+
+fromModel : Model -> Form
+fromModel model =
+    { initialForm | model = model }
 
 
 encode : Form -> Value
@@ -228,6 +237,69 @@ card address locations =
             |> Html.address []
 
 
+{-| TODO: Add Region to description
+-}
+select : (Int -> msg) -> Maybe AddressId -> List Model -> Bool -> Html msg
+select selectMsg maybeAddressId addresses newAddressOption =
+    let
+        isSelected addr =
+            selected <| addr.id == maybeAddressId
+
+        fromAddressId a =
+            case a of
+                Just (AddressId i) ->
+                    i
+
+                _ ->
+                    0
+
+        addressDescription addr =
+            [ b [] [ text <| addr.firstName ++ " " ++ addr.lastName ]
+            , text " - "
+            , text <|
+                String.join ", " <|
+                    List.filter (not << String.isEmpty) <|
+                        [ addr.companyName
+                        , addr.street
+                        , addr.addressTwo
+                        , addr.city
+                        , addr.zipCode ++ " " ++ addr.country
+                        ]
+            ]
+
+        onSelectInt msg =
+            targetValue
+                |> Decode.andThen
+                    (String.toInt
+                        >> Result.map Decode.succeed
+                        >> Result.withDefault (Decode.fail "")
+                    )
+                |> Decode.map msg
+                |> on "change"
+
+        addNewOption options =
+            if newAddressOption then
+                option [ selected (Just (AddressId 0) == maybeAddressId), value "0" ]
+                    [ text "Add a New Address..." ]
+                    :: options
+            else
+                option [ selected <| Nothing == maybeAddressId, value "0" ]
+                    [ text "Select an Address..." ]
+                    :: options
+    in
+        addresses
+            |> List.map
+                (\a ->
+                    option
+                        [ value <| toString <| fromAddressId a.id
+                        , isSelected a
+                        ]
+                        (addressDescription a)
+                )
+            |> addNewOption
+            |> Html.select [ class "form-control", onSelectInt selectMsg ]
+
+
 form : Form -> String -> AddressLocations -> Html Msg
 form { model, errors } inputPrefix locations =
     let
@@ -270,6 +342,57 @@ form { model, errors } inputPrefix locations =
             , field .zipCode ZipCode "Zip Code" "zipCode" "postal-code" True
             , selectField .country Country locations.countries "Country" "country"
             ]
+
+
+horizontalForm : Form -> AddressLocations -> List (Html Msg)
+horizontalForm { model, errors } locations =
+    let
+        requiredField s msg =
+            inputField s msg True
+
+        optionalField s msg =
+            inputField s msg False
+
+        inputField selector =
+            Form.inputRow errors (selector model)
+
+        selectRow =
+            Form.selectRow Ok
+
+        countrySelect =
+            List.map (locationToOption .country) locations.countries
+                |> selectRow Country "Country" True
+
+        locationToOption selector { code, name } =
+            option [ value code, selected <| selector model == code ]
+                [ text name ]
+
+        regionField =
+            case model.country of
+                "US" ->
+                    regionSelect "State" (locations.states ++ locations.armedForces)
+
+                "CA" ->
+                    regionSelect "Province" locations.provinces
+
+                _ ->
+                    requiredField stateCode State "State / Province" "state" "state"
+
+        regionSelect labelText =
+            List.map (locationToOption stateCode) >> selectRow State labelText True
+
+        stateCode =
+            .state >> Locations.fromRegion
+    in
+        [ requiredField .firstName FirstName "First Name" "firstName" "text"
+        , requiredField .lastName LastName "Last Name" "lastName" "text"
+        , requiredField .street Street "Street Address" "addressOne" "text"
+        , optionalField .addressTwo AddressTwo "Address Line 2" "addressTwo" "text"
+        , requiredField .city City "City" "city" "text"
+        , regionField
+        , requiredField .zipCode ZipCode "Zip Code" "zipCode" "text"
+        , countrySelect
+        ]
 
 
 {-| TODO: Refactor into separate Views.Form module. Turn parameters into a Config type.
@@ -370,7 +493,7 @@ locationSelect errors prefix selectedValue selectMsg locations labelText inputNa
         div [ class "form-group mb-2" ]
             [ fieldLabel
             , List.map toOption locations
-                |> select
+                |> Html.select
                     [ id inputId
                     , classList
                         [ ( "form-control", True )
