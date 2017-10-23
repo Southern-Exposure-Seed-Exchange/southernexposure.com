@@ -87,6 +87,11 @@ view route pageData =
                     , activeItem "Edit Contact Details"
                     ]
 
+                EditAddress ->
+                    [ inactiveItem "My Account" MyAccount
+                    , activeItem "Edit Addresses"
+                    ]
+
                 OrderDetails orderId ->
                     [ inactiveItem "My Account" MyAccount
                     , activeItem <| "Order #" ++ toString orderId

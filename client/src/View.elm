@@ -8,6 +8,7 @@ import Paginate exposing (Paginated)
 import RemoteData exposing (WebData)
 import AdvancedSearch
 import Auth.CreateAccount as CreateAccount
+import Auth.EditAddress as EditAddress
 import Auth.EditContact as EditContact
 import Auth.EditLogin as EditLogin
 import Auth.Login as Login
@@ -108,6 +109,11 @@ view ({ route, pageData, navigationData } as model) =
                     withIntermediateText
                         (EditContact.view EditContactMsg model.editContactForm)
                         pageData.locations
+
+                EditAddress ->
+                    RemoteData.map2 (,) pageData.locations pageData.addressDetails
+                        |> withIntermediateText (uncurry <| EditAddress.view model.editAddressForm)
+                        |> List.map (Html.map EditAddressMsg)
 
                 OrderDetails orderId ->
                     RemoteData.map2 (,) pageData.locations pageData.orderDetails

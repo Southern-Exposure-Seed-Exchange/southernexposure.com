@@ -8,6 +8,7 @@ module Model
 import Dict exposing (Dict)
 import RemoteData exposing (WebData)
 import Auth.CreateAccount as CreateAccount
+import Auth.EditAddress as EditAddress
 import Auth.EditContact as EditContact
 import Auth.EditLogin as EditLogin
 import Auth.Login as Login
@@ -32,6 +33,7 @@ type alias Model =
     , createAccountForm : CreateAccount.Form
     , loginForm : Login.Form
     , editLoginForm : EditLogin.Form
+    , editAddressForm : EditAddress.Form
     , editContactForm : EditContact.Form
     , resetPasswordForm : ResetPassword.Form
     , addToCartForms : CartForms
@@ -59,6 +61,7 @@ initial route =
     , loginForm = Login.initial
     , editLoginForm = EditLogin.initial
     , editContactForm = EditContact.initial
+    , editAddressForm = EditAddress.initial
     , resetPasswordForm = ResetPassword.initial
     , addToCartForms = Dict.empty
     , editCartForm = Cart.initial

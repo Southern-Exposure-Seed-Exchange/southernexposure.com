@@ -9,6 +9,7 @@ import RemoteData exposing (WebData)
 import AdvancedSearch
 import Auth.CreateAccount as CreateAccount
 import Auth.Login as Login
+import Auth.EditAddress as EditAddress
 import Auth.EditLogin as EditLogin
 import Auth.EditContact as EditContact
 import Auth.ResetPassword as ResetPassword
@@ -50,6 +51,7 @@ type Msg
     | ResetPasswordMsg ResetPassword.Msg
     | EditLoginMsg EditLogin.Msg
     | EditContactMsg EditContact.Msg
+    | EditAddressMsg EditAddress.Msg
     | EditCartMsg EditCartMessage
     | QuickOrderMsg QuickOrder.Msg
     | CheckoutMsg Checkout.Msg
@@ -61,6 +63,7 @@ type Msg
     | GetAddressLocations (WebData AddressLocations)
     | GetMyAccountDetails (WebData PageData.MyAccount)
     | GetContactDetails (WebData PageData.ContactDetails)
+    | GetAddressDetails (WebData PageData.AddressDetails)
     | GetCartDetails (WebData PageData.CartDetails)
     | GetCartItemCount (WebData Int)
     | GetCheckoutDetails (WebData PageData.CheckoutDetails)

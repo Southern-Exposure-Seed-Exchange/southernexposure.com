@@ -10,6 +10,7 @@ import Address
 import AdvancedSearch
 import Api
 import Auth.CreateAccount as CreateAccount
+import Auth.EditAddress as EditAddress
 import Auth.EditContact as EditContact
 import Auth.EditLogin as EditLogin
 import Auth.Login as Login
@@ -171,6 +172,9 @@ setPageTitle { route, pageData } =
             EditContact ->
                 Ports.setPageTitle "Edit Contact Details"
 
+            EditAddress ->
+                Ports.setPageTitle "Edit Addresses"
+
             OrderDetails orderId ->
                 Ports.setPageTitle <| "Order #" ++ toString orderId
 
@@ -261,6 +265,9 @@ fetchDataForRoute ({ route, pageData } as model) =
                 EditContact ->
                     fetchLocationsOnce pageData
                         |> Tuple.mapSecond (\cmd -> Cmd.batch [ cmd, getContactDetails model.currentUser ])
+
+                EditAddress ->
+                    getAddressDetails model.currentUser pageData
 
                 OrderDetails orderId ->
                     case model.currentUser of
@@ -402,6 +409,29 @@ getContactDetails authStatus =
                 |> Api.withJsonResponse PageData.contactDetailsDecoder
                 |> Api.withToken user.authToken
                 |> Api.sendRequest GetContactDetails
+
+
+getAddressDetails : AuthStatus -> PageData -> ( PageData, Cmd Msg )
+getAddressDetails authStatus pageData =
+    case authStatus of
+        User.Anonymous ->
+            ( pageData, Cmd.none )
+
+        User.Authorized user ->
+            let
+                getDetails pd =
+                    ( { pd | addressDetails = RemoteData.Loading }
+                    , detailsCmd
+                    )
+
+                detailsCmd =
+                    Api.get Api.CustomerAddressDetails
+                        |> Api.withJsonResponse PageData.addressDetailsDecoder
+                        |> Api.withToken user.authToken
+                        |> Api.sendRequest GetAddressDetails
+            in
+                fetchLocationsOnce pageData
+                    |> updateAndCommand getDetails
 
 
 getCartDetails : String -> Cmd Msg
@@ -664,6 +694,11 @@ update msg ({ pageData } as model) =
                 |> Tuple.mapFirst (\form -> { model | editContactForm = form })
                 |> Tuple.mapSecond (Cmd.map EditContactMsg)
 
+        EditAddressMsg subMsg ->
+            EditAddress.update subMsg model.editAddressForm model.currentUser pageData.addressDetails
+                |> Tuple.mapFirst (\form -> { model | editAddressForm = form })
+                |> Tuple.mapSecond (Cmd.map EditAddressMsg)
+
         EditCartMsg subMsg ->
             let
                 updatedPageData =
@@ -836,6 +871,13 @@ update msg ({ pageData } as model) =
                   }
                 , Cmd.none
                 )
+
+        GetAddressDetails response ->
+            let
+                updatedPageData =
+                    { pageData | addressDetails = response }
+            in
+                ( { model | pageData = updatedPageData }, Cmd.none )
 
         GetCartDetails response ->
             let

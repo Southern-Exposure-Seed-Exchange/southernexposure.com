@@ -7,7 +7,7 @@ import Api
 import Messages exposing (Msg(NavigateTo, GetMyAccountDetails, ShowAllOrders))
 import Views.Format as Format
 import Views.Utils exposing (routeLinkAttributes)
-import Routing exposing (Route(EditLogin, EditContact, OrderDetails))
+import Routing exposing (Route(EditLogin, EditContact, EditAddress, OrderDetails))
 import PageData exposing (MyAccount)
 import Locations exposing (AddressLocations)
 
@@ -31,6 +31,10 @@ view locations { orderSummaries } =
             , li []
                 [ a (routeLinkAttributes EditContact)
                     [ text "Edit Contact Information" ]
+                ]
+            , li []
+                [ a (routeLinkAttributes EditAddress)
+                    [ text "Edit Billing & Shipping Addresses" ]
                 ]
             ]
 

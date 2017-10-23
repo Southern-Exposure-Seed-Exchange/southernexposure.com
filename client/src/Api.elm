@@ -51,6 +51,9 @@ type Endpoint
     | CustomerContactDetails
     | CustomerEditLogin
     | CustomerEditContact
+    | CustomerAddressDetails
+    | CustomerEditAddress Int
+    | CustomerDeleteAddress Int
     | CartAddCustomer
     | CartDetailsCustomer
     | CartUpdateCustomer
@@ -126,6 +129,15 @@ toUrl endpoint =
 
                 CustomerEditContact ->
                     joinPath [ "customers", "contact-edit" ]
+
+                CustomerAddressDetails ->
+                    joinPath [ "customers", "addresses" ]
+
+                CustomerEditAddress id ->
+                    joinPath [ "customers", "address-edit", toString id ]
+
+                CustomerDeleteAddress id ->
+                    joinPath [ "customers", "address-delete", toString id ]
 
                 CartAddCustomer ->
                     joinPath [ "carts", "customer", "add" ]

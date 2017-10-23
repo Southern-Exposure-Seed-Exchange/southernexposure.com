@@ -15,6 +15,8 @@ module PageData
         , ContactDetails
         , contactDetailsDecoder
         , contactDetailsEncoder
+        , AddressDetails
+        , addressDetailsDecoder
         , CartDetails
         , cartTotals
         , blankCartDetails
@@ -65,6 +67,7 @@ type alias PageData =
     , locations : WebData AddressLocations
     , myAccount : WebData MyAccount
     , contactDetails : WebData ContactDetails
+    , addressDetails : WebData AddressDetails
     , cartDetails : WebData CartDetails
     , checkoutDetails : WebData CheckoutDetails
     , orderDetails : WebData OrderDetails
@@ -96,6 +99,7 @@ initial =
         , locations = RemoteData.NotAsked
         , myAccount = RemoteData.NotAsked
         , contactDetails = RemoteData.NotAsked
+        , addressDetails = RemoteData.NotAsked
         , cartDetails = RemoteData.NotAsked
         , checkoutDetails = RemoteData.NotAsked
         , orderDetails = RemoteData.NotAsked
@@ -275,6 +279,23 @@ contactDetailsEncoder details =
         |> List.map (Tuple.mapSecond Encode.string)
         |> ((::) <| ( "state", regionEncoder details.state ))
         |> Encode.object
+
+
+
+-- Address Details
+
+
+type alias AddressDetails =
+    { shippingAddresses : List Address.Model
+    , billingAddresses : List Address.Model
+    }
+
+
+addressDetailsDecoder : Decoder AddressDetails
+addressDetailsDecoder =
+    Decode.map2 AddressDetails
+        (Decode.field "shippingAddresses" <| Decode.list Address.decoder)
+        (Decode.field "billingAddresses" <| Decode.list Address.decoder)
 
 
 

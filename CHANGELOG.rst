@@ -5,6 +5,11 @@ CHANGELOG
 v0.6.0
 ======
 
+* Don't collect contact addresses from Customers.
+* Allow Customers to have an infinite number of Addresses.
+* Show the links above the recent Order summary on the My Account page.
+* Expand the Orders table on My Account page instead of navigating to a
+  different page when Customers click the ``View All Orders`` button.
 * Show the Checkout on a single page instead of 4 separate pages.
 * Show the new Order's details on the Checkout Success page.
 
