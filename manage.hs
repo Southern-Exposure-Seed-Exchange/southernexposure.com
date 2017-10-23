@@ -162,13 +162,17 @@ initializeClient = do
     clientDirectory <- getClientDirectory
     liftIO $ do
         hasNvm <- (++ "/.nvm/nvm.sh") <$> getHomeDirectory >>= doesFileExist
-        when hasNvm $
+        when hasNvm $ do
             printInfo "Found NVM, Installing Node"
-                >> getHandle <$> createProcess
-                    (shell "sh -c 'source ~/.nvm/nvm.sh; nvm install'")
-                    { cwd = Just clientDirectory }
-                >>= waitForProcess
-                >>= printExitMessage "Node Installed" "Node Installation Failed"
+            (_, Just nvmOut, Just nvmErr, nvmHandle) <- createProcess
+                (shell "sh -c 'source ~/.nvm/nvm.sh; nvm install'")
+                { cwd = Just clientDirectory
+                , std_out = CreatePipe
+                , std_err = CreatePipe
+                }
+            printClientOutput nvmOut >> printClientOutput nvmErr
+            waitForProcess nvmHandle >>=
+                printExitMessage "Node Installed" "Node Installation Failed"
         installDependency "npm" ["install"] clientDirectory printClientOutput
             "Node Dependencies"
         installDependency "npm" ["run", "elm", "--", "package", "install", "--yes"]
