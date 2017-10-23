@@ -198,7 +198,8 @@ clientAndServerWatching = do
     processRef <- asks serverProcess
     liftIO $ buildAndStartServer serverDirectory processRef jobCount
 
-    liftIO . void . withManagerConf (defaultConfig { confDebounce = Debounce 100 }) $ \mgr -> do
+    let watchConfig = defaultConfig { confDebounce = Debounce 100 }
+    liftIO . void . withManagerConf watchConfig $ \mgr -> do
         void $ watchTree
             mgr
             "server"
