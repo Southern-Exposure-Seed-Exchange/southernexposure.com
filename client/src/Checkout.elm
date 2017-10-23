@@ -784,15 +784,6 @@ addressForm config =
                         |> Maybe.withDefault (text "")
                     )
 
-        errorHtml =
-            if List.isEmpty config.generalErrors then
-                text ""
-            else
-                config.generalErrors
-                    |> List.map text
-                    |> List.intersperse (br [] [])
-                    |> div [ class "text-danger" ]
-
         withDefaultCheckbox address content =
             let
                 isNewAddressWithExistingAddresses =
@@ -834,7 +825,7 @@ addressForm config =
                 , sameAsShippingCheckbox
                 ]
             , selectHtml
-            , errorHtml
+            , Api.errorHtml config.generalErrors
             , addressHtml
             ]
 

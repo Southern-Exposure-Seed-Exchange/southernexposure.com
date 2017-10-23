@@ -16,6 +16,7 @@ module Api
         , formErrorsDecoder
         , addError
         , getErrorHtml
+        , errorHtml
         )
 
 import Dict exposing (Dict)
@@ -325,12 +326,19 @@ addError field message errors =
                     Just <| message :: es
 
 
+{-| Render a field's error messages in red text.
+-}
 getErrorHtml : Field -> FormErrors -> Html.Html msg
 getErrorHtml field errors =
     Dict.get field errors
-        |> Maybe.map
-            (List.map Html.text
-                >> List.intersperse (Html.br [] [])
-                >> Html.div [ class "text-danger" ]
-            )
+        |> Maybe.map errorHtml
         |> Maybe.withDefault (Html.text "")
+
+
+{-| Render a list of error messages in red text.
+-}
+errorHtml : List ErrorMessage -> Html.Html msg
+errorHtml =
+    List.map Html.text
+        >> List.intersperse (Html.br [] [])
+        >> Html.div [ class "text-danger" ]
