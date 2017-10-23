@@ -119,6 +119,12 @@ encode { model } =
         , ( "country", model.country )
         ]
             |> List.map (Tuple.mapSecond Encode.string)
+            |> ((::)
+                    ( "id"
+                    , Maybe.withDefault Encode.null <|
+                        Maybe.map (\(AddressId i) -> Encode.int i) model.id
+                    )
+               )
             |> ((::) ( "state", encodedState ))
             |> ((::) ( "isDefault", Encode.bool model.isDefault ))
             |> Encode.object
