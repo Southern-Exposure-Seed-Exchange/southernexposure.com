@@ -317,8 +317,7 @@ customerPlaceOrderRoute token = validate >=> \parameters -> do
                             [ AddressType ==. addrType
                             , AddressCustomerId ==. customerId ]
                             [ AddressIsDefault =. False ]
-                    addrId <- insert newAddress
-                    return $ Entity addrId newAddress
+                    insertOrActivateAddress newAddress
 
 
 data AnonymousPlaceOrderParameters =

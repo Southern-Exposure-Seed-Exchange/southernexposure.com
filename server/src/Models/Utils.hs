@@ -7,13 +7,15 @@ module Models.Utils
     , getTaxRate
     , applyTaxRate
     , mergeCarts
+    , insertOrActivateAddress
     ) where
 
 import Data.Char (isAlphaNum)
+import Data.Maybe (listToMaybe)
 import Data.Monoid ((<>))
 import Database.Persist
     ( (==.), (=.), (+=.), Entity(..), Key(..), get, getBy, update, upsert
-    , delete, deleteWhere, selectList, selectKeysList
+    , delete, deleteWhere, selectList, selectKeysList, insertEntity
     )
 import Text.HTML.TagSoup (parseTags, innerText)
 
@@ -130,3 +132,36 @@ mergeCarts cartToken customerId = do
                     , cartItemQuantity = cartItemQuantity anonymousCartItem
                     }
                 [ CartItemQuantity +=. cartItemQuantity anonymousCartItem ]
+
+
+-- | Insert an Address for a Customer, or activate an existing Address if
+-- one with the same details exists.
+insertOrActivateAddress :: Address -> AppSQL (Entity Address)
+insertOrActivateAddress newAddress = do
+    maybeAddress <- findAddress newAddress
+    case maybeAddress of
+        Nothing ->
+            insertEntity newAddress
+        Just existingAddress ->
+            update (entityKey existingAddress)
+                [ AddressIsActive =. True
+                , AddressIsDefault =. addressIsDefault newAddress
+                ]
+                >> return existingAddress
+    where findAddress :: Address -> AppSQL (Maybe (Entity Address))
+          findAddress address =
+            listToMaybe <$>
+                selectList
+                    [ AddressFirstName ==. addressFirstName address
+                    , AddressLastName ==. addressLastName address
+                    , AddressCompanyName ==. addressCompanyName address
+                    , AddressAddressOne ==. addressAddressOne address
+                    , AddressAddressTwo ==. addressAddressTwo address
+                    , AddressCity ==. addressCity address
+                    , AddressState ==. addressState address
+                    , AddressZipCode ==. addressZipCode address
+                    , AddressCountry ==. addressCountry address
+                    , AddressType ==. addressType address
+                    , AddressCustomerId ==. addressCustomerId address
+                    ]
+                    []

@@ -302,7 +302,7 @@ data AddressData =
         , adZipCode :: T.Text
         , adCountry :: Country
         , adIsDefault :: Bool
-        }
+        } deriving (Eq)
 
 instance FromJSON AddressData where
     parseJSON = withObject "AddressData" $ \v ->

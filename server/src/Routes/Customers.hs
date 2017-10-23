@@ -1,6 +1,7 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -11,28 +12,34 @@ module Routes.Customers
     , customerRoutes
     ) where
 
-import Control.Monad ((>=>), when, void)
+import Control.Monad ((>=>), (<=<), when, void)
+import Control.Monad.Catch (throwM, Exception, try)
 import Control.Monad.IO.Class (liftIO)
 import Data.Aeson (ToJSON(..), FromJSON(..), (.=), (.:), (.:?), withObject, object)
 import Data.Int (Int64)
+import Data.List (partition)
 import Data.Maybe (fromMaybe)
 import Data.Monoid ((<>))
 import Data.Text.Encoding (encodeUtf8, decodeUtf8)
 import Data.Time.Clock (UTCTime, getCurrentTime, addUTCTime)
+import Data.Typeable (Typeable)
 import Database.Persist
     ( (=.), (==.), Entity(..), get, getBy, insertUnique, insert_, update
-    , delete, deleteWhere
+    , selectList, delete, deleteWhere, getEntity, updateWhere, SelectOpt(Asc)
     )
 import Database.Persist.Sql (toSqlKey)
 import Servant
     ( (:>), (:<|>)(..), AuthProtect, ReqBody, JSON, Get, Post, Put, errBody
-    , err403, err500, QueryParam
+    , err403, err404, err500, QueryParam, Capture, Delete
     )
 
 import Auth
 import Models
-import Models.Fields (Country(..), Region, ArmedForcesRegionCode, armedForcesRegion, Cents(..))
-import Routes.CommonData (AuthorizationData, toAuthorizationData, AddressData, toAddressData)
+import Models.Fields (ArmedForcesRegionCode, armedForcesRegion, Cents(..))
+import Routes.CommonData
+    ( AuthorizationData, toAuthorizationData, AddressData(..), toAddressData
+    , fromAddressData
+    )
 import Routes.Utils (generateUniqueToken, hashPassword)
 import Server
 import Validation (Validation(..))
@@ -59,8 +66,9 @@ type CustomerAPI =
     :<|> "reset-password" :> ResetPasswordRoute
     :<|> "my-account" :> MyAccountRoute
     :<|> "edit" :> EditDetailsRoute
-    :<|> "contact" :> ContactDetailsRoute
-    :<|> "contact-edit" :> ContactEditRoute
+    :<|> "addresses" :> AddressDetailsRoute
+    :<|> "address-edit" :> AddressEditRoute
+    :<|> "address-delete" :> AddressDeleteRoute
 
 type CustomerRoutes =
          App LocationData
@@ -71,8 +79,9 @@ type CustomerRoutes =
     :<|> (ResetPasswordParameters -> App AuthorizationData)
     :<|> (AuthToken -> Maybe Int64 -> App MyAccountDetails)
     :<|> (AuthToken -> EditDetailsParameters -> App ())
-    :<|> (AuthToken -> App ContactDetailsData)
-    :<|> (AuthToken -> ContactEditParameters -> App ())
+    :<|> (AuthToken -> App AddressDetails)
+    :<|> (AuthToken -> Int64 -> AddressData -> App ())
+    :<|> (AuthToken -> Int64 -> App ())
 
 customerRoutes :: CustomerRoutes
 customerRoutes =
@@ -84,8 +93,9 @@ customerRoutes =
     :<|> resetPasswordRoute
     :<|> myAccountRoute
     :<|> editDetailsRoute
-    :<|> contactDetailsRoute
-    :<|> contactEditRoute
+    :<|> addressDetailsRoute
+    :<|> addressEditRoute
+    :<|> addressDeleteRoute
 
 
 -- LOCATIONS
@@ -556,118 +566,105 @@ editDetailsRoute token p = do
                 ++ maybe [] (\e -> [CustomerEncryptedPassword =. e]) maybePassword
 
 
--- CONTACT DETAILS
+-- ADDRESS DETAILS
 
 
-data ContactDetailsData =
-    ContactDetailsData
-        { cddFirstName :: T.Text
-        , cddLastName :: T.Text
-        , cddAddressOne :: T.Text
-        , cddAddressTwo :: T.Text
-        , cddCity :: T.Text
-        , cddState :: Region
-        , cddZipCode :: T.Text
-        , cddCountry :: Country
-        , cddTelephone :: T.Text
+data AddressDetails =
+    AddressDetails
+        { adShippingAddresses :: [AddressData]
+        , adBillingAddresses :: [AddressData]
         }
 
-instance ToJSON ContactDetailsData where
-    toJSON contact =
-        object [ "firstName" .= cddFirstName contact
-               , "lastName" .= cddLastName contact
-               , "addressOne" .= cddAddressOne contact
-               , "addressTwo" .= cddAddressTwo contact
-               , "city" .= cddCity contact
-               , "state" .= cddState contact
-               , "zipCode" .= cddZipCode contact
-               , "country" .= cddCountry contact
-               , "telephone" .= cddTelephone contact
-               ]
-
-customerToContactDetails :: Entity Customer -> ContactDetailsData
-customerToContactDetails (Entity _ customer) =
-    ContactDetailsData
-        { cddFirstName = customerFirstName customer
-        , cddLastName = customerLastName customer
-        , cddAddressOne = customerAddressOne customer
-        , cddAddressTwo = customerAddressTwo customer
-        , cddCity = customerCity customer
-        , cddState = customerState customer
-        , cddZipCode = customerZipCode customer
-        , cddCountry = customerCountry customer
-        , cddTelephone = customerTelephone customer
-        }
-
-type ContactDetailsRoute =
-       AuthProtect "auth-token"
-    :> Get '[JSON] ContactDetailsData
-
-contactDetailsRoute :: AuthToken -> App ContactDetailsData
-contactDetailsRoute token =
-    customerToContactDetails <$> validateToken token
-
-
--- EDIT CONTACT DETAILS
-
-
-data ContactEditParameters =
-    ContactEditParameters
-        { cepFirstName :: T.Text
-        , cepLastName :: T.Text
-        , cepAddressOne :: T.Text
-        , cepAddressTwo :: T.Text
-        , cepCity :: T.Text
-        , cepState :: Region
-        , cepZipCode :: T.Text
-        , cepCountry :: Country
-        , cepTelephone :: T.Text
-        }
-
-instance FromJSON ContactEditParameters where
-    parseJSON =
-        withObject "ContactEditParameters" $ \v ->
-            ContactEditParameters
-                <$> v .: "firstName"
-                <*> v .: "lastName"
-                <*> v .: "addressOne"
-                <*> v .: "addressTwo"
-                <*> v .: "city"
-                <*> v .: "state"
-                <*> v .: "zipCode"
-                <*> v .: "country"
-                <*> v .: "telephone"
-
-instance Validation ContactEditParameters where
-    validators parameters =
-        return
-            [ ( "firstName", [ V.required $ cepFirstName parameters ])
-            , ( "lastName", [ V.required $ cepLastName parameters ])
-            , ( "addressOne", [ V.required $ cepAddressOne parameters ])
-            , ( "city", [ V.required $ cepCity parameters ])
-            , ( "zipCode", [ V.required $ cepZipCode parameters ])
-            , ( "telephone", [ V.required $ cepTelephone parameters ])
+instance ToJSON AddressDetails where
+    toJSON details =
+        object
+            [ "shippingAddresses" .= adShippingAddresses details
+            , "billingAddresses" .= adBillingAddresses details
             ]
 
-type ContactEditRoute =
+type AddressDetailsRoute =
        AuthProtect "auth-token"
-    :> ReqBody '[JSON] ContactEditParameters
+    :> Get '[JSON] AddressDetails
+
+addressDetailsRoute :: AuthToken -> App AddressDetails
+addressDetailsRoute = validateToken >=> \(Entity customerId _) -> do
+    addresses <- runDB $
+        selectList [AddressCustomerId ==. customerId, AddressIsActive ==. True]
+            [Asc AddressFirstName, Asc AddressLastName, Asc AddressAddressOne]
+    let (shipping, billing) =
+            partition (\a -> addressType (entityVal a) == Fields.Shipping) addresses
+    return AddressDetails
+        { adShippingAddresses = map toAddressData shipping
+        , adBillingAddresses = map toAddressData billing
+        }
+
+
+-- EDIT ADDRESS
+
+
+data AddressEditError
+    = AddressNotFound
+    deriving (Typeable, Show)
+
+instance Exception AddressEditError
+
+handleAddressError :: AddressEditError -> App a
+handleAddressError = \case
+    AddressNotFound ->
+        serverError err404
+
+
+type AddressEditRoute =
+       AuthProtect "auth-token"
+    :> Capture "id" Int64
+    :> ReqBody '[JSON] AddressData
     :> Post '[JSON] ()
 
-contactEditRoute :: AuthToken -> ContactEditParameters -> App ()
-contactEditRoute token = validate >=> \parameters -> do
+addressEditRoute :: AuthToken -> Int64 -> AddressData -> App ()
+addressEditRoute token aId addressData = do
     (Entity customerId _) <- validateToken token
-    void . runDB $ update customerId
-        [ CustomerFirstName =. cepFirstName parameters
-        , CustomerLastName =. cepLastName parameters
-        , CustomerAddressOne =. cepAddressOne parameters
-        , CustomerAddressTwo =. cepAddressTwo parameters
-        , CustomerCity =. cepCity parameters
-        , CustomerState =. cepState parameters
-        , CustomerZipCode =. cepZipCode parameters
-        , CustomerCountry =. cepCountry parameters
-        , CustomerTelephone =. cepTelephone parameters
-        ]
+    void $ validate addressData
+    either handleAddressError return <=< try . runDB $ do
+        let addressId = toSqlKey aId
+        getEntity addressId >>= \case
+            Nothing ->
+                throwM AddressNotFound
+            Just address
+                | addressCustomerId (entityVal address) /= customerId ->
+                    throwM AddressNotFound
+                | toAddressData address == addressData ->
+                    return ()
+                | otherwise -> do
+                    let addrType = addressType $ entityVal address
+                    when (adIsDefault addressData) $
+                        updateWhere
+                            [ AddressCustomerId ==. customerId
+                            , AddressType ==. addrType
+                            ]
+                            [ AddressIsDefault =. False ]
+                    update addressId
+                        [ AddressIsActive =. False
+                        , AddressIsDefault =. False
+                        ]
+                    void . insertOrActivateAddress
+                        $ fromAddressData addrType customerId addressData
+
+
+type AddressDeleteRoute =
+       AuthProtect "auth-token"
+    :> Capture "id" Int64
+    :> Delete '[JSON] ()
+
+addressDeleteRoute :: AuthToken -> Int64 -> App ()
+addressDeleteRoute token aId = do
+    let addressId = toSqlKey aId :: AddressId
+    customerId <- entityKey <$> validateToken token
+    either handleAddressError return <=< try . runDB $ do
+        address <- get addressId >>= maybe (throwM AddressNotFound) return
+        if addressCustomerId address /= customerId then
+            throwM AddressNotFound
+        else
+            update addressId [AddressIsActive =. False, AddressIsDefault =. False]
 
 
 -- UTILS
