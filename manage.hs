@@ -14,6 +14,7 @@
 -- TODO: Make a `BuildTarget = Client | Server` type that chooses cwd
 --       directory & output function/prefix.
 -- TODO: Async Client/Server Dependency Installations?
+-- TODO: Fix Rebuilds Not Terminating In-Progress Builds
 import Control.Concurrent (threadDelay, forkIO)
 import Control.Monad (forever, void, when)
 import Control.Monad.Loops (whileM_)
@@ -205,6 +206,7 @@ clientAndServerWatching = do
 
 productionBuild :: Script
 productionBuild = do
+    cleanBuiltFiles
     initializeServer >> initializeClient
     printInfo "Building Client"
     clientDirectory <- getClientDirectory
