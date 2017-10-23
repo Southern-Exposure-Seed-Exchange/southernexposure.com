@@ -183,9 +183,15 @@ clientAndServerWatching = do
 
     printInfo "Starting Client Dev Server"
     clientDirectory <- getClientDirectory
-    (_, Just clientStdOut, _, clientHandle) <- liftIO $ createProcess
-        (proc "npm" ["run", "watch"]) { cwd = Just clientDirectory, std_out = CreatePipe }
+    (_, Just clientStdOut, Just clientStdErr, clientHandle) <- liftIO $
+        createProcess
+            (proc "npm" ["run", "watch"])
+            { cwd = Just clientDirectory
+            , std_out = CreatePipe
+            , std_err = CreatePipe
+            }
     liftIO $ printClientOutput clientStdOut
+    liftIO $ printClientOutput clientStdErr
 
     serverDirectory <- getServerDirectory
     jobCount <- stackJobCount
