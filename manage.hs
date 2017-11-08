@@ -10,7 +10,6 @@
     --package process
 -}
 -- TODO: Watch .nvmrc, package.json, & elm-package.json & re-init on change
--- TODO: Watch stack.yaml, & cabal file & re-init on change
 -- TODO: Make a `BuildTarget = Client | Server` type that chooses cwd
 --       directory & output function/prefix.
 -- TODO: Async Client/Server Dependency Installations?
@@ -20,7 +19,7 @@ import Control.Monad ((>=>), forever, void, when)
 import Control.Monad.Loops (whileM_)
 import Control.Monad.Reader (ReaderT, runReaderT, asks, MonadIO, liftIO)
 import Data.IORef (IORef, newIORef, readIORef, writeIORef)
-import Data.List (intercalate, isInfixOf)
+import Data.List (intercalate, isInfixOf, isSuffixOf)
 import Data.Maybe (fromMaybe)
 import GHC.IO.Handle
     ( Handle, BufferMode(LineBuffering), hSetBuffering, hIsEOF, hGetLine
@@ -37,7 +36,7 @@ import System.Directory
 import System.Environment (getArgs)
 import System.Exit (ExitCode(..), exitWith)
 import System.FSNotify
-    ( Event(..), WatchConfig(..), Debounce(..), eventPath, watchTree
+    ( WatchConfig(..), Debounce(..), eventPath, watchTree
     , withManagerConf, defaultConfig
     )
 import System.Process
@@ -150,11 +149,8 @@ initializeServer = do
     serverDirectory <- getServerDirectory
     jobCount <- stackJobCount
     liftIO $
-        installDependency "stack" ["setup", jobCount] serverDirectory
-            printServerOutput "GHC"
-    liftIO $
-        installDependency "stack" ["install", "--only-dependencies", jobCount]
-            serverDirectory printServerOutput "Server Dependencies"
+        stackSetup jobCount serverDirectory >>
+        installServerDependencies jobCount serverDirectory
 
 
 initializeClient :: Script
@@ -204,15 +200,26 @@ clientAndServerWatching = do
 
     let watchConfig = defaultConfig { confDebounce = Debounce 100 }
     liftIO . void . withManagerConf watchConfig $ \mgr -> do
-        void $ watchTree
-            mgr
-            "server"
-            (\ev -> not $ "stack-work" `isInfixOf` eventPath ev)
-            (rebuildAndServe serverDirectory processRef jobCount)
-        forever $ threadDelay 1000000
+        watchTree mgr serverDirectory isProjectFile $ \event ->
+            if ".hs" `isSuffixOf` eventPath event then
+                rebuildAndServe serverDirectory processRef jobCount
+            else
+                when (requiresReinitialization event) $ do
+                    printInfo "Reinitialization Triggered"
+                    stackSetup jobCount serverDirectory
+                    installServerDependencies jobCount serverDirectory
+                    rebuildAndServe serverDirectory processRef jobCount
+        forever (threadDelay 1000000)
 
     liftIO $ readIORef processRef >>= maybe (return ()) terminateProcess
     liftIO $ terminateProcess clientHandle
+    where isProjectFile event =
+            not $ "stack-work" `isInfixOf` eventPath event
+          requiresReinitialization event =
+            any (`isSuffixOf` eventPath event)
+                [ "stack.yaml"
+                , "sese-website.cabal"
+                ]
 
 
 productionBuild :: Script
@@ -239,6 +246,19 @@ productionBuild = do
                         printError (description ++ " Build Failed")
                         >> liftIO (exitWith status)
 
+
+stackSetup :: String -> FilePath -> IO ()
+stackSetup jobCount serverDirectory =
+    installDependency "stack" ["setup", jobCount] serverDirectory
+        printServerOutput "GHC"
+
+
+installServerDependencies :: String -> FilePath -> IO ()
+installServerDependencies jobCount serverDirectory =
+    installDependency "stack" ["install", "--only-dependencies", jobCount]
+        serverDirectory printServerOutput "Server Dependencies"
+
+
 buildAndStartServer :: FilePath -> IORef (Maybe ProcessHandle) -> String -> IO ()
 buildAndStartServer serverDirectory processRef jobCount = do
     printInfo "Building Server"
@@ -256,21 +276,17 @@ buildAndStartServer serverDirectory processRef jobCount = do
                 >> printError "Server Build Failure"
 
 
-rebuildAndServe :: String -> IORef (Maybe ProcessHandle) -> String -> Event -> IO ()
-rebuildAndServe serverDirectory processRef jobCount event =
-    case event of
-        Added _ _ -> do
-            printInfo "Rebuild Triggered"
-            maybeProcessHandle <- readIORef processRef
-            case maybeProcessHandle of
-                Just processHandle ->
-                    printInfo "Killing Server" >>
-                    terminateProcess processHandle
-                Nothing ->
-                    printInfo "Server Not Running, Process Not Killed"
-            buildAndStartServer serverDirectory processRef jobCount
-        _ ->
-            return ()
+rebuildAndServe :: String -> IORef (Maybe ProcessHandle) -> String -> IO ()
+rebuildAndServe serverDirectory processRef jobCount = do
+    printInfo "Rebuild Triggered"
+    maybeProcessHandle <- readIORef processRef
+    case maybeProcessHandle of
+        Just processHandle ->
+            printInfo "Killing Server" >>
+            terminateProcess processHandle
+        Nothing ->
+            printInfo "Server Not Running, Process Not Killed"
+    buildAndStartServer serverDirectory processRef jobCount
 
 
 cleanBuiltFiles :: Script
