@@ -230,7 +230,7 @@ productionBuild = do
     liftIO $ run "stack" ["build", "--pedantic", jobCount, "--ghc-options", "-O2"]
         serverDirectory printServerOutput
         >>= exitOnError "Server"
-    where exitOnError descr =
+    where exitOnError description =
             waitForProcess >=> \status ->
                 case status of
                     ExitSuccess ->
