@@ -16,7 +16,7 @@
 -- TODO: Async Client/Server Dependency Installations?
 -- TODO: Fix Rebuilds Not Terminating In-Progress Builds
 import Control.Concurrent (threadDelay, forkIO)
-import Control.Monad (forever, void, when)
+import Control.Monad ((>=>), forever, void, when)
 import Control.Monad.Loops (whileM_)
 import Control.Monad.Reader (ReaderT, runReaderT, asks, MonadIO, liftIO)
 import Data.IORef (IORef, newIORef, readIORef, writeIORef)
