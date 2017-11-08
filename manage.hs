@@ -221,30 +221,23 @@ productionBuild = do
     initializeClient
     printInfo "Building Client"
     clientDirectory <- getClientDirectory
-    clientResult <- liftIO $
-        run "npm" ["run", "build"] clientDirectory printClientOutput
-            >>= waitForProcess
-    case clientResult of
-        ExitSuccess ->
-            printSuccess "Client Built"
-        _ ->
-            printError "Client Build Failed"
-                >> liftIO (exitWith clientResult)
+    liftIO $ run "npm" ["run", "build"] clientDirectory printClientOutput
+        >>= exitOnError "Client"
     initializeServer
     printInfo "Building Server"
     serverDirectory <- getServerDirectory
     jobCount <- stackJobCount
-    serverResult <- liftIO $
-        run "stack" ["build", "--pedantic", jobCount, "--ghc-options", "-O2"]
-            serverDirectory printServerOutput
-            >>= waitForProcess
-    case serverResult of
-        ExitSuccess ->
-            printSuccess "Server Built"
-        _ ->
-            printError "Server Build Failed"
-            >> liftIO (exitWith serverResult)
-
+    liftIO $ run "stack" ["build", "--pedantic", jobCount, "--ghc-options", "-O2"]
+        serverDirectory printServerOutput
+        >>= exitOnError "Server"
+    where exitOnError descr =
+            waitForProcess >=> \status ->
+                case status of
+                    ExitSuccess ->
+                        printSuccess $ description ++ " Built"
+                    _ ->
+                        printError (description ++ " Build Failed")
+                        >> liftIO (exitWith status)
 
 buildAndStartServer :: FilePath -> IORef (Maybe ProcessHandle) -> String -> IO ()
 buildAndStartServer serverDirectory processRef jobCount = do
