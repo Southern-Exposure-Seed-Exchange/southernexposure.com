@@ -218,7 +218,7 @@ clientAndServerWatching = do
 productionBuild :: Script
 productionBuild = do
     cleanBuiltFiles
-    initializeServer >> initializeClient
+    initializeClient
     printInfo "Building Client"
     clientDirectory <- getClientDirectory
     clientResult <- liftIO $
@@ -230,6 +230,7 @@ productionBuild = do
         _ ->
             printError "Client Build Failed"
                 >> liftIO (exitWith clientResult)
+    initializeServer
     printInfo "Building Server"
     serverDirectory <- getServerDirectory
     jobCount <- stackJobCount
