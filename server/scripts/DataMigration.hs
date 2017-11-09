@@ -236,6 +236,7 @@ makeCustomers mysql = do
             { customerEmail = email
             , customerEncryptedPassword = ""
             , customerAuthToken = token
+            , customerStripeId = Nothing
             , customerIsAdmin = email == "gardens@southernexposure.com"
             }
     where generateToken = UUID.toText <$> UUID4.nextRandom

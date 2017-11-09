@@ -15,13 +15,14 @@ import Database.Persist.Sql (PersistFieldSql(..), SqlType(SqlString))
 import Database.Persist.TH (derivePersistField)
 import GHC.Generics (Generic)
 import Numeric.Natural (Natural)
-import Text.Read (readMaybe)
+import Text.Read (readMaybe, readPrec)
 
 import Models.ProvinceCodes (ProvinceCode)
 
 import qualified Data.StateCodes as StateCodes
 import qualified Data.Text as T
 import qualified Models.ProvinceCodes as ProvinceCodes
+import qualified Web.Stripe.Types as Stripe
 
 
 -- | Cents are used to do any currency-related arithmetic & are represented
@@ -29,6 +30,11 @@ import qualified Models.ProvinceCodes as ProvinceCodes
 newtype Cents =
     Cents { fromCents :: Natural }
     deriving (Show, Read, Eq, Ord, Num, ToJSON, FromJSON, PersistField, PersistFieldSql)
+
+-- | Convert `Cents` into a Stripe `Amount`.
+toStripeAmount :: Cents -> Stripe.Amount
+toStripeAmount = Stripe.Amount . fromIntegral . fromCents
+
 
 -- | Milligrams are used to do any weight-related arithmetic & are
 -- represented as arbitrary-percision numbers.
@@ -168,14 +174,59 @@ data AddressType
 derivePersistField "AddressType"
 
 
+-- STRIPE
+
+newtype StripeCustomerId =
+    StripeCustomerId { fromStripeCustomerId :: Stripe.CustomerId }
+
+instance PersistField StripeCustomerId where
+    toPersistValue (StripeCustomerId (Stripe.CustomerId customerId)) =
+        toPersistValue customerId
+    fromPersistValue =
+        fmap (StripeCustomerId . Stripe.CustomerId) <$> fromPersistValue
+
+instance PersistFieldSql StripeCustomerId where
+    sqlType _ = SqlString
+
+
+newtype StripeChargeId =
+    StripeChargeId { fromStripeChargeId :: Stripe.ChargeId }
+
+instance Read StripeChargeId where
+    readPrec =
+        StripeChargeId . Stripe.ChargeId <$> readPrec
+
+instance Show StripeChargeId where
+    show =
+        show . (\(Stripe.ChargeId c) -> c) . fromStripeChargeId
+
+instance PersistField StripeChargeId where
+    toPersistValue (StripeChargeId (Stripe.ChargeId chargeId)) =
+        toPersistValue chargeId
+    fromPersistValue =
+        fmap (StripeChargeId . Stripe.ChargeId) <$> fromPersistValue
+
+instance PersistFieldSql StripeChargeId where
+    sqlType _ = SqlString
+
+instance ToJSON StripeChargeId where
+    toJSON =
+        toJSON . (\(Stripe.ChargeId c) -> c) . fromStripeChargeId
+instance FromJSON StripeChargeId where
+    parseJSON j =
+        StripeChargeId . Stripe.ChargeId <$> parseJSON j
+
+
 -- ORDERS
 
 
 data OrderStatus
-    = Pending
+    = OrderReceived
+    | PaymentReceived
+    | PaymentFailed
     | Processing
+    | Refunded
     | Delivered
-    | Update
     deriving (Show, Read, Generic)
 
 instance ToJSON OrderStatus

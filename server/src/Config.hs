@@ -8,6 +8,7 @@ module Config
 import Data.Pool (Pool, createPool)
 import Database.Persist.Sql (ConnectionPool)
 import Network.HaskellNet.SMTP.SSL (SMTPConnection, connectSMTPSTARTTLS, closeSMTP)
+import Web.Stripe.Client (StripeConfig)
 
 
 data Environment
@@ -23,6 +24,7 @@ data Config
     , getSmtpPool :: Pool SMTPConnection
     , getSmtpUser :: String
     , getSmtpPass :: String
+    , getStripeConfig :: StripeConfig
     }
 
 defaultConfig :: Config
@@ -34,6 +36,7 @@ defaultConfig =
         , getSmtpPool = undefined
         , getSmtpUser = undefined
         , getSmtpPass = undefined
+        , getStripeConfig = undefined
         }
 
 

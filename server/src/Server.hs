@@ -4,13 +4,16 @@ module Server
     ( App
     , AppSQL
     , runDB
+    , stripeRequest
     , serverError
     ) where
 
-import Control.Monad.Reader (ReaderT, asks, lift)
+import Control.Monad.Reader (ReaderT, asks, lift, liftIO)
 import Control.Monad.Except (MonadError)
+import Data.Aeson (FromJSON)
 import Database.Persist.Sql (SqlPersistT, runSqlPool)
 import Servant (Handler, throwError)
+import Web.Stripe
 
 import Config
 
@@ -28,6 +31,16 @@ type AppSQL =
 runDB :: AppSQL a -> App a
 runDB query =
     asks getPool >>= lift . runSqlPool query
+
+
+-- | Perform a request to the Stripe API.
+stripeRequest :: FromJSON (StripeReturn a)
+              => StripeRequest a
+              -> App (Either StripeError (StripeReturn a))
+stripeRequest req = do
+    stripeConfig <- asks getStripeConfig
+    liftIO $ stripe stripeConfig req
+
 
 serverError :: MonadError e Handler => e -> App a
 serverError =

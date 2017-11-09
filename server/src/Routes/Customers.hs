@@ -210,6 +210,7 @@ registrationRoute = validate >=> \parameters -> do
             { customerEmail = rpEmail parameters
             , customerEncryptedPassword = encryptedPass
             , customerAuthToken = authToken
+            , customerStripeId = Nothing
             , customerIsAdmin = False
             }
     maybeCustomerId <- runDB $ insertUnique customer

@@ -68,10 +68,11 @@ Page json
     deriving Show
 
 
-Customer json
+Customer
     email T.Text
     encryptedPassword T.Text
     authToken T.Text
+    stripeId StripeCustomerId Maybe
     isAdmin Bool default=false
     UniqueToken authToken
     UniqueEmail email
@@ -139,13 +140,14 @@ Address
     isActive Bool
     isDefault Bool
 
-Order json
+Order
     customerId CustomerId
     status OrderStatus
     billingAddressId AddressId
     shippingAddressId AddressId
     taxDescription T.Text
     customerComment T.Text
+    stripeChargeId StripeChargeId Maybe
     createdAt UTCTime
 
 OrderLineItem json
@@ -154,7 +156,7 @@ OrderLineItem json
     description T.Text
     amount Cents
 
-OrderProduct json
+OrderProduct
     orderId OrderId
     productVariantId ProductVariantId
     quantity Natural

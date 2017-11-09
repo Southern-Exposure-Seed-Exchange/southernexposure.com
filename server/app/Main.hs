@@ -7,11 +7,13 @@ import Database.Persist.Postgresql
 import Network.Wai.Middleware.RequestLogger (logStdoutDev, logStdout)
 import System.Directory (getCurrentDirectory, createDirectoryIfMissing)
 import System.Environment (lookupEnv)
+import Web.Stripe.Client (StripeConfig(..), StripeKey(..))
 
 import Api
 import Config
 import Models
 
+import qualified Data.ByteString.Char8 as C
 import qualified Network.Wai.Handler.Warp as Warp
 
 -- | Connect to the database, configure the application, & start the server.
@@ -25,6 +27,7 @@ main = do
     smtpUser <- fromMaybe "" <$> lookupEnv "SMTP_USER"
     smtpPass <- fromMaybe "" <$> lookupEnv "SMTP_PASS"
     emailPool <- smtpPool smtpServer (poolSize env)
+    stripeToken <- fromMaybe "" <$> lookupEnv "STRIPE_TOKEN"
     dbPool <- makePool env
     let cfg = defaultConfig
             { getPool = dbPool
@@ -33,6 +36,7 @@ main = do
             , getSmtpPool = emailPool
             , getSmtpUser = smtpUser
             , getSmtpPass = smtpPass
+            , getStripeConfig = StripeConfig $ StripeKey $ C.pack stripeToken
             }
     Warp.runSettings (warpSettings port) . httpLogger env $ app cfg
     where lookupSetting env def =

@@ -55,6 +55,8 @@ library
                      , resource-pool
                      , servant-server
                      , state-codes
+                     , stripe-core
+                     , stripe-haskell
                      , tagsoup
                      , text
                      , time
@@ -69,9 +71,11 @@ executable sese-website-exe
   ghc-options:         -threaded -rtsopts -with-rtsopts=-N
   build-depends:       base
                      , sese-website
+                     , bytestring
                      , directory
                      , monad-logger
                      , persistent-postgresql
+                     , stripe-core
                      , wai-extra
                      , warp
   default-language:    Haskell2010
