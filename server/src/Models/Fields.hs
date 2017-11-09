@@ -21,6 +21,7 @@ import Models.ProvinceCodes (ProvinceCode)
 
 import qualified Data.StateCodes as StateCodes
 import qualified Data.Text as T
+import qualified Models.ProvinceCodes as ProvinceCodes
 
 
 -- | Cents are used to do any currency-related arithmetic & are represented
@@ -103,6 +104,17 @@ instance FromJSON Region where
                     CustomRegion <$> v .: "custom"
               maybeM errorStr constructor =
                   maybe (fail errorStr) (return . constructor)
+
+regionName :: Region -> T.Text
+regionName = \case
+    USState code ->
+        StateCodes.toName code
+    USArmedForces code ->
+        armedForcesRegion code
+    CAProvince code ->
+        ProvinceCodes.toName code
+    CustomRegion region ->
+        region
 
 
 newtype Country =
