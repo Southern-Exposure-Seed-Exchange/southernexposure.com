@@ -8,12 +8,12 @@
     --package monad-loops
     --package mtl
     --package process
+    --package time
 -}
 -- TODO: Watch .nvmrc, package.json, & elm-package.json & re-init on change
 -- TODO: Make a `BuildTarget = Client | Server` type that chooses cwd
 --       directory & output function/prefix.
 -- TODO: Async Client/Server Dependency Installations?
--- TODO: Fix Rebuilds Not Terminating In-Progress Builds
 import Control.Concurrent (threadDelay, forkIO)
 import Control.Monad ((>=>), forever, void, when)
 import Control.Monad.Loops (whileM_)
@@ -21,6 +21,7 @@ import Control.Monad.Reader (ReaderT, runReaderT, asks, MonadIO, liftIO)
 import Data.IORef (IORef, newIORef, readIORef, writeIORef)
 import Data.List (intercalate, isInfixOf, isSuffixOf)
 import Data.Maybe (fromMaybe)
+import Data.Time (UTCTime, getCurrentTime)
 import GHC.IO.Handle
     ( Handle, BufferMode(LineBuffering), hSetBuffering, hIsEOF, hGetLine
     )
@@ -41,7 +42,7 @@ import System.FSNotify
     )
 import System.Process
     ( CreateProcess(..), ProcessHandle, StdStream(..), shell, proc
-    , createProcess, waitForProcess, terminateProcess
+    , createProcess, waitForProcess, terminateProcess, getProcessExitCode
     )
 import Text.Read (readMaybe)
 
@@ -110,11 +111,15 @@ helpText =
 type Script =
     ReaderT Config IO ()
 
+type ProcessData =
+    (ProcessHandle, UTCTime)
+
 data Config =
     Config
         { cClientDirectory :: FilePath
         , cServerDirectory :: FilePath
         , serverProcess :: IORef (Maybe ProcessHandle)
+        , serverBuildProcess :: IORef (Maybe ProcessData)
         , coreCount :: Integer
         }
 
@@ -123,6 +128,7 @@ getConfig =
     Config
         <$> makeAbsolute "./client/"
         <*> makeAbsolute "./server/"
+        <*> newIORef Nothing
         <*> newIORef Nothing
         <*> determineCoreCount
     where determineCoreCount = do
@@ -195,23 +201,24 @@ clientAndServerWatching = do
 
     serverDirectory <- getServerDirectory
     jobCount <- stackJobCount
-    processRef <- asks serverProcess
-    liftIO $ buildAndStartServer serverDirectory processRef jobCount
+    buildRef <- asks serverBuildProcess
+    serverRef <- asks serverProcess
+    liftIO $ buildAndStartServer serverDirectory buildRef serverRef jobCount
 
     let watchConfig = defaultConfig { confDebounce = Debounce 100 }
     liftIO . void . withManagerConf watchConfig $ \mgr -> do
         watchTree mgr serverDirectory isProjectFile $ \event ->
             if ".hs" `isSuffixOf` eventPath event then
-                rebuildAndServe serverDirectory processRef jobCount
+                rebuildAndServe serverDirectory buildRef serverRef jobCount
             else
                 when (requiresReinitialization event) $ do
                     printInfo "Reinitialization Triggered"
                     stackSetup jobCount serverDirectory
                     installServerDependencies jobCount serverDirectory
-                    rebuildAndServe serverDirectory processRef jobCount
+                    rebuildAndServe serverDirectory buildRef serverRef jobCount
         forever (threadDelay 1000000)
 
-    liftIO $ readIORef processRef >>= maybe (return ()) terminateProcess
+    liftIO $ readIORef serverRef >>= maybe (return ()) terminateProcess
     liftIO $ terminateProcess clientHandle
     where isProjectFile event =
             not $ "stack-work" `isInfixOf` eventPath event
@@ -259,34 +266,50 @@ installServerDependencies jobCount serverDirectory =
         serverDirectory printServerOutput "Server Dependencies"
 
 
-buildAndStartServer :: FilePath -> IORef (Maybe ProcessHandle) -> String -> IO ()
-buildAndStartServer serverDirectory processRef jobCount = do
+buildAndStartServer :: FilePath -> IORef (Maybe ProcessData) -> IORef (Maybe ProcessHandle) -> String -> IO ()
+buildAndStartServer serverDirectory buildRef serverRef jobCount = do
     printInfo "Building Server"
-    buildResult <- run "stack" ["build", "--pedantic", jobCount] serverDirectory printServerOutput
-        >>= waitForProcess
+    buildProcess <- run "stack" ["build", "--pedantic", jobCount] serverDirectory printServerOutput
+    currentTime <- getCurrentTime
+    writeIORef buildRef (Just (buildProcess, currentTime))
+    buildResult <- waitOrAbort currentTime buildProcess
     case buildResult of
-        ExitSuccess -> do
+        Just ExitSuccess -> do
             printSuccess "Server Build Completed"
             printInfo "Starting Server"
             run "stack" ["exec", "sese-website-exe"] serverDirectory printServerOutput
-                >>= writeIORef processRef . Just
+                >>= writeIORef serverRef . Just
             printSuccess "Server Started"
-        _ ->
-            writeIORef processRef Nothing
+        Just _ ->
+            writeIORef buildRef Nothing
                 >> printError "Server Build Failure"
+        Nothing ->
+            return ()
+    where waitOrAbort processTime processHandle = do
+            currentProcessTime <- fmap snd <$> readIORef buildRef
+            if currentProcessTime /= Just processTime then
+                terminateProcess processHandle >>
+                printInfo "Terminated Previous Build" >>
+                return Nothing
+            else
+                threadDelay 100
+                    >> getProcessExitCode processHandle
+                    >>= maybe (waitOrAbort processTime processHandle)
+                        (\code -> writeIORef buildRef Nothing >> return (Just code))
 
 
-rebuildAndServe :: String -> IORef (Maybe ProcessHandle) -> String -> IO ()
-rebuildAndServe serverDirectory processRef jobCount = do
+rebuildAndServe :: String -> IORef (Maybe ProcessData) -> IORef (Maybe ProcessHandle) -> String -> IO ()
+rebuildAndServe serverDirectory buildRef serverRef jobCount = do
     printInfo "Rebuild Triggered"
-    maybeProcessHandle <- readIORef processRef
-    case maybeProcessHandle of
+    maybeServerHandle <- readIORef serverRef
+    case maybeServerHandle of
         Just processHandle ->
             printInfo "Killing Server" >>
-            terminateProcess processHandle
+            terminateProcess processHandle >>
+            writeIORef serverRef Nothing
         Nothing ->
-            printInfo "Server Not Running, Process Not Killed"
-    buildAndStartServer serverDirectory processRef jobCount
+            return ()
+    buildAndStartServer serverDirectory buildRef serverRef jobCount
 
 
 cleanBuiltFiles :: Script
