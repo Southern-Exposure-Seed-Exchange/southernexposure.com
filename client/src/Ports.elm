@@ -13,6 +13,8 @@ port module Ports
         , newCartSessionToken
         , setCartItemCount
         , cartItemCountChanged
+        , collectStripeToken
+        , stripeTokenReceived
         )
 
 -- Page Change
@@ -74,3 +76,13 @@ port setCartItemCount : Int -> Cmd msg
 
 
 port cartItemCountChanged : (Int -> msg) -> Sub msg
+
+
+
+-- Checkout
+
+
+port collectStripeToken : ( String, Int ) -> Cmd msg
+
+
+port stripeTokenReceived : (String -> msg) -> Sub msg

@@ -390,6 +390,11 @@ orderDecoder =
 
 type OrderStatus
     = Processing
+    | OrderReceived
+    | PaymentReceived
+    | PaymentFailed
+    | Refunded
+    | Shipped
 
 
 orderStatusDecoder : Decoder OrderStatus
@@ -399,6 +404,21 @@ orderStatusDecoder =
             case str of
                 "Processing" ->
                     Decode.succeed Processing
+
+                "OrderReceived" ->
+                    Decode.succeed OrderReceived
+
+                "PaymentReceived" ->
+                    Decode.succeed PaymentReceived
+
+                "PaymentFailed" ->
+                    Decode.succeed PaymentFailed
+
+                "Refunded" ->
+                    Decode.succeed Refunded
+
+                "Delivered" ->
+                    Decode.succeed Shipped
 
                 _ ->
                     Decode.fail <| "Invalid OrderStatus: " ++ str

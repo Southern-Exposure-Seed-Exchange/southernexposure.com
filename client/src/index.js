@@ -5,6 +5,9 @@ const authUserIdKey = 'authUserId';
 const cartTokenKey = 'cartSessionToken';
 const cartItemCountKey = 'cartItemCount';
 
+// TODO: Select between test or production key
+const stripeApiKey = 'pk_test_F6Mr5XLKEDMn4rUsmsv5aqvr';
+
 
 /** FLAGS **/
 var cartToken = localStorage.getItem(cartTokenKey);
@@ -23,6 +26,20 @@ var app = Elm.Main.embed(
     cartItemCount: intOrNull(cartItemCount),
   }
 );
+
+
+/** STRIPE **/
+var stripeHandler = StripeCheckout.configure({
+  key: stripeApiKey,
+  locale: 'auto',
+  name: 'Southern Exposure',
+  image: '/static/img/logos/sese.png',
+  zipCode: true,
+  token: function(token) {
+    /** STRIPE SUBSCRIPTION **/
+    app.ports.stripeTokenReceived.send(token.id)
+  }
+});
 
 
 /** SUBSCRIPTIONS **/
@@ -122,6 +139,19 @@ app.ports.removeCartSessionToken.subscribe(function() {
 /* Store the Number of Items in the Cart */
 app.ports.setCartItemCount.subscribe(function(itemCount) {
   localStorage.setItem(cartItemCountKey, itemCount);
+});
+
+
+/* Open the Stripe Checkout Popup */
+app.ports.collectStripeToken.subscribe(function(portData) {
+  var [customerEmail, checkoutTotal] = portData;
+  stripeHandler.open({
+    email: customerEmail,
+    amount: checkoutTotal,
+  });
+  window.addEventListener('popstate', function() {
+    stripeHandler.close();
+  });
 });
 
 

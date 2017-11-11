@@ -104,6 +104,7 @@ module.exports = {
 
       title: 'Southern Exposure Seed Exchange',
       links: ['https://fonts.googleapis.com/css?family=Crimson+Text|Glass+Antiqua'],
+      scripts: ['https://checkout.stripe.com/checkout.js'],
       xhtml: true,
       hash: false,
       baseHref: '/',

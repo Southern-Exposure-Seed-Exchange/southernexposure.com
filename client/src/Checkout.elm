@@ -5,6 +5,7 @@ module Checkout
         , initialWithDefaults
         , Msg
         , OutMsg(..)
+        , subscriptions
         , update
         , getCustomerDetails
         , getAnonymousDetails
@@ -121,6 +122,7 @@ type Msg
     | BillingSameAsShipping Bool
     | Comment String
     | Submit
+    | TokenReceived String
     | SubmitResponse (WebData (Result Api.FormErrors ( Int, AuthStatus )))
     | RefreshDetails (WebData PageData.CheckoutDetails)
 
@@ -131,8 +133,13 @@ type OutMsg
     | DetailsRefreshed PageData.CheckoutDetails
 
 
-update : Msg -> Form -> AuthStatus -> Maybe String -> ( Form, Maybe OutMsg, Cmd Msg )
-update msg model authStatus maybeSessionToken =
+subscriptions : Sub Msg
+subscriptions =
+    Ports.stripeTokenReceived TokenReceived
+
+
+update : Msg -> Form -> AuthStatus -> Maybe String -> WebData PageData.CheckoutDetails -> ( Form, Maybe OutMsg, Cmd Msg )
+update msg model authStatus maybeSessionToken checkoutDetails =
     case msg of
         Email email ->
             { model | email = email } |> nothingAndNoCommand
@@ -198,7 +205,27 @@ update msg model authStatus maybeSessionToken =
                 , Ports.scrollToTop
                 )
             else
-                ( model, Nothing, placeOrder model authStatus maybeSessionToken )
+                case checkoutDetails of
+                    RemoteData.Success details ->
+                        let
+                            (Cents total) =
+                                PageData.cartTotals details |> .total
+
+                            customerEmail =
+                                case authStatus of
+                                    User.Authorized user ->
+                                        user.email
+
+                                    User.Anonymous ->
+                                        model.email
+                        in
+                            ( model, Nothing, Ports.collectStripeToken ( customerEmail, total ) )
+
+                    _ ->
+                        ( model, Nothing, Cmd.none )
+
+        TokenReceived stripeTokenId ->
+            ( model, Nothing, placeOrder model authStatus maybeSessionToken stripeTokenId )
 
         SubmitResponse (RemoteData.Success (Ok ( orderId, newAuthStatus ))) ->
             let
@@ -436,14 +463,15 @@ getAnonymousDetails msg sessionToken maybeCountry maybeRegion =
             |> Api.sendRequest msg
 
 
-placeOrder : Form -> AuthStatus -> Maybe String -> Cmd Msg
-placeOrder model authStatus maybeSessionToken =
+placeOrder : Form -> AuthStatus -> Maybe String -> String -> Cmd Msg
+placeOrder model authStatus maybeSessionToken stripeTokenId =
     let
         customerData =
             Encode.object
                 [ ( "shippingAddress", encodedShippingAddress )
                 , ( "billingAddress", encodedBillingAddress )
                 , ( "comment", Encode.string model.comment )
+                , ( "stripeToken", Encode.string stripeTokenId )
                 ]
 
         anonymousData =
@@ -454,6 +482,7 @@ placeOrder model authStatus maybeSessionToken =
                 , ( "sessionToken", encodeMaybe Encode.string maybeSessionToken )
                 , ( "email", Encode.string model.email )
                 , ( "password", Encode.string model.password )
+                , ( "stripeToken", Encode.string stripeTokenId )
                 ]
 
         encodedShippingAddress =
@@ -622,7 +651,7 @@ view model authStatus locations checkoutDetails =
                 ]
             , div [ class "form-group text-right" ]
                 [ button [ class "btn btn-primary", type_ "submit" ]
-                    [ text "Place Order" ]
+                    [ text "Pay with Credit Card" ]
                 ]
             ]
         ]

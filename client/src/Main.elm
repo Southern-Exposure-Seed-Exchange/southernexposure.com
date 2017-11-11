@@ -46,6 +46,7 @@ main =
                 , Ports.loggedIn OtherTabLoggedIn
                 , Ports.newCartSessionToken OtherTabNewCartToken
                 , Ports.cartItemCountChanged OtherTabCartItemCountChanged
+                , Sub.map CheckoutMsg Checkout.subscriptions
                 ]
                 |> always
         , view = view
@@ -755,7 +756,7 @@ update msg ({ pageData } as model) =
                         Nothing ->
                             ( model, cmd )
             in
-                Checkout.update subMsg model.checkoutForm model.currentUser model.maybeSessionToken
+                Checkout.update subMsg model.checkoutForm model.currentUser model.maybeSessionToken pageData.checkoutDetails
                     |> (\( form, maybeOutMsg, cmd ) ->
                             ( { model
                                 | checkoutForm = form
