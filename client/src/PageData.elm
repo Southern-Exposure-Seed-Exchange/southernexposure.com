@@ -24,6 +24,7 @@ module PageData
         , OrderDetails
         , orderDetailsDecoder
         , orderTotals
+        , statusText
         , PredecessorCategory
         , ProductData
         , productDataDecoder
@@ -422,6 +423,28 @@ orderStatusDecoder =
 
                 _ ->
                     Decode.fail <| "Invalid OrderStatus: " ++ str
+
+
+statusText : OrderStatus -> String
+statusText status =
+    case status of
+        Processing ->
+            "Processing"
+
+        OrderReceived ->
+            "Received"
+
+        PaymentReceived ->
+            "Payment Complete"
+
+        PaymentFailed ->
+            "Payment Failed"
+
+        Refunded ->
+            "Refunded"
+
+        Shipped ->
+            "Shipped"
 
 
 type alias OrderLineItem =

@@ -58,6 +58,7 @@ orderTable locations orderSummaries =
                 [ td [ class "text-center" ] [ text <| Format.date created ]
                 , td [ class "text-center" ] [ text <| toString id ]
                 , td [] [ addressInfo shippingAddress ]
+                , td [ class "text-center" ] [ text <| PageData.statusText status ]
                 , td [ class "text-right" ] [ text <| Format.cents total ]
                 , td [ class "text-center" ]
                     [ button
@@ -94,6 +95,7 @@ orderTable locations orderSummaries =
                         [ th [ class "text-center" ] [ text "Date" ]
                         , th [ class "text-center" ] [ text "Order #" ]
                         , th [] [ text "Shipping Address" ]
+                        , th [ class "text-center" ] [ text "Order Status" ]
                         , th [ class "text-right" ] [ text "Total" ]
                         , th [] []
                         ]
