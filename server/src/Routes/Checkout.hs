@@ -294,6 +294,11 @@ type CustomerPlaceOrderRoute =
     :> Post '[JSON] PlaceOrderData
 
 
+-- | Place an Order using a Customer's Cart.
+--
+-- If the Customer has a StripeId, add a new Card & set it as their
+-- Default. Otherwise create a new Stripe Customer for them. Then charge
+-- the Stripe Customer.
 customerPlaceOrderRoute :: AuthToken -> CustomerPlaceOrderParameters -> App PlaceOrderData
 customerPlaceOrderRoute token = validate >=> \parameters -> do
     ce@(Entity customerId customer) <- validateToken token
@@ -307,7 +312,15 @@ customerPlaceOrderRoute token = validate >=> \parameters -> do
     setCustomerCard customer stripeCustomerId billingAddress stripeToken
     chargeCustomer stripeCustomerId cartId orderId orderTotal
     return $ PlaceOrderData orderId
-    where createAddressesAndOrder customerId shippingParam billingParam comment currentTime =
+    where getOrCreateStripeCustomer (Entity customerId customer) stripeToken =
+            case customerStripeId customer of
+                Just stripeId ->
+                    return stripeId
+                Nothing -> do
+                    newId <- createStripeCustomer (customerEmail customer) stripeToken
+                    runDB $ update customerId [CustomerStripeId =. Just newId]
+                    return newId
+          createAddressesAndOrder customerId shippingParam billingParam comment currentTime =
             withPlaceOrderErrors shippingParam . runDB $ do
                 shippingAddress <- getOrInsertAddress Shipping customerId shippingParam
                 billingAddress <- getOrInsertAddress Billing customerId billingParam
@@ -337,16 +350,8 @@ customerPlaceOrderRoute token = validate >=> \parameters -> do
                     insertOrActivateAddress newAddress
           setCustomerCard customer stripeCustomerId billingAddress stripeToken = do
             stripeCardId <- case customerStripeId customer of
-                Nothing -> do
-                    -- New Customer - Get Card we just created
-                    let noCardErrorText =
-                            "An error occured while charging your card. "
-                            <> "Please try again or contact us for help."
-                    stripeRequest (getCustomerCards (fromStripeCustomerId stripeCustomerId)
-                            -&- Stripe.Limit 1)
-                        >>= either (V.singleError . errorMsg)
-                            (return . fmap Stripe.cardId . listToMaybe . Stripe.list)
-                        >>= maybe (V.singleError noCardErrorText) return
+                Nothing ->
+                    getFirstStripeCard stripeCustomerId
                 Just _ -> do
                     -- Already Had Customer, Create New Card w/ Token
                     requestResult <- stripeRequest $
@@ -357,28 +362,6 @@ customerPlaceOrderRoute token = validate >=> \parameters -> do
             stripeRequest (updateCustomer (fromStripeCustomerId stripeCustomerId)
                 -&- Stripe.DefaultCard stripeCardId)
                 >>= either (V.singleError . errorMsg) (void . return)
-          updateCardAddress stripeCustomerId stripeCardId billingAddress =
-            void . stripeRequest $
-                updateCustomerCard (fromStripeCustomerId stripeCustomerId) stripeCardId
-                    -&- Stripe.Name (addressFirstName billingAddress <> " " <> addressLastName billingAddress)
-                    -&- Stripe.AddressLine1 (addressAddressOne billingAddress)
-                    -&- Stripe.AddressLine2 (addressAddressTwo billingAddress)
-                    -&- Stripe.AddressCity (addressCity billingAddress)
-                    -&- Stripe.AddressState (regionName $ addressState billingAddress)
-          chargeCustomer stripeCustomerId cartId orderId orderTotal = do
-            chargeResult <- stripeRequest
-                (createCharge (toStripeAmount orderTotal) Stripe.USD
-                    -&- fromStripeCustomerId stripeCustomerId)
-            case chargeResult of
-                Left err ->
-                    runDB (update orderId [OrderStatus =. PaymentFailed])
-                        >> V.singleError (errorMsg err)
-                Right stripeCharge ->
-                    let
-                        stripeChargeId = StripeChargeId $ Stripe.chargeId stripeCharge
-                    in
-                        runDB $ update orderId [OrderStripeChargeId =. Just stripeChargeId]
-                            >> deleteCart cartId
 
 
 data AnonymousPlaceOrderParameters =
@@ -389,6 +372,7 @@ data AnonymousPlaceOrderParameters =
         , apopBillingAddress :: AddressData
         , apopComment :: T.Text
         , apopCartToken :: T.Text
+        , apopStripeToken :: T.Text
         }
 
 instance FromJSON AnonymousPlaceOrderParameters where
@@ -400,6 +384,7 @@ instance FromJSON AnonymousPlaceOrderParameters where
             <*> v .: "billingAddress"
             <*> v .: "comment"
             <*> v .: "sessionToken"
+            <*> v .: "stripeToken"
 
 instance Validation AnonymousPlaceOrderParameters where
     validators parameters = do
@@ -440,52 +425,105 @@ type AnonymousPlaceOrderRoute =
        ReqBody '[JSON] AnonymousPlaceOrderParameters
     :> Post '[JSON] AnonymousPlaceOrderData
 
+-- | Place an Order using an Anonymous Cart.
+--
+-- A new Customer & Order is created & the Customer is charged.
 anonymousPlaceOrderRoute :: AnonymousPlaceOrderParameters -> App AnonymousPlaceOrderData
 anonymousPlaceOrderRoute = validate >=> \parameters -> do
     encryptedPass <- hashPassword $ apopPassword parameters
     authToken <- generateUniqueToken UniqueToken
     currentTime <- liftIO getCurrentTime
+    stripeCustomerId <- createStripeCustomer (apopEmail parameters)
+        $ apopStripeToken parameters
     let customer = Customer
             { customerEmail = apopEmail parameters
             , customerEncryptedPassword = encryptedPass
             , customerAuthToken = authToken
-            , customerStripeId = Nothing
+            , customerStripeId = Just stripeCustomerId
             , customerIsAdmin = False
             }
-    withPlaceOrderErrors (NewAddress $ apopShippingAddress parameters) . runDB $ do
-        customerId <- insert customer
-        let shippingAddress = fromAddressData Shipping customerId
-                $ apopShippingAddress parameters
-        mergeCarts (apopCartToken parameters) customerId
-        (Entity cartId _) <- getBy (UniqueCustomerCart $ Just customerId)
-            >>= maybe (throwM CartNotFound) return
-        shippingId <- insert shippingAddress
-        billingId <- insert . fromAddressData Billing customerId
-            $ apopBillingAddress parameters
-        (orderId, _) <- createOrder customerId cartId (Entity shippingId shippingAddress)
-            billingId (apopComment parameters) currentTime
-        deleteCart cartId
-        return . AnonymousPlaceOrderData orderId
-            . toAuthorizationData
-            $ Entity customerId customer
+    (billingAddress, cartId, orderTotal, orderData) <- withPlaceOrderErrors
+        (NewAddress $ apopShippingAddress parameters) . runDB $ do
+            customerId <- insert customer
+            mergeCarts (apopCartToken parameters) customerId
+            (Entity cartId _) <- getBy (UniqueCustomerCart $ Just customerId)
+                >>= maybe (throwM CartNotFound) return
+            let shippingAddress = fromAddressData Shipping customerId
+                    $ apopShippingAddress parameters
+                billingAddress = fromAddressData Billing customerId
+                    $ apopBillingAddress parameters
+            shippingId <- insert shippingAddress
+            billingId <- insert billingAddress
+            (orderId, orderTotal) <- createOrder customerId cartId
+                (Entity shippingId shippingAddress) billingId
+                (apopComment parameters) currentTime
+            return
+                ( billingAddress
+                , cartId
+                , orderTotal
+                , AnonymousPlaceOrderData orderId . toAuthorizationData
+                    $ Entity customerId customer
+                )
+    stripeCardId <- getFirstStripeCard stripeCustomerId
+    updateCardAddress stripeCustomerId stripeCardId billingAddress
+    chargeCustomer stripeCustomerId cartId (apodOrderId orderData) orderTotal
+    return orderData
 
 
--- | Get the StripeId for a Customer, creating a new Stripe Customer if
--- necessary.
-getOrCreateStripeCustomer :: Entity Customer -> T.Text -> App StripeCustomerId
-getOrCreateStripeCustomer (Entity customerId customer) stripeToken =
-    case customerStripeId customer of
-        Just stripeId ->
-            return stripeId
-        Nothing -> do
-            requestResult <- stripeRequest $
-                createCustomer
-                    -&- Email (customerEmail customer)
-                    -&- Stripe.TokenId stripeToken
-            newId <- either (V.singleError . errorMsg)
-                (return . StripeCustomerId . Stripe.customerId) requestResult
-            runDB $ update customerId [CustomerStripeId =. Just newId]
-            return newId
+-- | Create a Stripe Customer with an Email & Token.
+createStripeCustomer :: T.Text -> T.Text -> App StripeCustomerId
+createStripeCustomer email stripeToken =
+    stripeRequest (createCustomer -&- Email email -&- Stripe.TokenId stripeToken)
+        >>= either (V.singleError . errorMsg)
+            (return . StripeCustomerId . Stripe.customerId)
+
+
+-- | Update the Name & Address of a Stripe Card.
+updateCardAddress :: StripeCustomerId -> Stripe.CardId -> Address -> App ()
+updateCardAddress stripeCustomerId stripeCardId billingAddress =
+    void . stripeRequest $
+        updateCustomerCard (fromStripeCustomerId stripeCustomerId) stripeCardId
+            -&- Stripe.Name (addressFirstName billingAddress <> " " <> addressLastName billingAddress)
+            -&- Stripe.AddressLine1 (addressAddressOne billingAddress)
+            -&- Stripe.AddressLine2 (addressAddressTwo billingAddress)
+            -&- Stripe.AddressCity (addressCity billingAddress)
+            -&- Stripe.AddressState (regionName $ addressState billingAddress)
+
+
+-- | Charge a Stripe Customer for an Order & delete their Cart on success.
+chargeCustomer :: StripeCustomerId -> CartId -> OrderId -> Cents -> App ()
+chargeCustomer stripeCustomerId cartId orderId orderTotal = do
+    chargeResult <- stripeRequest
+        (createCharge (toStripeAmount orderTotal) Stripe.USD
+            -&- fromStripeCustomerId stripeCustomerId)
+    case chargeResult of
+        Left err ->
+            runDB (update orderId [OrderStatus =. PaymentFailed])
+                >> V.singleError (errorMsg err)
+        Right stripeCharge ->
+            let
+                stripeChargeId = StripeChargeId $ Stripe.chargeId stripeCharge
+            in
+                runDB $ update orderId [OrderStripeChargeId =. Just stripeChargeId]
+                    >> deleteCart cartId
+
+
+-- | Return the first Stripe Card Id for a Stripe Customer. This is useful
+-- for getting new CardId after creating a Stripe Customer from a Stripe
+-- Token.
+getFirstStripeCard :: StripeCustomerId -> App Stripe.CardId
+getFirstStripeCard stripeCustomerId =
+    let
+        noCardErrorText =
+            "An error occured while charging your card. Please try again or "
+                <> "contact us for help."
+    in
+        stripeRequest (getCustomerCards (fromStripeCustomerId stripeCustomerId)
+                -&- Stripe.Limit 1)
+            >>= either (V.singleError . errorMsg)
+                (return . fmap Stripe.cardId . listToMaybe . Stripe.list)
+            >>= maybe (V.singleError noCardErrorText) return
+
 
 -- | Create an Order and it's Line Items & Products, returning the ID
 -- & Total.
