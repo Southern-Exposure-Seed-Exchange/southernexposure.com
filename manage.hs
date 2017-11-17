@@ -1,7 +1,7 @@
 #!/usr/bin/env stack
 {- stack
     script
-    --resolver lts-9.12
+    --resolver lts-9.13
     --package ansi-terminal
     --package directory
     --package fsnotify
