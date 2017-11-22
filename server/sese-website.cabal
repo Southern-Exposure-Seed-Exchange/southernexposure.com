@@ -23,6 +23,7 @@ library
   other-modules:       Auth
                      , Emails
                      , Emails.AccountCreated
+                     , Emails.OrderPlaced
                      , Emails.PasswordReset
                      , Models.DB
                      , Models.Utils
@@ -42,6 +43,7 @@ library
                      , async
                      , bcrypt
                      , blaze-html
+                     , blaze-markup
                      , containers
                      , esqueleto
                      , exceptions
@@ -50,6 +52,7 @@ library
                      , iso3166-country-codes
                      , markdown
                      , mtl
+                     , pandoc
                      , persistent
                      , persistent-template
                      , resource-pool

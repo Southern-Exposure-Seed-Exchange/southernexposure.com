@@ -46,6 +46,8 @@ import Validation (Validation(..))
 
 import qualified Data.Text as T
 import qualified Database.Esqueleto as E
+import qualified Emails
+import qualified Emails.OrderPlaced as OrderPlaced
 import qualified Validation as V
 import qualified Web.Stripe.Types as Stripe
 
@@ -311,6 +313,8 @@ customerPlaceOrderRoute token = validate >=> \parameters -> do
             (cpopComment parameters) currentTime
     setCustomerCard customer stripeCustomerId billingAddress stripeToken
     chargeCustomer stripeCustomerId cartId orderId orderTotal
+    runDB (OrderPlaced.fetchData orderId)
+            >>= maybe (return ()) (void . Emails.send . Emails.OrderPlaced)
     return $ PlaceOrderData orderId
     where getOrCreateStripeCustomer (Entity customerId customer) stripeToken =
             case customerStripeId customer of
@@ -442,7 +446,7 @@ anonymousPlaceOrderRoute = validate >=> \parameters -> do
             , customerStripeId = Just stripeCustomerId
             , customerIsAdmin = False
             }
-    (billingAddress, cartId, orderTotal, orderData) <- withPlaceOrderErrors
+    (orderId, billingAddress, cartId, orderTotal, orderData) <- withPlaceOrderErrors
         (NewAddress $ apopShippingAddress parameters) . runDB $ do
             customerId <- insert customer
             mergeCarts (apopCartToken parameters) customerId
@@ -458,7 +462,8 @@ anonymousPlaceOrderRoute = validate >=> \parameters -> do
                 (Entity shippingId shippingAddress) billingId
                 (apopComment parameters) currentTime
             return
-                ( billingAddress
+                ( orderId
+                , billingAddress
                 , cartId
                 , orderTotal
                 , AnonymousPlaceOrderData orderId . toAuthorizationData
@@ -467,6 +472,8 @@ anonymousPlaceOrderRoute = validate >=> \parameters -> do
     stripeCardId <- getFirstStripeCard stripeCustomerId
     updateCardAddress stripeCustomerId stripeCardId billingAddress
     chargeCustomer stripeCustomerId cartId (apodOrderId orderData) orderTotal
+    runDB (OrderPlaced.fetchData orderId)
+        >>= maybe (return ()) (void . Emails.send . Emails.OrderPlaced)
     return orderData
 
 

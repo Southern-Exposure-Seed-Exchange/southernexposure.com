@@ -9,6 +9,7 @@ import Control.Applicative ((<|>))
 import Control.Monad (fail)
 import Data.Aeson (ToJSON(..), FromJSON(..), (.=), (.:), object, withObject, withText)
 import Data.ISO3166_CountryCodes (CountryCode)
+import Data.Ratio ((%), numerator, denominator)
 import Data.StateCodes (StateCode)
 import Database.Persist (PersistField(..))
 import Database.Persist.Sql (PersistFieldSql(..), SqlType(SqlString))
@@ -30,6 +31,26 @@ import qualified Web.Stripe.Types as Stripe
 newtype Cents =
     Cents { fromCents :: Natural }
     deriving (Show, Read, Eq, Ord, Num, ToJSON, FromJSON, PersistField, PersistFieldSql)
+
+formatCents :: Cents -> T.Text
+formatCents (Cents c) =
+    T.pack . ("$" ++) . formatRational 2 $ fromIntegral c % 100
+
+formatRational :: Int -> Rational -> String
+formatRational len rat =
+    (if num < 0 then "-" else "") ++ shows d ("." ++ decimalPart)
+    where (d, next) = abs num `quotRem` den
+          num = numerator rat
+          den = denominator rat
+          dec = take len $ go next
+          decimalPart =
+              if length dec < len then
+                dec ++ replicate (len - length dec) '0'
+              else
+                dec
+          go 0 = ""
+          go x = let (d_, next_) = (10 * x) `quotRem` den
+              in shows d_ (go next_)
 
 -- | Convert `Cents` into a Stripe `Amount`.
 toStripeAmount :: Cents -> Stripe.Amount

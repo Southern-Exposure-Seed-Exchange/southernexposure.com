@@ -12,6 +12,7 @@ import Data.Pool (withResource)
 import Network.HaskellNet.SMTP.SSL (authenticate, sendMimeMail, AuthType(PLAIN))
 import Text.Blaze.Html.Renderer.Text (renderHtml)
 import Text.Markdown (markdown, def)
+import Text.Pandoc (readHtml, writeMarkdown)
 
 import Config
 import Models hiding (PasswordReset)
@@ -20,6 +21,7 @@ import Server
 import qualified Data.Text as T
 import qualified Data.Text.Lazy as L
 import qualified Emails.AccountCreated as AccountCreated
+import qualified Emails.OrderPlaced as OrderPlaced
 import qualified Emails.PasswordReset as PasswordReset
 import qualified Models.DB as DB
 
@@ -28,6 +30,7 @@ data EmailType
     = AccountCreated Customer
     | PasswordReset Customer DB.PasswordReset
     | PasswordResetSuccess Customer
+    | OrderPlaced OrderPlaced.Parameters
 
 
 -- TODO: Make Configurable
@@ -47,13 +50,15 @@ send email = ask >>= \cfg ->
             if env /= Production then
                 developmentEmailRecipient
             else
-                case email of
+                T.unpack . customerEmail $ case email of
                     AccountCreated customer ->
-                        T.unpack $ customerEmail customer
+                        customer
                     PasswordReset customer _ ->
-                        T.unpack $ customerEmail customer
+                        customer
                     PasswordResetSuccess customer ->
-                        T.unpack $ customerEmail customer
+                        customer
+                    OrderPlaced parameters ->
+                        OrderPlaced.customer parameters
 
         domainName =
             case getEnv cfg of
@@ -72,12 +77,24 @@ send email = ask >>= \cfg ->
                         (L.fromStrict $ passwordResetCode passwordReset)
                 PasswordResetSuccess _ ->
                     PasswordReset.getSuccess
+                OrderPlaced parameters ->
+                    OrderPlaced.get parameters
+
+        (plainMessage, htmlMessage) =
+            case email of
+                OrderPlaced {} ->
+                    (htmlToMarkdown message, message)
+                _ ->
+                    (message, renderHtml $ markdown def message)
+
+        htmlToMarkdown =
+            either (const "") (L.pack . writeMarkdown def) . readHtml def . L.unpack
     in
         liftIO $ async $ withResource (getSmtpPool cfg) $ \conn -> do
             authSucceeded <- authenticate PLAIN (getSmtpUser cfg) (getSmtpPass cfg) conn
             if authSucceeded then
-                sendMimeMail (recipient $ getEnv cfg) sender subject message
-                    (renderHtml $ markdown def message) [] conn
+                sendMimeMail (recipient $ getEnv cfg) sender subject plainMessage
+                    htmlMessage [] conn
             else
                 -- TODO: Properly Log SMTP Auth Error
                 print ("SMTP AUTHENTICATION FAILED" :: T.Text)
