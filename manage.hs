@@ -167,7 +167,7 @@ initializeClient = do
         when hasNvm $ do
             printInfo "Found NVM, Installing Node"
             (_, Just nvmOut, Just nvmErr, nvmHandle) <- createProcess
-                (shell "sh -c 'source ~/.nvm/nvm.sh; nvm install'")
+                (shell "sh -c '. ~/.nvm/nvm.sh; nvm install'")
                 { cwd = Just clientDirectory
                 , std_out = CreatePipe
                 , std_err = CreatePipe
