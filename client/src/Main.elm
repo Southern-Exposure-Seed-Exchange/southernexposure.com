@@ -297,7 +297,7 @@ fetchDataForRoute ({ route, pageData } as model) =
                                 getDetails =
                                     case model.maybeSessionToken of
                                         Nothing ->
-                                            identity
+                                            Tuple.mapSecond (always <| Routing.newUrl Cart)
 
                                         Just token ->
                                             batchCommand
@@ -851,25 +851,34 @@ update msg ({ pageData } as model) =
             let
                 updatedPageData =
                     { pageData | checkoutDetails = response }
+
+                cmd =
+                    case response of
+                        RemoteData.Success { items } ->
+                            if List.isEmpty items then
+                                Routing.newUrl Cart
+                            else
+                                Cmd.none
+
+                        _ ->
+                            Cmd.none
             in
-                case ( pageData.checkoutDetails, response ) of
-                    ( RemoteData.Success _, RemoteData.Success _ ) ->
-                        { model | pageData = updatedPageData }
-                            |> noCommand
+                flip (,) cmd <|
+                    case ( pageData.checkoutDetails, response ) of
+                        ( RemoteData.Success _, RemoteData.Success _ ) ->
+                            { model | pageData = updatedPageData }
 
-                    ( _, RemoteData.Success details ) ->
-                        { model
-                            | pageData = updatedPageData
-                            , checkoutForm =
-                                Checkout.initialWithDefaults
-                                    details.shippingAddresses
-                                    details.billingAddresses
-                        }
-                            |> noCommand
+                        ( _, RemoteData.Success details ) ->
+                            { model
+                                | pageData = updatedPageData
+                                , checkoutForm =
+                                    Checkout.initialWithDefaults
+                                        details.shippingAddresses
+                                        details.billingAddresses
+                            }
 
-                    _ ->
-                        { model | pageData = updatedPageData }
-                            |> noCommand
+                        _ ->
+                            { model | pageData = updatedPageData }
 
         GetCheckoutSuccessDetails response ->
             let
