@@ -3,11 +3,13 @@ module Models.Fields
         ( Cents(..)
         , centsMap
         , centsMap2
+        , centsDecoder
         , Milligrams(..)
         , milligramsToString
         )
 
 import Decimal
+import Json.Decode as Decode exposing (Decoder)
 
 
 type Cents
@@ -22,6 +24,11 @@ centsMap f (Cents c) =
 centsMap2 : (Int -> Int -> Int) -> Cents -> Cents -> Cents
 centsMap2 f (Cents a) (Cents b) =
     f a b |> Cents
+
+
+centsDecoder : Decoder Cents
+centsDecoder =
+    Decode.map Cents Decode.int
 
 
 type Milligrams

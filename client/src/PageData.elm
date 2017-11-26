@@ -43,7 +43,7 @@ import Address
 import Api
 import Category exposing (Category, CategoryId(..))
 import Locations exposing (Region, regionDecoder, regionEncoder, AddressLocations)
-import Models.Fields exposing (Cents(..), centsMap, centsMap2, Milligrams(..))
+import Models.Fields exposing (Cents(..), centsMap, centsMap2, centsDecoder, Milligrams(..))
 import StaticPage exposing (StaticPage)
 import Product exposing (Product, ProductVariant, ProductVariantId(..))
 import Products.Pagination as Pagination
@@ -221,7 +221,7 @@ orderSummaryDecoder =
         (Decode.field "id" Decode.int)
         (Decode.field "shippingAddress" Address.decoder)
         (Decode.field "status" orderStatusDecoder)
-        (Decode.field "total" <| Decode.map Cents Decode.int)
+        (Decode.field "total" centsDecoder)
         (Decode.field "created" dateTimeDecoder)
 
 
@@ -459,7 +459,7 @@ lineItemDecoder =
     Decode.map3 OrderLineItem
         (Decode.field "type" lineItemTypeDecoder)
         (Decode.field "description" Decode.string)
-        (Decode.field "amount" <| Decode.map Cents Decode.int)
+        (Decode.field "amount" centsDecoder)
 
 
 type LineItemType
@@ -502,8 +502,8 @@ orderProductDecoder =
         (Decode.field "name" Decode.string)
         (Decode.field "weight" <| Decode.map Milligrams Decode.int)
         (Decode.field "quantity" Decode.int)
-        (Decode.field "price" <| Decode.map Cents Decode.int)
-        (Decode.field "tax" <| Decode.map Cents Decode.int)
+        (Decode.field "price" centsDecoder)
+        (Decode.field "tax" centsDecoder)
 
 
 
@@ -588,7 +588,7 @@ cartItemDecoder =
         (Decode.field "variant" Product.variantDecoder)
         (Decode.field "seedAttribute" <| Decode.nullable SeedAttribute.decoder)
         (Decode.field "quantity" Decode.int)
-        (Decode.field "tax" <| Decode.map Cents Decode.int)
+        (Decode.field "tax" centsDecoder)
 
 
 type alias CartCharge =
@@ -601,7 +601,7 @@ cartChargeDecoder : Decoder CartCharge
 cartChargeDecoder =
     Decode.map2 CartCharge
         (Decode.field "description" Decode.string)
-        (Decode.field "amount" <| Decode.map Cents Decode.int)
+        (Decode.field "amount" centsDecoder)
 
 
 type alias CartCharges =
