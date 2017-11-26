@@ -53,8 +53,8 @@ type Msg
     | SubmitChangeResponse (WebData (Result Api.FormErrors AuthStatus))
 
 
-update : Msg -> Form -> ( Form, Maybe AuthStatus, Cmd Msg )
-update msg model =
+update : Msg -> Form -> Maybe String -> ( Form, Maybe AuthStatus, Cmd Msg )
+update msg model maybeSessionToken =
     case msg of
         Email email ->
             { model | email = email }
@@ -90,7 +90,7 @@ update msg model =
         SubmitChange code ->
             ( { model | changeErrors = Api.initialErrors }
             , Nothing
-            , changePassword code model.password
+            , changePassword maybeSessionToken code model.password
             )
 
         SubmitChangeResponse response ->
@@ -121,13 +121,17 @@ requestResetEmail email =
         |> Api.sendRequest SubmitRequestResponse
 
 
-changePassword : String -> String -> Cmd Msg
-changePassword code password =
+changePassword : Maybe String -> String -> String -> Cmd Msg
+changePassword maybeSessionToken code password =
     Api.post Api.CustomerPasswordReset
         |> Api.withJsonBody
             (Encode.object
                 [ ( "resetCode", Encode.string code )
                 , ( "password", Encode.string password )
+                , ( "sessionToken"
+                  , Maybe.map Encode.string maybeSessionToken
+                        |> Maybe.withDefault Encode.null
+                  )
                 ]
             )
         |> Api.withJsonResponse User.decoder

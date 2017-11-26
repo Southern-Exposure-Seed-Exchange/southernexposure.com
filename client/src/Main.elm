@@ -651,7 +651,7 @@ update msg ({ pageData } as model) =
                         _ ->
                             Cmd.none
             in
-                ResetPassword.update subMsg model.resetPasswordForm
+                ResetPassword.update subMsg model.resetPasswordForm model.maybeSessionToken
                     |> (\( form, maybeAuthStatus, cmd ) ->
                             ( { model
                                 | resetPasswordForm = form

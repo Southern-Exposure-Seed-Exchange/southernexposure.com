@@ -377,6 +377,7 @@ data ResetPasswordParameters =
     ResetPasswordParameters
         { rppPassword :: T.Text
         , rppResetCode :: T.Text
+        , rppCartToken :: Maybe T.Text
         }
 
 instance FromJSON ResetPasswordParameters where
@@ -384,6 +385,7 @@ instance FromJSON ResetPasswordParameters where
         ResetPasswordParameters
             <$> v .: "password"
             <*> v .: "resetCode"
+            <*> v .:? "sessionToken"
 
 instance Validation ResetPasswordParameters where
     validators parameters =
@@ -422,7 +424,9 @@ resetPasswordRoute = validate >=> \parameters ->
                         , CustomerEncryptedPassword =. newHash
                         ]
                         >> delete resetId
+                        >> maybeMergeCarts customerId (rppCartToken parameters)
                     maybeCustomer <- runDB $ get customerId
+                    -- TODO: Something more relevant than invalidCodeError
                     flip (maybe invalidCodeError) maybeCustomer $ \customer -> do
                         void . Emails.send $ Emails.PasswordResetSuccess customer
                         return . toAuthorizationData
