@@ -80,6 +80,13 @@ init flags location =
                         }
                    )
                 |> fetchDataForRoute
+                |> Tuple.mapSecond
+                    (\cmd ->
+                        if route == Checkout then
+                            Cmd.none
+                        else
+                            cmd
+                    )
 
         authorizationCmd =
             Maybe.map2 reAuthorize flags.authUserId flags.authToken
