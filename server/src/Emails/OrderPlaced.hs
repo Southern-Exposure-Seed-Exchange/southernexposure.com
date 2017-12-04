@@ -166,14 +166,16 @@ orderTable order productData lineItems =
                 productData
         tax =
             sum $ map (\(op, _, _) -> orderProductTax op) productData
-        (maybeShippingLine, surcharges) =
-            foldl (\(shippingLine, surchargeLines) lineItem ->
+        (maybeShippingLine, maybeStoreCredit, surcharges) =
+            foldl (\(shippingLine, creditLine, surchargeLines) lineItem ->
                 case orderLineItemType lineItem of
-                    ShippingLine  ->
-                        (Just lineItem, surchargeLines)
+                    ShippingLine ->
+                        (Just lineItem, creditLine, surchargeLines)
+                    StoreCreditLine ->
+                        (shippingLine, Just lineItem, surchargeLines)
                     SurchargeLine ->
-                        (shippingLine, lineItem : surchargeLines)
-            ) (Nothing, []) lineItems
+                        (shippingLine, creditLine, lineItem : surchargeLines)
+            ) (Nothing, Nothing, []) lineItems
         total =
             subTotal + tax + sum (map orderLineItemAmount lineItems)
     in
@@ -194,6 +196,9 @@ orderTable order productData lineItems =
                 when (tax > 0) $ H.tr $ do
                     H.th H.! A.colspan "4" H.! alignRight $ H.text $ orderTaxDescription order
                     H.th H.! alignLeft $ H.text $ formatCents tax
+                maybe (return ())
+                    (\l -> lineRow $ l { orderLineItemAmount = negate $ orderLineItemAmount l })
+                    maybeStoreCredit
                 H.tr $ do
                     H.th H.! A.colspan "4" H.! alignRight $ "Total"
                     H.th H.! alignLeft $ H.text $ formatCents total

@@ -22,7 +22,7 @@ import Data.Monoid ((<>))
 import Data.Time.Clock (getCurrentTime, UTCTime)
 import Data.Typeable (Typeable)
 import Database.Persist
-    ( (==.), (=.), Entity(..), insert, insertEntity, get, getBy
+    ( (==.), (=.), (-=.), Entity(..), insert, insert_, insertEntity, get, getBy
     , selectList, update, updateWhere, delete, deleteWhere
     )
 import Numeric.Natural (Natural)
@@ -98,6 +98,7 @@ data CheckoutDetailsData =
         , cddBillingAddresses :: [AddressData]
         , cddItems :: [CartItemData]
         , cddCharges :: CartCharges
+        , cddStoreCredit :: Cents
         }
 
 instance ToJSON CheckoutDetailsData where
@@ -107,6 +108,7 @@ instance ToJSON CheckoutDetailsData where
             , "billingAddresses" .= cddBillingAddresses details
             , "items" .= cddItems details
             , "charges" .= cddCharges details
+            , "storeCredit" .= cddStoreCredit details
             ]
 
 type CustomerDetailsRoute =
@@ -116,7 +118,7 @@ type CustomerDetailsRoute =
 
 customerDetailsRoute :: AuthToken -> CustomerDetailsParameters -> App CheckoutDetailsData
 customerDetailsRoute token parameters = do
-    (Entity customerId _) <- validateToken token
+    (Entity customerId customer) <- validateToken token
     runDB $ do
         customerAddresses <- selectList
             [AddressCustomerId ==. customerId, AddressIsActive ==. True] []
@@ -134,6 +136,7 @@ customerDetailsRoute token parameters = do
             , cddBillingAddresses = map toAddressData billingAddresses
             , cddItems = items
             , cddCharges = charges
+            , cddStoreCredit = customerStoreCredit customer
             }
     where getShippingArea ps addrs =
             let
@@ -189,6 +192,7 @@ anonymousDetailsRoute parameters =
                 , cddBillingAddresses = []
                 , cddItems = items
                 , cddCharges = charges
+                , cddStoreCredit = 0
                 }
 
 
@@ -244,6 +248,7 @@ data CustomerPlaceOrderParameters =
     CustomerPlaceOrderParameters
         { cpopShippingAddress :: CustomerAddress
         , cpopBillingAddress :: CustomerAddress
+        , cpopStoreCredit :: Maybe Cents
         , cpopComment :: T.Text
         , cpopStripeToken :: T.Text
         }
@@ -253,6 +258,7 @@ instance FromJSON CustomerPlaceOrderParameters where
         CustomerPlaceOrderParameters
             <$> v .: "shippingAddress"
             <*> v .: "billingAddress"
+            <*> v .:? "storeCredit"
             <*> v .: "comment"
             <*> v .: "stripeToken"
 
@@ -308,13 +314,17 @@ customerPlaceOrderRoute token = validate >=> \parameters -> do
         stripeToken = cpopStripeToken parameters
     stripeCustomerId <- getOrCreateStripeCustomer ce stripeToken
     currentTime <- liftIO getCurrentTime
-    (billingAddress, orderId, orderTotal, cartId) <-
-        createAddressesAndOrder customerId shippingParameter (cpopBillingAddress parameters)
-            (cpopComment parameters) currentTime
+    (billingAddress, orderId, orderTotal, cartId, appliedCredit) <-
+        createAddressesAndOrder ce shippingParameter (cpopBillingAddress parameters)
+            (cpopStoreCredit parameters) (cpopComment parameters) currentTime
     setCustomerCard customer stripeCustomerId billingAddress stripeToken
-    chargeCustomer stripeCustomerId cartId orderId orderTotal
+    when (orderTotal > 0)
+        $ chargeCustomer stripeCustomerId orderId orderTotal
+    runDB $ deleteCart cartId
+    when (appliedCredit > 0) $ runDB
+        $ update customerId [CustomerStoreCredit -=. appliedCredit]
     runDB (OrderPlaced.fetchData orderId)
-            >>= maybe (return ()) (void . Emails.send . Emails.OrderPlaced)
+        >>= maybe (return ()) (void . Emails.send . Emails.OrderPlaced)
     return $ PlaceOrderData orderId
     where getOrCreateStripeCustomer (Entity customerId customer) stripeToken =
             case customerStripeId customer of
@@ -324,15 +334,16 @@ customerPlaceOrderRoute token = validate >=> \parameters -> do
                     newId <- createStripeCustomer (customerEmail customer) stripeToken
                     runDB $ update customerId [CustomerStripeId =. Just newId]
                     return newId
-          createAddressesAndOrder customerId shippingParam billingParam comment currentTime =
+          createAddressesAndOrder customer@(Entity customerId _) shippingParam billingParam maybeStoreCredit comment currentTime =
             withPlaceOrderErrors shippingParam . runDB $ do
                 shippingAddress <- getOrInsertAddress Shipping customerId shippingParam
                 billingAddress <- getOrInsertAddress Billing customerId billingParam
                 (Entity cartId _) <- getBy (UniqueCustomerCart $ Just customerId) >>=
                     maybe (throwM CartNotFound) return
-                (orderId, orderTotal) <- createOrder customerId cartId shippingAddress
-                    (entityKey billingAddress) comment currentTime
-                return (entityVal billingAddress, orderId, orderTotal, cartId)
+                (orderId, orderTotal, appliedCredit) <- createOrder
+                    customer cartId shippingAddress (entityKey billingAddress)
+                    maybeStoreCredit comment currentTime
+                return (entityVal billingAddress, orderId, orderTotal, cartId, appliedCredit)
           getOrInsertAddress :: AddressType -> CustomerId -> CustomerAddress -> AppSQL (Entity Address)
           getOrInsertAddress addrType customerId = \case
             ExistingAddress addrId makeDefault -> do
@@ -441,6 +452,7 @@ anonymousPlaceOrderRoute = validate >=> \parameters -> do
         $ apopStripeToken parameters
     let customer = Customer
             { customerEmail = apopEmail parameters
+            , customerStoreCredit = Cents 0
             , customerEncryptedPassword = encryptedPass
             , customerAuthToken = authToken
             , customerStripeId = Just stripeCustomerId
@@ -458,8 +470,8 @@ anonymousPlaceOrderRoute = validate >=> \parameters -> do
                     $ apopBillingAddress parameters
             shippingId <- insert shippingAddress
             billingId <- insert billingAddress
-            (orderId, orderTotal) <- createOrder customerId cartId
-                (Entity shippingId shippingAddress) billingId
+            (orderId, orderTotal, _) <- createOrder (Entity customerId customer)
+                cartId (Entity shippingId shippingAddress) billingId Nothing
                 (apopComment parameters) currentTime
             return
                 ( orderId
@@ -471,7 +483,8 @@ anonymousPlaceOrderRoute = validate >=> \parameters -> do
                 )
     stripeCardId <- getFirstStripeCard stripeCustomerId
     updateCardAddress stripeCustomerId stripeCardId billingAddress
-    chargeCustomer stripeCustomerId cartId (apodOrderId orderData) orderTotal
+    chargeCustomer stripeCustomerId (apodOrderId orderData) orderTotal
+    runDB $ deleteCart cartId
     runDB (OrderPlaced.fetchData orderId)
         >>= maybe (return ()) (void . Emails.send . Emails.OrderPlaced)
     return orderData
@@ -497,9 +510,9 @@ updateCardAddress stripeCustomerId stripeCardId billingAddress =
             -&- Stripe.AddressState (regionName $ addressState billingAddress)
 
 
--- | Charge a Stripe Customer for an Order & delete their Cart on success.
-chargeCustomer :: StripeCustomerId -> CartId -> OrderId -> Cents -> App ()
-chargeCustomer stripeCustomerId cartId orderId orderTotal = do
+-- | Charge a Stripe Customer for an Order or throw a validation error.
+chargeCustomer :: StripeCustomerId -> OrderId -> Cents -> App ()
+chargeCustomer stripeCustomerId orderId orderTotal = do
     chargeResult <- stripeRequest
         (createCharge (toStripeAmount orderTotal) Stripe.USD
             -&- fromStripeCustomerId stripeCustomerId)
@@ -512,7 +525,6 @@ chargeCustomer stripeCustomerId cartId orderId orderTotal = do
                 stripeChargeId = StripeChargeId $ Stripe.chargeId stripeCharge
             in
                 runDB $ update orderId [OrderStripeChargeId =. Just stripeChargeId]
-                    >> deleteCart cartId
 
 
 -- | Return the first Stripe Card Id for a Stripe Customer. This is useful
@@ -532,10 +544,10 @@ getFirstStripeCard stripeCustomerId =
             >>= maybe (V.singleError noCardErrorText) return
 
 
--- | Create an Order and it's Line Items & Products, returning the ID
--- & Total.
-createOrder :: CustomerId -> CartId -> Entity Address -> AddressId -> T.Text -> UTCTime -> AppSQL (OrderId, Cents)
-createOrder customerId cartId shippingEntity billingId comment currentTime = do
+-- | Create an Order and it's Line Items & Products, returning the ID, Total,
+-- & Applied Store Credit.
+createOrder :: Entity Customer -> CartId -> Entity Address -> AddressId -> Maybe Cents -> T.Text -> UTCTime -> AppSQL (OrderId, Cents, Cents)
+createOrder (Entity customerId customer) cartId shippingEntity billingId maybeStoreCredit comment currentTime = do
     let (Entity shippingId shippingAddress) = shippingEntity
     maybeTaxRate <- getTaxRate (Just $ addressCountry shippingAddress)
         (Just $ addressState shippingAddress)
@@ -552,7 +564,23 @@ createOrder customerId cartId shippingEntity billingId comment currentTime = do
         }
     lineTotal <- createLineItems maybeTaxRate shippingAddress items orderId
     productTotals <- createProducts maybeTaxRate items orderId
-    return (orderId, lineTotal + sum productTotals)
+    let totalCharges = lineTotal + sum productTotals
+    case maybeStoreCredit of
+        Nothing ->
+            return (orderId, totalCharges, 0)
+        Just c ->
+            if c > 0 && totalCharges > 0 then do
+                let storeCredit = min (customerStoreCredit customer) $ min totalCharges c
+                insert_ OrderLineItem
+                    { orderLineItemOrderId = orderId
+                    , orderLineItemType = StoreCreditLine
+                    , orderLineItemDescription = "Store Credit"
+                    , orderLineItemAmount = storeCredit
+                    }
+                return (orderId, totalCharges - storeCredit, storeCredit)
+            else
+                return (orderId, totalCharges, 0)
+
 
 -- | Delete a Cart & all it's Items.
 deleteCart :: CartId -> AppSQL ()

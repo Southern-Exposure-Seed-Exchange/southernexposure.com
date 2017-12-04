@@ -259,6 +259,7 @@ derivePersistField "OrderStatus"
 data LineItemType
     = ShippingLine
     | SurchargeLine
+    | StoreCreditLine
     deriving (Show, Read, Generic)
 
 instance ToJSON LineItemType

@@ -70,6 +70,7 @@ Page json
 
 Customer
     email T.Text
+    storeCredit Cents
     encryptedPassword T.Text
     authToken T.Text
     stripeId StripeCustomerId Maybe

@@ -35,7 +35,7 @@ import Servant
 
 import Auth
 import Models
-import Models.Fields (ArmedForcesRegionCode, armedForcesRegion, Cents(..))
+import Models.Fields (ArmedForcesRegionCode, armedForcesRegion, Cents(..), LineItemType(..))
 import Routes.CommonData
     ( AuthorizationData, toAuthorizationData, AddressData(..), toAddressData
     , fromAddressData
@@ -208,6 +208,7 @@ registrationRoute = validate >=> \parameters -> do
     authToken <- generateUniqueToken UniqueToken
     let customer = Customer
             { customerEmail = rpEmail parameters
+            , customerStoreCredit = Cents 0
             , customerEncryptedPassword = encryptedPass
             , customerAuthToken = authToken
             , customerStripeId = Nothing
@@ -438,15 +439,17 @@ resetPasswordRoute = validate >=> \parameters ->
 -- MY ACCOUNT
 
 
-newtype MyAccountDetails =
+data MyAccountDetails =
     MyAccountDetails
         { madOrderDetails :: [MyAccountOrderDetails]
+        , madStoreCredit :: Cents
         }
 
 instance ToJSON MyAccountDetails where
     toJSON details =
         object
             [ "orderDetails" .= madOrderDetails details
+            , "storeCredit" .= madStoreCredit details
             ]
 
 data MyAccountOrderDetails =
@@ -475,15 +478,23 @@ type MyAccountRoute =
 
 myAccountRoute :: AuthToken -> Maybe Int64 -> App MyAccountDetails
 myAccountRoute authToken maybeLimit = do
-    (Entity customerId _) <- validateToken authToken
-    MyAccountDetails <$> getOrderDetails customerId
+    (Entity customerId customer) <- validateToken authToken
+    orderDetails <- getOrderDetails customerId
+    return $ MyAccountDetails orderDetails (customerStoreCredit customer)
     where getOrderDetails customerId = runDB $ do
             let limit = fromMaybe 4 maybeLimit
             orderData <- E.select $ E.from $
-                \(o `E.InnerJoin` op `E.InnerJoin` ol `E.InnerJoin` sa) -> do
+                \(o `E.InnerJoin` op `E.InnerJoin` sa) -> do
                     E.on $ sa E.^. AddressId E.==. o E.^. OrderShippingAddressId
-                    E.on $ ol E.^. OrderLineItemOrderId E.==. o E.^. OrderId
                     E.on $ op E.^. OrderProductOrderId E.==. o E.^. OrderId
+                    let lineTotal = E.sub_select $ E.from $ \ol_ -> do
+                            E.where_ $ ol_ E.^. OrderLineItemOrderId E.==. o E.^. OrderId
+                                E.&&. ol_ E.^. OrderLineItemType E.!=. E.val StoreCreditLine
+                            return $ E.sum_ $ ol_ E.^. OrderLineItemAmount
+                        storeCredit = E.sub_select $ E.from $ \sc_ -> do
+                            E.where_ $ sc_ E.^. OrderLineItemOrderId E.==. o E.^. OrderId
+                                E.&&. sc_ E.^. OrderLineItemType E.==. E.val StoreCreditLine
+                            return $ E.sum_ $ sc_ E.^. OrderLineItemAmount
                     E.groupBy (o E.^. OrderId, sa E.^. AddressId)
                     E.where_ $ o E.^. OrderCustomerId E.==. E.val customerId
                     E.orderBy [E.desc $ o E.^. OrderCreatedAt]
@@ -492,11 +503,11 @@ myAccountRoute authToken maybeLimit = do
                         ( o E.^. OrderId
                         , sa
                         , o E.^. OrderStatus
-                        , calculateTotal op ol
+                        , calculateTotal op lineTotal storeCredit
                         , o E.^. OrderCreatedAt
                         )
             return $ map makeDetails orderData
-          calculateTotal orderProduct orderLineItem =
+          calculateTotal orderProduct maybeLineTotal maybeStoreCredit =
             let
                 productTax =
                     orderProduct E.^. OrderProductTax
@@ -505,18 +516,15 @@ myAccountRoute authToken maybeLimit = do
                 productPrice =
                     orderProduct E.^. OrderProductPrice
                 subTotal =
-                    E.sum_ $ productTax E.+.
-                        (E.castNum productQuantity E.*.  productPrice)
-                surchargeTotal =
-                    E.sum_ $ orderLineItem E.^. OrderLineItemAmount
+                    E.sum_ $ productTax E.+. (E.castNum productQuantity E.*. productPrice)
             in
-                subTotal E.+. surchargeTotal
+                subTotal E.+. maybeLineTotal E.-. maybeStoreCredit
           makeDetails (orderId, shippingAddress, status, total, createdAt) =
               MyAccountOrderDetails
                 { maodId = E.unValue orderId
                 , maodShippingAddress = toAddressData shippingAddress
                 , maodOrderStatus = E.unValue status
-                , maodOrderTotal = Cents . maybe 0 round $ (E.unValue total :: Maybe Rational)
+                , maodOrderTotal = Cents $ maybe 0 round (E.unValue total :: Maybe Rational)
                 , maodCreated = E.unValue createdAt
                 }
 

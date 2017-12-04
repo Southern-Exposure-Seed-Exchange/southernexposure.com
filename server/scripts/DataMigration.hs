@@ -11,7 +11,7 @@ import Data.ByteString.Lazy (ByteString)
 import Data.Char (isAlpha)
 import Data.Int (Int32)
 import Data.List (nubBy)
-import Data.Maybe (maybeToList)
+import Data.Maybe (maybeToList, fromMaybe)
 import Data.Monoid ((<>))
 import Data.Pool (destroyAllResources)
 import Data.Scientific (Scientific)
@@ -226,20 +226,36 @@ makePages mysql = do
 
 makeCustomers :: MySQLConn -> IO [(Int, Customer)]
 makeCustomers mysql = do
+    storeCreditMap <- getStoreCreditMap mysql
     customers <- mysqlQuery mysql
         $ "SELECT c.customers_id, c.customers_email_address "
         <> "FROM customers AS c "
         <> "WHERE c.COWOA_account=0"
     forM customers $ \[ MySQLInt32 customerId, MySQLText email ] -> do
+        let storeCredit = fromMaybe 0 $ IntMap.lookup (fromIntegral customerId) storeCreditMap
         token <- generateToken
         return . (fromIntegral customerId,) $ Customer
             { customerEmail = email
+            , customerStoreCredit = storeCredit
             , customerEncryptedPassword = ""
             , customerAuthToken = token
             , customerStripeId = Nothing
             , customerIsAdmin = email == "gardens@southernexposure.com"
             }
     where generateToken = UUID.toText <$> UUID4.nextRandom
+
+-- | Generate a Map from MySQL Customer IDs to Store Credit Amounts.
+getStoreCreditMap :: MySQLConn -> IO (IntMap.IntMap Cents)
+getStoreCreditMap mysql = do
+    customersAndAmounts <- mysqlQuery mysql
+        $ "SELECT customer_id, amount "
+        <> "FROM coupon_gv_customer "
+        <> "WHERE amount > 0"
+    return $ foldl
+        (\acc [MySQLInt32 customerId, MySQLDecimal amount] ->
+            IntMap.insert (fromIntegral customerId) (Cents . round $ 100 * amount) acc
+        )
+        IntMap.empty customersAndAmounts
 
 
 -- | Build the Shipping Addresses for Customers.
