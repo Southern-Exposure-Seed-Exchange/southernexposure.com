@@ -82,7 +82,7 @@ init flags location =
                 |> fetchDataForRoute
                 |> Tuple.mapSecond
                     (\cmd ->
-                        if route == Checkout then
+                        if route == Checkout && flags.authToken /= Nothing then
                             Cmd.none
                         else
                             cmd
