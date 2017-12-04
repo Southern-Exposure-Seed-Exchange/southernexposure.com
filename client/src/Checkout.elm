@@ -15,13 +15,14 @@ module Checkout
 
 import Dict
 import Html exposing (..)
-import Html.Attributes exposing (attribute, class, type_, colspan, src, for, id, rows, value, href, target, selected, checked, name, required, minlength)
+import Html.Attributes as A exposing (attribute, class, type_, colspan, src, for, id, rows, value, href, target, selected, checked, name, required, minlength, step)
 import Html.Events exposing (onSubmit, onInput, onCheck, onClick, targetValue, on)
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode exposing (Value)
 import RemoteData exposing (WebData)
 import Address exposing (AddressId(..))
 import Api
+import Decimal
 import Locations exposing (AddressLocations, Region)
 import Models.Fields exposing (Cents(..), centsMap2, centsMap, milligramsToString)
 import OrderDetails
@@ -50,6 +51,7 @@ type alias Form =
     , billingAddress : CheckoutAddress
     , makeBillingDefault : Bool
     , billingSameAsShipping : Bool
+    , storeCredit : Maybe Cents
     , comment : String
     , errors : Api.FormErrors
     }
@@ -65,6 +67,7 @@ initial =
     , billingAddress = NewAddress Address.initialForm
     , makeBillingDefault = False
     , billingSameAsShipping = False
+    , storeCredit = Nothing
     , comment = ""
     , errors = Api.initialErrors
     }
@@ -100,6 +103,7 @@ initialWithDefaults shippingAddresses billingAddresses =
         , billingAddress = billingAddress
         , makeBillingDefault = isNew billingAddress
         , billingSameAsShipping = False
+        , storeCredit = Nothing
         , comment = ""
         , errors = Api.initialErrors
         }
@@ -120,6 +124,7 @@ type Msg
     | ToggleBillingDefault Bool
     | BillingMsg Address.Msg
     | BillingSameAsShipping Bool
+    | StoreCredit String
     | Comment String
     | Submit
     | TokenReceived String
@@ -190,6 +195,29 @@ update msg model authStatus maybeSessionToken checkoutDetails =
             { model | billingSameAsShipping = isSame }
                 |> nothingAndNoCommand
 
+        StoreCredit credit ->
+            let
+                maximumStoreCredit =
+                    case checkoutDetails of
+                        RemoteData.Success details ->
+                            PageData.cartTotals details
+                                |> .total
+                                |> centsMap2 min details.storeCredit
+
+                        _ ->
+                            Cents 0
+
+                toCents =
+                    Decimal.truncate -2
+                        >> Decimal.mul (Decimal.fromInt 100)
+                        >> Decimal.toFloat
+                        >> round
+                        >> Cents
+                        >> centsMap2 min maximumStoreCredit
+            in
+                { model | storeCredit = Decimal.fromString credit |> Maybe.map toCents }
+                    |> nothingAndNoCommand
+
         Comment comment ->
             { model | comment = comment } |> nothingAndNoCommand
 
@@ -208,8 +236,16 @@ update msg model authStatus maybeSessionToken checkoutDetails =
                 case checkoutDetails of
                     RemoteData.Success details ->
                         let
-                            (Cents total) =
-                                PageData.cartTotals details |> .total
+                            totals =
+                                PageData.cartTotals details
+
+                            (Cents finalTotal) =
+                                case model.storeCredit of
+                                    Nothing ->
+                                        totals.total
+
+                                    Just credit ->
+                                        centsMap2 (\total c -> total - c) totals.total credit
 
                             customerEmail =
                                 case authStatus of
@@ -219,7 +255,7 @@ update msg model authStatus maybeSessionToken checkoutDetails =
                                     User.Anonymous ->
                                         model.email
                         in
-                            ( model, Nothing, Ports.collectStripeToken ( customerEmail, total ) )
+                            ( model, Nothing, Ports.collectStripeToken ( customerEmail, finalTotal ) )
 
                     _ ->
                         ( model, Nothing, Cmd.none )
@@ -470,6 +506,10 @@ placeOrder model authStatus maybeSessionToken stripeTokenId =
             Encode.object
                 [ ( "shippingAddress", encodedShippingAddress )
                 , ( "billingAddress", encodedBillingAddress )
+                , ( "storeCredit"
+                  , Maybe.map (\(Cents c) -> Encode.int c) model.storeCredit
+                        |> Maybe.withDefault Encode.null
+                  )
                 , ( "comment", Encode.string model.comment )
                 , ( "stripeToken", Encode.string stripeTokenId )
                 ]
@@ -609,6 +649,47 @@ view model authStatus locations checkoutDetails =
                     findBy (\a -> a.id == Just id) checkoutDetails.shippingAddresses
                         |> Maybe.map (flip Address.card locations)
                         |> Maybe.withDefault (text "")
+
+        storeCreditForm =
+            case checkoutDetails.storeCredit of
+                Cents 0 ->
+                    text ""
+
+                _ ->
+                    div [ class "col-6" ]
+                        [ h5 [] [ text "Store Credit" ]
+                        , p []
+                            [ text "You have "
+                            , b [] [ text <| Format.cents checkoutDetails.storeCredit ]
+                            , text " of store credit available."
+                            , div [ class "input-group" ]
+                                [ span [ class "input-group-addon" ] [ text "$" ]
+                                , input
+                                    [ class "form-control"
+                                    , type_ "number"
+                                    , step "0.01"
+                                    , A.min "0"
+                                    , A.max <| Format.centsNumber maximumStoreCredit
+                                    , value <|
+                                        Maybe.withDefault "" <|
+                                            Maybe.map Format.centsNumber model.storeCredit
+                                    , onInput StoreCredit
+                                    ]
+                                    []
+                                ]
+                            ]
+                        ]
+
+        maximumStoreCredit =
+            let
+                (Cents orderTotal) =
+                    PageData.cartTotals checkoutDetails |> .total
+
+                (Cents credit) =
+                    checkoutDetails.storeCredit
+            in
+                min credit orderTotal
+                    |> Cents
     in
         [ h1 [] [ text "Checkout" ]
         , hr [] []
@@ -633,9 +714,10 @@ view model authStatus locations checkoutDetails =
                     }
                 , billingCard
                 ]
+            , div [ class "row mb-3" ] [ storeCreditForm ]
             , div [ class "mb-3" ]
                 [ h4 [] [ text "Order Summary" ]
-                , summaryTable checkoutDetails
+                , summaryTable checkoutDetails model.storeCredit
                 ]
             , div [ class "form-group" ]
                 [ label [ class "h4", for "commentsTextarea" ]
@@ -881,8 +963,8 @@ sameAddressesCheckbox billingSameAsShipping =
         ]
 
 
-summaryTable : PageData.CheckoutDetails -> Html msg
-summaryTable ({ items, charges } as checkoutDetails) =
+summaryTable : PageData.CheckoutDetails -> Maybe Cents -> Html msg
+summaryTable ({ items, charges } as checkoutDetails) maybeAppliedCredit =
     let
         tableHeader =
             thead [ class "font-weight-bold" ]
@@ -916,7 +998,8 @@ summaryTable ({ items, charges } as checkoutDetails) =
                     :: maybeChargeRow charges.shippingMethod
                     :: List.map chargeRow charges.surcharges
                     ++ [ taxRow
-                       , footerRow "Total" totals.total "font-weight-bold"
+                       , storeCreditRow
+                       , footerRow "Total" finalTotal "font-weight-bold"
                        ]
 
         subTotalRow =
@@ -937,6 +1020,17 @@ summaryTable ({ items, charges } as checkoutDetails) =
         maybeChargeRow =
             Maybe.map chargeRow >> Maybe.withDefault (text "")
 
+        storeCreditRow =
+            case maybeAppliedCredit of
+                Nothing ->
+                    text ""
+
+                Just (Cents 0) ->
+                    text ""
+
+                Just credit ->
+                    footerRow "Store Credit" (centsMap negate credit) ""
+
         footerRow content amount rowClass =
             tr [ class rowClass ]
                 [ td [ colspan 4, class "text-right" ] [ text <| content ++ ":" ]
@@ -946,8 +1040,13 @@ summaryTable ({ items, charges } as checkoutDetails) =
         totals =
             PageData.cartTotals checkoutDetails
 
-        centsMap f (Cents c) =
-            Cents (f c)
+        finalTotal =
+            case maybeAppliedCredit of
+                Nothing ->
+                    totals.total
+
+                Just credit ->
+                    centsMap2 (\total c -> total - c) totals.total credit
     in
         table [ class "table table-striped table-sm checkout-products-table" ]
             [ tableHeader

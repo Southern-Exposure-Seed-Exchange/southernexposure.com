@@ -5,6 +5,7 @@ import Html.Attributes exposing (class)
 import Html.Events exposing (onClick)
 import Api
 import Messages exposing (Msg(NavigateTo, GetMyAccountDetails, ShowAllOrders))
+import Models.Fields exposing (Cents(..), centsMap)
 import Views.Format as Format
 import Views.Utils exposing (routeLinkAttributes)
 import Routing exposing (Route(EditLogin, EditAddress, OrderDetails))
@@ -21,7 +22,7 @@ getDetails token maybeLimit =
 
 
 view : AddressLocations -> MyAccount -> List (Html Msg)
-view locations { orderSummaries } =
+view locations { storeCredit, orderSummaries } =
     let
         accountLinks =
             [ li []
@@ -34,6 +35,21 @@ view locations { orderSummaries } =
                 ]
             ]
 
+        (Cents credit) =
+            storeCredit
+
+        storeCreditText =
+            if credit > 0 then
+                p []
+                    [ text "You have "
+                    , b [] [ text <| Format.cents storeCredit ]
+                    , text <|
+                        " of Store Credit available. You can use this during "
+                            ++ "Checkout."
+                    ]
+            else
+                text ""
+
         summaryTable =
             if List.isEmpty orderSummaries then
                 text ""
@@ -45,7 +61,13 @@ view locations { orderSummaries } =
     in
         [ h1 [] [ text "My Account" ]
         , hr [] []
-        , ul [] accountLinks
+        , if credit > 0 then
+            div [ class "row" ]
+                [ div [ class "col-sm-6" ] [ ul [] accountLinks ]
+                , div [ class "col-sm-6" ] [ storeCreditText ]
+                ]
+          else
+            ul [] accountLinks
         , summaryTable
         ]
 

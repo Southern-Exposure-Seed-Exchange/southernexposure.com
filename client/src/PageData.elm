@@ -197,13 +197,16 @@ searchConfig =
 
 
 type alias MyAccount =
-    { orderSummaries : List OrderSummary }
+    { orderSummaries : List OrderSummary
+    , storeCredit : Cents
+    }
 
 
 myAccountDecoder : Decoder MyAccount
 myAccountDecoder =
-    Decode.map MyAccount
+    Decode.map2 MyAccount
         (Decode.field "orderDetails" <| Decode.list orderSummaryDecoder)
+        (Decode.field "storeCredit" centsDecoder)
 
 
 type alias OrderSummary =
@@ -307,16 +310,18 @@ type alias CheckoutDetails =
     , billingAddresses : List Address.Model
     , items : List CartItem
     , charges : CartCharges
+    , storeCredit : Cents
     }
 
 
 checkoutDetailsDecoder : Decoder CheckoutDetails
 checkoutDetailsDecoder =
-    Decode.map4 CheckoutDetails
+    Decode.map5 CheckoutDetails
         (Decode.field "shippingAddresses" <| Decode.list Address.decoder)
         (Decode.field "billingAddresses" <| Decode.list Address.decoder)
         (Decode.field "items" <| Decode.list cartItemDecoder)
         (Decode.field "charges" cartChargesDecoder)
+        (Decode.field "storeCredit" centsDecoder)
 
 
 
@@ -356,6 +361,22 @@ orderTotals { lineItems, products } =
                 ( Cents 0, Cents 0 )
                 products
 
+        ( credits, debits ) =
+            List.foldl
+                (\charge ( cs, ds ) ->
+                    case charge.itemType of
+                        Shipping ->
+                            ( cs, centsMap2 (+) charge.amount ds )
+
+                        Surcharge ->
+                            ( cs, centsMap2 (+) charge.amount ds )
+
+                        StoreCredit ->
+                            ( centsMap2 (+) charge.amount cs, ds )
+                )
+                ( Cents 0, Cents 0 )
+                lineItems
+
         extraCharges =
             List.foldl (\charge -> centsMap2 (+) charge.amount)
                 (Cents 0)
@@ -363,8 +384,9 @@ orderTotals { lineItems, products } =
 
         total =
             subTotal
-                |> centsMap2 (+) extraCharges
+                |> centsMap2 (+) debits
                 |> centsMap2 (+) tax
+                |> centsMap2 (\c t -> t - c) credits
     in
         { subTotal = subTotal
         , tax = tax
@@ -465,6 +487,7 @@ lineItemDecoder =
 type LineItemType
     = Shipping
     | Surcharge
+    | StoreCredit
 
 
 lineItemTypeDecoder : Decoder LineItemType
@@ -477,6 +500,9 @@ lineItemTypeDecoder =
 
                 "SurchargeLine" ->
                     Decode.succeed Surcharge
+
+                "StoreCreditLine" ->
+                    Decode.succeed StoreCredit
 
                 _ ->
                     Decode.fail <| "Invalid LineItemType: " ++ str
