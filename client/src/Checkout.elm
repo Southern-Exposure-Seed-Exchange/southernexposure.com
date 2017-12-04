@@ -261,7 +261,7 @@ update msg model authStatus maybeSessionToken checkoutDetails =
                         ( model, Nothing, Cmd.none )
 
         TokenReceived stripeTokenId ->
-            ( model, Nothing, placeOrder model authStatus maybeSessionToken stripeTokenId )
+            ( model, Nothing, placeOrder model authStatus maybeSessionToken stripeTokenId checkoutDetails )
 
         SubmitResponse (RemoteData.Success (Ok ( orderId, newAuthStatus ))) ->
             let
@@ -499,8 +499,8 @@ getAnonymousDetails msg sessionToken maybeCountry maybeRegion =
             |> Api.sendRequest msg
 
 
-placeOrder : Form -> AuthStatus -> Maybe String -> String -> Cmd Msg
-placeOrder model authStatus maybeSessionToken stripeTokenId =
+placeOrder : Form -> AuthStatus -> Maybe String -> String -> WebData PageData.CheckoutDetails -> Cmd Msg
+placeOrder model authStatus maybeSessionToken stripeTokenId checkoutDetails =
     let
         customerData =
             Encode.object
@@ -530,7 +530,12 @@ placeOrder model authStatus maybeSessionToken stripeTokenId =
 
         encodedBillingAddress =
             if model.billingSameAsShipping then
-                encodedShippingAddress
+                RemoteData.toMaybe checkoutDetails
+                    |> Maybe.map
+                        (isDefaultAddress model.shippingAddress
+                            >> encodeAddress model.shippingAddress
+                        )
+                    |> Maybe.withDefault (encodeAddress model.shippingAddress model.makeShippingDefault)
             else
                 encodeAddress model.billingAddress model.makeBillingDefault
 
@@ -554,6 +559,16 @@ placeOrder model authStatus maybeSessionToken stripeTokenId =
                             { form | model = formModelWithDefault }
                     in
                         Address.encode formWithDefault
+
+        isDefaultAddress address { shippingAddresses, billingAddresses } =
+            case address of
+                ExistingAddress id ->
+                    findBy (\a -> a.id == Just id) (shippingAddresses ++ billingAddresses)
+                        |> Maybe.map .isDefault
+                        |> Maybe.withDefault True
+
+                NewAddress addrForm ->
+                    addrForm.model.isDefault || model.makeShippingDefault
 
         decoder =
             case authStatus of

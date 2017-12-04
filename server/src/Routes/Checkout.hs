@@ -350,10 +350,13 @@ customerPlaceOrderRoute token = validate >=> \parameters -> do
                 let noAddress = throwM $ AddressNotFound addrType
                 address <- get addrId >>= maybe noAddress return
                 when (addressCustomerId address /= customerId) noAddress
-                when makeDefault $
+                when makeDefault $ do
                     updateWhere [AddressCustomerId ==. customerId, AddressType ==. addrType]
                         [AddressIsDefault =. False]
-                    >> update addrId [AddressIsDefault =. True]
+                    if addressType address == addrType then
+                        update addrId [AddressIsDefault =. True]
+                    else
+                        insert_ (address { addressIsDefault = True, addressType = addrType })
                 return $ Entity addrId address
             NewAddress ca -> do
                     let newAddress = fromAddressData addrType customerId ca
