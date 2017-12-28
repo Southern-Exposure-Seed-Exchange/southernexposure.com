@@ -6,13 +6,14 @@ module Emails
     where
 
 import Control.Concurrent.Async (Async, async)
+import Control.Monad ((<=<))
 import Control.Monad.Reader (ask)
 import Control.Monad.IO.Class (liftIO)
 import Data.Pool (withResource)
 import Network.HaskellNet.SMTP.SSL (authenticate, sendMimeMail, AuthType(PLAIN))
 import Text.Blaze.Html.Renderer.Text (renderHtml)
 import Text.Markdown (markdown, def)
-import Text.Pandoc (readHtml, writeMarkdown)
+import Text.Pandoc (readHtml, writeMarkdown, runPure)
 
 import Config
 import Models hiding (PasswordReset)
@@ -88,7 +89,7 @@ send email = ask >>= \cfg ->
                     (message, renderHtml $ markdown def message)
 
         htmlToMarkdown =
-            either (const "") (L.pack . writeMarkdown def) . readHtml def . L.unpack
+            either (const "") L.fromStrict . runPure . (writeMarkdown def <=< readHtml def) . L.toStrict
     in
         liftIO $ async $ withResource (getSmtpPool cfg) $ \conn -> do
             authSucceeded <- authenticate PLAIN (getSmtpUser cfg) (getSmtpPass cfg) conn
