@@ -59,6 +59,17 @@ library:
         - Models.Fields
         - Models.ProvinceCodes
 
+tests:
+    sese-website-test:
+        main:           Spec.hs
+        source-dirs:    test
+        ghc-options:
+            - -threaded
+            - -rtsopts
+            - -with-rtsopts=-N
+        dependencies:
+            - sese-website
+
 executables:
     sese-website-exe:
         main:           Main.hs
