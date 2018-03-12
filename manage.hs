@@ -225,7 +225,7 @@ clientAndServerWatching = do
           requiresReinitialization event =
             any (`isSuffixOf` eventPath event)
                 [ "stack.yaml"
-                , "sese-website.cabal"
+                , "package.yaml"
                 ]
 
 
@@ -321,6 +321,7 @@ cleanBuiltFiles = do
         remove $ clientDirectory ++ "/elm-stuff"
         remove $ clientDirectory ++ "/node_modules"
         remove $ serverDirectory ++ "/.stack-work"
+        remove $ serverDirectory ++ "/dist"
     where remove dir =
             doesDirectoryExist dir >>= flip when (removeDirectoryRecursive dir)
 

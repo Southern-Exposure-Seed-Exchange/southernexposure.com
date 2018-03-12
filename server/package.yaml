@@ -1,0 +1,138 @@
+name:           sese-website
+version:        0.5.0.0
+synopsis:       The API Server for Southern Exposure's Retail Website
+category:       Application
+github:         Southern-Exposure-Seed-Exchange/southernexposure.com
+license:        GPL-3.0
+license-file:   ../LICENSE
+author:         "Pavan Rikhi"
+maintainer:     "pavan.rikhi@gmail.com"
+copyright:      2017-2018 Pavan Rikhi
+bug-reports:    http://bugs.sleepanarchy.com/projects/sese-website/issues/new
+
+description:    This is JSON API server for Southern Exposure Seed Exchange's
+                Retail E-Commerce Website. It uses Persistent for DB management
+                & Servant for routing. It is paired with an Elm frontend.
+
+extra-source-files:
+    - ../README.rst
+    - ../LICENSE
+
+
+dependencies:
+    - base >= 4.7 && < 5
+    - aeson
+    - async
+    - bcrypt
+    - blaze-html
+    - blaze-markup
+    - containers
+    - esqueleto
+    - exceptions
+    - HaskellNet
+    - HaskellNet-SSL
+    - iso3166-country-codes
+    - markdown
+    - mtl
+    - pandoc
+    - persistent
+    - persistent-template
+    - resource-pool
+    - servant-server
+    - state-codes
+    - stripe-core
+    - stripe-haskell
+    - tagsoup
+    - text
+    - time
+    - unordered-containers
+    - uuid
+    - wai
+
+
+library:
+    source-dirs: src
+    exposed-modules:
+        - Api
+        - Config
+        - Models
+        - Models.Fields
+        - Models.ProvinceCodes
+
+executables:
+    sese-website-exe:
+        main:           Main.hs
+        source-dirs:    app
+        ghc-options:
+            - -threaded
+            - -rtsopts
+            - -with-rtsopts=-N
+        dependencies:
+            - sese-website
+            - bytestring
+            - directory
+            - monad-logger
+            - persistent-postgresql
+            - stripe-core
+            - wai-extra
+            - warp
+
+    data-migration:
+        main:           DataMigration.hs
+        source-dirs:    scripts
+        other-modules:  Utils
+        ghc-options:
+            - -threaded
+            - -rtsopts
+            - -with-rtsopts=-N
+        dependencies:
+            - sese-website
+            - bytestring
+            - containers
+            - filepath
+            - io-streams
+            - iso3166-country-codes
+            - monad-logger
+            - mysql-haskell
+            - persistent
+            - persistent-postgresql
+            - resource-pool
+            - scientific
+            - state-codes
+            - text
+            - transformers
+            - uuid
+
+    image-migration:
+        main:           ImageMigration.hs
+        source-dirs:    scripts
+        other-modules:  Utils
+        ghc-options:
+            - -threaded
+            - -rtsopts
+            - -with-rtsopts=-N
+        dependencies:
+            - sese-website
+            - bytestring
+            - directory
+            - filepath
+            - io-streams
+            - mysql-haskell
+            - text
+
+    clean-database:
+        main:           CleanDatabase.hs
+        source-dirs:    scripts
+        other-modules:  []
+        ghc-options:
+            - -threaded
+            - -rtsopts
+            - -with-rtsopts=-N
+        dependencies:
+            - sese-website
+            - bytestring
+            - monad-logger
+            - persistent
+            - persistent-postgresql
+            - time
+            - transformers

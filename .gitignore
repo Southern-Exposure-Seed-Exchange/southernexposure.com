@@ -4,3 +4,5 @@ client/dist
 .stack-work
 server/media
 server/old_media
+server/dist
+server/sese-website.cabal
