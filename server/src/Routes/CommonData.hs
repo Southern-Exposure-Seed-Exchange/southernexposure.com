@@ -231,12 +231,14 @@ getCharges maybeTaxRate maybeCountry items includeMemberDiscount =
         taxTotal =
             foldl (\acc item -> acc + fromCents (cidTax item)) 0 items
         memberDiscount =
-            if includeMemberDiscount then
+            if includeMemberDiscount && calculatedMemberDiscount > 0 then
                 Just CartCharge
                     { ccDescription = "5% Member Discount"
-                    , ccAmount = Cents . round $ (5 % 100) * toRational subTotal
+                    , ccAmount = calculatedMemberDiscount
                     }
             else Nothing
+        calculatedMemberDiscount =
+            Cents . round $ (5 % 100) * toRational subTotal
     in do
         surcharges <- getSurcharges items
         shippingMethods <- getShippingMethods maybeCountry items subTotal
