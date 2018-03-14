@@ -27,7 +27,10 @@ Dollar-sign.
 -}
 cents : Cents -> String
 cents ((Cents i) as c) =
-    "$" ++ centsNumber c
+    if i < 0 then
+        "−$" ++ centsNumber (Cents <| abs i)
+    else
+        "$" ++ centsNumber c
 
 
 {-| Format a Cents into a decimal-representation of Dollars.
