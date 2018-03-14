@@ -529,15 +529,20 @@ update msg ({ pageData } as model) =
         NavigateTo route ->
             ( model, Routing.newUrl route )
 
-        -- TODO: Refetch or clear cart details on logout
         LogOut ->
-            ( { model | currentUser = User.unauthorized, cartItemCount = 0 }
-            , Cmd.batch
-                [ redirectIfAuthRequired model.route
-                , Ports.removeAuthDetails ()
-                , Ports.setCartItemCount 0
-                ]
-            )
+            let
+                ( updatedModel, fetchCmd ) =
+                    { model | currentUser = User.unauthorized, cartItemCount = 0 }
+                        |> fetchDataForRoute
+            in
+                ( updatedModel
+                , Cmd.batch
+                    [ redirectIfAuthRequired model.route
+                    , Ports.removeAuthDetails ()
+                    , Ports.setCartItemCount 0
+                    , fetchCmd
+                    ]
+                )
 
         OtherTabLoggedIn authData ->
             ( model, reAuthorize authData.userId authData.token )
