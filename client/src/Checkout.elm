@@ -671,27 +671,28 @@ view model authStatus locations checkoutDetails =
                     text ""
 
                 _ ->
-                    div [ class "col-6" ]
+                    div [ class "col-6 d-flex flex-column" ]
                         [ h5 [] [ text "Store Credit" ]
                         , p []
                             [ text "You have "
                             , b [] [ text <| Format.cents checkoutDetails.storeCredit ]
                             , text " of store credit available."
-                            , div [ class "input-group" ]
-                                [ span [ class "input-group-addon" ] [ text "$" ]
-                                , input
-                                    [ class "form-control"
-                                    , type_ "number"
-                                    , step "0.01"
-                                    , A.min "0"
-                                    , A.max <| Format.centsNumber maximumStoreCredit
-                                    , value <|
-                                        Maybe.withDefault "" <|
-                                            Maybe.map Format.centsNumber model.storeCredit
-                                    , onInput StoreCredit
-                                    ]
-                                    []
+                            ]
+                        , div [ class "input-group mt-auto mb-3" ]
+                            [ div [ class "input-group-prepend" ]
+                                [ span [ class "input-group-text" ] [ text "$" ] ]
+                            , input
+                                [ class "form-control"
+                                , type_ "number"
+                                , step "0.01"
+                                , A.min "0"
+                                , A.max <| Format.centsNumber maximumStoreCredit
+                                , value <|
+                                    Maybe.withDefault "" <|
+                                        Maybe.map Format.centsNumber model.storeCredit
+                                , onInput StoreCredit
                                 ]
+                                []
                             ]
                         ]
 
