@@ -23,6 +23,7 @@ import Servant ((:>), (:<|>)(..), AuthProtect, ReqBody, JSON, PlainText, Get, Po
 
 import Auth
 import Models
+import Models.Fields (AddressType(..))
 import Routes.CommonData (CartItemData(..), CartCharges(..), getCartItems, getCharges)
 import Routes.Utils (generateUniqueToken)
 import Server
@@ -30,6 +31,7 @@ import Validation (Validation(..))
 
 import qualified Data.Map.Strict as M
 import qualified Data.Text as T
+import qualified Database.Persist as P
 import qualified Database.Esqueleto as E
 import qualified Validation as V
 
@@ -226,11 +228,26 @@ type CustomerDetailsRoute =
 customerDetailsRoute :: AuthToken -> App CartDetailsData
 customerDetailsRoute = validateToken >=> \(Entity customerId customer) ->
     runDB $ do
-        items <- getCartItems Nothing $ \c ->
+        (taxRate, shippingCountry) <- getTaxAndShippingCountry customerId
+        items <- getCartItems taxRate $ \c ->
             c E.^. CartCustomerId E.==. E.just (E.val customerId)
-        charges <- getCharges Nothing Nothing items
+        charges <- getCharges taxRate shippingCountry items
             . not . T.null $ customerMemberNumber customer
         return $ CartDetailsData items charges
+    where getTaxAndShippingCountry customerId = do
+            maybeShippingAddress <-
+                listToMaybe . map P.entityVal
+                    <$> P.selectList
+                        [ AddressType ==. Shipping
+                        , AddressIsDefault ==. True
+                        , AddressCustomerId ==. customerId
+                        ]
+                        [ P.LimitTo 1
+                        ]
+            let shippingCountry = addressCountry <$> maybeShippingAddress
+                shippingState = addressState <$> maybeShippingAddress
+            taxRate <- getTaxRate shippingCountry shippingState
+            return (taxRate, shippingCountry)
 
 
 newtype AnonymousDetailsParameters =
