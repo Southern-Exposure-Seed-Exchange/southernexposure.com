@@ -61,20 +61,23 @@ orderTable ({ order, lineItems, products } as details) =
         subTotal =
             orderTotals.subTotal
 
-        ( maybeShippingCharge, maybeStoreCredit, surcharges ) =
+        ( maybeShippingCharge, maybeStoreCredit, maybeMemberDiscount, surcharges ) =
             List.foldl
-                (\lineItem ( maybeShipping, maybeCredit, ss ) ->
+                (\lineItem ( maybeShipping, maybeCredit, maybeMemberDiscount, ss ) ->
                     case lineItem.itemType of
                         PageData.Shipping ->
-                            ( Just lineItem, maybeCredit, ss )
+                            ( Just lineItem, maybeCredit, maybeMemberDiscount, ss )
 
                         PageData.StoreCredit ->
-                            ( maybeShipping, Just { lineItem | amount = centsMap negate lineItem.amount }, ss )
+                            ( maybeShipping, Just { lineItem | amount = centsMap negate lineItem.amount }, maybeMemberDiscount, ss )
+
+                        PageData.MemberDiscount ->
+                            ( maybeShipping, maybeCredit, Just { lineItem | amount = centsMap negate lineItem.amount }, ss )
 
                         PageData.Surcharge ->
-                            ( maybeShipping, maybeCredit, lineItem :: ss )
+                            ( maybeShipping, maybeCredit, maybeMemberDiscount, lineItem :: ss )
                 )
-                ( Nothing, Nothing, [] )
+                ( Nothing, Nothing, Nothing, [] )
                 lineItems
 
         total =
@@ -123,6 +126,7 @@ orderTable ({ order, lineItems, products } as details) =
                     ++ List.map chargeRow surcharges
                     ++ [ taxRow
                        , htmlOrBlank chargeRow maybeStoreCredit
+                       , htmlOrBlank chargeRow maybeMemberDiscount
                        , footerRow "font-weight-bold" "Total" total
                        ]
             ]

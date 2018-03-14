@@ -230,6 +230,7 @@ view { quantities } ({ items, charges } as cartDetails) =
                     ++ List.map chargeRow charges.surcharges
                     ++ [ htmlOrBlank chargeRow charges.shippingMethod
                        , taxRow
+                       , memberDiscountRow
                        , totalRow
                        ]
 
@@ -241,6 +242,11 @@ view { quantities } ({ items, charges } as cartDetails) =
                 text ""
             else
                 chargeRow charges.tax
+
+        memberDiscountRow =
+            charges.memberDiscount
+                |> Maybe.map (\c -> { c | amount = centsMap negate c.amount })
+                |> htmlOrBlank chargeRow
 
         footerRow rowClass content amount =
             tr [ class rowClass ]

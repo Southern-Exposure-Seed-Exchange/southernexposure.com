@@ -257,7 +257,7 @@ type alias CartDetails =
 
 blankCartDetails : CartDetails
 blankCartDetails =
-    CartDetails [] (CartCharges (CartCharge "" (Cents 0)) [] Nothing)
+    CartDetails [] (CartCharges (CartCharge "" (Cents 0)) [] Nothing Nothing)
 
 
 cartDetailsDecoder : Decoder CartDetails
@@ -272,6 +272,11 @@ cartTotals { items, charges } =
     let
         subTotal =
             List.foldl (\item acc -> itemTotal item |> addCents acc) (Cents 0) items
+
+        memberDiscount =
+            charges.memberDiscount
+                |> Maybe.map .amount
+                |> Maybe.withDefault (Cents 0)
 
         shippingAmount =
             charges.shippingMethod
@@ -292,6 +297,7 @@ cartTotals { items, charges } =
                 |> addCents surchargeAmount
                 |> addCents shippingAmount
                 |> addCents taxAmount
+                |> centsMap2 (\discount runningTotal -> runningTotal - discount) memberDiscount
 
         addCents =
             centsMap2 (+)
@@ -311,17 +317,19 @@ type alias CheckoutDetails =
     , items : List CartItem
     , charges : CartCharges
     , storeCredit : Cents
+    , memberNumber : String
     }
 
 
 checkoutDetailsDecoder : Decoder CheckoutDetails
 checkoutDetailsDecoder =
-    Decode.map5 CheckoutDetails
+    Decode.map6 CheckoutDetails
         (Decode.field "shippingAddresses" <| Decode.list Address.decoder)
         (Decode.field "billingAddresses" <| Decode.list Address.decoder)
         (Decode.field "items" <| Decode.list cartItemDecoder)
         (Decode.field "charges" cartChargesDecoder)
         (Decode.field "storeCredit" centsDecoder)
+        (Decode.field "memberNumber" Decode.string)
 
 
 
@@ -372,6 +380,9 @@ orderTotals { lineItems, products } =
                             ( cs, centsMap2 (+) charge.amount ds )
 
                         StoreCredit ->
+                            ( centsMap2 (+) charge.amount cs, ds )
+
+                        MemberDiscount ->
                             ( centsMap2 (+) charge.amount cs, ds )
                 )
                 ( Cents 0, Cents 0 )
@@ -488,6 +499,7 @@ type LineItemType
     = Shipping
     | Surcharge
     | StoreCredit
+    | MemberDiscount
 
 
 lineItemTypeDecoder : Decoder LineItemType
@@ -503,6 +515,9 @@ lineItemTypeDecoder =
 
                 "StoreCreditLine" ->
                     Decode.succeed StoreCredit
+
+                "MemberDiscountLine" ->
+                    Decode.succeed MemberDiscount
 
                 _ ->
                     Decode.fail <| "Invalid LineItemType: " ++ str
@@ -634,18 +649,20 @@ type alias CartCharges =
     { tax : CartCharge
     , surcharges : List CartCharge
     , shippingMethod : Maybe CartCharge
+    , memberDiscount : Maybe CartCharge
     }
 
 
 cartChargesDecoder : Decoder CartCharges
 cartChargesDecoder =
-    Decode.map3 CartCharges
+    Decode.map4 CartCharges
         (Decode.field "tax" cartChargeDecoder)
         (Decode.field "surcharges" <| Decode.list cartChargeDecoder)
         (Decode.field "shippingMethods" <|
             Decode.map List.head <|
                 Decode.list cartChargeDecoder
         )
+        (Decode.field "memberDiscount" <| Decode.nullable cartChargeDecoder)
 
 
 

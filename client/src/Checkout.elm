@@ -52,6 +52,7 @@ type alias Form =
     , makeBillingDefault : Bool
     , billingSameAsShipping : Bool
     , storeCredit : Maybe Cents
+    , memberNumber : Maybe String
     , comment : String
     , errors : Api.FormErrors
     }
@@ -68,6 +69,7 @@ initial =
     , makeBillingDefault = False
     , billingSameAsShipping = False
     , storeCredit = Nothing
+    , memberNumber = Nothing
     , comment = ""
     , errors = Api.initialErrors
     }
@@ -104,6 +106,7 @@ initialWithDefaults shippingAddresses billingAddresses =
         , makeBillingDefault = isNew billingAddress
         , billingSameAsShipping = False
         , storeCredit = Nothing
+        , memberNumber = Nothing
         , comment = ""
         , errors = Api.initialErrors
         }
@@ -125,6 +128,7 @@ type Msg
     | BillingMsg Address.Msg
     | BillingSameAsShipping Bool
     | StoreCredit String
+    | MemberNumber String
     | Comment String
     | Submit
     | TokenReceived String
@@ -196,27 +200,13 @@ update msg model authStatus maybeSessionToken checkoutDetails =
                 |> nothingAndNoCommand
 
         StoreCredit credit ->
-            let
-                maximumStoreCredit =
-                    case checkoutDetails of
-                        RemoteData.Success details ->
-                            PageData.cartTotals details
-                                |> .total
-                                |> centsMap2 min details.storeCredit
+            model
+                |> limitStoreCredit checkoutDetails credit
+                |> nothingAndNoCommand
 
-                        _ ->
-                            Cents 0
-
-                toCents =
-                    Decimal.truncate -2
-                        >> Decimal.mul (Decimal.fromInt 100)
-                        >> Decimal.toFloat
-                        >> round
-                        >> Cents
-                        >> centsMap2 min maximumStoreCredit
-            in
-                { model | storeCredit = Decimal.fromString credit |> Maybe.map toCents }
-                    |> nothingAndNoCommand
+        MemberNumber memberNumber ->
+            { model | memberNumber = Just memberNumber }
+                |> refreshDetails authStatus maybeSessionToken model
 
         Comment comment ->
             { model | comment = comment } |> nothingAndNoCommand
@@ -340,7 +330,15 @@ update msg model authStatus maybeSessionToken checkoutDetails =
             model |> nothingAndNoCommand
 
         RefreshDetails (RemoteData.Success details) ->
-            ( model, Just (DetailsRefreshed details), Cmd.none )
+            let
+                storeCreditString =
+                    Maybe.map Format.centsNumber model.storeCredit
+                        |> Maybe.withDefault ""
+            in
+                ( model |> limitStoreCredit (RemoteData.Success details) storeCreditString
+                , Just (DetailsRefreshed details)
+                , Cmd.none
+                )
 
         RefreshDetails _ ->
             model |> nothingAndNoCommand
@@ -381,15 +379,14 @@ refreshDetails authStatus maybeSessionToken oldModel newModel =
                                 maybeCountry
                                 maybeRegion
                                 maybeAddressId
+                                newModel.memberNumber
                         )
 
         applyArguments cmdFunction =
-            case commandArguments of
-                Just args ->
-                    cmdFunction args
-
-                Nothing ->
-                    Cmd.none
+            if shouldUpdate then
+                cmdFunction addressArguments
+            else
+                Cmd.none
 
         anonymousCommand ( maybeCountry, maybeRegion, _ ) =
             case maybeSessionToken of
@@ -397,47 +394,50 @@ refreshDetails authStatus maybeSessionToken oldModel newModel =
                     Cmd.none
 
                 Just token ->
-                    getAnonymousDetails RefreshDetails token maybeCountry maybeRegion
+                    getAnonymousDetails RefreshDetails
+                        token
+                        maybeCountry
+                        maybeRegion
+                        (Maybe.withDefault "" newModel.memberNumber)
 
-        commandArguments =
+        shouldUpdate =
+            addressChanged || memberNumberChanged
+
+        addressChanged =
             case ( oldModel.shippingAddress, newModel.shippingAddress ) of
                 ( ExistingAddress id1, ExistingAddress id2 ) ->
-                    if id1 /= id2 then
-                        Just ( Nothing, Nothing, Just id2 )
-                    else
-                        Nothing
+                    id1 /= id2
 
                 ( NewAddress oldForm, NewAddress newForm ) ->
                     if oldForm.model.country == newForm.model.country then
                         case ( oldForm.model.state, newForm.model.state ) of
                             ( Locations.Custom _, Locations.Custom _ ) ->
-                                Nothing
+                                False
 
                             ( oldState, newState ) ->
-                                if oldState /= newState then
-                                    Just
-                                        ( Just newForm.model.country
-                                        , Just newState
-                                        , Nothing
-                                        )
-                                else
-                                    Nothing
+                                oldState /= newState
                     else
-                        Just
-                            ( Just newForm.model.country
-                            , Just newForm.model.state
-                            , Nothing
-                            )
+                        True
 
-                ( _, ExistingAddress id ) ->
-                    Just ( Nothing, Nothing, Just id )
+                _ ->
+                    True
 
-                ( _, NewAddress form ) ->
-                    Just
-                        ( Just form.model.country
-                        , Just form.model.state
-                        , Nothing
-                        )
+        memberNumberChanged =
+            case ( oldModel.memberNumber, newModel.memberNumber ) of
+                ( Just oldNumber, Just newNumber ) ->
+                    (String.length oldNumber > 3 && String.length newNumber <= 3)
+                        || (String.length newNumber > 3 && String.length oldNumber <= 3)
+
+                ( old, new ) ->
+                    old /= new
+
+        addressArguments =
+            case newModel.shippingAddress of
+                ExistingAddress id ->
+                    ( Nothing, Nothing, Just id )
+
+                NewAddress addressForm ->
+                    ( Just addressForm.model.country, Just addressForm.model.state, Nothing )
     in
         ( newModel, Nothing, refreshCommand )
 
@@ -455,21 +455,60 @@ findBy pred l =
                 findBy pred xs
 
 
+{-| Limit the amount of store credit applied so the checkout total is never negative.
+-}
+limitStoreCredit : WebData PageData.CheckoutDetails -> String -> Form -> Form
+limitStoreCredit checkoutDetails creditString model =
+    let
+        maximumStoreCredit =
+            case checkoutDetails of
+                RemoteData.Success details ->
+                    PageData.cartTotals details
+                        |> .total
+                        |> centsMap2 min details.storeCredit
+
+                _ ->
+                    Cents 0
+
+        toCents =
+            Decimal.truncate -2
+                >> Decimal.mul (Decimal.fromInt 100)
+                >> Decimal.toFloat
+                >> round
+                >> Cents
+                >> centsMap2 min maximumStoreCredit
+    in
+        { model | storeCredit = Decimal.fromString creditString |> Maybe.map toCents }
+
+
 getCustomerDetails :
     (WebData PageData.CheckoutDetails -> msg)
     -> String
     -> Maybe String
     -> Maybe Region
     -> Maybe AddressId
+    -> Maybe String
     -> Cmd msg
-getCustomerDetails msg token maybeCountry maybeRegion maybeAddressId =
+getCustomerDetails msg token maybeCountry maybeRegion maybeAddressId maybeMemberNumber =
     let
         data =
             Encode.object
                 [ ( "region", encodeMaybe Locations.regionEncoder maybeRegion )
                 , ( "country", encodeMaybe Encode.string maybeCountry )
                 , ( "addressId", encodeMaybe (\(AddressId i) -> Encode.int i) maybeAddressId )
+                , ( "memberNumber", encodedMemberNumber )
                 ]
+
+        encodedMemberNumber =
+            maybeMemberNumber
+                |> Maybe.andThen
+                    (\num ->
+                        if String.length num > 3 then
+                            Just num
+                        else
+                            Nothing
+                    )
+                |> encodeMaybe Encode.string
     in
         Api.post Api.CheckoutDetailsCustomer
             |> Api.withJsonBody data
@@ -483,13 +522,15 @@ getAnonymousDetails :
     -> String
     -> Maybe String
     -> Maybe Region
+    -> String
     -> Cmd msg
-getAnonymousDetails msg sessionToken maybeCountry maybeRegion =
+getAnonymousDetails msg sessionToken maybeCountry maybeRegion memberNumber =
     let
         data =
             Encode.object
                 [ ( "region", encodeMaybe Locations.regionEncoder maybeRegion )
                 , ( "country", encodeMaybe Encode.string maybeCountry )
+                , ( "memberNumber", Encode.string memberNumber )
                 , ( "sessionToken", Encode.string sessionToken )
                 ]
     in
@@ -510,6 +551,7 @@ placeOrder model authStatus maybeSessionToken stripeTokenId checkoutDetails =
                   , Maybe.map (\(Cents c) -> Encode.int c) model.storeCredit
                         |> Maybe.withDefault Encode.null
                   )
+                , ( "memberNumber", encodedMemberNumber )
                 , ( "comment", Encode.string model.comment )
                 , ( "stripeToken", Encode.string stripeTokenId )
                 ]
@@ -518,12 +560,24 @@ placeOrder model authStatus maybeSessionToken stripeTokenId checkoutDetails =
             Encode.object
                 [ ( "shippingAddress", encodedShippingAddress )
                 , ( "billingAddress", encodedBillingAddress )
+                , ( "memberNumber", encodedMemberNumber )
                 , ( "comment", Encode.string model.comment )
                 , ( "sessionToken", encodeMaybe Encode.string maybeSessionToken )
                 , ( "email", Encode.string model.email )
                 , ( "password", Encode.string model.password )
                 , ( "stripeToken", Encode.string stripeTokenId )
                 ]
+
+        encodedMemberNumber =
+            Encode.string <|
+                case model.memberNumber of
+                    Nothing ->
+                        RemoteData.toMaybe checkoutDetails
+                            |> Maybe.map .memberNumber
+                            |> Maybe.withDefault ""
+
+                    Just str ->
+                        str
 
         encodedShippingAddress =
             encodeAddress model.shippingAddress model.makeShippingDefault
@@ -706,6 +760,29 @@ view model authStatus locations checkoutDetails =
             in
                 min credit orderTotal
                     |> Cents
+
+        memberNumberForm =
+            div [ class "col-6" ]
+                [ h5 [] [ text "Member Number" ]
+                , p []
+                    [ text <|
+                        "Returning customers can receive a 5% discount by "
+                            ++ "entering their member number. You can find your member "
+                            ++ "number on your catalog mailing label and on previous order "
+                            ++ "invoices."
+                    ]
+                , div [ class "form-group" ]
+                    [ input
+                        [ class "form-control"
+                        , type_ "text"
+                        , minlength 4
+                        , onInput MemberNumber
+                        , value <|
+                            Maybe.withDefault checkoutDetails.memberNumber model.memberNumber
+                        ]
+                        []
+                    ]
+                ]
     in
         [ h1 [] [ text "Checkout" ]
         , hr [] []
@@ -730,7 +807,8 @@ view model authStatus locations checkoutDetails =
                     }
                 , billingCard
                 ]
-            , div [ class "row mb-3" ] [ storeCreditForm ]
+            , div [ class "row mb-3" ]
+                [ storeCreditForm, memberNumberForm ]
             , div [ class "mb-3" ]
                 [ h4 [] [ text "Order Summary" ]
                 , summaryTable checkoutDetails model.storeCredit
@@ -1015,6 +1093,7 @@ summaryTable ({ items, charges } as checkoutDetails) maybeAppliedCredit =
                     :: List.map chargeRow charges.surcharges
                     ++ [ taxRow
                        , storeCreditRow
+                       , memberDiscountRow
                        , footerRow "Total" finalTotal "font-weight-bold"
                        ]
 
@@ -1046,6 +1125,11 @@ summaryTable ({ items, charges } as checkoutDetails) maybeAppliedCredit =
 
                 Just credit ->
                     footerRow "Store Credit" (centsMap negate credit) ""
+
+        memberDiscountRow =
+            charges.memberDiscount
+                |> Maybe.map (\c -> { c | amount = centsMap negate c.amount })
+                |> maybeChargeRow
 
         footerRow content amount rowClass =
             tr [ class rowClass ]
