@@ -237,6 +237,8 @@ makeCustomers mysql = do
         return . (fromIntegral customerId,) $ Customer
             { customerEmail = email
             , customerStoreCredit = storeCredit
+            -- TODO: Get an export of the latest member numbers from stonedge
+            , customerMemberNumber = ""
             , customerEncryptedPassword = ""
             , customerAuthToken = token
             , customerStripeId = Nothing

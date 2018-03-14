@@ -260,6 +260,7 @@ data LineItemType
     = ShippingLine
     | SurchargeLine
     | StoreCreditLine
+    | MemberDiscountLine
     deriving (Show, Read, Generic)
 
 instance ToJSON LineItemType

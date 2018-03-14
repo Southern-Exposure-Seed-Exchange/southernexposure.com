@@ -20,6 +20,7 @@ module Routes.CommonData
 import Data.Aeson ((.=), (.:), (.:?), ToJSON(..), FromJSON(..), object, withObject)
 import Data.List (intersect)
 import Data.Maybe (mapMaybe)
+import Data.Ratio ((%))
 import Database.Persist ((==.), Entity(..), SelectOpt(Asc), selectList, getBy)
 import Numeric.Natural (Natural)
 
@@ -132,18 +133,23 @@ instance ToJSON CartItemData where
                ]
 
 
+-- TODO: Add Grand Total & Don't Calculate in Frontend
 data CartCharges =
     CartCharges
         { ccTax :: CartCharge
         , ccSurcharges :: [CartCharge]
         , ccShippingMethods :: [CartCharge]
+        , ccProductTotal :: Cents
+        , ccMemberDiscount :: Maybe CartCharge
         }
 
+-- TODO: Add Product Total & Don't Calculate in Frontend
 instance ToJSON CartCharges where
     toJSON charges =
         object [ "tax" .= ccTax charges
                , "surcharges" .= ccSurcharges charges
                , "shippingMethods" .= ccShippingMethods charges
+               , "memberDiscount" .= ccMemberDiscount charges
                ]
 
 
@@ -159,7 +165,14 @@ instance ToJSON CartCharge where
                , "amount" .= ccAmount charge
                ]
 
-getCartItems :: Maybe TaxRate -> (E.SqlExpr (Entity Cart) -> E.SqlExpr (E.Value Bool)) -> AppSQL [CartItemData]
+{-| Retrieve all the `CartItem`s of a `Cart` along with their `Product`,
+`ProductVariant`, & Tax information.
+
+-}
+getCartItems
+    :: Maybe TaxRate                                                -- ^ The tax to apply
+    -> (E.SqlExpr (Entity Cart) -> E.SqlExpr (E.Value Bool))        -- ^ The `E.where_` query
+    -> AppSQL [CartItemData]
 getCartItems maybeTaxRate whereQuery = do
     items <- E.select $ E.from
         $ \(ci `E.InnerJoin` c `E.InnerJoin` v `E.InnerJoin` p `E.LeftOuterJoin` sa) -> do
@@ -195,8 +208,19 @@ getCartItems maybeTaxRate whereQuery = do
                     }
 
 
-getCharges :: Maybe TaxRate -> Maybe Country -> [CartItemData] -> AppSQL CartCharges
-getCharges maybeTaxRate maybeCountry items =
+{-| Calculate the Charges for a set of Cart Items.
+
+Tax, Shipping, & the Membership Discount are all based off of the Product
+subtotal.
+
+-}
+getCharges
+    :: Maybe TaxRate        -- ^ Applies tax to the Products if specified.
+    -> Maybe Country        -- ^ Used to calculate the Shipping charge.
+    -> [CartItemData]       -- ^ The cart items (see `getCartItems`)
+    -> Bool                 -- ^ Include the 5% Member Discount?
+    -> AppSQL CartCharges
+getCharges maybeTaxRate maybeCountry items includeMemberDiscount =
     let
         variant item =
             (\(Entity _ v) -> v) $ cidVariant item
@@ -206,12 +230,23 @@ getCharges maybeTaxRate maybeCountry items =
             fromIntegral (cidQuantity item) * fromCents (productVariantPrice $ variant item)
         taxTotal =
             foldl (\acc item -> acc + fromCents (cidTax item)) 0 items
+        memberDiscount =
+            if includeMemberDiscount then
+                Just CartCharge
+                    { ccDescription = "5% Member Discount"
+                    , ccAmount = Cents . round $ (5 % 100) * toRational subTotal
+                    }
+            else Nothing
     in do
         surcharges <- getSurcharges items
         shippingMethods <- getShippingMethods maybeCountry items subTotal
-        return $ CartCharges
-            (CartCharge (maybe "" taxRateDescription maybeTaxRate) $ Cents taxTotal)
-            surcharges shippingMethods
+        return CartCharges
+            { ccTax = CartCharge (maybe "" taxRateDescription maybeTaxRate) $ Cents taxTotal
+            , ccSurcharges = surcharges
+            , ccShippingMethods = shippingMethods
+            , ccProductTotal = Cents subTotal
+            , ccMemberDiscount = memberDiscount
+            }
 
 
 getSurcharges :: [CartItemData] -> AppSQL [CartCharge]

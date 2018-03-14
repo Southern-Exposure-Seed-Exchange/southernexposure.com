@@ -224,11 +224,12 @@ type CustomerDetailsRoute =
     :> Get '[JSON] CartDetailsData
 
 customerDetailsRoute :: AuthToken -> App CartDetailsData
-customerDetailsRoute = validateToken >=> \(Entity customerId _) ->
+customerDetailsRoute = validateToken >=> \(Entity customerId customer) ->
     runDB $ do
         items <- getCartItems Nothing $ \c ->
             c E.^. CartCustomerId E.==. E.just (E.val customerId)
         charges <- getCharges Nothing Nothing items
+            . not . T.null $ customerMemberNumber customer
         return $ CartDetailsData items charges
 
 
@@ -251,7 +252,7 @@ anonymousDetailsRoute parameters =
     runDB $ do
         items <- getCartItems Nothing $ \c ->
             c E.^. CartSessionToken E.==. E.just (E.val $ adpCartToken parameters)
-        charges <- getCharges Nothing Nothing items
+        charges <- getCharges Nothing Nothing items False
         return $ CartDetailsData items charges
 
 

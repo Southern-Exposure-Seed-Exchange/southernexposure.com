@@ -166,16 +166,19 @@ orderTable order productData lineItems =
                 productData
         tax =
             sum $ map (\(op, _, _) -> orderProductTax op) productData
-        (maybeShippingLine, maybeStoreCredit, surcharges) =
-            foldl (\(shippingLine, creditLine, surchargeLines) lineItem ->
+        (maybeShippingLine, maybeStoreCredit, maybeMemberDiscount, surcharges) =
+            foldl (\(shippingLine, creditLine, memberLine, surchargeLines) lineItem ->
                 case orderLineItemType lineItem of
                     ShippingLine ->
-                        (Just lineItem, creditLine, surchargeLines)
+                        (Just lineItem, creditLine, memberLine, surchargeLines)
                     StoreCreditLine ->
-                        (shippingLine, Just lineItem, surchargeLines)
+                        (shippingLine, Just lineItem, memberLine, surchargeLines)
                     SurchargeLine ->
-                        (shippingLine, creditLine, lineItem : surchargeLines)
-            ) (Nothing, Nothing, []) lineItems
+                        (shippingLine, creditLine, memberLine, lineItem : surchargeLines)
+                    MemberDiscountLine ->
+                        (shippingLine, creditLine, Just lineItem, surchargeLines)
+
+            ) (Nothing, Nothing, Nothing, []) lineItems
         total =
             subTotal + tax + sum (map orderLineItemAmount lineItems)
     in
@@ -199,6 +202,9 @@ orderTable order productData lineItems =
                 maybe (return ())
                     (\l -> lineRow $ l { orderLineItemAmount = negate $ orderLineItemAmount l })
                     maybeStoreCredit
+                maybe (return ())
+                    (\l -> lineRow $ l { orderLineItemAmount = negate $ orderLineItemAmount l })
+                    maybeMemberDiscount
                 H.tr $ do
                     H.th H.! A.colspan "4" H.! alignRight $ "Total"
                     H.th H.! alignLeft $ H.text $ formatCents total

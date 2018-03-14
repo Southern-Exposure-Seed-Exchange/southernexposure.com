@@ -83,6 +83,7 @@ data CustomerDetailsParameters =
         { cdpShippingRegion :: Maybe Region
         , cdpShippingCountry :: Maybe Country
         , cdpExistingAddress :: Maybe AddressId
+        , cdpMemberNumber :: Maybe T.Text
         }
 
 instance FromJSON CustomerDetailsParameters where
@@ -91,6 +92,7 @@ instance FromJSON CustomerDetailsParameters where
             <$> v .:? "region"
             <*> v .:? "country"
             <*> v .:? "addressId"
+            <*> v .: "memberNumber"
 
 data CheckoutDetailsData =
     CheckoutDetailsData
@@ -99,6 +101,7 @@ data CheckoutDetailsData =
         , cddItems :: [CartItemData]
         , cddCharges :: CartCharges
         , cddStoreCredit :: Cents
+        , cddMemberNumber :: T.Text
         }
 
 instance ToJSON CheckoutDetailsData where
@@ -109,6 +112,7 @@ instance ToJSON CheckoutDetailsData where
             , "items" .= cddItems details
             , "charges" .= cddCharges details
             , "storeCredit" .= cddStoreCredit details
+            , "memberNumber" .= cddMemberNumber details
             ]
 
 type CustomerDetailsRoute =
@@ -119,6 +123,9 @@ type CustomerDetailsRoute =
 customerDetailsRoute :: AuthToken -> CustomerDetailsParameters -> App CheckoutDetailsData
 customerDetailsRoute token parameters = do
     (Entity customerId customer) <- validateToken token
+    let hasValidMemberNumber =
+            (> 3) . T.length . fromMaybe (customerMemberNumber customer)
+                $ cdpMemberNumber parameters
     runDB $ do
         customerAddresses <- selectList
             [AddressCustomerId ==. customerId, AddressIsActive ==. True] []
@@ -130,13 +137,14 @@ customerDetailsRoute token parameters = do
         maybeTaxRate <- getTaxRate maybeCountry maybeRegion
         items <- getCartItems maybeTaxRate $ \c ->
             c E.^. CartCustomerId E.==. E.just (E.val customerId)
-        charges <- getCharges maybeTaxRate maybeCountry items
+        charges <- getCharges maybeTaxRate maybeCountry items hasValidMemberNumber
         return CheckoutDetailsData
             { cddShippingAddresses = map toAddressData shippingAddresses
             , cddBillingAddresses = map toAddressData billingAddresses
             , cddItems = items
             , cddCharges = charges
             , cddStoreCredit = customerStoreCredit customer
+            , cddMemberNumber = customerMemberNumber customer
             }
     where getShippingArea ps addrs =
             let
@@ -163,6 +171,7 @@ data AnonymousDetailsParameters =
     AnonymousDetailsParameters
         { adpShippingCountry :: Maybe Country
         , adpShippingRegion :: Maybe Region
+        , adpMemberNumber :: Maybe T.Text
         , adpCartToken :: T.Text
         }
 
@@ -171,6 +180,7 @@ instance FromJSON AnonymousDetailsParameters where
         AnonymousDetailsParameters
             <$> v .:? "country"
             <*> v .:? "region"
+            <*> v .:? "memberNumber"
             <*> v .: "sessionToken"
 
 type AnonymousDetailsRoute =
@@ -180,19 +190,23 @@ type AnonymousDetailsRoute =
 anonymousDetailsRoute :: AnonymousDetailsParameters -> App CheckoutDetailsData
 anonymousDetailsRoute parameters =
     let
-        maybeCountry = adpShippingCountry parameters
+        maybeCountry =
+            adpShippingCountry parameters
+        isValidMemberNumber =
+            maybe False ((> 3) . T.length) $ adpMemberNumber parameters
     in
         runDB $ do
             maybeTaxRate <- getTaxRate maybeCountry $ adpShippingRegion parameters
             items <- getCartItems maybeTaxRate $ \c ->
                 c E.^. CartSessionToken E.==. E.just (E.val $ adpCartToken parameters)
-            charges <- getCharges maybeTaxRate maybeCountry items
+            charges <- getCharges maybeTaxRate maybeCountry items isValidMemberNumber
             return CheckoutDetailsData
                 { cddShippingAddresses = []
                 , cddBillingAddresses = []
                 , cddItems = items
                 , cddCharges = charges
                 , cddStoreCredit = 0
+                , cddMemberNumber = ""
                 }
 
 
@@ -249,6 +263,7 @@ data CustomerPlaceOrderParameters =
         { cpopShippingAddress :: CustomerAddress
         , cpopBillingAddress :: CustomerAddress
         , cpopStoreCredit :: Maybe Cents
+        , cpopMemberNumber :: T.Text
         , cpopComment :: T.Text
         , cpopStripeToken :: T.Text
         }
@@ -259,6 +274,7 @@ instance FromJSON CustomerPlaceOrderParameters where
             <$> v .: "shippingAddress"
             <*> v .: "billingAddress"
             <*> v .:? "storeCredit"
+            <*> v .: "memberNumber"
             <*> v .: "comment"
             <*> v .: "stripeToken"
 
@@ -270,8 +286,14 @@ instance Validation CustomerPlaceOrderParameters where
             ( "", [ ( "There was an error processing your payment, please try again."
                     , T.null $ cpopStripeToken parameters )
                   ] )
-                : map (first $ T.append "shipping-") shippingValidators
-                ++ map (first $ T.append "billing-") billingValidators
+            : ( "memberNumber"
+              , [ ( "Invalid Member Number"
+                  , T.length (cpopMemberNumber parameters) > 0 &&
+                    T.length (cpopMemberNumber parameters) < 4
+                  )
+                ] )
+            : map (first $ T.append "shipping-") shippingValidators
+            ++ map (first $ T.append "billing-") billingValidators
         where validateAddress a =
                 case a of
                     NewAddress f ->
@@ -310,13 +332,17 @@ type CustomerPlaceOrderRoute =
 customerPlaceOrderRoute :: AuthToken -> CustomerPlaceOrderParameters -> App PlaceOrderData
 customerPlaceOrderRoute token = validate >=> \parameters -> do
     ce@(Entity customerId customer) <- validateToken token
-    let shippingParameter = cpopShippingAddress parameters
+    let memberNumberParameter = cpopMemberNumber parameters
+        shippingParameter = cpopShippingAddress parameters
         stripeToken = cpopStripeToken parameters
     stripeCustomerId <- getOrCreateStripeCustomer ce stripeToken
     currentTime <- liftIO getCurrentTime
+    when (not (T.null memberNumberParameter) && memberNumberParameter /= customerMemberNumber customer)
+        $ runDB $ update customerId [CustomerMemberNumber =. cpopMemberNumber parameters]
     (billingAddress, orderId, orderTotal, cartId, appliedCredit) <-
         createAddressesAndOrder ce shippingParameter (cpopBillingAddress parameters)
-            (cpopStoreCredit parameters) (cpopComment parameters) currentTime
+            (cpopStoreCredit parameters) (cpopMemberNumber parameters)
+            (cpopComment parameters) currentTime
     setCustomerCard customer stripeCustomerId billingAddress stripeToken
     when (orderTotal > 0)
         $ chargeCustomer stripeCustomerId orderId orderTotal
@@ -334,7 +360,7 @@ customerPlaceOrderRoute token = validate >=> \parameters -> do
                     newId <- createStripeCustomer (customerEmail customer) stripeToken
                     runDB $ update customerId [CustomerStripeId =. Just newId]
                     return newId
-          createAddressesAndOrder customer@(Entity customerId _) shippingParam billingParam maybeStoreCredit comment currentTime =
+          createAddressesAndOrder customer@(Entity customerId _) shippingParam billingParam maybeStoreCredit memberNumber comment currentTime =
             withPlaceOrderErrors shippingParam . runDB $ do
                 shippingAddress <- getOrInsertAddress Shipping customerId shippingParam
                 billingAddress <- getOrInsertAddress Billing customerId billingParam
@@ -342,7 +368,7 @@ customerPlaceOrderRoute token = validate >=> \parameters -> do
                     maybe (throwM CartNotFound) return
                 (orderId, orderTotal, appliedCredit) <- createOrder
                     customer cartId shippingAddress (entityKey billingAddress)
-                    maybeStoreCredit comment currentTime
+                    maybeStoreCredit memberNumber comment currentTime
                 return (entityVal billingAddress, orderId, orderTotal, cartId, appliedCredit)
           getOrInsertAddress :: AddressType -> CustomerId -> CustomerAddress -> AppSQL (Entity Address)
           getOrInsertAddress addrType customerId = \case
@@ -388,6 +414,7 @@ data AnonymousPlaceOrderParameters =
         , apopPassword :: T.Text
         , apopShippingAddress :: AddressData
         , apopBillingAddress :: AddressData
+        , apopMemberNumber :: T.Text
         , apopComment :: T.Text
         , apopCartToken :: T.Text
         , apopStripeToken :: T.Text
@@ -400,6 +427,7 @@ instance FromJSON AnonymousPlaceOrderParameters where
             <*> v .: "password"
             <*> v .: "shippingAddress"
             <*> v .: "billingAddress"
+            <*> v .: "memberNumber"
             <*> v .: "comment"
             <*> v .: "sessionToken"
             <*> v .: "stripeToken"
@@ -422,6 +450,12 @@ instance Validation AnonymousPlaceOrderParameters where
                 , V.minimumLength 8 $ apopPassword parameters
                 ]
               )
+            , ( "memberNumber"
+              , [ ( "Invalid Member Number"
+                  , T.length (apopMemberNumber parameters) > 0 &&
+                    T.length (apopMemberNumber parameters) < 4
+                  )
+                ] )
             ]
             ++ map (first $ T.append "shipping-") shippingValidators
             ++ map (first $ T.append "billing-") billingValidators
@@ -453,9 +487,11 @@ anonymousPlaceOrderRoute = validate >=> \parameters -> do
     currentTime <- liftIO getCurrentTime
     stripeCustomerId <- createStripeCustomer (apopEmail parameters)
         $ apopStripeToken parameters
-    let customer = Customer
+    let memberNumber = apopMemberNumber parameters
+        customer = Customer
             { customerEmail = apopEmail parameters
             , customerStoreCredit = Cents 0
+            , customerMemberNumber = memberNumber
             , customerEncryptedPassword = encryptedPass
             , customerAuthToken = authToken
             , customerStripeId = Just stripeCustomerId
@@ -475,7 +511,7 @@ anonymousPlaceOrderRoute = validate >=> \parameters -> do
             billingId <- insert billingAddress
             (orderId, orderTotal, _) <- createOrder (Entity customerId customer)
                 cartId (Entity shippingId shippingAddress) billingId Nothing
-                (apopComment parameters) currentTime
+                memberNumber (apopComment parameters) currentTime
             return
                 ( orderId
                 , billingAddress
@@ -549,8 +585,11 @@ getFirstStripeCard stripeCustomerId =
 
 -- | Create an Order and it's Line Items & Products, returning the ID, Total,
 -- & Applied Store Credit.
-createOrder :: Entity Customer -> CartId -> Entity Address -> AddressId -> Maybe Cents -> T.Text -> UTCTime -> AppSQL (OrderId, Cents, Cents)
-createOrder (Entity customerId customer) cartId shippingEntity billingId maybeStoreCredit comment currentTime = do
+--
+-- TODO: Turn all the parameters into a `CreateOrderParams` data type so we
+-- can pass them by field name.
+createOrder :: Entity Customer -> CartId -> Entity Address -> AddressId -> Maybe Cents -> T.Text -> T.Text -> UTCTime -> AppSQL (OrderId, Cents, Cents)
+createOrder (Entity customerId customer) cartId shippingEntity billingId maybeStoreCredit memberNumber comment currentTime = do
     let (Entity shippingId shippingAddress) = shippingEntity
     maybeTaxRate <- getTaxRate (Just $ addressCountry shippingAddress)
         (Just $ addressState shippingAddress)
@@ -565,7 +604,7 @@ createOrder (Entity customerId customer) cartId shippingEntity billingId maybeSt
         , orderStripeChargeId = Nothing
         , orderCreatedAt = currentTime
         }
-    lineTotal <- createLineItems maybeTaxRate shippingAddress items orderId
+    lineTotal <- createLineItems maybeTaxRate shippingAddress items orderId memberNumber
     productTotals <- createProducts maybeTaxRate items orderId
     let totalCharges = lineTotal + sum productTotals
     case maybeStoreCredit of
@@ -590,9 +629,13 @@ deleteCart :: CartId -> AppSQL ()
 deleteCart cartId =
     deleteWhere [CartItemCartId ==. cartId] >> delete cartId
 
-createLineItems :: Maybe TaxRate -> Address -> [CartItemData] -> OrderId -> AppSQL Cents
-createLineItems maybeTaxRate shippingAddress items orderId = do
-    charges <- getCharges maybeTaxRate (Just $ addressCountry shippingAddress) items
+-- | Create the Shipping, Surcharge, & MemberDiscount OrderLineItems for an
+-- Order, returning the total amount of all items.
+--
+-- May throw a PlaceOrderError exception.
+createLineItems :: Maybe TaxRate -> Address -> [CartItemData] -> OrderId -> T.Text -> AppSQL Cents
+createLineItems maybeTaxRate shippingAddress items orderId memberNumber = do
+    charges <- getCharges maybeTaxRate (Just $ addressCountry shippingAddress) items (T.length memberNumber >= 4)
     shippingCharge <-
         case ccShippingMethods charges of
             [] ->
@@ -601,9 +644,13 @@ createLineItems maybeTaxRate shippingAddress items orderId = do
                 return charge
     shippingLine <- insertEntity $ makeLine ShippingLine shippingCharge
     surcharges <- mapM (insertEntity . makeLine SurchargeLine) $ ccSurcharges charges
+    maybeMemberDiscount <-
+        maybe (return Nothing) (fmap Just . insertEntity . makeLine MemberDiscountLine)
+            $ ccMemberDiscount charges
     return $
         sum (map (orderLineItemAmount . entityVal) surcharges)
         + orderLineItemAmount (entityVal shippingLine)
+        - maybe 0 (orderLineItemAmount . entityVal) maybeMemberDiscount
     where makeLine lineType charge =
             OrderLineItem
                 { orderLineItemOrderId = orderId

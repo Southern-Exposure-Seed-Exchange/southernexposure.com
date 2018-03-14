@@ -209,6 +209,7 @@ registrationRoute = validate >=> \parameters -> do
     let customer = Customer
             { customerEmail = rpEmail parameters
             , customerStoreCredit = Cents 0
+            , customerMemberNumber = ""
             , customerEncryptedPassword = encryptedPass
             , customerAuthToken = authToken
             , customerStripeId = Nothing
