@@ -1,6 +1,12 @@
 #!/usr/bin/env stack
 {- stack
     script
+    --ghc-build standard
+    --ghc-options -Wall
+    --ghc-options -Wcompat
+    --ghc-options -Wincomplete-record-updates
+    --ghc-options -Wincomplete-uni-patterns
+    --ghc-options -Wredundant-constraints
     --resolver lts-10.9
     --package ansi-terminal
     --package directory
