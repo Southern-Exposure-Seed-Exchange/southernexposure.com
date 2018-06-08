@@ -22,9 +22,8 @@ import Json.Encode as Encode exposing (Value)
 import RemoteData exposing (WebData)
 import Address exposing (AddressId(..))
 import Api
-import Decimal
 import Locations exposing (AddressLocations, Region)
-import Models.Fields exposing (Cents(..), centsMap2, centsMap, milligramsToString)
+import Models.Fields exposing (Cents(..), centsMap2, centsMap, centsFromString, milligramsToString)
 import OrderDetails
 import PageData
 import Ports
@@ -51,7 +50,7 @@ type alias Form =
     , billingAddress : CheckoutAddress
     , makeBillingDefault : Bool
     , billingSameAsShipping : Bool
-    , storeCredit : Maybe Cents
+    , storeCredit : String
     , memberNumber : Maybe String
     , comment : String
     , errors : Api.FormErrors
@@ -68,7 +67,7 @@ initial =
     , billingAddress = NewAddress Address.initialForm
     , makeBillingDefault = False
     , billingSameAsShipping = False
-    , storeCredit = Nothing
+    , storeCredit = ""
     , memberNumber = Nothing
     , comment = ""
     , errors = Api.initialErrors
@@ -105,7 +104,7 @@ initialWithDefaults shippingAddresses billingAddresses =
         , billingAddress = billingAddress
         , makeBillingDefault = isNew billingAddress
         , billingSameAsShipping = False
-        , storeCredit = Nothing
+        , storeCredit = ""
         , memberNumber = Nothing
         , comment = ""
         , errors = Api.initialErrors
@@ -200,8 +199,7 @@ update msg model authStatus maybeSessionToken checkoutDetails =
                 |> nothingAndNoCommand
 
         StoreCredit credit ->
-            model
-                |> limitStoreCredit checkoutDetails credit
+            { model | storeCredit = credit }
                 |> nothingAndNoCommand
 
         MemberNumber memberNumber ->
@@ -229,8 +227,13 @@ update msg model authStatus maybeSessionToken checkoutDetails =
                             totals =
                                 PageData.cartTotals details
 
+                            storeCredit =
+                                model.storeCredit
+                                    |> centsFromString
+                                    |> Maybe.map (limitStoreCredit details)
+
                             (Cents finalTotal) =
-                                case model.storeCredit of
+                                case storeCredit of
                                     Nothing ->
                                         totals.total
 
@@ -330,15 +333,10 @@ update msg model authStatus maybeSessionToken checkoutDetails =
             model |> nothingAndNoCommand
 
         RefreshDetails (RemoteData.Success details) ->
-            let
-                storeCreditString =
-                    Maybe.map Format.centsNumber model.storeCredit
-                        |> Maybe.withDefault ""
-            in
-                ( model |> limitStoreCredit (RemoteData.Success details) storeCreditString
-                , Just (DetailsRefreshed details)
-                , Cmd.none
-                )
+            ( model
+            , Just (DetailsRefreshed details)
+            , Cmd.none
+            )
 
         RefreshDetails _ ->
             model |> nothingAndNoCommand
@@ -455,30 +453,18 @@ findBy pred l =
                 findBy pred xs
 
 
-{-| Limit the amount of store credit applied so the checkout total is never negative.
+{-| Limit the amount of store credit applied so the checkout total is never
+negative.
 -}
-limitStoreCredit : WebData PageData.CheckoutDetails -> String -> Form -> Form
-limitStoreCredit checkoutDetails creditString model =
+limitStoreCredit : PageData.CheckoutDetails -> Cents -> Cents
+limitStoreCredit checkoutDetails =
     let
         maximumStoreCredit =
-            case checkoutDetails of
-                RemoteData.Success details ->
-                    PageData.cartTotals details
-                        |> .total
-                        |> centsMap2 min details.storeCredit
-
-                _ ->
-                    Cents 0
-
-        toCents =
-            Decimal.truncate -2
-                >> Decimal.mul (Decimal.fromInt 100)
-                >> Decimal.toFloat
-                >> round
-                >> Cents
-                >> centsMap2 min maximumStoreCredit
+            PageData.cartTotals checkoutDetails
+                |> .total
+                |> centsMap2 min checkoutDetails.storeCredit
     in
-        { model | storeCredit = Decimal.fromString creditString |> Maybe.map toCents }
+        centsMap2 min maximumStoreCredit
 
 
 getCustomerDetails :
@@ -547,10 +533,7 @@ placeOrder model authStatus maybeSessionToken stripeTokenId checkoutDetails =
             Encode.object
                 [ ( "shippingAddress", encodedShippingAddress )
                 , ( "billingAddress", encodedBillingAddress )
-                , ( "storeCredit"
-                  , Maybe.map (\(Cents c) -> Encode.int c) model.storeCredit
-                        |> Maybe.withDefault Encode.null
-                  )
+                , ( "storeCredit", encodedStoreCredit )
                 , ( "memberNumber", encodedMemberNumber )
                 , ( "comment", Encode.string model.comment )
                 , ( "stripeToken", Encode.string stripeTokenId )
@@ -567,6 +550,12 @@ placeOrder model authStatus maybeSessionToken stripeTokenId checkoutDetails =
                 , ( "password", Encode.string model.password )
                 , ( "stripeToken", Encode.string stripeTokenId )
                 ]
+
+        encodedStoreCredit =
+            model.storeCredit
+                |> centsFromString
+                |> Maybe.map (\(Cents c) -> Encode.int c)
+                |> Maybe.withDefault Encode.null
 
         encodedMemberNumber =
             Encode.string <|
@@ -741,9 +730,7 @@ view model authStatus locations checkoutDetails =
                                 , step "0.01"
                                 , A.min "0"
                                 , A.max <| Format.centsNumber maximumStoreCredit
-                                , value <|
-                                    Maybe.withDefault "" <|
-                                        Maybe.map Format.centsNumber model.storeCredit
+                                , value model.storeCredit
                                 , onInput StoreCredit
                                 ]
                                 []
@@ -1057,8 +1044,8 @@ sameAddressesCheckbox billingSameAsShipping =
         ]
 
 
-summaryTable : PageData.CheckoutDetails -> Maybe Cents -> Html msg
-summaryTable ({ items, charges } as checkoutDetails) maybeAppliedCredit =
+summaryTable : PageData.CheckoutDetails -> String -> Html msg
+summaryTable ({ items, charges } as checkoutDetails) creditString =
     let
         tableHeader =
             thead [ class "font-weight-bold" ]
@@ -1126,6 +1113,10 @@ summaryTable ({ items, charges } as checkoutDetails) maybeAppliedCredit =
                 Just credit ->
                     footerRow "Store Credit" (centsMap negate credit) ""
 
+        maybeAppliedCredit =
+            centsFromString creditString
+                |> Maybe.map (limitStoreCredit checkoutDetails)
+
         memberDiscountRow =
             charges.memberDiscount
                 |> Maybe.map (\c -> { c | amount = centsMap negate c.amount })
@@ -1146,7 +1137,8 @@ summaryTable ({ items, charges } as checkoutDetails) maybeAppliedCredit =
                     totals.total
 
                 Just credit ->
-                    centsMap2 (\total c -> total - c) totals.total credit
+                    credit
+                        |> centsMap2 (\total c -> total - c) totals.total
     in
         table [ class "table table-striped table-sm checkout-products-table" ]
             [ tableHeader

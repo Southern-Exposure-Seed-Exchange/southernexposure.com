@@ -4,11 +4,13 @@ module Models.Fields
         , centsMap
         , centsMap2
         , centsDecoder
+        , centsFromDecimal
+        , centsFromString
         , Milligrams(..)
         , milligramsToString
         )
 
-import Decimal
+import Decimal exposing (Decimal)
 import Json.Decode as Decode exposing (Decoder)
 
 
@@ -29,6 +31,20 @@ centsMap2 f (Cents a) (Cents b) =
 centsDecoder : Decoder Cents
 centsDecoder =
     Decode.map Cents Decode.int
+
+
+centsFromDecimal : Decimal -> Cents
+centsFromDecimal =
+    Decimal.truncate -2
+        >> Decimal.mul (Decimal.fromInt 100)
+        >> Decimal.toFloat
+        >> round
+        >> Cents
+
+
+centsFromString : String -> Maybe Cents
+centsFromString =
+    Decimal.fromString >> Maybe.map centsFromDecimal
 
 
 type Milligrams
