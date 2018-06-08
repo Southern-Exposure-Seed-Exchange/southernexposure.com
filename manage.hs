@@ -213,7 +213,7 @@ clientAndServerWatching = do
 
     let watchConfig = defaultConfig { confDebounce = Debounce 100 }
     liftIO . void . withManagerConf watchConfig $ \mgr -> do
-        watchTree mgr serverDirectory isProjectFile $ \event ->
+        void . watchTree mgr serverDirectory isProjectFile $ \event ->
             if ".hs" `isSuffixOf` eventPath event then
                 rebuildAndServe serverDirectory buildRef serverRef jobCount
             else
