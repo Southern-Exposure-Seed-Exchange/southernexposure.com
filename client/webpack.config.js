@@ -8,6 +8,7 @@ var isProduction = process.env.NODE_ENV === 'production';
 
 
 module.exports = {
+  mode: isProduction ? 'production' : 'development',
   entry: {
     vendor: [
       'bootstrap',
@@ -23,7 +24,11 @@ module.exports = {
 
   output: {
     path: path.resolve(__dirname + '/dist'),
-    filename: '[name].' + (isProduction ? '[chunkHash]' : '[hash]') + '.js',
+    filename: '[name].' + (isProduction ? '[contenthash]' : '[hash]') + '.js',
+  },
+
+  optimization: {
+    runtimeChunk: 'single'
   },
 
   module: {
@@ -72,6 +77,7 @@ module.exports = {
             options: {
               limit: 10000,
               mimetype: 'application/font-woff',
+              name: '[name].[hash].[ext]'
             },
           },
         ],
@@ -116,13 +122,6 @@ module.exports = {
       $: 'jquery',
       jQuery: 'jquery',
       Popper: 'popper.js/dist/umd/popper.js',
-    }),
-    new webpack.optimize.CommonsChunkPlugin({
-      name: 'vendor',
-      minChunks: function(module) { return isExternal(module); }
-    }),
-    new webpack.optimize.CommonsChunkPlugin({
-      name: 'runtime',
     }),
   ],
 
