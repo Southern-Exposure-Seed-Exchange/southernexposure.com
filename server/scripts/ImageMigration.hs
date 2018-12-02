@@ -49,14 +49,20 @@ getProductImagePaths :: MySQLConn -> IO [T.Text]
 getProductImagePaths mysql = do
     (_, productStream) <- query_ mysql . Query $
         "SELECT products_image FROM products WHERE products_image <> \"\""
-    map (\[MySQLText path] -> path) <$> Streams.toList productStream
+    map imagePath <$> Streams.toList productStream
 
 
 getCategoryImagePaths :: MySQLConn -> IO [T.Text]
 getCategoryImagePaths mysql = do
     (_, categoryStream) <- query_ mysql . Query $
         "SELECT categories_image FROM categories WHERE categories_image <> \"NULL\""
-    map (\[MySQLText path] -> path) <$> Streams.toList categoryStream
+    map imagePath <$> Streams.toList categoryStream
+
+
+imagePath :: [MySQLValue] -> T.Text
+imagePath [MySQLText path] = path
+imagePath _ = error "Invalid arguments to imagePath."
+
 
 
 findLargestImageAndMove :: T.Text -> T.Text -> IO ()

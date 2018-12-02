@@ -4,7 +4,7 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeFamilies #-}
 
-import Control.Monad (forM, foldM, void)
+import Control.Monad (foldM, void)
 import Control.Monad.Trans.Class (lift)
 import Control.Monad.Logger (runNoLoggingT)
 import Data.ByteString.Lazy (ByteString)
@@ -141,10 +141,13 @@ makeProducts mysql = do
         <> "    products_image, products_status "
         <> "FROM products "
         <> "WHERE products_status=1"
-    forM products $
-        \[ MySQLInt32 prodId, MySQLInt32 catId, MySQLDecimal prodPrice
+    mapM makeProduct products
+    where
+        makeProduct
+         [ MySQLInt32 prodId, MySQLInt32 catId, MySQLDecimal prodPrice
          , MySQLFloat prodQty, MySQLFloat prodWeight, MySQLText prodSKU
-         , MySQLText prodImg, _] -> do
+         , MySQLText prodImg, _] = do
+             -- TODO: Just use join query?
             queryString <- prepareStmt mysql . Query $
                 "SELECT products_id, products_name, products_description "
                 <> "FROM products_description WHERE products_id=?"
@@ -165,6 +168,7 @@ makeProducts mysql = do
                         , productImageUrl = T.pack . takeFileName $ T.unpack prodImg
                         }
                    )
+        makeProduct _ = error "Invalid arguments to makeProduct."
 
 
 makeVariants :: [(Int32, Int, T.Text, Scientific, Float, Float, Product)] -> [(Int, T.Text, ProductVariant)]
@@ -215,13 +219,15 @@ splitSku fullSku =
 
 
 makePages :: MySQLConn -> IO [Page]
-makePages mysql = do
-    pages <- Streams.toList . snd
+makePages mysql =
+    (map makePage <$>) . Streams.toList . snd
         =<< (query_ mysql . Query
             $ "SELECT pages_title, pages_html_text"
             <> "    FROM ezpages WHERE pages_html_text <> \"\"")
-    return $ flip map pages $ \[MySQLText name, MySQLText content] ->
-        Page name (slugify name) content
+    where
+        makePage [MySQLText name, MySQLText content] =
+            Page name (slugify name) content
+        makePage _ = error "Invalid arguments to makePage."
 
 
 makeCustomers :: MySQLConn -> IO [(Int, Customer)]
@@ -231,20 +237,24 @@ makeCustomers mysql = do
         $ "SELECT c.customers_id, c.customers_email_address "
         <> "FROM customers AS c "
         <> "WHERE c.COWOA_account=0"
-    forM customers $ \[ MySQLInt32 customerId, MySQLText email ] -> do
-        let storeCredit = fromMaybe 0 $ IntMap.lookup (fromIntegral customerId) storeCreditMap
-        token <- generateToken
-        return . (fromIntegral customerId,) $ Customer
-            { customerEmail = email
-            , customerStoreCredit = storeCredit
-            -- TODO: Get an export of the latest member numbers from stonedge
-            , customerMemberNumber = ""
-            , customerEncryptedPassword = ""
-            , customerAuthToken = token
-            , customerStripeId = Nothing
-            , customerIsAdmin = email == "gardens@southernexposure.com"
-            }
-    where generateToken = UUID.toText <$> UUID4.nextRandom
+    mapM (makeCustomer storeCreditMap) customers
+    where
+        generateToken = UUID.toText <$> UUID4.nextRandom
+        makeCustomer creditMap [MySQLInt32 customerId, MySQLText email ] = do
+            let storeCredit = fromMaybe 0
+                    $ IntMap.lookup (fromIntegral customerId) creditMap
+            token <- generateToken
+            return . (fromIntegral customerId,) $ Customer
+                { customerEmail = email
+                , customerStoreCredit = storeCredit
+                -- TODO: Get an export of the latest member numbers from stonedge
+                , customerMemberNumber = ""
+                , customerEncryptedPassword = ""
+                , customerAuthToken = token
+                , customerStripeId = Nothing
+                , customerIsAdmin = email == "gardens@southernexposure.com"
+                }
+        makeCustomer _ _ = error "Invalid arguments to makeCustomer."
 
 -- | Generate a Map from MySQL Customer IDs to Store Credit Amounts.
 getStoreCreditMap :: MySQLConn -> IO (IntMap.IntMap Cents)
@@ -253,11 +263,11 @@ getStoreCreditMap mysql = do
         $ "SELECT customer_id, amount "
         <> "FROM coupon_gv_customer "
         <> "WHERE amount > 0"
-    return $ foldl
-        (\acc [MySQLInt32 customerId, MySQLDecimal amount] ->
-            IntMap.insert (fromIntegral customerId) (Cents . round $ 100 * amount) acc
-        )
-        IntMap.empty customersAndAmounts
+    return $ foldl updateCreditMap IntMap.empty customersAndAmounts
+    where
+        updateCreditMap m [MySQLInt32 customerId, MySQLDecimal amount] =
+            IntMap.insert (fromIntegral customerId) (Cents . round $ 100 * amount) m
+        updateCreditMap _ _ = error "Invalid arguments to updateCreditMap."
 
 
 -- | Build the Shipping Addresses for Customers.
@@ -277,13 +287,15 @@ makeAddresses mysql = do
         <> "RIGHT JOIN countries as co "
         <> "    ON entry_country_id=co.countries_id "
         <> "WHERE c.COWOA_account=0"
-    forM customersAndAddresses $
-        \[ MySQLInt32 addressId, MySQLText firstName, MySQLText lastName
+    mapM makeAddress customersAndAddresses
+    where
+    makeAddress
+         [ MySQLInt32 addressId, MySQLText firstName, MySQLText lastName
          , MySQLText companyName, MySQLText street, MySQLText addressTwo
          , MySQLText zipCode, MySQLText city, MySQLText state
          , nullableZoneName, MySQLText rawCountryCode, MySQLInt32 customerId
          , MySQLInt32 defaultAddress
-         ] ->
+         ] =
         let
             zone =
                 case nullableZoneName of
@@ -361,6 +373,7 @@ makeAddresses mysql = do
                 , addressCustomerId = toSqlKey $ fromIntegral customerId
                 , addressIsActive = True
                 }
+    makeAddress _ = error "Invalid arguments to makeAddress."
 
 
 makeCustomerCarts :: MySQLConn -> IO (OldIdMap [(Int, Natural)])
@@ -368,18 +381,18 @@ makeCustomerCarts mysql = do
     cartItems <- mysqlQuery mysql $
         "SELECT customers_id, products_id, customers_basket_quantity " <>
         "FROM customers_basket ORDER BY customers_id"
-    return $ foldl
-        (\acc [MySQLInt32 customerId, MySQLText productsId, MySQLFloat quantity] ->
-            IntMap.insertWith (++) (fromIntegral customerId)
-                [(parseProductId productsId, round quantity)] acc
-        )
-        IntMap.empty cartItems
-    where parseProductId productId =
+    return $ foldl updateCartMap IntMap.empty cartItems
+    where
+        parseProductId productId =
             case T.split (== ':') productId of
                 [] ->
                     error "makeCustomerCarts: T.split returned an empty list!"
                 integerPart : _ ->
                     read $ T.unpack integerPart
+        updateCartMap m [MySQLInt32 customerId, MySQLText productsId, MySQLFloat quantity] =
+            IntMap.insertWith (++) (fromIntegral customerId)
+                [(parseProductId productsId, round quantity)] m
+        updateCartMap _ _ = error "Invalid arguments to updateCartMap."
 
 
 -- Persistent Model Saving Functions
