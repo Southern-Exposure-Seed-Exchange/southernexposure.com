@@ -19,6 +19,13 @@ extra-source-files:
     - ../LICENSE
 
 
+ghc-options:
+    - -Wall
+    - -Wcompat
+    - -Wincomplete-record-updates
+    - -Wincomplete-uni-patterns
+    - -Wredundant-constraints
+
 dependencies:
     - base >= 4.7 && < 5
     - aeson
