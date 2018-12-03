@@ -1,29 +1,29 @@
 module Address
     exposing
-        ( Model
-        , AddressId(..)
-        , initial
-        , fromModel
-        , decoder
+        ( AddressId(..)
         , Form
-        , initialForm
-        , encode
+        , Model
         , Msg
-        , update
         , card
-        , select
+        , decoder
+        , encode
         , form
+        , fromModel
         , horizontalForm
+        , initial
+        , initialForm
+        , select
+        , update
         )
 
+import Api
 import Dict
 import Html exposing (..)
-import Html.Attributes exposing (attribute, id, class, for, type_, required, value, name, selected, classList)
-import Html.Events exposing (onInput, on, targetValue)
+import Html.Attributes exposing (attribute, class, classList, for, id, name, required, selected, type_, value)
+import Html.Events exposing (on, onInput, targetValue)
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode exposing (Value)
-import Api
-import Locations exposing (Region(..), regionDecoder, regionEncoder, Location, AddressLocations)
+import Locations exposing (AddressLocations, Location, Region(..), regionDecoder, regionEncoder)
 import Views.HorizontalForm as Form
 
 
@@ -119,14 +119,13 @@ encode { model } =
         , ( "country", model.country )
         ]
             |> List.map (Tuple.mapSecond Encode.string)
-            |> ((::)
-                    ( "id"
-                    , Maybe.withDefault Encode.null <|
-                        Maybe.map (\(AddressId i) -> Encode.int i) model.id
-                    )
-               )
-            |> ((::) ( "state", encodedState ))
-            |> ((::) ( "isDefault", Encode.bool model.isDefault ))
+            |> (::)
+                ( "id"
+                , Maybe.withDefault Encode.null <|
+                    Maybe.map (\(AddressId i) -> Encode.int i) model.id
+                )
+            |> (::) ( "state", encodedState )
+            |> (::) ( "isDefault", Encode.bool model.isDefault )
             |> Encode.object
 
 
@@ -277,8 +276,8 @@ select selectMsg maybeAddressId addresses newAddressOption =
             targetValue
                 |> Decode.andThen
                     (String.toInt
-                        >> Result.map Decode.succeed
-                        >> Result.withDefault (Decode.fail "")
+                        >> Maybe.map Decode.succeed
+                        >> Maybe.withDefault (Decode.fail "")
                     )
                 |> Decode.map msg
                 |> on "change"
@@ -297,7 +296,7 @@ select selectMsg maybeAddressId addresses newAddressOption =
             |> List.map
                 (\a ->
                     option
-                        [ value <| toString <| fromAddressId a.id
+                        [ value <| String.fromInt <| fromAddressId a.id
                         , isSelected a
                         ]
                         (addressDescription a)
@@ -354,12 +353,12 @@ horizontalForm : Form -> AddressLocations -> List (Html Msg)
 horizontalForm { model, errors } locations =
     let
         requiredField s msg =
-            inputField s msg True
+            textField s msg True
 
         optionalField s msg =
-            inputField s msg False
+            textField s msg False
 
-        inputField selector =
+        textField selector =
             Form.inputRow errors (selector model)
 
         selectRow =

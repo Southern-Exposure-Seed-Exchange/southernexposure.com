@@ -6,7 +6,7 @@ module Products.Pagination
         , fromQueryString
         )
 
-import UrlParser as Url exposing ((<?>))
+import Url.Parser as Url exposing ((<?>))
 import Products.Sorting as Sorting
 import Routing.Utils exposing (optionalIntParam)
 
@@ -31,7 +31,7 @@ toQueryString { page, perPage, sorting } =
         |> List.map
             (\( selector, value, param ) ->
                 ( selector default /= value
-                , param ++ "=" ++ toString value
+                , param ++ "=" ++ String.fromInt value
                 )
             )
         |> (\fs -> ( Sorting.default /= sorting, Sorting.toQueryString sorting ) :: fs)
@@ -46,7 +46,7 @@ fromQueryString :
 fromQueryString pathParser =
     Url.map (\constructor page perPage -> constructor << Data page perPage)
         (pathParser
-            <?> optionalIntParam "page" (default.page)
-            <?> optionalIntParam "perPage" (default.perPage)
+            <?> optionalIntParam "page" default.page
+            <?> optionalIntParam "perPage" default.perPage
         )
         |> Sorting.fromQueryString

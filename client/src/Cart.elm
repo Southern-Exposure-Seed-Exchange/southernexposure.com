@@ -10,15 +10,15 @@ module Cart
 import Dict exposing (Dict)
 import Html exposing (..)
 import Html.Attributes as A exposing (class, colspan, src, type_, value, step, href, disabled)
-import Html.Events exposing (onSubmit)
-import Html.Events.Extra exposing (onClickPreventDefault)
+import Html.Events exposing (onSubmit, onClick)
+import Html.Keyed as Keyed
 import Json.Encode as Encode
 import RemoteData
 import Api
-import Messages exposing (Msg(EditCartMsg), EditCartMessage(..))
+import Messages exposing (Msg(..), EditCartMessage(..))
 import Models.Fields exposing (Cents(..), centsMap)
 import PageData exposing (CartDetails, CartItemId(..))
-import Routing exposing (Route(ProductDetails, Checkout))
+import Routing exposing (Route(..))
 import User exposing (AuthStatus, User)
 import Views.Format as Format
 import Views.Images as Images
@@ -79,8 +79,8 @@ update msg authStatus maybeCartToken model details =
 
         UpdateResponse response ->
             case response of
-                RemoteData.Success details ->
-                    ( initial, Just details, Cmd.none )
+                RemoteData.Success cartDetails ->
+                    ( initial, Just cartDetails, Cmd.none )
 
                 _ ->
                     ( model, Nothing, Cmd.none )
@@ -115,7 +115,7 @@ removeItem authStatus maybeCartToken model itemId =
             Encode.object <|
                 [ ( "quantities"
                   , Encode.object
-                        [ ( toString <| fromCartItemId itemId, Encode.int 0 ) ]
+                        [ ( String.fromInt <| fromCartItemId itemId, Encode.int 0 ) ]
                   )
                 ]
                     ++ encodedCartToken maybeCartToken
@@ -159,7 +159,14 @@ view { quantities } ({ items, charges } as cartDetails) =
         cartTable =
             table [ class "table table-striped table-sm cart-table" ]
                 [ tableHeader
-                , tbody [] <| List.map productRow items
+                , Keyed.node "tbody" [] <|
+                    List.map
+                        (\i ->
+                            ( String.fromInt <| fromCartItemId i.id
+                            , productRow i
+                            )
+                        )
+                        items
                 , tableFooter
                 ]
 
@@ -189,7 +196,7 @@ view { quantities } ({ items, charges } as cartDetails) =
                     [ input
                         [ class "cart-quantity form-control mx-auto"
                         , type_ "number"
-                        , value <| toString <| Maybe.withDefault 1 <| Dict.get (fromCartItemId id) quantities
+                        , value <| String.fromInt <| Maybe.withDefault 1 <| Dict.get (fromCartItemId id) quantities
                         , onIntInput <| EditCartMsg << Quantity id
                         , A.min "1"
                         , A.step "1"
@@ -219,7 +226,7 @@ view { quantities } ({ items, charges } as cartDetails) =
                 , td [ class "text-right align-middle" ]
                     [ text <| Format.cents (centsMap ((*) quantity) variant.price) ]
                 , td [ class "text-center align-middle" ]
-                    [ a [ class "text-danger", href "#", onClickPreventDefault <| EditCartMsg <| Remove id ]
+                    [ button [ class "btn btn-link text-danger", onClick <| EditCartMsg <| Remove id ]
                         [ icon "times" ]
                     ]
                 ]
@@ -272,7 +279,7 @@ view { quantities } ({ items, charges } as cartDetails) =
             [ h1 [] [ text "Shopping Cart" ]
             , hr [] []
             , p [ class "text-center font-weight-bold" ]
-                [ text <| "Total Items: " ++ toString itemCount ++ " Amount: " ++ Format.cents totals.total
+                [ text <| "Total Items: " ++ String.fromInt itemCount ++ " Amount: " ++ Format.cents totals.total
                 ]
             , form [ onSubmit <| EditCartMsg Submit ]
                 [ cartTable
@@ -305,7 +312,7 @@ changedQuantities quantities =
 
                 Just formQuantity ->
                     if formQuantity /= quantity then
-                        ( toString <| fromCartItemId id, Encode.int formQuantity )
+                        ( String.fromInt <| fromCartItemId id, Encode.int formQuantity )
                             :: acc
                     else
                         acc

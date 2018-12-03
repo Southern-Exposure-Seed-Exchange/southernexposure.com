@@ -7,7 +7,7 @@ module QuickOrder
         , view
         )
 
-import Array.Hamt as Array exposing (Array)
+import Array exposing (Array)
 import Dict
 import Html exposing (..)
 import Html.Attributes as A exposing (id, class, type_, value, name, required)
@@ -48,15 +48,6 @@ initialForm index =
     { sku = ""
     , quantity = 1
     }
-
-
-encodeForm : Int -> Form -> Value
-encodeForm index { sku, quantity } =
-    Encode.object
-        [ ( "sku", Encode.string sku )
-        , ( "quantity", Encode.int quantity )
-        , ( "index", Encode.int index )
-        ]
 
 
 
@@ -104,7 +95,7 @@ update msg ({ forms } as model) authStatus maybeSessionToken =
                     Array.foldl
                         (\f ( q, i, acc ) ->
                             if not (String.isEmpty f.sku) then
-                                ( q + f.quantity, i + 1, encodeForm i f :: acc )
+                                ( q + f.quantity, i + 1, ( i, f ) :: acc )
                             else
                                 ( q, i + 1, acc )
                         )
@@ -113,11 +104,19 @@ update msg ({ forms } as model) authStatus maybeSessionToken =
 
                 encodedForms =
                     Encode.object
-                        [ ( "items", Encode.list changedForms )
+                        [ ( "items", Encode.list encodeForm changedForms )
                         , ( "sessionToken"
                           , Maybe.map Encode.string maybeSessionToken
                                 |> Maybe.withDefault Encode.null
                           )
+                        ]
+
+                encodeForm : ( Int, Form ) -> Value
+                encodeForm ( index, { sku, quantity } ) =
+                    Encode.object
+                        [ ( "sku", Encode.string sku )
+                        , ( "quantity", Encode.int quantity )
+                        , ( "index", Encode.int index )
                         ]
             in
                 if List.isEmpty changedForms then
@@ -161,15 +160,16 @@ addItemsToCustomerCart token encodedForms quantityToAdd =
     Api.post Api.CartQuickOrderCustomer
         |> Api.withToken token
         |> Api.withJsonBody encodedForms
-        |> Api.withJsonResponse (Decode.succeed "")
-        |> Api.withErrorHandler (SubmitResponse quantityToAdd)
+        |> Api.withErrorHandler (Decode.succeed token)
+        |> Api.sendRequest (SubmitResponse quantityToAdd)
 
 
 addItemsToAnonymousCart : Value -> Int -> Cmd Msg
 addItemsToAnonymousCart encodedForms quantityToAdd =
     Api.post Api.CartQuickOrderAnonymous
         |> Api.withJsonBody encodedForms
-        |> Api.withErrorHandler (SubmitResponse quantityToAdd)
+        |> Api.withStringErrorHandler
+        |> Api.sendRequest (SubmitResponse quantityToAdd)
 
 
 
@@ -246,9 +246,9 @@ renderForm errors index model =
     let
         itemNumberInput =
             input
-                [ id <| "item-number-" ++ toString index
+                [ id <| "item-number-" ++ String.fromInt index
                 , class itemNumberClass
-                , name <| "item-number-" ++ toString index
+                , name <| "item-number-" ++ String.fromInt index
                 , type_ "text"
                 , value model.sku
                 , onInput <| Sku index
@@ -276,7 +276,7 @@ renderForm errors index model =
             not <| List.isEmpty itemNumberErrors
 
         itemNumberErrors =
-            Dict.get (toString index) errors
+            Dict.get (String.fromInt index) errors
                 |> Maybe.withDefault []
 
         onIntInput msg =
@@ -285,15 +285,15 @@ renderForm errors index model =
         [ td [ class "item-number" ] [ itemNumberInput, errorHtml ]
         , td [ class "quantity" ]
             [ input
-                [ id <| "quantity-" ++ toString index
+                [ id <| "quantity-" ++ String.fromInt index
                 , class "form-control"
-                , name <| "quantity-" ++ toString index
+                , name <| "quantity-" ++ String.fromInt index
                 , type_ "number"
                 , A.min "1"
                 , A.step "1"
                 , A.size 5
                 , onIntInput <| Quantity index
-                , value <| toString model.quantity
+                , value <| String.fromInt model.quantity
                 , required <| not <| String.isEmpty model.sku
                 ]
                 []
@@ -341,8 +341,8 @@ instructions =
 
 
 indexedFoldl : (Int -> a -> b -> b) -> b -> Array a -> b
-indexedFoldl reducer initial =
+indexedFoldl reducer initialValue =
     Array.foldl
         (\item ( index, acc ) -> ( index + 1, reducer index item acc ))
-        ( 0, initial )
+        ( 0, initialValue )
         >> Tuple.second

@@ -1,6 +1,8 @@
 module Routing.Utils
     exposing
-        ( fromIntParam
+        ( fromStringParam
+        , fromStringWithDefaultParam
+        , fromIntParam
         , optionalIntParam
         , parseFlag
         , joinPath
@@ -10,31 +12,35 @@ module Routing.Utils
         , joinQueryStrings
         )
 
-import UrlParser exposing (QueryParser, customParam)
+import Url.Parser.Query as Query
 
 
 -- Parsing
 
 
-fromIntParam : String -> (Int -> a) -> QueryParser (Maybe a -> b) b
+fromStringParam : String -> (String -> a) -> Query.Parser a
+fromStringParam param fromString =
+    Query.map (Maybe.withDefault "" >> fromString) <| Query.string param
+
+
+fromStringWithDefaultParam : String -> (String -> a) -> a -> Query.Parser a
+fromStringWithDefaultParam param mapper default =
+    Query.map (Maybe.map mapper >> Maybe.withDefault default) <| Query.string param
+
+
+fromIntParam : String -> (Int -> a) -> Query.Parser (Maybe a)
 fromIntParam param fromInt =
-    customParam param
-        (Maybe.andThen (String.toInt >> Result.toMaybe)
-            >> Maybe.map fromInt
-        )
+    Query.map (Maybe.map fromInt) <| Query.int param
 
 
-optionalIntParam : String -> Int -> QueryParser (Int -> b) b
+optionalIntParam : String -> Int -> Query.Parser Int
 optionalIntParam param default =
-    customParam param
-        (Maybe.andThen (String.toInt >> Result.toMaybe)
-            >> Maybe.withDefault default
-        )
+    Query.map (Maybe.withDefault default) <| Query.int param
 
 
-parseFlag : String -> QueryParser (Bool -> b) b
+parseFlag : String -> Query.Parser Bool
 parseFlag param =
-    customParam param (Maybe.map ((==) "1") >> Maybe.withDefault False)
+    fromStringWithDefaultParam param ((==) "1") False
 
 
 

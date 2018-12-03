@@ -1,23 +1,23 @@
 module Auth.EditAddress
     exposing
         ( Form
-        , initial
         , Msg
+        , initial
         , update
         , view
         )
 
+import Address exposing (AddressId(..))
+import Api
 import Dict exposing (Dict)
 import Html exposing (..)
 import Html.Attributes exposing (..)
-import Html.Events exposing (onClick, onSubmit, onCheck)
+import Html.Events exposing (onCheck, onClick, onSubmit)
 import Json.Decode as Decode
-import RemoteData exposing (WebData)
-import Address exposing (AddressId(..))
-import Api
 import Locations exposing (AddressLocations)
 import PageData
-import Routing exposing (Route(MyAccount))
+import RemoteData exposing (WebData)
+import Routing exposing (Route(..))
 import Update.Utils exposing (noCommand)
 import User exposing (AuthStatus)
 
@@ -55,8 +55,8 @@ type Msg
     | UpdateResponse AddressId (WebData (Result Api.FormErrors ()))
 
 
-update : Msg -> Form -> AuthStatus -> WebData PageData.AddressDetails -> ( Form, Cmd Msg )
-update msg model authStatus details =
+update : Routing.Key -> Msg -> Form -> AuthStatus -> WebData PageData.AddressDetails -> ( Form, Cmd Msg )
+update key msg model authStatus details =
     case msg of
         SelectShipping addressId ->
             details
@@ -91,7 +91,7 @@ update msg model authStatus details =
         DeleteResponse response ->
             case response of
                 RemoteData.Success _ ->
-                    ( initial, Routing.newUrl MyAccount )
+                    ( initial, Routing.newUrl key MyAccount )
 
                 _ ->
                     ( model, Cmd.none )
@@ -110,7 +110,7 @@ update msg model authStatus details =
         UpdateResponse (AddressId addressId) response ->
             case response of
                 RemoteData.Success (Ok _) ->
-                    ( initial, Routing.newUrl MyAccount )
+                    ( initial, Routing.newUrl key MyAccount )
 
                 RemoteData.Success (Err errors) ->
                     { model
@@ -184,10 +184,10 @@ updateAddress authStatus isDefault ({ model } as addressForm) =
         case ( authStatus, addressForm.model.id ) of
             ( User.Authorized user, Just (AddressId addressId) ) ->
                 Api.post (Api.CustomerEditAddress addressId)
-                    |> Api.withJsonBody (Address.encode withNewDefault)
-                    |> Api.withJsonResponse (Decode.succeed ())
                     |> Api.withToken user.authToken
-                    |> Api.withErrorHandler (UpdateResponse <| AddressId addressId)
+                    |> Api.withJsonBody (Address.encode withNewDefault)
+                    |> Api.withErrorHandler (Decode.succeed ())
+                    |> Api.sendRequest (UpdateResponse <| AddressId addressId)
 
             _ ->
                 Cmd.none
@@ -249,15 +249,25 @@ view model locations { shippingAddresses, billingAddresses } =
 
         maybeSelectedIdAndForm =
             model.selectedAddress
-                |> Maybe.andThen (\(AddressId id) -> Dict.get id model.forms |> Maybe.map ((,) id))
+                |> Maybe.andThen
+                    (\(AddressId id) ->
+                        Dict.get id model.forms |> Maybe.map (Tuple.pair id)
+                    )
 
         maybeSelectedAddress =
             model.selectedAddress
-                |> Maybe.andThen (\i -> findAddress i <| shippingAddresses ++ billingAddresses)
+                |> Maybe.andThen
+                    (\i ->
+                        findAddress i <| shippingAddresses ++ billingAddresses
+                    )
 
         buttons =
             div [ class "form-group text-right" ]
-                [ button [ class "btn btn-success mr-2", disabled updateIsDisabled, type_ "submit" ]
+                [ button
+                    [ class "btn btn-success mr-2"
+                    , disabled updateIsDisabled
+                    , type_ "submit"
+                    ]
                     [ text "Update" ]
                 , button
                     [ class "btn btn-danger"

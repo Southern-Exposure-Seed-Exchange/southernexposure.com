@@ -1,14 +1,18 @@
 module Routing
     exposing
-        ( Route(..)
+        ( Key
+        , Route(..)
         , parseRoute
         , reverse
         , authRequired
         , newUrl
         )
 
-import Navigation
-import UrlParser as Url exposing ((</>), (<?>))
+import Browser
+import Browser.Navigation
+import Url exposing (Url)
+import Url.Parser as Url exposing ((</>), (<?>))
+import Url.Parser.Query as Query
 import Products.Pagination as Pagination
 import Routing.Utils exposing (parseFlag, joinPath, withQueryStrings, queryFlag)
 import SeedAttribute
@@ -36,7 +40,7 @@ type Route
     | NotFound
 
 
-parseRoute : Navigation.Location -> Route
+parseRoute : Url -> Route
 parseRoute =
     let
         searchParser =
@@ -64,7 +68,7 @@ parseRoute =
                 [ Url.map Login (Url.s "login")
                 , Url.map CreateAccount (Url.s "create")
                 , Url.map CreateAccountSuccess (Url.s "create" </> Url.s "success")
-                , Url.map ResetPassword (Url.s "reset-password" <?> Url.stringParam "code")
+                , Url.map ResetPassword (Url.s "reset-password" <?> Query.string "code")
                 , Url.map MyAccount Url.top
                 , Url.map EditLogin (Url.s "edit")
                 , Url.map EditAddress (Url.s "addresses")
@@ -87,10 +91,10 @@ parseRoute =
                 , Url.map QuickOrder (Url.s "quick-order")
                 , Url.map Checkout (Url.s "checkout")
                 , Url.map CheckoutSuccess (Url.s "checkout" </> Url.s "success" </> Url.int <?> parseFlag "newAccount")
-                , Url.map PageDetails (Url.string)
+                , Url.map PageDetails Url.string
                 ]
     in
-        Url.parsePath routeParser
+        Url.parse routeParser
             >> Maybe.withDefault NotFound
 
 
@@ -168,7 +172,7 @@ reverse route =
             joinPath [ "account", "addresses" ]
 
         OrderDetails orderId ->
-            joinPath [ "account", "order", toString orderId ]
+            joinPath [ "account", "order", String.fromInt orderId ]
 
         Cart ->
             joinPath [ "cart" ]
@@ -180,7 +184,7 @@ reverse route =
             joinPath [ "checkout" ]
 
         CheckoutSuccess orderId newAccount ->
-            joinPath [ "checkout", "success", toString orderId ]
+            joinPath [ "checkout", "success", String.fromInt orderId ]
                 ++ withQueryStrings [ queryFlag "newAccount" newAccount ]
 
         NotFound ->
@@ -245,6 +249,10 @@ authRequired route =
             False
 
 
-newUrl : Route -> Cmd msg
-newUrl =
-    reverse >> Navigation.newUrl
+type alias Key =
+    Browser.Navigation.Key
+
+
+newUrl : Key -> Route -> Cmd msg
+newUrl key =
+    reverse >> Browser.Navigation.pushUrl key

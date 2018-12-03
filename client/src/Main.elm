@@ -3,7 +3,6 @@ module Main exposing (main)
 import Dict
 import Json.Decode as Decode
 import Json.Encode as Encode
-import Navigation
 import Paginate exposing (Paginated)
 import RemoteData exposing (WebData)
 import Address
@@ -15,6 +14,8 @@ import Auth.EditLogin as EditLogin
 import Auth.Login as Login
 import Auth.MyAccount as MyAccount
 import Auth.ResetPassword as ResetPassword
+import Browser
+import Browser.Navigation
 import Cart
 import Checkout
 import Locations
@@ -30,14 +31,17 @@ import SeedAttribute exposing (SeedAttribute)
 import SiteUI
 import SiteUI.Search as SiteSearch
 import StaticPage exposing (StaticPage)
+import Task
+import Time
 import Update.Utils exposing (extraCommand, noCommand, discardCommand, updateAndCommand, withCommand, batchCommand, maybeCommand)
 import User exposing (User, AuthStatus)
+import Url exposing (Url)
 import View exposing (view)
 
 
 main : Program Flags Model Msg
 main =
-    Navigation.programWithFlags (parseRoute >> UrlUpdate)
+    Browser.application
         { init = init
         , update = update
         , subscriptions =
@@ -50,6 +54,8 @@ main =
                 ]
                 |> always
         , view = view
+        , onUrlChange = parseRoute >> UrlUpdate
+        , onUrlRequest = LinkClick
         }
 
 
@@ -65,14 +71,14 @@ type alias Flags =
 -- MODEL
 
 
-init : Flags -> Navigation.Location -> ( Model, Cmd Msg )
-init flags location =
+init : Flags -> Url -> Routing.Key -> ( Model, Cmd Msg )
+init flags url key =
     let
         route =
-            parseRoute location
+            parseRoute url
 
         ( model, cmd ) =
-            Model.initial route
+            Model.initial key route
                 |> (\m ->
                         { m
                             | maybeSessionToken = flags.cartSessionToken
@@ -81,23 +87,23 @@ init flags location =
                    )
                 |> fetchDataForRoute
                 |> Tuple.mapSecond
-                    (\cmd ->
+                    (\cmd_ ->
                         if route == Checkout && flags.authToken /= Nothing then
                             Cmd.none
                         else
-                            cmd
+                            cmd_
                     )
 
         authorizationCmd =
             Maybe.map2 reAuthorize flags.authUserId flags.authToken
-                |> Maybe.withDefault (redirectIfAuthRequired route)
+                |> Maybe.withDefault (redirectIfAuthRequired key route)
     in
         ( model
         , Cmd.batch
             [ cmd
             , getNavigationData
-            , setPageTitle model
             , authorizationCmd
+            , Task.perform NewZone Time.here
             ]
         )
 
@@ -106,102 +112,10 @@ init flags location =
 -- COMMANDS
 
 
-setPageTitle : Model -> Cmd Msg
-setPageTitle { route, pageData } =
-    let
-        mapper selector f =
-            selector pageData
-                |> RemoteData.toMaybe
-                |> Maybe.map (f >> Ports.setPageTitle)
-                |> Maybe.withDefault Cmd.none
-    in
-        case route of
-            ProductDetails _ ->
-                mapper .productDetails (.product >> .name)
-
-            CategoryDetails _ _ ->
-                pageData.categoryDetails
-                    |> Paginate.getResponseData
-                    |> Maybe.map (.category >> .name)
-                    |> Maybe.withDefault ""
-                    |> Ports.setPageTitle
-
-            AdvancedSearch ->
-                Ports.setPageTitle "Advanced Search"
-
-            SearchResults data _ ->
-                Ports.setPageTitle <|
-                    case Search.uniqueSearch data of
-                        Nothing ->
-                            "Search Results"
-
-                        Just searchType ->
-                            case searchType of
-                                AllProducts ->
-                                    "All Products"
-
-                                AttributeSearch (SeedAttribute.Organic) ->
-                                    "Organic Products"
-
-                                AttributeSearch (SeedAttribute.Heirloom) ->
-                                    "Heirloom Products"
-
-                                AttributeSearch (SeedAttribute.Regional) ->
-                                    "South-Eastern Products"
-
-                                AttributeSearch (SeedAttribute.Ecological) ->
-                                    "Ecologically Grown Products"
-
-            PageDetails _ ->
-                mapper .pageDetails .name
-
-            CreateAccount ->
-                Ports.setPageTitle "Create an Account"
-
-            CreateAccountSuccess ->
-                Ports.setPageTitle "Account Creation Successful"
-
-            Login ->
-                Ports.setPageTitle "Customer Login"
-
-            ResetPassword Nothing ->
-                Ports.setPageTitle "Reset Password"
-
-            ResetPassword (Just _) ->
-                Ports.setPageTitle "Change Password"
-
-            MyAccount ->
-                Ports.setPageTitle "My Account"
-
-            EditLogin ->
-                Ports.setPageTitle "Edit Login Details"
-
-            EditAddress ->
-                Ports.setPageTitle "Edit Addresses"
-
-            OrderDetails orderId ->
-                Ports.setPageTitle <| "Order #" ++ toString orderId
-
-            Cart ->
-                Ports.setPageTitle "Shopping Cart"
-
-            QuickOrder ->
-                Ports.setPageTitle "Quick Order"
-
-            Checkout ->
-                Ports.setPageTitle "Checkout"
-
-            CheckoutSuccess _ _ ->
-                Ports.setPageTitle "Order Complete"
-
-            NotFound ->
-                Ports.setPageTitle "Page Not Found"
-
-
 {-| TODO: Move to PageData module?
 -}
 fetchDataForRoute : Model -> ( Model, Cmd Msg )
-fetchDataForRoute ({ route, pageData } as model) =
+fetchDataForRoute ({ route, pageData, key } as model) =
     let
         updateCategoryDetails slug pagination products =
             products
@@ -227,10 +141,10 @@ fetchDataForRoute ({ route, pageData } as model) =
                     , getAdvancedSearchData
                     )
 
-                SearchResults data pagination ->
+                SearchResults searchData pagination ->
                     pageData.searchResults
                         |> Paginate.updateData PageData.searchConfig
-                            { data = data, sorting = pagination.sorting }
+                            { data = searchData, sorting = pagination.sorting }
                         |> discardCommand (Paginate.updatePerPage PageData.searchConfig pagination.perPage)
                         |> discardCommand (Paginate.jumpTo PageData.searchConfig pagination.page)
                         |> Tuple.mapFirst (\sr -> { pageData | searchResults = sr })
@@ -305,7 +219,7 @@ fetchDataForRoute ({ route, pageData } as model) =
                                 getDetails =
                                     case model.maybeSessionToken of
                                         Nothing ->
-                                            Tuple.mapSecond (always <| Routing.newUrl Cart)
+                                            Tuple.mapSecond (always <| Routing.newUrl key Cart)
 
                                         Just token ->
                                             batchCommand
@@ -470,7 +384,7 @@ addToCustomerCart token quantity (ProductVariantId variantId) =
     in
         Api.post Api.CartAddCustomer
             |> Api.withJsonBody body
-            |> Api.withJsonResponse (Decode.succeed "")
+            |> Api.withJsonResponse (Decode.succeed token)
             |> Api.withToken token
             |> Api.sendRequest (SubmitAddToCartResponse quantity)
 
@@ -490,6 +404,7 @@ addToAnonymousCart maybeSessionToken quantity (ProductVariantId variantId) =
     in
         Api.post Api.CartAddAnonymous
             |> Api.withJsonBody body
+            |> Api.withStringResponse
             |> Api.sendRequest (SubmitAddToCartResponse quantity)
 
 
@@ -517,17 +432,25 @@ getCheckoutSuccessDetails token orderId =
 {-| TODO: Refactor pagedata messages into separate msg & update
 -}
 update : Msg -> Model -> ( Model, Cmd Msg )
-update msg ({ pageData } as model) =
+update msg ({ pageData, key } as model) =
     case msg of
         UrlUpdate route ->
             { model | route = route }
                 |> fetchDataForRoute
                 |> clearSearchForm
-                |> extraCommand setPageTitle
                 |> extraCommand (always (Ports.collapseMobileMenus ()))
 
         NavigateTo route ->
-            ( model, Routing.newUrl route )
+            ( model, Routing.newUrl key route )
+
+        LinkClick (Browser.External url) ->
+            ( model, Browser.Navigation.load url )
+
+        LinkClick (Browser.Internal url) ->
+            ( model, Routing.newUrl key <| parseRoute url )
+
+        NewZone zone ->
+            ( { model | zone = zone }, Cmd.none )
 
         LogOut ->
             let
@@ -537,7 +460,7 @@ update msg ({ pageData } as model) =
             in
                 ( updatedModel
                 , Cmd.batch
-                    [ redirectIfAuthRequired model.route
+                    [ redirectIfAuthRequired key model.route
                     , Ports.removeAuthDetails ()
                     , Ports.setCartItemCount 0
                     , fetchCmd
@@ -614,7 +537,7 @@ update msg ({ pageData } as model) =
         SearchMsg subMsg ->
             let
                 ( searchData, cmd ) =
-                    SiteSearch.update subMsg model.searchData
+                    SiteSearch.update key subMsg model.searchData
             in
                 ( { model | searchData = searchData }, cmd )
 
@@ -626,7 +549,7 @@ update msg ({ pageData } as model) =
         CreateAccountMsg subMsg ->
             let
                 ( updatedForm, maybeAuthStatus, cmd ) =
-                    CreateAccount.update subMsg model.createAccountForm model.maybeSessionToken
+                    CreateAccount.update key subMsg model.createAccountForm model.maybeSessionToken
             in
                 ( { model
                     | createAccountForm = updatedForm
@@ -638,7 +561,7 @@ update msg ({ pageData } as model) =
         LoginMsg subMsg ->
             let
                 ( updatedForm, maybeAuthStatus, cmd ) =
-                    Login.update subMsg model.loginForm model.maybeSessionToken
+                    Login.update key subMsg model.loginForm model.maybeSessionToken
 
                 cartItemsCommand =
                     case maybeAuthStatus of
@@ -665,7 +588,7 @@ update msg ({ pageData } as model) =
                         _ ->
                             Cmd.none
             in
-                ResetPassword.update subMsg model.resetPasswordForm model.maybeSessionToken
+                ResetPassword.update key subMsg model.resetPasswordForm model.maybeSessionToken
                     |> (\( form, maybeAuthStatus, cmd ) ->
                             ( { model
                                 | resetPasswordForm = form
@@ -679,12 +602,12 @@ update msg ({ pageData } as model) =
                        )
 
         EditLoginMsg subMsg ->
-            EditLogin.update subMsg model.editLoginForm model.currentUser
+            EditLogin.update key subMsg model.editLoginForm model.currentUser
                 |> Tuple.mapFirst (\form -> { model | editLoginForm = form })
                 |> Tuple.mapSecond (Cmd.map EditLoginMsg)
 
         EditAddressMsg subMsg ->
-            EditAddress.update subMsg model.editAddressForm model.currentUser pageData.addressDetails
+            EditAddress.update key subMsg model.editAddressForm model.currentUser pageData.addressDetails
                 |> Tuple.mapFirst (\form -> { model | editAddressForm = form })
                 |> Tuple.mapSecond (Cmd.map EditAddressMsg)
 
@@ -718,13 +641,13 @@ update msg ({ pageData } as model) =
                         let
                             newQuantityAndToken m =
                                 maybeQuantityAndToken
-                                    |> Maybe.map (uncurry <| updateSessionTokenAndCartItemCount m)
+                                    |> Maybe.map (\( q, t ) -> updateSessionTokenAndCartItemCount m q t)
                                     |> Maybe.withDefault ( m, Cmd.none )
                         in
                             ( { model | quickOrderForms = forms }
                             , Cmd.batch
                                 [ Cmd.map QuickOrderMsg cmd
-                                , Maybe.map (always <| Routing.newUrl Cart) maybeQuantityAndToken
+                                , Maybe.map (always <| Routing.newUrl key Cart) maybeQuantityAndToken
                                     |> Maybe.withDefault Cmd.none
                                 ]
                             )
@@ -733,22 +656,22 @@ update msg ({ pageData } as model) =
 
         CheckoutMsg subMsg ->
             let
-                handleOutMsg maybeMsg ( model, cmd ) =
+                handleOutMsg maybeMsg ( model_, cmd ) =
                     case maybeMsg of
                         Just (Checkout.CustomerOrderCompleted orderId) ->
-                            ( { model | cartItemCount = 0 }
+                            ( { model_ | cartItemCount = 0 }
                             , Cmd.batch
                                 [ cmd
-                                , Routing.newUrl <| CheckoutSuccess orderId False
+                                , Routing.newUrl key <| CheckoutSuccess orderId False
                                 , Ports.setCartItemCount 0
                                 ]
                             )
 
                         Just (Checkout.AnonymousOrderCompleted orderId newAuthStatus) ->
-                            ( { model | cartItemCount = 0, currentUser = newAuthStatus }
+                            ( { model_ | cartItemCount = 0, currentUser = newAuthStatus }
                             , Cmd.batch
                                 [ cmd
-                                , Routing.newUrl <| CheckoutSuccess orderId True
+                                , Routing.newUrl key <| CheckoutSuccess orderId True
                                 , Ports.setCartItemCount 0
                                 , Ports.removeCartSessionToken ()
                                 , User.storeDetails newAuthStatus
@@ -763,18 +686,20 @@ update msg ({ pageData } as model) =
                                             RemoteData.Success checkoutDetails
                                     }
                             in
-                                ( { model | pageData = updatedPageData }
+                                ( { model_ | pageData = updatedPageData }
                                 , cmd
                                 )
 
                         Nothing ->
-                            ( model, cmd )
+                            ( model_, cmd )
             in
-                Checkout.update subMsg model.checkoutForm model.currentUser model.maybeSessionToken pageData.checkoutDetails
+                Checkout.update subMsg
+                    model.checkoutForm
+                    model.currentUser
+                    model.maybeSessionToken
+                    pageData.checkoutDetails
                     |> (\( form, maybeOutMsg, cmd ) ->
-                            ( { model
-                                | checkoutForm = form
-                              }
+                            ( { model | checkoutForm = form }
                             , Cmd.map CheckoutMsg cmd
                             )
                                 |> handleOutMsg maybeOutMsg
@@ -790,7 +715,7 @@ update msg ({ pageData } as model) =
                     ( { model | currentUser = User.Anonymous }
                     , Cmd.batch
                         [ Ports.removeAuthDetails ()
-                        , redirectIfAuthRequired model.route
+                        , redirectIfAuthRequired key model.route
                         ]
                     )
 
@@ -803,11 +728,11 @@ update msg ({ pageData } as model) =
                     { pageData | productDetails = response }
             in
                 ( { model | pageData = updatedPageData }, Cmd.none )
-                    |> extraCommand setPageTitle
                     |> extraCommand (always Ports.scrollToTop)
 
+        -- TODO: Handle navigation loading errors - maybe w/ a global error list
         GetNavigationData response ->
-            ( { model | navigationData = logUnsuccessfulRequest response }, Cmd.none )
+            ( { model | navigationData = response }, Cmd.none )
 
         GetAdvancedSearchData response ->
             let
@@ -824,7 +749,6 @@ update msg ({ pageData } as model) =
                 ( { model | pageData = updatedPageData }
                 , Cmd.none
                 )
-                    |> extraCommand setPageTitle
                     |> extraCommand (always Ports.scrollToTop)
 
         GetAddressLocations response ->
@@ -870,14 +794,14 @@ update msg ({ pageData } as model) =
                     case response of
                         RemoteData.Success { items } ->
                             if List.isEmpty items then
-                                Routing.newUrl Cart
+                                Routing.newUrl key Cart
                             else
                                 Cmd.none
 
                         _ ->
                             Cmd.none
             in
-                flip (,) cmd <|
+                (\a -> Tuple.pair a cmd) <|
                     case ( pageData.checkoutDetails, response ) of
                         ( RemoteData.Success _, RemoteData.Success _ ) ->
                             { model | pageData = updatedPageData }
@@ -906,26 +830,25 @@ update msg ({ pageData } as model) =
                 |> Paginate.update PageData.categoryConfig subMsg
                 |> Tuple.mapSecond (Cmd.map CategoryPaginationMsg)
                 |> (\( ps, cmd ) ->
-                        ( ps, Cmd.batch [ cmd, updatePageFromPagination model.route ps ] )
+                        ( ps, Cmd.batch [ cmd, updatePageFromPagination key model.route ps ] )
                    )
                 |> Tuple.mapFirst (\cd -> { pageData | categoryDetails = cd })
                 |> Tuple.mapFirst (\pd -> { model | pageData = pd })
-                |> extraCommand setPageTitle
                 |> extraCommand (always Ports.scrollToTop)
 
         SearchPaginationMsg subMsg ->
             Paginate.update PageData.searchConfig subMsg pageData.searchResults
                 |> Tuple.mapSecond (Cmd.map SearchPaginationMsg)
                 |> (\( sr, cmd ) ->
-                        ( sr, Cmd.batch [ cmd, updatePageFromPagination model.route sr ] )
+                        ( sr, Cmd.batch [ cmd, updatePageFromPagination key model.route sr ] )
                    )
                 |> Tuple.mapFirst (\sr -> { pageData | searchResults = sr })
                 |> Tuple.mapFirst (\pd -> { model | pageData = pd })
                 |> extraCommand (always Ports.scrollToTop)
 
 
-updatePageFromPagination : Route -> Paginated a b c -> Cmd msg
-updatePageFromPagination route paginated =
+updatePageFromPagination : Routing.Key -> Route -> Paginated a b c -> Cmd msg
+updatePageFromPagination key route paginated =
     let
         ( maybePage, newRouteConstructor ) =
             case route of
@@ -949,12 +872,12 @@ updatePageFromPagination route paginated =
                 if page == newPage then
                     Cmd.none
                 else
-                    Routing.newUrl <| newRouteConstructor newPage
+                    Routing.newUrl key <| newRouteConstructor newPage
 
 
 clearSearchForm : ( Model, Cmd msg ) -> ( Model, Cmd msg )
 clearSearchForm ( model, cmd ) =
-    flip (,) cmd <|
+    (\a -> Tuple.pair a cmd) <|
         case model.route of
             AdvancedSearch ->
                 { model | searchData = Search.initial }
@@ -1050,19 +973,9 @@ updateSessionTokenAndCartItemCount model quantity sessionToken =
         )
 
 
-logUnsuccessfulRequest : WebData a -> WebData a
-logUnsuccessfulRequest response =
-    case response of
-        RemoteData.Success _ ->
-            response
-
-        _ ->
-            Debug.log "Unsuccessful Request Returned" response
-
-
-redirectIfAuthRequired : Route -> Cmd msg
-redirectIfAuthRequired route =
+redirectIfAuthRequired : Routing.Key -> Route -> Cmd msg
+redirectIfAuthRequired key route =
     if Routing.authRequired route then
-        Routing.newUrl <| PageDetails "home"
+        Routing.newUrl key <| PageDetails "home"
     else
         Cmd.none

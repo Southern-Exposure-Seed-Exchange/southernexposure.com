@@ -8,9 +8,10 @@ module Api
         , withToken
         , withJsonBody
         , withJsonResponse
+        , withStringResponse
         , withErrorHandler
+        , withStringErrorHandler
         , sendRequest
-        , toRequest
         , FormErrors
         , initialErrors
         , formErrorsDecoder
@@ -25,7 +26,7 @@ import Html.Attributes exposing (class)
 import Http
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode exposing (Value)
-import RemoteData
+import RemoteData exposing (WebData)
 import Time
 import Products.Pagination as Pagination
 import Routing.Utils exposing (joinPath, queryParameter, withQueryStrings)
@@ -117,7 +118,7 @@ toUrl endpoint =
                 CustomerMyAccount (Just limit) ->
                     joinPath [ "customers", "my-account" ]
                         ++ withQueryStrings
-                            [ queryParameter ( "limit", toString limit ) ]
+                            [ queryParameter ( "limit", String.fromInt limit ) ]
 
                 CustomerEditLogin ->
                     joinPath [ "customers", "edit" ]
@@ -126,10 +127,10 @@ toUrl endpoint =
                     joinPath [ "customers", "addresses" ]
 
                 CustomerEditAddress id ->
-                    joinPath [ "customers", "address-edit", toString id ]
+                    joinPath [ "customers", "address-edit", String.fromInt id ]
 
                 CustomerDeleteAddress id ->
-                    joinPath [ "customers", "address-delete", toString id ]
+                    joinPath [ "customers", "address-delete", String.fromInt id ]
 
                 CartAddCustomer ->
                     joinPath [ "carts", "customer", "add" ]
@@ -186,44 +187,44 @@ type alias Request a =
     , url : String
     , body : Http.Body
     , expect : Http.Expect a
-    , timeout : Maybe Time.Time
-    , withCredentials : Bool
+    , timeout : Maybe Float
+    , tracker : Maybe String
     }
 
 
-initialRequest : Request String
+initialRequest : Request (Maybe String)
 initialRequest =
     { method = "GET"
     , headers = []
     , url = ""
     , body = Http.emptyBody
-    , expect = Http.expectString
+    , expect = Http.expectString Result.toMaybe
     , timeout = Nothing
-    , withCredentials = False
+    , tracker = Nothing
     }
 
 
-initialMethod : String -> Endpoint -> Request String
+initialMethod : String -> Endpoint -> Request (Maybe String)
 initialMethod method endpoint =
     { initialRequest | method = method, url = toUrl endpoint }
 
 
-get : Endpoint -> Request String
+get : Endpoint -> Request (Maybe String)
 get =
     initialMethod "GET"
 
 
-post : Endpoint -> Request String
+post : Endpoint -> Request (Maybe String)
 post =
     initialMethod "POST"
 
 
-put : Endpoint -> Request String
+put : Endpoint -> Request (Maybe String)
 put =
     initialMethod "PUT"
 
 
-delete : Endpoint -> Request String
+delete : Endpoint -> Request (Maybe String)
 delete =
     initialMethod "DELETE"
 
@@ -238,53 +239,99 @@ withJsonBody body request =
     { request | body = Http.jsonBody body }
 
 
-withJsonResponse : Decoder a -> Request b -> Request a
+withJsonResponse : Decoder a -> Request b -> Request (WebData a)
 withJsonResponse decoder request =
-    { request | expect = Http.expectJson decoder }
+    { method = request.method
+    , headers = request.headers
+    , url = request.url
+    , body = request.body
+    , expect = Http.expectJson RemoteData.fromResult decoder
+    , timeout = request.timeout
+    , tracker = request.tracker
+    }
 
 
-withErrorHandler : (RemoteData.WebData (Result FormErrors a) -> msg) -> Request a -> Cmd msg
-withErrorHandler msg request =
+withStringResponse : Request b -> Request (WebData String)
+withStringResponse request =
+    { method = request.method
+    , headers = request.headers
+    , url = request.url
+    , body = request.body
+    , expect = Http.expectString RemoteData.fromResult
+    , timeout = request.timeout
+    , tracker = request.tracker
+    }
+
+
+withErrorHandler : Decoder a -> Request b -> Request (WebData (Result FormErrors a))
+withErrorHandler decoder request =
     let
-        errorHandler response =
+        expectDecoded =
+            errorHandler <|
+                \body ->
+                    case Decode.decodeString decoder body of
+                        Ok value ->
+                            Ok value
+
+                        Err err ->
+                            Err <| Http.BadBody (Decode.errorToString err)
+    in
+        { method = request.method
+        , headers = request.headers
+        , url = request.url
+        , body = request.body
+        , expect = expectDecoded
+        , timeout = request.timeout
+        , tracker = request.tracker
+        }
+
+
+withStringErrorHandler : Request a -> Request (WebData (Result FormErrors String))
+withStringErrorHandler request =
+    { method = request.method
+    , headers = request.headers
+    , url = request.url
+    , body = request.body
+    , expect = errorHandler Ok
+    , timeout = request.timeout
+    , tracker = request.tracker
+    }
+
+
+errorHandler :
+    (String -> Result Http.Error a)
+    -> Http.Expect (WebData (Result FormErrors a))
+errorHandler bodyFunction =
+    Http.expectStringResponse RemoteData.fromResult <|
+        \response ->
             case response of
-                RemoteData.Failure (Http.BadStatus rawResponse) ->
-                    if rawResponse.status.code == validationErrorCode then
-                        case Decode.decodeString formErrorsDecoder rawResponse.body of
+                Http.BadUrl_ url ->
+                    Err <| Http.BadUrl url
+
+                Http.Timeout_ ->
+                    Err <| Http.Timeout
+
+                Http.NetworkError_ ->
+                    Err <| Http.NetworkError
+
+                Http.BadStatus_ metadata body ->
+                    if metadata.statusCode == validationErrorCode then
+                        case Decode.decodeString formErrorsDecoder body of
                             Ok errors ->
-                                RemoteData.Success <| Err errors
+                                Ok <| Err errors
 
                             Err _ ->
-                                RemoteData.Failure <| Http.BadStatus rawResponse
+                                Err <| Http.BadStatus metadata.statusCode
                     else
-                        RemoteData.Failure <| Http.BadStatus rawResponse
+                        Err <| Http.BadStatus metadata.statusCode
 
-                RemoteData.Failure error ->
-                    RemoteData.Failure error
-
-                RemoteData.Success data ->
-                    RemoteData.Success <| Ok data
-
-                RemoteData.Loading ->
-                    RemoteData.Loading
-
-                RemoteData.NotAsked ->
-                    RemoteData.NotAsked
-    in
-        request
-            |> Http.request
-            |> RemoteData.sendRequest
-            |> Cmd.map (errorHandler >> msg)
+                Http.GoodStatus_ metadata body ->
+                    Result.map Ok <| bodyFunction body
 
 
-sendRequest : (RemoteData.WebData a -> msg) -> Request a -> Cmd msg
+sendRequest : (a -> msg) -> Request a -> Cmd msg
 sendRequest msg =
-    Http.request >> RemoteData.sendRequest >> Cmd.map msg
-
-
-toRequest : Request a -> Http.Request a
-toRequest =
-    Http.request
+    Http.request >> Cmd.map msg
 
 
 
@@ -320,7 +367,7 @@ formErrorsDecoder =
 
 addError : Field -> ErrorMessage -> FormErrors -> FormErrors
 addError field message errors =
-    flip (Dict.update field) errors <|
+    (\a -> Dict.update field a errors) <|
         \val ->
             case val of
                 Nothing ->

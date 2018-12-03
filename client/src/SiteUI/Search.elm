@@ -10,7 +10,7 @@ import Html exposing (Html, div, span, text, button, input)
 import Html.Attributes exposing (class, type_, value)
 import Html.Events exposing (onInput, onSubmit)
 import Products.Pagination as Pagination
-import Routing exposing (Route(SearchResults), reverse)
+import Routing exposing (Route(..), reverse)
 import Search
 
 
@@ -27,14 +27,14 @@ type Msg
     | Submit
 
 
-update : Msg -> Data -> ( Data, Cmd msg )
-update msg data =
+update : Routing.Key -> Msg -> Data -> ( Data, Cmd msg )
+update key msg data =
     case msg of
         Update query ->
             ( { data | query = query }, Cmd.none )
 
         Submit ->
-            ( data, Routing.newUrl <| SearchResults data Pagination.default )
+            ( data, Routing.newUrl key <| SearchResults data Pagination.default )
 
 
 

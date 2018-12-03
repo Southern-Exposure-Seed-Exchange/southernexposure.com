@@ -6,7 +6,7 @@ module SiteUI
 
 import Dict exposing (Dict)
 import Json.Decode as Decode exposing (Decoder)
-import Category exposing (Category, CategoryId(CategoryId))
+import Category exposing (Category, CategoryId(..))
 
 
 type alias NavigationData =
@@ -31,10 +31,10 @@ stringToIntKeys =
     Dict.foldl
         (\key value newDict ->
             case String.toInt key of
-                Err _ ->
+                Nothing ->
                     newDict
 
-                Ok newKey ->
+                Just newKey ->
                     Dict.insert newKey value newDict
         )
         Dict.empty

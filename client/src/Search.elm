@@ -12,9 +12,9 @@ module Search
         )
 
 import Json.Encode as Encode exposing (Value)
-import UrlParser as Url exposing ((<?>))
+import Url.Parser as Url exposing ((<?>))
 import Category exposing (CategoryId(..))
-import Routing.Utils as Routing exposing (queryFlag, queryParameter)
+import Routing.Utils as Routing exposing (queryFlag, queryParameter, fromStringParam, fromStringWithDefaultParam)
 import SeedAttribute
 
 
@@ -75,7 +75,7 @@ toQueryString data =
     , queryFlag "southeast" data.isRegional
     , queryFlag "ecological" data.isEcological
     , queryFlag "titlesOnly" (data.searchIn == Titles)
-    , Maybe.map (\(CategoryId i) -> queryParameter ( "category", toString i ))
+    , Maybe.map (\(CategoryId i) -> queryParameter ( "category", String.fromInt i ))
         data.category
         |> Maybe.withDefault ""
     ]
@@ -98,11 +98,8 @@ fromQueryString :
     -> Url.Parser (b -> c) c
 fromQueryString pathParser =
     pathParser
-        <?> Url.customParam "q" (Maybe.withDefault "")
-        <?> Url.customParam "titlesOnly"
-                (Maybe.map (always Titles)
-                    >> Maybe.withDefault TitlesAndDescriptions
-                )
+        <?> fromStringParam "q" identity
+        <?> fromStringWithDefaultParam "titlesOnly" (always Titles) TitlesAndDescriptions
         <?> Routing.parseFlag "organic"
         <?> Routing.parseFlag "heirloom"
         <?> Routing.parseFlag "regional"
@@ -127,23 +124,21 @@ uniqueSearch : Data -> Maybe UniqueSearch
 uniqueSearch { query, searchIn, category, isOrganic, isHeirloom, isRegional, isEcological } =
     case ( query, searchIn, category ) of
         ( "", TitlesAndDescriptions, Nothing ) ->
-            case ( isOrganic, isHeirloom, isRegional, isEcological ) of
-                ( True, False, False, False ) ->
+            let
+                none =
+                    List.all ((==) False)
+            in
+                if isOrganic && none [ isHeirloom, isRegional, isEcological ] then
                     Just <| AttributeSearch SeedAttribute.Organic
-
-                ( False, True, False, False ) ->
+                else if isHeirloom && none [ isOrganic, isRegional, isEcological ] then
                     Just <| AttributeSearch SeedAttribute.Heirloom
-
-                ( False, False, True, False ) ->
+                else if isRegional && none [ isOrganic, isHeirloom, isEcological ] then
                     Just <| AttributeSearch SeedAttribute.Regional
-
-                ( False, False, False, True ) ->
+                else if isEcological && none [ isOrganic, isHeirloom, isRegional ] then
                     Just <| AttributeSearch SeedAttribute.Ecological
-
-                ( False, False, False, False ) ->
+                else if none [ isOrganic, isHeirloom, isRegional, isEcological ] then
                     Just AllProducts
-
-                _ ->
+                else
                     Nothing
 
         _ ->

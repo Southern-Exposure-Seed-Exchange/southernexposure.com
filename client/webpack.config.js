@@ -40,9 +40,8 @@ module.exports = {
           {
             loader: 'elm-webpack-loader',
             options: {
-              warn: true,
-              verbose: true,
               debug: !isProduction,
+              optimize: isProduction,
               cwd: __dirname,
             },
           },
@@ -104,7 +103,6 @@ module.exports = {
       inject: false,
       template: require('html-webpack-template'),
 
-      appMountId: 'main',
       mobile: true,
       lang: 'en-US',
 

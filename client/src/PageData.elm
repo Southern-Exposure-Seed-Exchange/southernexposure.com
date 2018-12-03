@@ -38,18 +38,19 @@ import Dict exposing (Dict)
 import Json.Decode as Decode exposing (Decoder)
 import Paginate exposing (Paginated)
 import RemoteData exposing (WebData)
-import Time.DateTime as DateTime exposing (DateTime)
 import Address
 import Api
 import Category exposing (Category, CategoryId(..))
 import Locations exposing (Region, regionDecoder, regionEncoder, AddressLocations)
 import Models.Fields exposing (Cents(..), centsMap, centsMap2, centsDecoder, Milligrams(..))
 import StaticPage exposing (StaticPage)
+import Iso8601
 import Product exposing (Product, ProductVariant, ProductVariantId(..))
 import Products.Pagination as Pagination
 import Products.Sorting as Sorting
 import Search
 import SeedAttribute exposing (SeedAttribute)
+import Time exposing (Posix)
 
 
 -- MODEL
@@ -129,7 +130,7 @@ categoryConfig =
         request { slug, sorting } page perPage =
             Api.get (Api.CategoryDetails slug <| Pagination.Data page perPage sorting)
                 |> Api.withJsonResponse fetchDecoder
-                |> Api.toRequest
+                |> Api.sendRequest identity
 
         fetchDecoder =
             Decode.map3 Paginate.FetchResponse
@@ -187,7 +188,7 @@ searchConfig =
             Api.post (Api.ProductSearch <| Pagination.Data page perPage sorting)
                 |> Api.withJsonBody (Search.encode data)
                 |> Api.withJsonResponse fetchDecoder
-                |> Api.toRequest
+                |> Api.sendRequest identity
     in
         Paginate.makeConfig request
 
@@ -214,7 +215,7 @@ type alias OrderSummary =
     , shippingAddress : Address.Model
     , status : OrderStatus
     , total : Cents
-    , created : DateTime
+    , created : Posix
     }
 
 
@@ -225,7 +226,7 @@ orderSummaryDecoder =
         (Decode.field "shippingAddress" Address.decoder)
         (Decode.field "status" orderStatusDecoder)
         (Decode.field "total" centsDecoder)
-        (Decode.field "created" dateTimeDecoder)
+        (Decode.field "created" Iso8601.decoder)
 
 
 
@@ -409,7 +410,7 @@ type alias Order =
     { status : OrderStatus
     , comment : String
     , taxDescription : String
-    , createdAt : DateTime
+    , createdAt : Posix
     }
 
 
@@ -419,7 +420,7 @@ orderDecoder =
         (Decode.field "status" orderStatusDecoder)
         (Decode.field "comment" Decode.string)
         (Decode.field "taxDescription" Decode.string)
-        (Decode.field "createdAt" dateTimeDecoder)
+        (Decode.field "createdAt" Iso8601.decoder)
 
 
 type OrderStatus
@@ -572,7 +573,7 @@ type alias ProductData =
 
 productDataDecoder : Decoder ProductData
 productDataDecoder =
-    Decode.map3 (,,)
+    Decode.map3 (\a b c -> ( a, b, c ))
         (Decode.field "product" Product.decoder)
         (Decode.field "variants" variantDictDecoder)
         (Decode.field "seedAttribute" <| Decode.nullable SeedAttribute.decoder)
@@ -677,8 +678,3 @@ resultToDecoder r =
 
         Err e ->
             Decode.fail e
-
-
-dateTimeDecoder : Decoder DateTime
-dateTimeDecoder =
-    Decode.string |> Decode.andThen (DateTime.fromISO8601 >> resultToDecoder)

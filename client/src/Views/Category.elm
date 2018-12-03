@@ -1,17 +1,17 @@
 module Views.Category exposing (details)
 
+import Category
 import Html exposing (..)
 import Html.Attributes exposing (class, src)
 import Markdown
-import Paginate exposing (Paginated)
-import Category
 import Messages exposing (Msg)
 import Model exposing (CartForms)
 import PageData exposing (ProductData)
+import Paginate exposing (Paginated)
 import Products.Pagination as Pagination
 import Products.Sorting as Sorting
 import Products.Views as ProductViews
-import Routing exposing (Route(CategoryDetails))
+import Routing exposing (Route(..))
 import Views.Images as Images
 import Views.Utils exposing (routeLinkAttributes)
 
@@ -38,16 +38,16 @@ details pagination addToCartForms products =
             else
                 text ""
 
-        subCategoryCard category =
+        subCategoryCard subCategory =
             div [ class "col-6 col-sm-4 col-md-3 mb-2" ]
-                [ a (routeLinkAttributes <| CategoryDetails category.slug Pagination.default)
+                [ a (routeLinkAttributes <| CategoryDetails subCategory.slug Pagination.default)
                     [ div [ class "h-100 text-center" ]
                         [ img
                             [ class "img-fluid mx-auto"
-                            , src <| Images.media <| "categories/" ++ category.imageURL
+                            , src <| Images.media <| "categories/" ++ subCategory.imageURL
                             ]
                             []
-                        , div [ class "my-auto" ] [ text category.name ]
+                        , div [ class "my-auto" ] [ text subCategory.name ]
                         ]
                     ]
                 ]

@@ -1,22 +1,22 @@
 module Auth.ResetPassword
     exposing
         ( Form
-        , initial
         , Msg
+        , initial
         , update
         , view
         )
 
+import Api
 import Dict
 import Html exposing (..)
-import Html.Attributes exposing (id, class, for, type_, value, required, autofocus, name, href)
+import Html.Attributes exposing (autofocus, class, for, href, id, name, required, type_, value)
 import Html.Events exposing (onInput, onSubmit)
 import Json.Decode as Decode
 import Json.Encode as Encode
-import RemoteData exposing (WebData)
-import Api
 import Ports
-import Routing exposing (Route(MyAccount))
+import RemoteData exposing (WebData)
+import Routing exposing (Route(..))
 import Update.Utils exposing (nothingAndNoCommand)
 import User exposing (AuthStatus)
 
@@ -53,8 +53,8 @@ type Msg
     | SubmitChangeResponse (WebData (Result Api.FormErrors AuthStatus))
 
 
-update : Msg -> Form -> Maybe String -> ( Form, Maybe AuthStatus, Cmd Msg )
-update msg model maybeSessionToken =
+update : Routing.Key -> Msg -> Form -> Maybe String -> ( Form, Maybe AuthStatus, Cmd Msg )
+update key msg model maybeSessionToken =
     case msg of
         Email email ->
             { model | email = email }
@@ -99,7 +99,7 @@ update msg model maybeSessionToken =
                     ( initial
                     , Just authStatus
                     , Cmd.batch
-                        [ Routing.newUrl MyAccount
+                        [ Routing.newUrl key MyAccount
                         , Ports.scrollToTop
                         , User.storeDetails authStatus
                         ]
@@ -134,8 +134,8 @@ changePassword maybeSessionToken code password =
                   )
                 ]
             )
-        |> Api.withJsonResponse User.decoder
-        |> Api.withErrorHandler SubmitChangeResponse
+        |> Api.withErrorHandler User.decoder
+        |> Api.sendRequest SubmitChangeResponse
 
 
 view : (Msg -> msg) -> Form -> Maybe String -> List (Html msg)

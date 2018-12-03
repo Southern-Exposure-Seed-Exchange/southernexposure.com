@@ -1,24 +1,22 @@
 module Views.Utils
     exposing
-        ( routeLinkAttributes
-        , onIntInput
-        , htmlOrBlank
+        ( htmlOrBlank
         , icon
+        , onIntInput
+        , routeLinkAttributes
         )
 
-import Html exposing (Html, Attribute, i, text)
-import Html.Attributes exposing (href, class)
+import Html exposing (Attribute, Html, i, text)
+import Html.Attributes exposing (class, href)
 import Html.Events exposing (on)
-import Html.Events.Extra exposing (onClickPreventDefault, targetValueInt)
+import Html.Events.Extra exposing (targetValueInt)
 import Json.Decode as Decode
-import Messages exposing (Msg(NavigateTo))
 import Routing exposing (Route, reverse)
 
 
-routeLinkAttributes : Route -> List (Attribute Msg)
+routeLinkAttributes : Route -> List (Attribute msg)
 routeLinkAttributes route =
-    [ onClickPreventDefault <| NavigateTo route
-    , href <| reverse route
+    [ href <| reverse route
     ]
 
 

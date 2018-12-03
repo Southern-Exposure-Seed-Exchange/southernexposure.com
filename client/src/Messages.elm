@@ -12,6 +12,7 @@ import Auth.Login as Login
 import Auth.EditAddress as EditAddress
 import Auth.EditLogin as EditLogin
 import Auth.ResetPassword as ResetPassword
+import Browser exposing (UrlRequest)
 import Checkout
 import StaticPage exposing (StaticPage)
 import Locations exposing (AddressLocations)
@@ -21,6 +22,7 @@ import QuickOrder
 import Routing exposing (Route)
 import SiteUI exposing (NavigationData)
 import SiteUI.Search as SiteSearch
+import Time
 import User
 
 
@@ -34,15 +36,21 @@ type EditCartMessage
 type Msg
     = UrlUpdate Route
     | NavigateTo Route
+    | LinkClick UrlRequest
+    | NewZone Time.Zone
     | LogOut
+      -- Other Tabs (via localStorage ports)
     | OtherTabLoggedIn { userId : Int, token : String }
     | OtherTabNewCartToken String
     | OtherTabCartItemCountChanged Int
+      -- Product List/Details Cart Forms
     | ChangeCartFormVariantId ProductId ProductVariantId
     | ChangeCartFormQuantity ProductId Int
     | SubmitAddToCart ProductId ProductVariantId
     | SubmitAddToCartResponse Int (WebData String)
+      -- My Account Page
     | ShowAllOrders
+      -- Sub-Messages
     | SearchMsg SiteSearch.Msg
     | AdvancedSearchMsg AdvancedSearch.Msg
     | CreateAccountMsg CreateAccount.Msg
@@ -53,6 +61,7 @@ type Msg
     | EditCartMsg EditCartMessage
     | QuickOrderMsg QuickOrder.Msg
     | CheckoutMsg Checkout.Msg
+      -- API Requests
     | ReAuthorize (WebData User.AuthStatus)
     | GetProductDetailsData (WebData PageData.ProductDetails)
     | GetNavigationData (WebData NavigationData)

@@ -4,7 +4,7 @@ import Html exposing (..)
 import Html.Attributes exposing (class)
 import Paginate
 import RemoteData
-import Messages exposing (Msg(NavigateTo))
+import Messages exposing (Msg(..))
 import PageData exposing (PageData)
 import Products.Pagination as Pagination
 import Routing exposing (Route(..))
@@ -23,9 +23,9 @@ view route pageData =
         activeItem content =
             li [ class "breadcrumb-item active" ] [ text content ]
 
-        inactiveItem content route =
+        inactiveItem content itemRoute =
             li [ class "breadcrumb-item" ]
-                [ a (routeLinkAttributes route) [ text content ]
+                [ a (routeLinkAttributes itemRoute) [ text content ]
                 ]
 
         childItems =
@@ -89,7 +89,7 @@ view route pageData =
 
                 OrderDetails orderId ->
                     [ inactiveItem "My Account" MyAccount
-                    , activeItem <| "Order #" ++ toString orderId
+                    , activeItem <| "Order #" ++ String.fromInt orderId
                     ]
 
                 Cart ->

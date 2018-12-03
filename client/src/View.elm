@@ -1,11 +1,5 @@
 module View exposing (view)
 
-import Html exposing (..)
-import Html.Attributes exposing (class, src)
-import Http
-import Markdown
-import Paginate exposing (Paginated)
-import RemoteData exposing (WebData)
 import AdvancedSearch
 import Auth.CreateAccount as CreateAccount
 import Auth.EditAddress as EditAddress
@@ -13,16 +7,22 @@ import Auth.EditLogin as EditLogin
 import Auth.Login as Login
 import Auth.MyAccount as MyAccount
 import Auth.ResetPassword as ResetPassword
+import Browser exposing (Document)
 import Cart
 import Checkout
-import Views.Category as CategoryViews
+import Html exposing (..)
+import Html.Attributes exposing (class, src)
+import Http
+import Markdown
 import Messages exposing (Msg(..))
-import Model exposing (Model, CartForms)
+import Model exposing (CartForms, Model)
 import OrderDetails
 import PageData
+import Paginate exposing (Paginated)
 import Products.Pagination as Pagination
 import Products.Views as ProductViews
 import QuickOrder
+import RemoteData exposing (WebData)
 import Routing exposing (Route(..))
 import Search exposing (UniqueSearch(..))
 import SeedAttribute
@@ -32,10 +32,11 @@ import SiteUI.Header as SiteHeader
 import SiteUI.Navigation as SiteNavigation
 import SiteUI.Sidebar as SiteSidebar
 import StaticPage exposing (StaticPage)
+import Views.Category as CategoryViews
 
 
-view : Model -> Html Msg
-view ({ route, pageData, navigationData } as model) =
+view : Model -> Document Msg
+view ({ route, pageData, navigationData, zone } as model) =
     let
         middleContent =
             if route == Checkout then
@@ -98,20 +99,20 @@ view ({ route, pageData, navigationData } as model) =
                     ResetPassword.view ResetPasswordMsg model.resetPasswordForm maybeCode
 
                 MyAccount ->
-                    RemoteData.map2 (,) pageData.locations pageData.myAccount
-                        |> withIntermediateText (uncurry MyAccount.view)
+                    RemoteData.map2 Tuple.pair pageData.locations pageData.myAccount
+                        |> withIntermediateText (apply <| MyAccount.view zone)
 
                 EditLogin ->
                     EditLogin.view EditLoginMsg model.editLoginForm model.currentUser
 
                 EditAddress ->
-                    RemoteData.map2 (,) pageData.locations pageData.addressDetails
-                        |> withIntermediateText (uncurry <| EditAddress.view model.editAddressForm)
+                    RemoteData.map2 Tuple.pair pageData.locations pageData.addressDetails
+                        |> withIntermediateText (apply <| EditAddress.view model.editAddressForm)
                         |> List.map (Html.map EditAddressMsg)
 
                 OrderDetails orderId ->
-                    RemoteData.map2 (,) pageData.locations pageData.orderDetails
-                        |> withIntermediateText (uncurry <| OrderDetails.view orderId)
+                    RemoteData.map2 Tuple.pair pageData.locations pageData.orderDetails
+                        |> withIntermediateText (apply <| OrderDetails.view zone orderId)
 
                 Cart ->
                     withIntermediateText (Cart.view model.editCartForm) pageData.cartDetails
@@ -121,16 +122,112 @@ view ({ route, pageData, navigationData } as model) =
                         |> List.map (Html.map QuickOrderMsg)
 
                 Checkout ->
-                    RemoteData.map2 (,) pageData.locations pageData.checkoutDetails
-                        |> withIntermediateText (uncurry <| Checkout.view model.checkoutForm model.currentUser)
+                    RemoteData.map2 Tuple.pair pageData.locations pageData.checkoutDetails
+                        |> withIntermediateText (apply <| Checkout.view model.checkoutForm model.currentUser)
                         |> List.map (Html.map CheckoutMsg)
 
                 CheckoutSuccess orderId newAccount ->
-                    RemoteData.map2 (,) pageData.locations pageData.orderDetails
-                        |> withIntermediateText (uncurry <| Checkout.successView LogOut orderId newAccount)
+                    RemoteData.map2 Tuple.pair pageData.locations pageData.orderDetails
+                        |> withIntermediateText (apply <| Checkout.successView zone LogOut orderId newAccount)
 
                 NotFound ->
                     notFoundView
+
+        apply : (a -> b -> c) -> ( a, b ) -> c
+        apply f ( a, b ) =
+            f a b
+
+        pageTitle =
+            case route of
+                ProductDetails _ ->
+                    getFromPageData .productDetails (.product >> .name)
+
+                CategoryDetails _ _ ->
+                    pageData.categoryDetails
+                        |> Paginate.getResponseData
+                        |> Maybe.map (.category >> .name)
+                        |> Maybe.withDefault ""
+
+                AdvancedSearch ->
+                    "Advanced Search"
+
+                SearchResults data _ ->
+                    case Search.uniqueSearch data of
+                        Nothing ->
+                            "Search Results"
+
+                        Just searchType ->
+                            case searchType of
+                                AllProducts ->
+                                    "All Products"
+
+                                AttributeSearch (SeedAttribute.Organic) ->
+                                    "Organic Products"
+
+                                AttributeSearch (SeedAttribute.Heirloom) ->
+                                    "Heirloom Products"
+
+                                AttributeSearch (SeedAttribute.Regional) ->
+                                    "South-Eastern Products"
+
+                                AttributeSearch (SeedAttribute.Ecological) ->
+                                    "Ecologically Grown Products"
+
+                PageDetails _ ->
+                    getFromPageData .pageDetails .name
+
+                CreateAccount ->
+                    "Create an Account"
+
+                CreateAccountSuccess ->
+                    "Account Creation Successful"
+
+                Login ->
+                    "Customer Login"
+
+                ResetPassword Nothing ->
+                    "Reset Password"
+
+                ResetPassword (Just _) ->
+                    "Change Password"
+
+                MyAccount ->
+                    "My Account"
+
+                EditLogin ->
+                    "Edit Login Details"
+
+                EditAddress ->
+                    "Edit Addresses"
+
+                OrderDetails orderId ->
+                    "Order #" ++ String.fromInt orderId
+
+                Cart ->
+                    "Shopping Cart"
+
+                QuickOrder ->
+                    "Quick Order"
+
+                Checkout ->
+                    "Checkout"
+
+                CheckoutSuccess _ _ ->
+                    "Order Complete"
+
+                NotFound ->
+                    "Page Not Found"
+
+        -- TODO: Have "Error" & "Loading" titles?
+        getFromPageData :
+            (PageData.PageData -> RemoteData.WebData a)
+            -> (a -> String)
+            -> String
+        getFromPageData selector f =
+            selector pageData
+                |> RemoteData.toMaybe
+                |> Maybe.map f
+                |> Maybe.withDefault ""
 
         activeCategories =
             case route of
@@ -147,7 +244,7 @@ view ({ route, pageData, navigationData } as model) =
                 _ ->
                     []
     in
-        div []
+        Document pageTitle
             [ SiteHeader.view SearchMsg model.searchData model.currentUser model.cartItemCount
             , SiteNavigation.view navigationData activeCategories model.searchData
             , SiteBreadcrumbs.view route pageData
@@ -157,22 +254,25 @@ view ({ route, pageData, navigationData } as model) =
 
 
 withIntermediateText : (a -> List (Html msg)) -> WebData a -> List (Html msg)
-withIntermediateText view data =
+withIntermediateText subView data =
     case data of
         RemoteData.Loading ->
             [ text "Loading..." ]
 
         RemoteData.Success d ->
-            view d
+            subView d
 
-        RemoteData.Failure (Http.BadStatus resp) ->
-            if resp.status.code == 404 then
+        RemoteData.Failure (Http.BadStatus code) ->
+            if code == 404 then
                 notFoundView
             else
-                [ text <| toString e ]
+                [ text <| "Bad Status: " ++ String.fromInt code ]
 
-        e ->
-            [ text <| toString e ]
+        RemoteData.NotAsked ->
+            [ text "BUG! Reached NotAsked!" ]
+
+        _ ->
+            [ text "BUG! Unhandled HTTP Error!" ]
 
 
 notFoundView : List (Html msg)
@@ -239,7 +339,7 @@ searchResultsView ({ query } as data) pagination addToCartForms products =
             else
                 span []
                     [ text "Found "
-                    , b [] [ text <| toString (Paginate.getTotalItems products) ]
+                    , b [] [ text <| String.fromInt (Paginate.getTotalItems products) ]
                     , text " results for “"
                     , b [] [ text query ]
                     , text "”."

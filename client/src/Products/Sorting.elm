@@ -10,7 +10,8 @@ module Products.Sorting
         , toDescription
         )
 
-import UrlParser as Url exposing ((<?>))
+import Url.Parser as Url exposing ((<?>))
+import Routing.Utils exposing (fromStringParam)
 
 
 -- MODEL
@@ -57,10 +58,7 @@ fromQueryString :
     Url.Parser ((a -> d) -> a -> d) (Option -> b)
     -> Url.Parser (b -> c) c
 fromQueryString pathParser =
-    Url.map (<|)
-        (pathParser
-            <?> Url.customParam "sortBy" (Maybe.withDefault "" >> fromQueryValue)
-        )
+    Url.map (<|) (pathParser <?> fromStringParam "sortBy" fromQueryValue)
 
 
 toQueryValue : Option -> String

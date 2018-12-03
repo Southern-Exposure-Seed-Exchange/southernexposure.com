@@ -20,6 +20,7 @@ import QuickOrder
 import Routing exposing (Route)
 import Search
 import SiteUI exposing (NavigationData)
+import Time
 import User exposing (AuthStatus)
 
 
@@ -41,6 +42,8 @@ type alias Model =
     , cartItemCount : Int
     , maybeSessionToken : Maybe String
     , currentUser : AuthStatus
+    , zone : Time.Zone
+    , key : Routing.Key
     }
 
 
@@ -48,8 +51,8 @@ type alias CartForms =
     Dict Int { variant : Maybe ProductVariantId, quantity : Int }
 
 
-initial : Route -> Model
-initial route =
+initial : Routing.Key -> Route -> Model
+initial key route =
     { navigationData = RemoteData.Loading
     , route = route
     , pageData = PageData.initial
@@ -67,4 +70,6 @@ initial route =
     , cartItemCount = 0
     , maybeSessionToken = Nothing
     , currentUser = User.unauthorized
+    , zone = Time.utc
+    , key = key
     }

@@ -3,7 +3,7 @@ module SiteUI.Footer exposing (view)
 import Html exposing (..)
 import Html.Attributes exposing (id, class, href, target, title)
 import Messages exposing (Msg)
-import Routing exposing (Route(PageDetails))
+import Routing exposing (Route(..))
 import Views.Utils exposing (routeLinkAttributes)
 
 

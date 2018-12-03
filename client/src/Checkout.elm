@@ -27,6 +27,7 @@ import Models.Fields exposing (Cents(..), centsMap2, centsMap, centsFromString, 
 import OrderDetails
 import PageData
 import Ports
+import Time
 import Update.Utils exposing (nothingAndNoCommand)
 import User exposing (AuthStatus)
 import Views.Format as Format
@@ -270,24 +271,24 @@ update msg model authStatus maybeSessionToken checkoutDetails =
             let
                 ( generalErrors, shippingErrors, billingErrors ) =
                     List.foldl
-                        (\( field, fieldErrors ) ( generalErrors, shippingErrors, billingErrors ) ->
+                        (\( field, fieldErrors ) ( generalErr, shippingErr, billingErr ) ->
                             case String.split "-" field of
                                 "shipping" :: xs ->
-                                    ( generalErrors
-                                    , ( String.join "" xs, fieldErrors ) :: shippingErrors
-                                    , billingErrors
+                                    ( generalErr
+                                    , ( String.join "" xs, fieldErrors ) :: shippingErr
+                                    , billingErr
                                     )
 
                                 "billing" :: xs ->
-                                    ( generalErrors
-                                    , shippingErrors
-                                    , ( String.join "" xs, fieldErrors ) :: billingErrors
+                                    ( generalErr
+                                    , shippingErr
+                                    , ( String.join "" xs, fieldErrors ) :: billingErr
                                     )
 
                                 _ ->
-                                    ( ( field, fieldErrors ) :: generalErrors
-                                    , shippingErrors
-                                    , billingErrors
+                                    ( ( field, fieldErrors ) :: generalErr
+                                    , shippingErr
+                                    , billingErr
                                     )
                         )
                         ( [], [], [] )
@@ -298,16 +299,16 @@ update msg model authStatus maybeSessionToken checkoutDetails =
                         ExistingAddress _ ->
                             model.shippingAddress
 
-                        NewAddress addressForm ->
-                            NewAddress { addressForm | errors = Dict.fromList shippingErrors }
+                        NewAddress addrForm ->
+                            NewAddress { addrForm | errors = Dict.fromList shippingErrors }
 
                 updatedBillingForm =
                     case model.billingAddress of
                         ExistingAddress _ ->
                             model.billingAddress
 
-                        NewAddress addressForm ->
-                            NewAddress { addressForm | errors = Dict.fromList billingErrors }
+                        NewAddress addrForm ->
+                            NewAddress { addrForm | errors = Dict.fromList billingErrors }
 
                 addAddresErrorIfExisting prefix address =
                     case address of
@@ -434,8 +435,8 @@ refreshDetails authStatus maybeSessionToken oldModel newModel =
                 ExistingAddress id ->
                     ( Nothing, Nothing, Just id )
 
-                NewAddress addressForm ->
-                    ( Just addressForm.model.country, Just addressForm.model.state, Nothing )
+                NewAddress addrForm ->
+                    ( Just addrForm.model.country, Just addrForm.model.state, Nothing )
     in
         ( newModel, Nothing, refreshCommand )
 
@@ -616,7 +617,7 @@ placeOrder model authStatus maybeSessionToken stripeTokenId checkoutDetails =
         decoder =
             case authStatus of
                 User.Anonymous ->
-                    Decode.map2 (,)
+                    Decode.map2 Tuple.pair
                         (Decode.field "orderId" Decode.int)
                         (Decode.field "authData" User.decoder)
 
@@ -628,15 +629,15 @@ placeOrder model authStatus maybeSessionToken stripeTokenId checkoutDetails =
             User.Anonymous ->
                 Api.post Api.CheckoutPlaceOrderAnonymous
                     |> Api.withJsonBody anonymousData
-                    |> Api.withJsonResponse decoder
-                    |> Api.withErrorHandler SubmitResponse
+                    |> Api.withErrorHandler decoder
+                    |> Api.sendRequest SubmitResponse
 
             User.Authorized user ->
                 Api.post Api.CheckoutPlaceOrderCustomer
                     |> Api.withToken user.authToken
                     |> Api.withJsonBody customerData
-                    |> Api.withJsonResponse decoder
-                    |> Api.withErrorHandler SubmitResponse
+                    |> Api.withErrorHandler decoder
+                    |> Api.sendRequest SubmitResponse
 
 
 {-| TODO: This is probably repeated other places, stick in a Json.Utils module.
@@ -705,7 +706,7 @@ view model authStatus locations checkoutDetails =
 
                 ExistingAddress id ->
                     findBy (\a -> a.id == Just id) checkoutDetails.shippingAddresses
-                        |> Maybe.map (flip Address.card locations)
+                        |> Maybe.map (\a -> Address.card a locations)
                         |> Maybe.withDefault (text "")
 
         storeCreditForm =
@@ -1068,7 +1069,7 @@ summaryTable ({ items, charges } as checkoutDetails) creditString =
                     , small [ class "text-muted" ]
                         [ text <| "Item #" ++ product.baseSKU ++ variant.skuSuffix ]
                     ]
-                , td [ class "text-center" ] [ text <| toString quantity ]
+                , td [ class "text-center" ] [ text <| String.fromInt quantity ]
                 , td [ class "text-right" ] [ text <| Format.cents variant.price ]
                 , td [ class "text-right" ] [ text <| Format.cents (centsMap ((*) quantity) variant.price) ]
                 ]
@@ -1147,8 +1148,8 @@ summaryTable ({ items, charges } as checkoutDetails) creditString =
             ]
 
 
-successView : msg -> Int -> Bool -> AddressLocations -> PageData.OrderDetails -> List (Html msg)
-successView logoutMsg orderId newAccountCreated locations orderDetails =
+successView : Time.Zone -> msg -> Int -> Bool -> AddressLocations -> PageData.OrderDetails -> List (Html msg)
+successView zone logoutMsg orderId newAccountCreated locations orderDetails =
     let
         newAccountAlert =
             if not newAccountCreated then
@@ -1168,7 +1169,7 @@ successView logoutMsg orderId newAccountCreated locations orderDetails =
                 [ href <|
                     "mailto:gardens@southernexposure.com"
                         ++ "?subject=SESE+Website+Contact(Order+#"
-                        ++ toString orderId
+                        ++ String.fromInt orderId
                         ++ ")"
                 , target "_blank"
                 ]
@@ -1200,8 +1201,8 @@ successView logoutMsg orderId newAccountCreated locations orderDetails =
             [ text "We will email you a tracking number once your order has shipped."
             ]
         , h3 []
-            [ text <| "Order #" ++ toString orderId
-            , small [] [ text <| " " ++ Format.date orderDate ]
+            [ text <| "Order #" ++ String.fromInt orderId
+            , small [] [ text <| " " ++ Format.date zone orderDate ]
             ]
         , div [ class "row mb-3" ]
             [ div [ class "col-6" ]

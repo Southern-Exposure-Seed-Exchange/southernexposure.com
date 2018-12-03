@@ -56,6 +56,6 @@ type Milligrams
 milligramsToString : Milligrams -> String
 milligramsToString (Milligrams i) =
     Decimal.fromInt i
-        |> Decimal.mul (Decimal.unsafeFromString "0.001")
+        |> Decimal.mul (Decimal.fromIntWithExponent 1 -3)
         |> Decimal.round -2
         |> Decimal.toString

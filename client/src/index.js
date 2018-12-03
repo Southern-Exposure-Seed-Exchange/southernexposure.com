@@ -1,4 +1,4 @@
-var Elm = require('./Main.elm');
+const { Elm } = require('./Main.elm');
 
 const authTokenKey = 'authToken';
 const authUserIdKey = 'authUserId';
@@ -16,15 +16,14 @@ var [userId, token] = getAuthData();
 
 
 /** ELM **/
-var node = document.getElementById('main');
-var app = Elm.Main.embed(
-  node,
-  {
-    authToken: token,
-    authUserId: userId,
-    cartSessionToken: cartToken,
-    cartItemCount: intOrNull(cartItemCount),
-  }
+var app = Elm.Main.init({
+  flags: {
+      authToken: token,
+      authUserId: userId,
+      cartSessionToken: cartToken,
+      cartItemCount: intOrNull(cartItemCount),
+    },
+  },
 );
 
 
@@ -84,14 +83,6 @@ window.addEventListener('storage', function(e) {
 
 
 /** PORTS **/
-
-/* Set the Page Title */
-app.ports.setPageTitle.subscribe(function(pageTitle) {
-  if (pageTitle !== "") {
-    var suffix = " : Southern Exposure Seed Exchange";
-    document.title = pageTitle + suffix;
-  }
-});
 
 /* Scroll to Top of Element if it's not in view */
 app.ports.scrollToSelector.subscribe(function(selector) {

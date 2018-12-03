@@ -1,18 +1,18 @@
 module Views.HorizontalForm
     exposing
         ( genericErrorText
-        , selectRow
         , inputRow
-        , withLabel
+        , selectRow
         , submitButton
+        , withLabel
         )
 
+import Api
 import Dict
 import Html exposing (..)
-import Html.Attributes exposing (id, class, for, name, type_, required, value)
-import Html.Events exposing (onInput, on, targetValue)
+import Html.Attributes exposing (class, for, id, name, required, type_, value)
+import Html.Events exposing (on, onInput, targetValue)
 import Json.Decode as Decode exposing (Decoder)
-import Api
 
 
 genericErrorText : Bool -> Html msg
@@ -87,7 +87,7 @@ selectRow parser msg labelText isRequired options =
         inputId =
             "input" ++ String.filter (\c -> c /= ' ') labelText
 
-        onSelect msg =
+        onSelect =
             targetValue
                 |> Decode.andThen decoder
                 |> Decode.map msg
@@ -101,7 +101,7 @@ selectRow parser msg labelText isRequired options =
                 Err e ->
                     Decode.fail e
     in
-        select [ id inputId, class "form-control", onSelect msg ] options
+        select [ id inputId, class "form-control", onSelect ] options
             |> List.singleton
             |> withLabel labelText isRequired
 

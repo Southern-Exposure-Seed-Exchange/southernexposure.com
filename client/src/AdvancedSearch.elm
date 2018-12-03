@@ -1,15 +1,15 @@
 module AdvancedSearch exposing (Msg(..), update, view)
 
-import Html exposing (..)
-import Html.Attributes exposing (id, class, for, type_, value, checked, selected, src)
-import Html.Events exposing (onSubmit, onInput, onClick, onCheck, on, targetValue)
-import Json.Decode as Decode
 import Category exposing (CategoryId(..))
-import Search
-import SeedAttribute
-import Routing exposing (Route(SearchResults))
+import Html exposing (..)
+import Html.Attributes exposing (checked, class, for, id, selected, src, type_, value)
+import Html.Events exposing (on, onCheck, onClick, onInput, onSubmit, targetValue)
+import Json.Decode as Decode
 import PageData
 import Products.Pagination as Pagination
+import Routing exposing (Route(..))
+import Search
+import SeedAttribute
 
 
 type Msg
@@ -68,7 +68,7 @@ view routingMsg formMsg data categories =
                     ]
                 ]
 
-        filterInput ( msg, attribute, selector, content ) =
+        filterInput { msg, attribute, selector, content } =
             div [ class "form-check form-check-inline" ]
                 [ label [ class "form-check-label" ]
                     [ input
@@ -87,10 +87,26 @@ view routingMsg formMsg data categories =
 
         filterCheckboxes =
             List.map filterInput
-                [ ( IsOrganic, SeedAttribute.Organic, .isOrganic, "Organic" )
-                , ( IsHeirloom, SeedAttribute.Heirloom, .isHeirloom, "Heirloom" )
-                , ( IsRegional, SeedAttribute.Regional, .isRegional, "South-East" )
-                , ( IsEcological, SeedAttribute.Ecological, .isEcological, "Ecologically Grown" )
+                [ { msg = IsOrganic
+                  , attribute = SeedAttribute.Organic
+                  , selector = .isOrganic
+                  , content = "Organic"
+                  }
+                , { msg = IsHeirloom
+                  , attribute = SeedAttribute.Heirloom
+                  , selector = .isHeirloom
+                  , content = "Heirloom"
+                  }
+                , { msg = IsRegional
+                  , attribute = SeedAttribute.Regional
+                  , selector = .isRegional
+                  , content = "South-East"
+                  }
+                , { msg = IsEcological
+                  , attribute = SeedAttribute.Ecological
+                  , selector = .isEcological
+                  , content = "Ecologically Grown"
+                  }
                 ]
 
         categorySelect =
@@ -103,12 +119,12 @@ view routingMsg formMsg data categories =
                 (CategoryId idAsInt) =
                     id
             in
-                option [ value <| toString idAsInt, selected (Just id == data.category) ]
+                option [ value <| String.fromInt idAsInt, selected (Just id == data.category) ]
                     [ text name ]
 
         onCategorySelect msg =
             targetValue
-                |> Decode.map (String.toInt >> Result.toMaybe >> Maybe.map CategoryId >> msg)
+                |> Decode.map (String.toInt >> Maybe.map CategoryId >> msg)
                 |> on "change"
     in
         [ h1 [] [ text "Advanced Search" ]

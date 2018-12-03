@@ -1,4 +1,4 @@
-module Views.Images exposing (static, media)
+module Views.Images exposing (media, static)
 
 
 static : String -> String

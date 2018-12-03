@@ -1,28 +1,28 @@
 module Auth.CreateAccount
     exposing
         ( Form
-        , initial
         , Msg
+        , initial
+        , successView
         , update
         , view
-        , successView
         )
 
 -- TODO: Refactor module as a composition of the EditLogin & EditContact module forms.
 
+import Api
 import Dict exposing (Dict)
 import Html exposing (..)
-import Html.Attributes exposing (id, class, for, type_, required, value, selected)
-import Html.Events exposing (onInput, onSubmit, on, targetValue)
+import Html.Attributes exposing (class, for, id, required, selected, type_, value)
+import Html.Events exposing (on, onInput, onSubmit, targetValue)
 import Json.Encode as Encode exposing (Value)
-import RemoteData exposing (WebData)
-import Api
 import Locations exposing (AddressLocations)
 import Ports
-import User exposing (AuthStatus)
+import RemoteData exposing (WebData)
+import Routing exposing (Route(..), reverse)
 import Update.Utils exposing (nothingAndNoCommand)
+import User exposing (AuthStatus)
 import Views.HorizontalForm as Form
-import Routing exposing (Route(CreateAccountSuccess), reverse)
 
 
 -- MODEL
@@ -67,7 +67,7 @@ encode : Form -> Maybe String -> Value
 encode model maybeSessionToken =
     let
         encodedState =
-            (,) "state" <|
+            Tuple.pair "state" <|
                 case model.country of
                     "US" ->
                         if List.member model.state Locations.armedForcesCodes then
@@ -85,7 +85,7 @@ encode model maybeSessionToken =
             maybeSessionToken
                 |> Maybe.map Encode.string
                 |> Maybe.withDefault Encode.null
-                |> ((,) "sessionToken")
+                |> Tuple.pair "sessionToken"
 
         stateWithKey key =
             Encode.object [ ( key, Encode.string model.state ) ]
@@ -102,8 +102,8 @@ encode model maybeSessionToken =
         , ( "telephone", model.phoneNumber )
         ]
             |> List.map (Tuple.mapSecond Encode.string)
-            |> ((::) encodedState)
-            |> ((::) encodedToken)
+            |> (::) encodedState
+            |> (::) encodedToken
             |> Encode.object
 
 
@@ -128,8 +128,8 @@ type Msg
     | SubmitResponse (WebData (Result Api.FormErrors AuthStatus))
 
 
-update : Msg -> Form -> Maybe String -> ( Form, Maybe AuthStatus, Cmd Msg )
-update msg form maybeSessionToken =
+update : Routing.Key -> Msg -> Form -> Maybe String -> ( Form, Maybe AuthStatus, Cmd Msg )
+update key msg form maybeSessionToken =
     case msg of
         Email str ->
             { form | email = str }
@@ -203,7 +203,7 @@ update msg form maybeSessionToken =
                     ( form
                     , Just authStatus
                     , Cmd.batch
-                        [ Routing.newUrl CreateAccountSuccess
+                        [ Routing.newUrl key CreateAccountSuccess
                         , Ports.scrollToTop
                         , User.storeDetails authStatus
                         , Ports.removeCartSessionToken ()
@@ -224,8 +224,8 @@ createNewAccount : Form -> Maybe String -> Cmd Msg
 createNewAccount form maybeSessionToken =
     Api.post Api.CustomerRegister
         |> Api.withJsonBody (encode form maybeSessionToken)
-        |> Api.withJsonResponse User.decoder
-        |> Api.withErrorHandler SubmitResponse
+        |> Api.withErrorHandler User.decoder
+        |> Api.sendRequest SubmitResponse
 
 
 

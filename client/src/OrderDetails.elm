@@ -11,14 +11,15 @@ import Address
 import Locations exposing (AddressLocations)
 import Models.Fields exposing (Cents(..), milligramsToString, centsMap, centsMap2)
 import PageData
+import Time
 import Views.Format as Format
 
 
-view : Int -> AddressLocations -> PageData.OrderDetails -> List (Html msg)
-view orderId locations orderDetails =
+view : Time.Zone -> Int -> AddressLocations -> PageData.OrderDetails -> List (Html msg)
+view zone orderId locations orderDetails =
     [ h1 []
-        [ text <| "Order #" ++ toString orderId
-        , small [] [ text <| " " ++ Format.date orderDetails.order.createdAt ]
+        [ text <| "Order #" ++ String.fromInt orderId
+        , small [] [ text <| " " ++ Format.date zone orderDetails.order.createdAt ]
         ]
     , hr [] []
     , div [ class "row mb-3" ]
@@ -41,13 +42,17 @@ addressCard locations titleText address =
         ]
 
 
+type Tuple4 a b c d
+    = Tuple4 a b c d
+
+
 orderTable : PageData.OrderDetails -> Html msg
 orderTable ({ order, lineItems, products } as details) =
     let
         productRow product =
             tr []
                 [ td [] [ text <| product.name ++ " " ++ milligramsToString product.weight ++ "g" ]
-                , td [ class "text-right" ] [ text <| toString product.quantity ]
+                , td [ class "text-right" ] [ text <| String.fromInt product.quantity ]
                 , td [ class "text-right" ] [ text <| Format.cents product.price ]
                 , td [ class "text-right" ] [ text <| Format.cents (productTotal product) ]
                 ]
@@ -61,23 +66,23 @@ orderTable ({ order, lineItems, products } as details) =
         subTotal =
             orderTotals.subTotal
 
-        ( maybeShippingCharge, maybeStoreCredit, maybeMemberDiscount, surcharges ) =
+        (Tuple4 maybeShippingCharge maybeStoreCredit maybeMemberDiscount surcharges) =
             List.foldl
-                (\lineItem ( maybeShipping, maybeCredit, maybeMemberDiscount, ss ) ->
+                (\lineItem (Tuple4 maybeShipping maybeCredit maybeMember ss) ->
                     case lineItem.itemType of
                         PageData.Shipping ->
-                            ( Just lineItem, maybeCredit, maybeMemberDiscount, ss )
+                            Tuple4 (Just lineItem) maybeCredit maybeMember ss
 
                         PageData.StoreCredit ->
-                            ( maybeShipping, Just { lineItem | amount = centsMap negate lineItem.amount }, maybeMemberDiscount, ss )
+                            Tuple4 maybeShipping (Just { lineItem | amount = centsMap negate lineItem.amount }) maybeMember ss
 
                         PageData.MemberDiscount ->
-                            ( maybeShipping, maybeCredit, Just { lineItem | amount = centsMap negate lineItem.amount }, ss )
+                            Tuple4 maybeShipping maybeCredit (Just { lineItem | amount = centsMap negate lineItem.amount }) ss
 
                         PageData.Surcharge ->
-                            ( maybeShipping, maybeCredit, maybeMemberDiscount, lineItem :: ss )
+                            Tuple4 maybeShipping maybeCredit maybeMember (lineItem :: ss)
                 )
-                ( Nothing, Nothing, Nothing, [] )
+                (Tuple4 Nothing Nothing Nothing [])
                 lineItems
 
         total =

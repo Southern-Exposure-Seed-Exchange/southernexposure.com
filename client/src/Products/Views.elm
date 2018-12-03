@@ -118,10 +118,10 @@ list routeConstructor pagination addToCartForms products =
                     (\c ->
                         if c == pagination.perPage then
                             span [ class "font-weight-bold" ]
-                                [ text <| toString c ]
+                                [ text <| String.fromInt c ]
                         else
                             a (routeLinkAttributes <| routeConstructor { pagination | perPage = c })
-                                [ text <| toString c ]
+                                [ text <| String.fromInt c ]
                     )
                 |> List.intersperse (text " | ")
                 |> (\ps ->
@@ -143,22 +143,22 @@ list routeConstructor pagination addToCartForms products =
                     , text " to "
                     , b [] [ text <| pagingEnd () ]
                     , text " (of "
-                    , b [] [ text <| toString productsCount ]
+                    , b [] [ text <| String.fromInt productsCount ]
                     , text " products)"
                     ]
 
         pagingStart _ =
-            toString <|
+            String.fromInt <|
                 (currentPage - 1)
                     * pagination.perPage
                     + 1
 
         pagingEnd _ =
-            toString <|
+            String.fromInt <|
                 if (not << Paginate.hasNext) products || productsCount < pagination.perPage then
                     productsCount
                 else
-                    (currentPage * pagination.perPage)
+                    currentPage * pagination.perPage
 
         totalPages =
             Paginate.getTotalPages products
@@ -174,7 +174,7 @@ list routeConstructor pagination addToCartForms products =
                     [ attribute "aria-label" "Category Product Pages" ]
                     [ ul [ class "pagination pagination-sm mb-0" ] <|
                         previousLink ()
-                            :: (renderSections ())
+                            :: renderSections ()
                             ++ [ nextLink () ]
                     ]
 
@@ -275,7 +275,7 @@ cartForm addToCartForms product variants =
 
         variantSelect _ =
             select
-                [ id <| "inputVariant-" ++ toString (fromProductId product.id)
+                [ id <| "inputVariant-" ++ String.fromInt (fromProductId product.id)
                 , class "variant-select form-control mb-1 mx-auto"
                 , onSelectInt <| ChangeCartFormVariantId product.id
                 ]
@@ -288,7 +288,7 @@ cartForm addToCartForms product variants =
                     , class "form-control"
                     , A.min "1"
                     , A.step "1"
-                    , value <| toString quantity
+                    , value <| String.fromInt quantity
                     , onIntInput <| ChangeCartFormQuantity product.id
                     ]
                     []
@@ -333,8 +333,8 @@ cartForm addToCartForms product variants =
             targetValue
                 |> Decode.andThen
                     (String.toInt
-                        >> Result.map (ProductVariantId >> Decode.succeed)
-                        >> Result.withDefault (Decode.fail "")
+                        >> Maybe.map (ProductVariantId >> Decode.succeed)
+                        >> Maybe.withDefault (Decode.fail "")
                     )
                 |> Decode.map msg
                 |> on "change"
@@ -347,7 +347,7 @@ cartForm addToCartForms product variants =
                 |> text
                 |> List.singleton
                 |> option
-                    [ value <| toString <| fromVariantId variant.id
+                    [ value <| String.fromInt <| fromVariantId variant.id
                     , selected (Just variant == maybeSelectedVariant)
                     ]
 

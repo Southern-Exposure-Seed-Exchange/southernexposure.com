@@ -1,22 +1,22 @@
 module Auth.EditLogin
     exposing
         ( Form
-        , initial
         , Msg
+        , initial
         , update
         , view
         )
 
+import Api
 import Dict
 import Html exposing (..)
 import Html.Attributes exposing (id)
 import Html.Events exposing (onInput, onSubmit)
 import Json.Decode as Decode
 import Json.Encode as Encode exposing (Value)
-import RemoteData exposing (WebData)
-import Api
 import Ports
-import Routing exposing (Route(MyAccount, Login))
+import RemoteData exposing (WebData)
+import Routing exposing (Route(..))
 import Update.Utils exposing (noCommand)
 import User exposing (AuthStatus(..))
 import Views.HorizontalForm as Form
@@ -66,8 +66,8 @@ type Msg
     | SubmitResponse (WebData (Result Api.FormErrors ()))
 
 
-update : Msg -> Form -> AuthStatus -> ( Form, Cmd Msg )
-update msg model authStatus =
+update : Routing.Key -> Msg -> Form -> AuthStatus -> ( Form, Cmd Msg )
+update key msg model authStatus =
     let
         nothingIfBlank str =
             if String.isEmpty str then
@@ -89,7 +89,7 @@ update msg model authStatus =
                     |> noCommand
 
             Submit ->
-                if (model.password /= model.passwordConfirm) then
+                if model.password /= model.passwordConfirm then
                     { model
                         | errors =
                             Api.initialErrors
@@ -105,7 +105,7 @@ update msg model authStatus =
                             )
 
                         _ ->
-                            ( initial, Routing.newUrl Login )
+                            ( initial, Routing.newUrl key Login )
 
             SubmitResponse response ->
                 case response of
@@ -115,7 +115,7 @@ update msg model authStatus =
                         )
 
                     RemoteData.Success (Ok _) ->
-                        ( initial, Cmd.batch [ Routing.newUrl MyAccount, Ports.scrollToTop ] )
+                        ( initial, Cmd.batch [ Routing.newUrl key MyAccount, Ports.scrollToTop ] )
 
                     _ ->
                         model |> noCommand
@@ -124,10 +124,10 @@ update msg model authStatus =
 updateLoginDetails : Form -> String -> Cmd Msg
 updateLoginDetails model token =
     Api.put Api.CustomerEditLogin
-        |> Api.withJsonBody (encoder model)
-        |> Api.withJsonResponse (Decode.succeed ())
         |> Api.withToken token
-        |> Api.withErrorHandler SubmitResponse
+        |> Api.withJsonBody (encoder model)
+        |> Api.withErrorHandler (Decode.succeed ())
+        |> Api.sendRequest SubmitResponse
 
 
 
@@ -147,8 +147,8 @@ view tagger model authStatus =
                         Anonymous ->
                             ""
 
-                Just email ->
-                    email
+                Just e ->
+                    e
 
         inputRow selector msg =
             Form.inputRow model.errors (selector model) (tagger << msg)

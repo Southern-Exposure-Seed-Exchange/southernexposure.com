@@ -1,25 +1,27 @@
 module Views.Format
     exposing
-        ( date
-        , cents
+        ( cents
         , centsNumber
+        , date
         )
 
+import DateFormat
 import Decimal
-import Time.DateTime as DateTime exposing (DateTime)
 import Models.Fields exposing (Cents(..))
+import Time exposing (Posix, Zone)
 
 
-{-| Format a DateTime into a MM/DD/YY string.
+{-| Format a Posix Time into a MM/DD/YY string.
 -}
-date : DateTime -> String
-date dateTime =
-    [ DateTime.month dateTime
-    , DateTime.day dateTime
-    , DateTime.year dateTime % 100
-    ]
-        |> List.map toString
-        |> String.join "/"
+date : Zone -> Posix -> String
+date =
+    DateFormat.format
+        [ DateFormat.monthFixed
+        , DateFormat.text "/"
+        , DateFormat.dayOfMonthFixed
+        , DateFormat.text "/"
+        , DateFormat.yearNumberLastTwo
+        ]
 
 
 {-| Format a Cents into a decimal-representation of Dollars prefixed with a
@@ -38,6 +40,6 @@ cents ((Cents i) as c) =
 centsNumber : Cents -> String
 centsNumber (Cents c) =
     Decimal.fromInt c
-        |> Decimal.mul (Decimal.unsafeFromString "0.01")
+        |> Decimal.mul (Decimal.fromIntWithExponent 1 -2)
         |> Decimal.round -2
         |> Decimal.toString

@@ -1,16 +1,17 @@
 module Auth.MyAccount exposing (getDetails, view)
 
+import Api
 import Html exposing (..)
 import Html.Attributes exposing (class)
 import Html.Events exposing (onClick)
-import Api
-import Messages exposing (Msg(NavigateTo, GetMyAccountDetails, ShowAllOrders))
+import Locations exposing (AddressLocations)
+import Messages exposing (Msg(..))
 import Models.Fields exposing (Cents(..), centsMap)
+import PageData exposing (MyAccount)
+import Routing exposing (Route(..))
+import Time
 import Views.Format as Format
 import Views.Utils exposing (routeLinkAttributes)
-import Routing exposing (Route(EditLogin, EditAddress, OrderDetails))
-import PageData exposing (MyAccount)
-import Locations exposing (AddressLocations)
 
 
 getDetails : String -> Maybe Int -> Cmd Msg
@@ -21,8 +22,8 @@ getDetails token maybeLimit =
         |> Api.sendRequest GetMyAccountDetails
 
 
-view : AddressLocations -> MyAccount -> List (Html Msg)
-view locations { storeCredit, orderSummaries } =
+view : Time.Zone -> AddressLocations -> MyAccount -> List (Html Msg)
+view zone locations { storeCredit, orderSummaries } =
     let
         accountLinks =
             [ li []
@@ -56,7 +57,7 @@ view locations { storeCredit, orderSummaries } =
             else
                 div []
                     [ h3 [] [ text "Recent Orders" ]
-                    , orderTable locations orderSummaries
+                    , orderTable zone locations orderSummaries
                     ]
     in
         [ h1 [] [ text "My Account" ]
@@ -72,21 +73,21 @@ view locations { storeCredit, orderSummaries } =
         ]
 
 
-orderTable : AddressLocations -> List PageData.OrderSummary -> Html Msg
-orderTable locations orderSummaries =
+orderTable : Time.Zone -> AddressLocations -> List PageData.OrderSummary -> Html Msg
+orderTable zone locations orderSummaries =
     let
         orderRow { id, shippingAddress, status, total, created } =
             tr []
-                [ td [ class "text-center" ] [ text <| Format.date created ]
-                , td [ class "text-center" ] [ text <| toString id ]
+                [ td [ class "text-center" ] [ text <| Format.date zone created ]
+                , td [ class "text-center" ] [ text <| String.fromInt id ]
                 , td [] [ addressInfo shippingAddress ]
                 , td [ class "text-center" ] [ text <| PageData.statusText status ]
                 , td [ class "text-right" ] [ text <| Format.cents total ]
                 , td [ class "text-center" ]
-                    [ button
-                        [ class "btn btn-light btn-sm"
-                        , onClick <| NavigateTo (OrderDetails id)
-                        ]
+                    [ a
+                        (class "btn btn-light btn-sm"
+                            :: routeLinkAttributes (OrderDetails id)
+                        )
                         [ text "View" ]
                     ]
                 ]

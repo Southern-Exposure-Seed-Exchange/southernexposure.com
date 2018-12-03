@@ -2,10 +2,10 @@ module SiteUI.Navigation exposing (view)
 
 import Dict
 import Html exposing (Html, text, div, ul, li, span, button, a, node, form)
-import Html.Attributes exposing (attribute, id, class, href, type_)
+import Html.Attributes exposing (attribute, id, class, href, type_, target)
 import RemoteData exposing (WebData)
 import Category exposing (CategoryId(..))
-import Messages exposing (Msg(SearchMsg))
+import Messages exposing (Msg(..))
 import PageData
 import Products.Pagination as Pagination
 import Routing exposing (Route(..), reverse)
@@ -23,7 +23,7 @@ view navigationData activeCategories searchData =
                 |> Maybe.map (\data -> List.map (rootCategory data.children) data.roots)
                 |> Maybe.withDefault []
 
-        rootCategory children category =
+        rootCategory childMap category =
             let
                 (CategoryId categoryId) =
                     category.id
@@ -46,11 +46,11 @@ view navigationData activeCategories searchData =
                             childItems
                         else
                             [ div [ class "row no-gutters multi-column-dropdown" ] <|
-                                List.map (\i -> div [ class "col" ] i)
+                                List.map (div [ class "col" ])
                                     (splitItems childItems)
                             ]
             in
-                case Dict.get categoryId children of
+                case Dict.get categoryId childMap of
                     Nothing ->
                         li [ class <| "nav-item" ++ activeClass category ]
                             [ a
@@ -66,6 +66,7 @@ view navigationData activeCategories searchData =
                         li [ class <| "nav-item dropdown" ++ activeClass category ]
                             [ a
                                 [ class "nav-link dropdown-toggle"
+                                , target "_self"
                                 , href <|
                                     reverse <|
                                         CategoryDetails category.slug Pagination.default

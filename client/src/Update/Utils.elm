@@ -12,8 +12,8 @@ module Update.Utils
 
 
 noCommand : model -> ( model, Cmd msg )
-noCommand =
-    flip (,) Cmd.none
+noCommand m =
+    ( m, Cmd.none )
 
 
 withCommand : (model -> Cmd msg) -> model -> ( model, Cmd msg )

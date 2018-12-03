@@ -4,7 +4,7 @@ import Html exposing (..)
 import Html.Attributes exposing (id, class, href, target, src)
 import Messages exposing (Msg)
 import Products.Pagination as Pagination
-import Routing exposing (Route(PageDetails, SearchResults, QuickOrder))
+import Routing exposing (Route(..))
 import Search
 import SeedAttribute
 import Views.Images as Images
@@ -25,7 +25,7 @@ view route =
                 li [ class "nav-item" ]
                     [ a
                         (class ("py-1 d-block border-0 nav-link" ++ activeClass)
-                            :: (routeLinkAttributes linkRoute)
+                            :: routeLinkAttributes linkRoute
                         )
                         [ text title ]
                     ]

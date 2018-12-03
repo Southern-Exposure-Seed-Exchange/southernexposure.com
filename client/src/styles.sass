@@ -80,7 +80,7 @@ body
   background-size: contain
 
 /* Set the background color of the body content */
-body > div#main > div > div.container
+body > div.container
   background: $body-bg
 
 #site-header
@@ -259,6 +259,9 @@ h1.product-details-title > div
     width: 3.25rem
   .cart-quantity
     width: 3.9rem
+  .btn-link.text-danger
+    +hover-focus
+      color: darken($danger, 10%) !important
 
 
 /** Quick Order **/

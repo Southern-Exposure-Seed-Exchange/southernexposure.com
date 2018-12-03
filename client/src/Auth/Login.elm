@@ -1,24 +1,24 @@
 module Auth.Login
     exposing
         ( Form
-        , initial
         , Msg
+        , initial
         , update
         , view
         )
 
+import Api
 import Dict
 import Html exposing (..)
-import Html.Attributes exposing (id, class, for, type_, href, required, autofocus, checked, value)
-import Html.Events exposing (onInput, onCheck, onSubmit)
-import Html.Events.Extra exposing (onClickPreventDefault)
+import Html.Attributes exposing (autofocus, checked, class, for, href, id, required, type_, value)
+import Html.Events exposing (onCheck, onInput, onSubmit)
 import Json.Encode as Encode exposing (Value)
-import RemoteData exposing (WebData)
-import Api
 import Ports
-import Routing exposing (Route(CreateAccount, ResetPassword, PageDetails), reverse)
-import User exposing (AuthStatus, UserId(..))
+import RemoteData exposing (WebData)
+import Routing exposing (Route(..), reverse)
 import Update.Utils exposing (nothingAndNoCommand)
+import User exposing (AuthStatus, UserId(..))
+import Views.Utils exposing (routeLinkAttributes)
 
 
 -- MODEL
@@ -67,8 +67,8 @@ type Msg
     | SubmitResponse (WebData (Result Api.FormErrors AuthStatus))
 
 
-update : Msg -> Form -> Maybe String -> ( Form, Maybe AuthStatus, Cmd Msg )
-update msg model maybeSessionToken =
+update : Routing.Key -> Msg -> Form -> Maybe String -> ( Form, Maybe AuthStatus, Cmd Msg )
+update key msg model maybeSessionToken =
     case msg of
         Email email ->
             { model | email = email }
@@ -86,7 +86,7 @@ update msg model maybeSessionToken =
             ( model
             , Nothing
             , Cmd.batch
-                [ Routing.newUrl CreateAccount
+                [ Routing.newUrl key CreateAccount
                 , Ports.scrollToTop
                 ]
             )
@@ -95,7 +95,7 @@ update msg model maybeSessionToken =
             ( model
             , Nothing
             , Cmd.batch
-                [ Routing.newUrl <| ResetPassword <| Just ""
+                [ Routing.newUrl key <| ResetPassword <| Just ""
                 , Ports.scrollToTop
                 ]
             )
@@ -113,7 +113,7 @@ update msg model maybeSessionToken =
                     ( initial
                     , Just authStatus
                     , Cmd.batch
-                        [ Routing.newUrl <| PageDetails "home"
+                        [ Routing.newUrl key <| PageDetails "home"
                         , rememberAuth model.remember authStatus
                         , Ports.removeCartSessionToken ()
                         ]
@@ -134,21 +134,23 @@ rememberAuth remember authStatus =
         Cmd.none
 
 
+{-| TODO: This no longer works since we use the --optimize flag. Show an error instead.
+-}
 debugResponse : c -> a -> ( a, Maybe b, Cmd msg )
 debugResponse response model =
-    let
-        _ =
-            Debug.log "Bad Response" response
-    in
-        model |> nothingAndNoCommand
+    --let
+    --    _ =
+    --        Debug.log "Bad Response" response
+    --in
+    model |> nothingAndNoCommand
 
 
 login : Form -> Maybe String -> Cmd Msg
 login form maybeSessionToken =
     Api.post Api.CustomerLogin
         |> Api.withJsonBody (encode form maybeSessionToken)
-        |> Api.withJsonResponse User.decoder
-        |> Api.withErrorHandler SubmitResponse
+        |> Api.withErrorHandler User.decoder
+        |> Api.sendRequest SubmitResponse
 
 
 
@@ -174,9 +176,7 @@ view tagger model =
                         ]
                     , div []
                         [ a
-                            [ onClickPreventDefault <| tagger ResetPasswordPage
-                            , href <| reverse <| ResetPassword <| Just ""
-                            ]
+                            (routeLinkAttributes <| ResetPassword <| Just "")
                             [ text "Forgot your password?" ]
                         ]
                     ]
@@ -250,7 +250,6 @@ view tagger model =
                 , a
                     [ class "btn btn-primary ml-auto mb-2"
                     , href <| reverse CreateAccount
-                    , onClickPreventDefault <| tagger CreateAccountPage
                     ]
                     [ text "Create an Account" ]
                 ]

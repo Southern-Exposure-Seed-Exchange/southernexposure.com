@@ -3,7 +3,7 @@ module SiteUI.Header exposing (view)
 import Html exposing (Html, div, a, img, h1, br, ul, li, text, small)
 import Html.Attributes exposing (id, class, href, src)
 import Html.Events.Extra exposing (onClickPreventDefault)
-import Messages exposing (Msg(LogOut))
+import Messages exposing (Msg(..))
 import Routing exposing (Route(..))
 import SiteUI.Search as SiteSearch
 import User exposing (AuthStatus(..))
@@ -70,7 +70,7 @@ linksAndSearch searchTagger searchData authStatus cartItemCount =
 
         cartLink =
             if cartItemCount > 0 then
-                routeLink ("Cart (" ++ toString cartItemCount ++ ")") Cart
+                routeLink ("Cart (" ++ String.fromInt cartItemCount ++ ")") Cart
             else
                 text ""
 

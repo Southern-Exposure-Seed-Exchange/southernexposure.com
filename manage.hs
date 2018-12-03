@@ -183,8 +183,6 @@ initializeClient = do
                 printExitMessage "Node Installed" "Node Installation Failed"
         installDependency "npm" ["install"] clientDirectory printClientOutput
             "Node Dependencies"
-        installDependency "npm" ["run", "elm", "--", "package", "install", "--yes"]
-            clientDirectory printClientOutput "Elm Dependencies"
 
 
 -- Commands
