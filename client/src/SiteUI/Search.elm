@@ -52,7 +52,7 @@ form tagger buttonColor { query } =
                 , onInput <| tagger << Update
                 ]
                 []
-            , span [ class "input-group-btn" ]
+            , div [ class "input-group-append" ]
                 [ button [ class <| "btn btn-" ++ buttonColor, type_ "submit" ] [ text "Search" ]
                 ]
             ]

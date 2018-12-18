@@ -292,7 +292,7 @@ cartForm addToCartForms product variants =
                     , onIntInput <| ChangeCartFormQuantity product.id
                     ]
                     []
-                , span [ class "input-group-btn" ]
+                , div [ class "input-group-append" ]
                     [ button [ class "btn btn-primary", type_ "submit" ]
                         [ text "Add" ]
                     ]
