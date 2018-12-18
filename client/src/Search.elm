@@ -72,7 +72,7 @@ toQueryString data =
     [ queryParameter ( "q", data.query )
     , queryFlag "organic" data.isOrganic
     , queryFlag "heirloom" data.isHeirloom
-    , queryFlag "southeast" data.isRegional
+    , queryFlag "regional" data.isRegional
     , queryFlag "ecological" data.isEcological
     , queryFlag "titlesOnly" (data.searchIn == Titles)
     , Maybe.map (\(CategoryId i) -> queryParameter ( "category", String.fromInt i ))
