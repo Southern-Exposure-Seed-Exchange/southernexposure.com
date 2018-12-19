@@ -67,15 +67,54 @@ encode data =
         ]
 
 
+
+-- Query String Generation / Parsing
+
+
+searchQueryFlagName : String
+searchQueryFlagName =
+    "q"
+
+
+organicFlagName : String
+organicFlagName =
+    "organic"
+
+
+heirloomFlagName : String
+heirloomFlagName =
+    "heirloom"
+
+
+regionalFlagName : String
+regionalFlagName =
+    "regional"
+
+
+ecologicalFlagName : String
+ecologicalFlagName =
+    "ecological"
+
+
+categoryFlagName : String
+categoryFlagName =
+    "category"
+
+
+titlesOnlyFlagName : String
+titlesOnlyFlagName =
+    "titlesOnly"
+
+
 toQueryString : Data -> String
 toQueryString data =
-    [ queryParameter ( "q", data.query )
-    , queryFlag "organic" data.isOrganic
-    , queryFlag "heirloom" data.isHeirloom
-    , queryFlag "regional" data.isRegional
-    , queryFlag "ecological" data.isEcological
-    , queryFlag "titlesOnly" (data.searchIn == Titles)
-    , Maybe.map (\(CategoryId i) -> queryParameter ( "category", String.fromInt i ))
+    [ queryParameter ( searchQueryFlagName, data.query )
+    , queryFlag organicFlagName data.isOrganic
+    , queryFlag heirloomFlagName data.isHeirloom
+    , queryFlag regionalFlagName data.isRegional
+    , queryFlag ecologicalFlagName data.isEcological
+    , queryFlag titlesOnlyFlagName (data.searchIn == Titles)
+    , Maybe.map (\(CategoryId i) -> queryParameter ( categoryFlagName, String.fromInt i ))
         data.category
         |> Maybe.withDefault ""
     ]
@@ -98,13 +137,13 @@ fromQueryString :
     -> Url.Parser (b -> c) c
 fromQueryString pathParser =
     pathParser
-        <?> fromStringParam "q" identity
-        <?> fromStringWithDefaultParam "titlesOnly" (always Titles) TitlesAndDescriptions
-        <?> Routing.parseFlag "organic"
-        <?> Routing.parseFlag "heirloom"
-        <?> Routing.parseFlag "regional"
-        <?> Routing.parseFlag "ecological"
-        <?> Routing.fromIntParam "category" CategoryId
+        <?> fromStringParam searchQueryFlagName identity
+        <?> fromStringWithDefaultParam titlesOnlyFlagName (always Titles) TitlesAndDescriptions
+        <?> Routing.parseFlag organicFlagName
+        <?> Routing.parseFlag heirloomFlagName
+        <?> Routing.parseFlag regionalFlagName
+        <?> Routing.parseFlag ecologicalFlagName
+        <?> Routing.fromIntParam categoryFlagName CategoryId
         |> Url.map
             (\constructor q descr org heir reg eco cat ->
                 constructor <| Data q descr org heir reg eco cat
