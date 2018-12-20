@@ -1,14 +1,13 @@
-module Products.Pagination
-    exposing
-        ( Data
-        , default
-        , toQueryString
-        , fromQueryString
-        )
+module Products.Pagination exposing
+    ( Data
+    , default
+    , fromQueryString
+    , toQueryString
+    )
 
-import Url.Parser as Url exposing ((<?>))
 import Products.Sorting as Sorting
 import Routing.Utils exposing (optionalIntParam)
+import Url.Parser as Url exposing ((<?>))
 
 
 type alias Data =

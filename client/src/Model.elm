@@ -1,12 +1,9 @@
-module Model
-    exposing
-        ( Model
-        , CartForms
-        , initial
-        )
+module Model exposing
+    ( CartForms
+    , Model
+    , initial
+    )
 
-import Dict exposing (Dict)
-import RemoteData exposing (WebData)
 import Auth.CreateAccount as CreateAccount
 import Auth.EditAddress as EditAddress
 import Auth.EditLogin as EditLogin
@@ -14,9 +11,11 @@ import Auth.Login as Login
 import Auth.ResetPassword as ResetPassword
 import Cart
 import Checkout
+import Dict exposing (Dict)
 import PageData exposing (PageData)
 import Product exposing (ProductVariantId)
 import QuickOrder
+import RemoteData exposing (WebData)
 import Routing exposing (Route)
 import Search
 import SiteUI exposing (NavigationData)

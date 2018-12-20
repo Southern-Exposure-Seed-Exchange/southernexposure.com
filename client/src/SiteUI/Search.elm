@@ -1,12 +1,11 @@
-module SiteUI.Search
-    exposing
-        ( Data
-        , Msg(..)
-        , update
-        , form
-        )
+module SiteUI.Search exposing
+    ( Data
+    , Msg(..)
+    , form
+    , update
+    )
 
-import Html exposing (Html, div, span, text, button, input)
+import Html exposing (Html, button, div, input, span, text)
 import Html.Attributes exposing (class, type_, value)
 import Html.Events exposing (onInput, onSubmit)
 import Products.Pagination as Pagination

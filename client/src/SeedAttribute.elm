@@ -1,16 +1,15 @@
-module SeedAttribute
-    exposing
-        ( SeedAttributeId(..)
-        , SeedAttribute
-        , decoder
-        , legend
-        , icons
-        , Attribute(..)
-        , iconUrl
-        )
+module SeedAttribute exposing
+    ( Attribute(..)
+    , SeedAttribute
+    , SeedAttributeId(..)
+    , decoder
+    , iconUrl
+    , icons
+    , legend
+    )
 
-import Html exposing (Html, div, ul, li, img, span, text)
-import Html.Attributes exposing (class, src, title, alt)
+import Html exposing (Html, div, img, li, span, text, ul)
+import Html.Attributes exposing (alt, class, src, title)
 import Json.Decode as Decode exposing (Decoder)
 import Product exposing (ProductId(..))
 import Views.Images as Images
@@ -70,7 +69,7 @@ iconUrl attribute =
                 Ecological ->
                     "ecologically-grown.png"
     in
-        Images.static <| "icons/" ++ url
+    Images.static <| "icons/" ++ url
 
 
 toString : Attribute -> String
@@ -121,9 +120,10 @@ legend =
                     , div [ class "media-body" ] [ text <| toDescription attribute ]
                     ]
             )
-        |> \items ->
-            div [ class "text-center" ]
-                [ ul [ class "list-unstyled d-inline-block mb-0" ] items ]
+        |> (\items ->
+                div [ class "text-center" ]
+                    [ ul [ class "list-unstyled d-inline-block mb-0" ] items ]
+           )
 
 
 icons : SeedAttribute -> Html msg

@@ -1,14 +1,13 @@
-module Update.Utils
-    exposing
-        ( noCommand
-        , withCommand
-        , batchCommand
-        , maybeCommand
-        , extraCommand
-        , updateAndCommand
-        , discardCommand
-        , nothingAndNoCommand
-        )
+module Update.Utils exposing
+    ( batchCommand
+    , discardCommand
+    , extraCommand
+    , maybeCommand
+    , noCommand
+    , nothingAndNoCommand
+    , updateAndCommand
+    , withCommand
+    )
 
 
 noCommand : model -> ( model, Cmd msg )

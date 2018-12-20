@@ -1,21 +1,20 @@
-module Search
-    exposing
-        ( Data
-        , initial
-        , SearchScope(..)
-        , resetQuery
-        , encode
-        , toQueryString
-        , fromQueryString
-        , UniqueSearch(..)
-        , uniqueSearch
-        )
+module Search exposing
+    ( Data
+    , SearchScope(..)
+    , UniqueSearch(..)
+    , encode
+    , fromQueryString
+    , initial
+    , resetQuery
+    , toQueryString
+    , uniqueSearch
+    )
 
-import Json.Encode as Encode exposing (Value)
-import Url.Parser as Url exposing ((<?>))
 import Category exposing (CategoryId(..))
-import Routing.Utils as Routing exposing (queryFlag, queryParameter, fromStringParam, fromStringWithDefaultParam)
+import Json.Encode as Encode exposing (Value)
+import Routing.Utils as Routing exposing (fromStringParam, fromStringWithDefaultParam, queryFlag, queryParameter)
 import SeedAttribute
+import Url.Parser as Url exposing ((<?>))
 
 
 type alias Data =
@@ -167,18 +166,23 @@ uniqueSearch { query, searchIn, category, isOrganic, isHeirloom, isRegional, isE
                 none =
                     List.all ((==) False)
             in
-                if isOrganic && none [ isHeirloom, isRegional, isEcological ] then
-                    Just <| AttributeSearch SeedAttribute.Organic
-                else if isHeirloom && none [ isOrganic, isRegional, isEcological ] then
-                    Just <| AttributeSearch SeedAttribute.Heirloom
-                else if isRegional && none [ isOrganic, isHeirloom, isEcological ] then
-                    Just <| AttributeSearch SeedAttribute.Regional
-                else if isEcological && none [ isOrganic, isHeirloom, isRegional ] then
-                    Just <| AttributeSearch SeedAttribute.Ecological
-                else if none [ isOrganic, isHeirloom, isRegional, isEcological ] then
-                    Just AllProducts
-                else
-                    Nothing
+            if isOrganic && none [ isHeirloom, isRegional, isEcological ] then
+                Just <| AttributeSearch SeedAttribute.Organic
+
+            else if isHeirloom && none [ isOrganic, isRegional, isEcological ] then
+                Just <| AttributeSearch SeedAttribute.Heirloom
+
+            else if isRegional && none [ isOrganic, isHeirloom, isEcological ] then
+                Just <| AttributeSearch SeedAttribute.Regional
+
+            else if isEcological && none [ isOrganic, isHeirloom, isRegional ] then
+                Just <| AttributeSearch SeedAttribute.Ecological
+
+            else if none [ isOrganic, isHeirloom, isRegional, isEcological ] then
+                Just AllProducts
+
+            else
+                Nothing
 
         _ ->
             Nothing

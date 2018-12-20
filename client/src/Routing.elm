@@ -1,22 +1,21 @@
-module Routing
-    exposing
-        ( Key
-        , Route(..)
-        , parseRoute
-        , reverse
-        , authRequired
-        , newUrl
-        )
+module Routing exposing
+    ( Key
+    , Route(..)
+    , authRequired
+    , newUrl
+    , parseRoute
+    , reverse
+    )
 
 import Browser
 import Browser.Navigation
+import Products.Pagination as Pagination
+import Routing.Utils exposing (joinPath, parseFlag, queryFlag, withQueryStrings)
+import Search exposing (UniqueSearch(..))
+import SeedAttribute
 import Url exposing (Url)
 import Url.Parser as Url exposing ((</>), (<?>))
 import Url.Parser.Query as Query
-import Products.Pagination as Pagination
-import Routing.Utils exposing (parseFlag, joinPath, withQueryStrings, queryFlag)
-import SeedAttribute
-import Search exposing (UniqueSearch(..))
 
 
 type Route
@@ -45,10 +44,10 @@ parseRoute =
     let
         searchParser =
             [ ( "all-products", identity )
-            , ( "organic", (\s -> { s | isOrganic = True }) )
-            , ( "heirloom", (\s -> { s | isHeirloom = True }) )
-            , ( "south-east", (\s -> { s | isRegional = True }) )
-            , ( "ecological", (\s -> { s | isEcological = True }) )
+            , ( "organic", \s -> { s | isOrganic = True } )
+            , ( "heirloom", \s -> { s | isHeirloom = True } )
+            , ( "south-east", \s -> { s | isRegional = True } )
+            , ( "ecological", \s -> { s | isEcological = True } )
             ]
                 |> List.map
                     (\( slug, modifier ) ->
@@ -94,8 +93,8 @@ parseRoute =
                 , Url.map PageDetails Url.string
                 ]
     in
-        Url.parse routeParser
-            >> Maybe.withDefault NotFound
+    Url.parse routeParser
+        >> Maybe.withDefault NotFound
 
 
 reverse : Route -> String
@@ -119,34 +118,35 @@ reverse route =
                         ++ withQueryStrings
                             [ Pagination.toQueryString pagination ]
             in
-                case Search.uniqueSearch data of
-                    Nothing ->
-                        joinPath [ "search" ]
-                            ++ withQueryStrings
-                                [ Search.toQueryString data
-                                , Pagination.toQueryString pagination
-                                ]
+            case Search.uniqueSearch data of
+                Nothing ->
+                    joinPath [ "search" ]
+                        ++ withQueryStrings
+                            [ Search.toQueryString data
+                            , Pagination.toQueryString pagination
+                            ]
 
-                    Just searchType ->
-                        case searchType of
-                            AllProducts ->
-                                specialSearchUrl "all-products"
+                Just searchType ->
+                    case searchType of
+                        AllProducts ->
+                            specialSearchUrl "all-products"
 
-                            AttributeSearch (SeedAttribute.Organic) ->
-                                specialSearchUrl "organic"
+                        AttributeSearch SeedAttribute.Organic ->
+                            specialSearchUrl "organic"
 
-                            AttributeSearch (SeedAttribute.Heirloom) ->
-                                specialSearchUrl "heirloom"
+                        AttributeSearch SeedAttribute.Heirloom ->
+                            specialSearchUrl "heirloom"
 
-                            AttributeSearch (SeedAttribute.Regional) ->
-                                specialSearchUrl "south-east"
+                        AttributeSearch SeedAttribute.Regional ->
+                            specialSearchUrl "south-east"
 
-                            AttributeSearch (SeedAttribute.Ecological) ->
-                                specialSearchUrl "ecological"
+                        AttributeSearch SeedAttribute.Ecological ->
+                            specialSearchUrl "ecological"
 
         PageDetails slug ->
             if slug == "home" then
                 "/"
+
             else
                 joinPath [ slug ]
 

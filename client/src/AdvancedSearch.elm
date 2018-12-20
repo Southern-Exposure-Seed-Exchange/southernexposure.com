@@ -119,41 +119,41 @@ view routingMsg formMsg data categories =
                 (CategoryId idAsInt) =
                     id
             in
-                option [ value <| String.fromInt idAsInt, selected (Just id == data.category) ]
-                    [ text name ]
+            option [ value <| String.fromInt idAsInt, selected (Just id == data.category) ]
+                [ text name ]
 
         onCategorySelect msg =
             targetValue
                 |> Decode.map (String.toInt >> Maybe.map CategoryId >> msg)
                 |> on "change"
     in
-        [ h1 [] [ text "Advanced Search" ]
-        , hr [] []
-        , form [ onSubmit << routingMsg <| SearchResults data Pagination.default, class "advanced-search" ]
-            [ div [ class "form-group" ]
-                [ legend [ class "font-weight-bold", for "keywords" ] [ text "Keywords: " ]
-                , input
-                    [ id "keywords"
-                    , class "form-control"
-                    , type_ "text"
-                    , value data.query
-                    , onInput <| formMsg << KeywordInput
-                    ]
-                    []
+    [ h1 [] [ text "Advanced Search" ]
+    , hr [] []
+    , form [ onSubmit << routingMsg <| SearchResults data Pagination.default, class "advanced-search" ]
+        [ div [ class "form-group" ]
+            [ legend [ class "font-weight-bold", for "keywords" ] [ text "Keywords: " ]
+            , input
+                [ id "keywords"
+                , class "form-control"
+                , type_ "text"
+                , value data.query
+                , onInput <| formMsg << KeywordInput
                 ]
-            , div []
-                [ label [ class "mr-4 font-weight-bold" ] [ text "Search In: " ]
-                , radioInput SearchTitles .searchIn Search.Titles "Titles"
-                , radioInput SearchTitlesAndDescriptions
-                    .searchIn
-                    Search.TitlesAndDescriptions
-                    "Titles & Descriptions"
-                ]
-            , legend [ class "font-weight-bold" ] [ text "Filters:" ]
-            , div [ class "row align-items-center" ]
-                [ div [ class "col-auto filters" ] filterCheckboxes
-                , div [ class "col" ] [ categorySelect ]
-                ]
-            , button [ class "mb-3 btn btn-primary", type_ "submit" ] [ text "Submit" ]
+                []
             ]
+        , div []
+            [ label [ class "mr-4 font-weight-bold" ] [ text "Search In: " ]
+            , radioInput SearchTitles .searchIn Search.Titles "Titles"
+            , radioInput SearchTitlesAndDescriptions
+                .searchIn
+                Search.TitlesAndDescriptions
+                "Titles & Descriptions"
+            ]
+        , legend [ class "font-weight-bold" ] [ text "Filters:" ]
+        , div [ class "row align-items-center" ]
+            [ div [ class "col-auto filters" ] filterCheckboxes
+            , div [ class "col" ] [ categorySelect ]
+            ]
+        , button [ class "mb-3 btn btn-primary", type_ "submit" ] [ text "Submit" ]
         ]
+    ]

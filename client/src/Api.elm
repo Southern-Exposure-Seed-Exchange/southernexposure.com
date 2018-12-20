@@ -1,24 +1,23 @@
-module Api
-    exposing
-        ( Endpoint(..)
-        , get
-        , post
-        , put
-        , delete
-        , withToken
-        , withJsonBody
-        , withJsonResponse
-        , withStringResponse
-        , withErrorHandler
-        , withStringErrorHandler
-        , sendRequest
-        , FormErrors
-        , initialErrors
-        , formErrorsDecoder
-        , addError
-        , getErrorHtml
-        , errorHtml
-        )
+module Api exposing
+    ( Endpoint(..)
+    , FormErrors
+    , addError
+    , delete
+    , errorHtml
+    , formErrorsDecoder
+    , get
+    , getErrorHtml
+    , initialErrors
+    , post
+    , put
+    , sendRequest
+    , withErrorHandler
+    , withJsonBody
+    , withJsonResponse
+    , withStringErrorHandler
+    , withStringResponse
+    , withToken
+    )
 
 import Dict exposing (Dict)
 import Html
@@ -26,10 +25,11 @@ import Html.Attributes exposing (class)
 import Http
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode exposing (Value)
-import RemoteData exposing (WebData)
-import Time
 import Products.Pagination as Pagination
+import RemoteData exposing (WebData)
 import Routing.Utils exposing (joinPath, queryParameter, withQueryStrings)
+import Time
+
 
 
 -- API ENDPOINTS
@@ -174,7 +174,7 @@ toUrl endpoint =
                 CheckoutSuccess ->
                     joinPath [ "checkout", "success" ]
     in
-        "/api" ++ endpointUrl
+    "/api" ++ endpointUrl
 
 
 
@@ -276,14 +276,14 @@ withErrorHandler decoder request =
                         Err err ->
                             Err <| Http.BadBody (Decode.errorToString err)
     in
-        { method = request.method
-        , headers = request.headers
-        , url = request.url
-        , body = request.body
-        , expect = expectDecoded
-        , timeout = request.timeout
-        , tracker = request.tracker
-        }
+    { method = request.method
+    , headers = request.headers
+    , url = request.url
+    , body = request.body
+    , expect = expectDecoded
+    , timeout = request.timeout
+    , tracker = request.tracker
+    }
 
 
 withStringErrorHandler : Request a -> Request (WebData (Result FormErrors String))
@@ -322,6 +322,7 @@ errorHandler bodyFunction =
 
                             Err _ ->
                                 Err <| Http.BadStatus metadata.statusCode
+
                     else
                         Err <| Http.BadStatus metadata.statusCode
 

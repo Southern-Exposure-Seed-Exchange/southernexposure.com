@@ -1,12 +1,11 @@
-module Auth.CreateAccount
-    exposing
-        ( Form
-        , Msg
-        , initial
-        , successView
-        , update
-        , view
-        )
+module Auth.CreateAccount exposing
+    ( Form
+    , Msg
+    , initial
+    , successView
+    , update
+    , view
+    )
 
 -- TODO: Refactor module as a composition of the EditLogin & EditContact module forms.
 
@@ -23,6 +22,7 @@ import Routing exposing (Route(..), reverse)
 import Update.Utils exposing (nothingAndNoCommand)
 import User exposing (AuthStatus)
 import Views.HorizontalForm as Form
+
 
 
 -- MODEL
@@ -72,6 +72,7 @@ encode model maybeSessionToken =
                     "US" ->
                         if List.member model.state Locations.armedForcesCodes then
                             stateWithKey "armedForces"
+
                         else
                             stateWithKey "state"
 
@@ -90,21 +91,21 @@ encode model maybeSessionToken =
         stateWithKey key =
             Encode.object [ ( key, Encode.string model.state ) ]
     in
-        [ ( "email", model.email )
-        , ( "password", model.password )
-        , ( "firstName", model.firstName )
-        , ( "lastName", model.lastName )
-        , ( "addressOne", model.street )
-        , ( "addressTwo", model.addressTwo )
-        , ( "city", model.city )
-        , ( "zipCode", model.zipCode )
-        , ( "country", model.country )
-        , ( "telephone", model.phoneNumber )
-        ]
-            |> List.map (Tuple.mapSecond Encode.string)
-            |> (::) encodedState
-            |> (::) encodedToken
-            |> Encode.object
+    [ ( "email", model.email )
+    , ( "password", model.password )
+    , ( "firstName", model.firstName )
+    , ( "lastName", model.lastName )
+    , ( "addressOne", model.street )
+    , ( "addressTwo", model.addressTwo )
+    , ( "city", model.city )
+    , ( "zipCode", model.zipCode )
+    , ( "country", model.country )
+    , ( "telephone", model.phoneNumber )
+    ]
+        |> List.map (Tuple.mapSecond Encode.string)
+        |> (::) encodedState
+        |> (::) encodedToken
+        |> Encode.object
 
 
 
@@ -190,6 +191,7 @@ update key msg form maybeSessionToken =
                 , Nothing
                 , Ports.scrollToID "form-errors-text"
                 )
+
             else
                 ( { form | errors = Api.initialErrors }
                 , Nothing
@@ -273,31 +275,31 @@ view tagger model locations =
         regionSelect labelText =
             List.map (locationToOption .state) >> selectRow State labelText True
     in
-        [ h1 [] [ text "Create an Account" ]
-        , hr [] []
-        , Form.genericErrorText (not <| Dict.isEmpty model.errors)
-        , form [ onSubmit <| tagger SubmitForm ]
-            [ fieldset []
-                [ legend [] [ text "Login Information" ]
-                , requiredField .email Email "Email" "email" "email"
-                , requiredField .password Password "Password" "password" "password"
-                , requiredField .passwordConfirm PasswordConfirm "Confirm Password" "passwordConfirm" "password"
-                ]
-            , fieldset []
-                [ legend [] [ text "Contact Information" ]
-                , requiredField .firstName FirstName "First Name" "firstName" "text"
-                , requiredField .lastName LastName "Last Name" "lastName" "text"
-                , requiredField .street Street "Street Address" "addressOne" "text"
-                , optionalField .addressTwo AddressTwo "Address Line 2" "addressTwo" "text"
-                , requiredField .city City "City" "city" "text"
-                , regionField
-                , requiredField .zipCode ZipCode "Zip Code" "zipCode" "text"
-                , countrySelect
-                , requiredField .phoneNumber PhoneNumber "Phone Number" "telephone" "tel"
-                ]
-            , Form.submitButton "Register"
+    [ h1 [] [ text "Create an Account" ]
+    , hr [] []
+    , Form.genericErrorText (not <| Dict.isEmpty model.errors)
+    , form [ onSubmit <| tagger SubmitForm ]
+        [ fieldset []
+            [ legend [] [ text "Login Information" ]
+            , requiredField .email Email "Email" "email" "email"
+            , requiredField .password Password "Password" "password" "password"
+            , requiredField .passwordConfirm PasswordConfirm "Confirm Password" "passwordConfirm" "password"
             ]
+        , fieldset []
+            [ legend [] [ text "Contact Information" ]
+            , requiredField .firstName FirstName "First Name" "firstName" "text"
+            , requiredField .lastName LastName "Last Name" "lastName" "text"
+            , requiredField .street Street "Street Address" "addressOne" "text"
+            , optionalField .addressTwo AddressTwo "Address Line 2" "addressTwo" "text"
+            , requiredField .city City "City" "city" "text"
+            , regionField
+            , requiredField .zipCode ZipCode "Zip Code" "zipCode" "text"
+            , countrySelect
+            , requiredField .phoneNumber PhoneNumber "Phone Number" "telephone" "tel"
+            ]
+        , Form.submitButton "Register"
         ]
+    ]
 
 
 successView : List (Html msg)

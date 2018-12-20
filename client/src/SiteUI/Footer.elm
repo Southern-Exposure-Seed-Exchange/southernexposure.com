@@ -1,7 +1,7 @@
 module SiteUI.Footer exposing (view)
 
 import Html exposing (..)
-import Html.Attributes exposing (id, class, href, target, title)
+import Html.Attributes exposing (class, href, id, target, title)
 import Messages exposing (Msg)
 import Routing exposing (Route(..))
 import Views.Utils exposing (routeLinkAttributes)
@@ -53,24 +53,24 @@ view =
                 , text " (540) 894-9481"
                 ]
     in
-        div [ id "footer", class "container" ]
-            [ node "footer"
-                []
-                [ div [ class "row" ]
-                    [ div [ class "col-sm-4" ]
-                        [ h4 [ class "mt-3" ] [ text "Information" ]
-                        , informationLinks
-                        ]
-                    , div [ class "col-sm-4" ]
-                        [ h4 [ class "mt-3" ] [ text "Important Links" ]
-                        , importantLinks
-                        ]
-                    , div [ class "col-sm-4" ]
-                        [ h4 [ class "mt-3" ] [ text "Contact Us" ]
-                        , contactAddress
-                        ]
-                    , div [ class "col-sm-12 text-center" ]
-                        [ text "Copyright © 2017 Southern Exposure Seed Exchange" ]
+    div [ id "footer", class "container" ]
+        [ node "footer"
+            []
+            [ div [ class "row" ]
+                [ div [ class "col-sm-4" ]
+                    [ h4 [ class "mt-3" ] [ text "Information" ]
+                    , informationLinks
                     ]
+                , div [ class "col-sm-4" ]
+                    [ h4 [ class "mt-3" ] [ text "Important Links" ]
+                    , importantLinks
+                    ]
+                , div [ class "col-sm-4" ]
+                    [ h4 [ class "mt-3" ] [ text "Contact Us" ]
+                    , contactAddress
+                    ]
+                , div [ class "col-sm-12 text-center" ]
+                    [ text "Copyright © 2017 Southern Exposure Seed Exchange" ]
                 ]
             ]
+        ]

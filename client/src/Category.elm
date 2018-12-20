@@ -1,10 +1,9 @@
-module Category
-    exposing
-        ( CategoryId(..)
-        , Category
-        , initial
-        , decoder
-        )
+module Category exposing
+    ( Category
+    , CategoryId(..)
+    , decoder
+    , initial
+    )
 
 import Json.Decode as Decode exposing (Decoder)
 

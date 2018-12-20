@@ -1,7 +1,7 @@
 module SiteUI.Sidebar exposing (view)
 
 import Html exposing (..)
-import Html.Attributes exposing (id, class, href, target, src)
+import Html.Attributes exposing (class, href, id, src, target)
 import Messages exposing (Msg)
 import Products.Pagination as Pagination
 import Routing exposing (Route(..))
@@ -19,16 +19,17 @@ view route =
                 activeClass =
                     if linkRoute == route then
                         " active"
+
                     else
                         ""
             in
-                li [ class "nav-item" ]
-                    [ a
-                        (class ("py-1 d-block border-0 nav-link" ++ activeClass)
-                            :: routeLinkAttributes linkRoute
-                        )
-                        [ text title ]
-                    ]
+            li [ class "nav-item" ]
+                [ a
+                    (class ("py-1 d-block border-0 nav-link" ++ activeClass)
+                        :: routeLinkAttributes linkRoute
+                    )
+                    [ text title ]
+                ]
 
         staticPageLink slug =
             pageLink (PageDetails slug)
@@ -97,8 +98,8 @@ view route =
                     ]
                 ]
     in
-        div [ id "sidebar", class "col-12 col-md-3 col-lg-3 col-xl-2 order-md-1" ]
-            [ pageLinks
-            , attributesCard
-            , logoCard
-            ]
+    div [ id "sidebar", class "col-12 col-md-3 col-lg-3 col-xl-2 order-md-1" ]
+        [ pageLinks
+        , attributesCard
+        , logoCard
+        ]

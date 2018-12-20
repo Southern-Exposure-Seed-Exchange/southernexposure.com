@@ -1,24 +1,24 @@
-module QuickOrder
-    exposing
-        ( Forms
-        , initial
-        , Msg
-        , update
-        , view
-        )
+module QuickOrder exposing
+    ( Forms
+    , Msg
+    , initial
+    , update
+    , view
+    )
 
+import Api
 import Array exposing (Array)
 import Dict
 import Html exposing (..)
-import Html.Attributes as A exposing (id, class, type_, value, name, required)
-import Html.Events exposing (on, onInput, onSubmit, onClick)
+import Html.Attributes as A exposing (class, id, name, required, type_, value)
+import Html.Events exposing (on, onClick, onInput, onSubmit)
 import Html.Events.Extra exposing (targetValueInt)
 import Json.Decode as Decode
 import Json.Encode as Encode exposing (Value)
-import RemoteData exposing (WebData)
-import Api
 import Ports
+import RemoteData exposing (WebData)
 import User exposing (AuthStatus, User)
+
 
 
 -- Model
@@ -80,14 +80,14 @@ update msg ({ forms } as model) authStatus maybeSessionToken =
                 formCount =
                     Array.length forms
             in
-                ( { model
-                    | forms =
-                        Array.append forms <|
-                            Array.initialize 14 (\i -> initialForm <| i + formCount)
-                  }
-                , Nothing
-                , Cmd.none
-                )
+            ( { model
+                | forms =
+                    Array.append forms <|
+                        Array.initialize 14 (\i -> initialForm <| i + formCount)
+              }
+            , Nothing
+            , Cmd.none
+            )
 
         Submit ->
             let
@@ -96,6 +96,7 @@ update msg ({ forms } as model) authStatus maybeSessionToken =
                         (\f ( q, i, acc ) ->
                             if not (String.isEmpty f.sku) then
                                 ( q + f.quantity, i + 1, ( i, f ) :: acc )
+
                             else
                                 ( q, i + 1, acc )
                         )
@@ -119,21 +120,22 @@ update msg ({ forms } as model) authStatus maybeSessionToken =
                         , ( "index", Encode.int index )
                         ]
             in
-                if List.isEmpty changedForms then
-                    ( model, Nothing, Cmd.none )
-                else
-                    case authStatus of
-                        User.Authorized { authToken } ->
-                            ( model
-                            , Nothing
-                            , addItemsToCustomerCart authToken encodedForms quantityToAdd
-                            )
+            if List.isEmpty changedForms then
+                ( model, Nothing, Cmd.none )
 
-                        User.Anonymous ->
-                            ( model
-                            , Nothing
-                            , addItemsToAnonymousCart encodedForms quantityToAdd
-                            )
+            else
+                case authStatus of
+                    User.Authorized { authToken } ->
+                        ( model
+                        , Nothing
+                        , addItemsToCustomerCart authToken encodedForms quantityToAdd
+                        )
+
+                    User.Anonymous ->
+                        ( model
+                        , Nothing
+                        , addItemsToAnonymousCart encodedForms quantityToAdd
+                        )
 
         SubmitResponse quantityToAdd response ->
             case response of
@@ -182,6 +184,7 @@ view model =
         generalErrorHtml =
             if Dict.isEmpty model.errors then
                 text ""
+
             else
                 div [ class "alert alert-danger" ]
                     [ p []
@@ -209,32 +212,32 @@ view model =
                 formColumns ->
                     rows ++ [ tr [] (formColumns ++ [ td [] [], td [] [] ]) ]
     in
-        [ h1 [] [ text "Quick Order" ]
-        , hr [] []
-        , p [] [ h5 [] [ text "Instructions" ], instructions ]
-        , form [ id "quick-order-form", onSubmit Submit ]
-            [ generalErrorHtml
-            , table [ class "table table-striped table-sm quick-order-table" ]
-                [ thead []
-                    [ tr []
-                        [ th [] [ text "Item Number" ]
-                        , th [] [ text "Quantity" ]
-                        , th [] [ text "Item Number" ]
-                        , th [] [ text "Quantity" ]
-                        ]
+    [ h1 [] [ text "Quick Order" ]
+    , hr [] []
+    , p [] [ h5 [] [ text "Instructions" ], instructions ]
+    , form [ id "quick-order-form", onSubmit Submit ]
+        [ generalErrorHtml
+        , table [ class "table table-striped table-sm quick-order-table" ]
+            [ thead []
+                [ tr []
+                    [ th [] [ text "Item Number" ]
+                    , th [] [ text "Quantity" ]
+                    , th [] [ text "Item Number" ]
+                    , th [] [ text "Quantity" ]
                     ]
-                , indexedFoldl buildTableRows ( [], [] ) model.forms
-                    |> applyOddRow
-                    |> tbody []
                 ]
-            , div [ class "form-group" ]
-                [ button [ class "btn btn-primary", type_ "submit" ]
-                    [ text "Add to Cart" ]
-                , button [ class "btn btn-secondary ml-3", type_ "button", onClick AddRows ]
-                    [ text "Add Rows" ]
-                ]
+            , indexedFoldl buildTableRows ( [], [] ) model.forms
+                |> applyOddRow
+                |> tbody []
+            ]
+        , div [ class "form-group" ]
+            [ button [ class "btn btn-primary", type_ "submit" ]
+                [ text "Add to Cart" ]
+            , button [ class "btn btn-secondary ml-3", type_ "button", onClick AddRows ]
+                [ text "Add Rows" ]
             ]
         ]
+    ]
 
 
 
@@ -258,6 +261,7 @@ renderForm errors index model =
         errorHtml =
             if List.isEmpty itemNumberErrors then
                 text ""
+
             else
                 itemNumberErrors
                     |> List.map text
@@ -267,8 +271,10 @@ renderForm errors index model =
         itemNumberClass =
             if List.isEmpty itemNumberErrors && not (Dict.isEmpty errors || String.isEmpty model.sku) then
                 "form-control is-valid"
+
             else if List.isEmpty itemNumberErrors then
                 "form-control"
+
             else
                 "form-control is-invalid"
 
@@ -282,23 +288,23 @@ renderForm errors index model =
         onIntInput msg =
             targetValueInt |> Decode.map msg |> on "input"
     in
-        [ td [ class "item-number" ] [ itemNumberInput, errorHtml ]
-        , td [ class "quantity" ]
-            [ input
-                [ id <| "quantity-" ++ String.fromInt index
-                , class "form-control"
-                , name <| "quantity-" ++ String.fromInt index
-                , type_ "number"
-                , A.min "1"
-                , A.step "1"
-                , A.size 5
-                , onIntInput <| Quantity index
-                , value <| String.fromInt model.quantity
-                , required <| not <| String.isEmpty model.sku
-                ]
-                []
+    [ td [ class "item-number" ] [ itemNumberInput, errorHtml ]
+    , td [ class "quantity" ]
+        [ input
+            [ id <| "quantity-" ++ String.fromInt index
+            , class "form-control"
+            , name <| "quantity-" ++ String.fromInt index
+            , type_ "number"
+            , A.min "1"
+            , A.step "1"
+            , A.size 5
+            , onIntInput <| Quantity index
+            , value <| String.fromInt model.quantity
+            , required <| not <| String.isEmpty model.sku
             ]
+            []
         ]
+    ]
 
 
 instructions : Html msg

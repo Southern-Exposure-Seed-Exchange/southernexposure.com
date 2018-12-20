@@ -48,29 +48,32 @@ view zone locations { storeCredit, orderSummaries } =
                         " of Store Credit available. You can use this during "
                             ++ "Checkout."
                     ]
+
             else
                 text ""
 
         summaryTable =
             if List.isEmpty orderSummaries then
                 text ""
+
             else
                 div []
                     [ h3 [] [ text "Recent Orders" ]
                     , orderTable zone locations orderSummaries
                     ]
     in
-        [ h1 [] [ text "My Account" ]
-        , hr [] []
-        , if credit > 0 then
-            div [ class "row" ]
-                [ div [ class "col-sm-6" ] [ ul [] accountLinks ]
-                , div [ class "col-sm-6" ] [ storeCreditText ]
-                ]
-          else
-            ul [] accountLinks
-        , summaryTable
-        ]
+    [ h1 [] [ text "My Account" ]
+    , hr [] []
+    , if credit > 0 then
+        div [ class "row" ]
+            [ div [ class "col-sm-6" ] [ ul [] accountLinks ]
+            , div [ class "col-sm-6" ] [ storeCreditText ]
+            ]
+
+      else
+        ul [] accountLinks
+    , summaryTable
+    ]
 
 
 orderTable : Time.Zone -> AddressLocations -> List PageData.OrderSummary -> Html Msg
@@ -111,19 +114,19 @@ orderTable zone locations orderSummaries =
                 , text zipCode
                 ]
     in
-        div []
-            [ table [ class "table table-sm table-striped" ]
-                [ thead []
-                    [ tr []
-                        [ th [ class "text-center" ] [ text "Date" ]
-                        , th [ class "text-center" ] [ text "Order #" ]
-                        , th [] [ text "Shipping Address" ]
-                        , th [ class "text-center" ] [ text "Order Status" ]
-                        , th [ class "text-right" ] [ text "Total" ]
-                        , th [] []
-                        ]
+    div []
+        [ table [ class "table table-sm table-striped" ]
+            [ thead []
+                [ tr []
+                    [ th [ class "text-center" ] [ text "Date" ]
+                    , th [ class "text-center" ] [ text "Order #" ]
+                    , th [] [ text "Shipping Address" ]
+                    , th [ class "text-center" ] [ text "Order Status" ]
+                    , th [ class "text-right" ] [ text "Total" ]
+                    , th [] []
                     ]
-                , tbody [] <| List.map orderRow orderSummaries
                 ]
-            , showAllButton
+            , tbody [] <| List.map orderRow orderSummaries
             ]
+        , showAllButton
+        ]

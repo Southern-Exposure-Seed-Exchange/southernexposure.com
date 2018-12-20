@@ -1,27 +1,26 @@
-module Messages
-    exposing
-        ( Msg(..)
-        , EditCartMessage(..)
-        )
+module Messages exposing
+    ( EditCartMessage(..)
+    , Msg(..)
+    )
 
-import Paginate
-import RemoteData exposing (WebData)
 import AdvancedSearch
 import Auth.CreateAccount as CreateAccount
-import Auth.Login as Login
 import Auth.EditAddress as EditAddress
 import Auth.EditLogin as EditLogin
+import Auth.Login as Login
 import Auth.ResetPassword as ResetPassword
 import Browser exposing (UrlRequest)
 import Checkout
-import StaticPage exposing (StaticPage)
 import Locations exposing (AddressLocations)
 import PageData exposing (ProductData)
+import Paginate
 import Product exposing (ProductId, ProductVariantId)
 import QuickOrder
+import RemoteData exposing (WebData)
 import Routing exposing (Route)
 import SiteUI exposing (NavigationData)
 import SiteUI.Search as SiteSearch
+import StaticPage exposing (StaticPage)
 import Time
 import User
 

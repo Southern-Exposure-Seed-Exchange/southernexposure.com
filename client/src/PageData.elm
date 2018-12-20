@@ -1,56 +1,56 @@
-module PageData
-    exposing
-        ( PageData
-        , initial
-        , CategoryDetails
-        , categoryDetailsDecoder
-        , categoryConfig
-        , ProductDetails
-        , productDetailsDecoder
-        , SearchResults
-        , searchConfig
-        , MyAccount
-        , myAccountDecoder
-        , OrderSummary
-        , AddressDetails
-        , addressDetailsDecoder
-        , CartDetails
-        , cartTotals
-        , blankCartDetails
-        , cartDetailsDecoder
-        , CheckoutDetails
-        , checkoutDetailsDecoder
-        , LineItemType(..)
-        , OrderDetails
-        , orderDetailsDecoder
-        , orderTotals
-        , statusText
-        , PredecessorCategory
-        , ProductData
-        , productDataDecoder
-        , AdvancedSearch
-        , advancedSearchDecoder
-        , CartItemId(..)
-        , CartItem
-        )
+module PageData exposing
+    ( AddressDetails
+    , AdvancedSearch
+    , CartDetails
+    , CartItem
+    , CartItemId(..)
+    , CategoryDetails
+    , CheckoutDetails
+    , LineItemType(..)
+    , MyAccount
+    , OrderDetails
+    , OrderSummary
+    , PageData
+    , PredecessorCategory
+    , ProductData
+    , ProductDetails
+    , SearchResults
+    , addressDetailsDecoder
+    , advancedSearchDecoder
+    , blankCartDetails
+    , cartDetailsDecoder
+    , cartTotals
+    , categoryConfig
+    , categoryDetailsDecoder
+    , checkoutDetailsDecoder
+    , initial
+    , myAccountDecoder
+    , orderDetailsDecoder
+    , orderTotals
+    , productDataDecoder
+    , productDetailsDecoder
+    , searchConfig
+    , statusText
+    )
 
-import Dict exposing (Dict)
-import Json.Decode as Decode exposing (Decoder)
-import Paginate exposing (Paginated)
-import RemoteData exposing (WebData)
 import Address
 import Api
 import Category exposing (Category, CategoryId(..))
-import Locations exposing (Region, regionDecoder, regionEncoder, AddressLocations)
-import Models.Fields exposing (Cents(..), centsMap, centsMap2, centsDecoder, Milligrams(..))
-import StaticPage exposing (StaticPage)
+import Dict exposing (Dict)
 import Iso8601
+import Json.Decode as Decode exposing (Decoder)
+import Locations exposing (AddressLocations, Region, regionDecoder, regionEncoder)
+import Models.Fields exposing (Cents(..), Milligrams(..), centsDecoder, centsMap, centsMap2)
+import Paginate exposing (Paginated)
 import Product exposing (Product, ProductVariant, ProductVariantId(..))
 import Products.Pagination as Pagination
 import Products.Sorting as Sorting
+import RemoteData exposing (WebData)
 import Search
 import SeedAttribute exposing (SeedAttribute)
+import StaticPage exposing (StaticPage)
 import Time exposing (Posix)
+
 
 
 -- MODEL
@@ -88,18 +88,18 @@ initial =
                 (.perPage Pagination.default)
                 |> Tuple.first
     in
-        { categoryDetails = categoryPaginate
-        , productDetails = RemoteData.NotAsked
-        , advancedSearch = RemoteData.NotAsked
-        , searchResults = searchPaginate
-        , pageDetails = RemoteData.NotAsked
-        , locations = RemoteData.NotAsked
-        , myAccount = RemoteData.NotAsked
-        , addressDetails = RemoteData.NotAsked
-        , cartDetails = RemoteData.NotAsked
-        , checkoutDetails = RemoteData.NotAsked
-        , orderDetails = RemoteData.NotAsked
-        }
+    { categoryDetails = categoryPaginate
+    , productDetails = RemoteData.NotAsked
+    , advancedSearch = RemoteData.NotAsked
+    , searchResults = searchPaginate
+    , pageDetails = RemoteData.NotAsked
+    , locations = RemoteData.NotAsked
+    , myAccount = RemoteData.NotAsked
+    , addressDetails = RemoteData.NotAsked
+    , cartDetails = RemoteData.NotAsked
+    , checkoutDetails = RemoteData.NotAsked
+    , orderDetails = RemoteData.NotAsked
+    }
 
 
 
@@ -138,7 +138,7 @@ categoryConfig =
                 (Decode.field "total" Decode.int)
                 (Decode.map Just categoryDetailsDecoder)
     in
-        Paginate.makeConfig request
+    Paginate.makeConfig request
 
 
 
@@ -190,7 +190,7 @@ searchConfig =
                 |> Api.withJsonResponse fetchDecoder
                 |> Api.sendRequest identity
     in
-        Paginate.makeConfig request
+    Paginate.makeConfig request
 
 
 
@@ -303,9 +303,9 @@ cartTotals { items, charges } =
         addCents =
             centsMap2 (+)
     in
-        { subTotal = subTotal
-        , total = total
-        }
+    { subTotal = subTotal
+    , total = total
+    }
 
 
 
@@ -400,10 +400,10 @@ orderTotals { lineItems, products } =
                 |> centsMap2 (+) tax
                 |> centsMap2 (\c t -> t - c) credits
     in
-        { subTotal = subTotal
-        , tax = tax
-        , total = total
-        }
+    { subTotal = subTotal
+    , tax = tax
+    , total = total
+    }
 
 
 type alias Order =

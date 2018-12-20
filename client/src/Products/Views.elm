@@ -2,23 +2,23 @@ module Products.Views exposing (details, list)
 
 import Dict exposing (Dict)
 import Html exposing (..)
-import Html.Attributes as A exposing (attribute, id, class, src, for, value, selected, tabindex, type_)
-import Html.Events exposing (on, targetValue, onInput, onSubmit)
+import Html.Attributes as A exposing (attribute, class, for, id, selected, src, tabindex, type_, value)
+import Html.Events exposing (on, onInput, onSubmit, targetValue)
 import Json.Decode as Decode
 import Markdown
-import Paginate exposing (Paginated)
 import Messages exposing (Msg(..))
 import Model exposing (CartForms)
 import Models.Fields exposing (Cents(..), Milligrams(..), milligramsToString)
 import PageData exposing (ProductData)
-import Product exposing (ProductId(..), Product, ProductVariantId(..), ProductVariant)
+import Paginate exposing (Paginated)
+import Product exposing (Product, ProductId(..), ProductVariant, ProductVariantId(..))
 import Products.Pagination as Pagination
 import Products.Sorting as Sorting
 import Routing exposing (Route(..))
 import SeedAttribute
 import Views.Format as Format
 import Views.Images as Images
-import Views.Utils exposing (routeLinkAttributes, onIntInput, htmlOrBlank)
+import Views.Utils exposing (htmlOrBlank, onIntInput, routeLinkAttributes)
 
 
 details : CartForms -> PageData.ProductDetails -> List (Html Msg)
@@ -37,31 +37,31 @@ details addToCartForms { product, variants, maybeSeedAttribute, categories } =
                             ]
                     )
     in
-        [ h1 [ class "product-details-title" ]
-            [ Markdown.toHtml [] product.name
-            , htmlOrBlank SeedAttribute.icons maybeSeedAttribute
-            ]
-        , hr [] []
-        , div [ class "product-details" ]
-            [ div [ class "clearfix" ]
-                [ div [ class "float-left w-25 mr-3 mb-2" ]
-                    [ div
-                        [ class "card" ]
-                        [ div [ class "card-body text-center p-1" ]
-                            [ img
-                                [ src << Images.media <| "products/" ++ product.imageURL
-                                , class "img-fluid mb-2"
-                                ]
-                                []
-                            , cartForm addToCartForms product variants
+    [ h1 [ class "product-details-title" ]
+        [ Markdown.toHtml [] product.name
+        , htmlOrBlank SeedAttribute.icons maybeSeedAttribute
+        ]
+    , hr [] []
+    , div [ class "product-details" ]
+        [ div [ class "clearfix" ]
+            [ div [ class "float-left w-25 mr-3 mb-2" ]
+                [ div
+                    [ class "card" ]
+                    [ div [ class "card-body text-center p-1" ]
+                        [ img
+                            [ src << Images.media <| "products/" ++ product.imageURL
+                            , class "img-fluid mb-2"
                             ]
+                            []
+                        , cartForm addToCartForms product variants
                         ]
                     ]
-                , Markdown.toHtml [] product.longDescription
-                , div [] categoryBlocks
                 ]
+            , Markdown.toHtml [] product.longDescription
+            , div [] categoryBlocks
             ]
         ]
+    ]
 
 
 list : (Pagination.Data -> Route) -> Pagination.Data -> CartForms -> Paginated ProductData a c -> List (Html Msg)
@@ -73,6 +73,7 @@ list routeConstructor pagination addToCartForms products =
                     [ sortingInput
                     , perPageLinks
                     ]
+
             else
                 text ""
 
@@ -119,6 +120,7 @@ list routeConstructor pagination addToCartForms products =
                         if c == pagination.perPage then
                             span [ class "font-weight-bold" ]
                                 [ text <| String.fromInt c ]
+
                         else
                             a (routeLinkAttributes <| routeConstructor { pagination | perPage = c })
                                 [ text <| String.fromInt c ]
@@ -136,6 +138,7 @@ list routeConstructor pagination addToCartForms products =
         pagingText =
             if productsCount == 0 then
                 text ""
+
             else
                 span []
                     [ text "Displaying "
@@ -157,6 +160,7 @@ list routeConstructor pagination addToCartForms products =
             String.fromInt <|
                 if (not << Paginate.hasNext) products || productsCount < pagination.perPage then
                     productsCount
+
                 else
                     currentPage * pagination.perPage
 
@@ -169,6 +173,7 @@ list routeConstructor pagination addToCartForms products =
         pager =
             if totalPages <= 1 then
                 text ""
+
             else
                 node "nav"
                     [ attribute "aria-label" "Category Product Pages" ]
@@ -193,7 +198,7 @@ list routeConstructor pagination addToCartForms products =
                 previousRoute =
                     routeConstructor { pagination | page = previousPage }
             in
-                prevNextLink (not << Paginate.hasPrevious) previousRoute "« Prev"
+            prevNextLink (not << Paginate.hasPrevious) previousRoute "« Prev"
 
         nextLink _ =
             let
@@ -203,20 +208,21 @@ list routeConstructor pagination addToCartForms products =
                 nextRoute =
                     routeConstructor { pagination | page = nextPage }
             in
-                prevNextLink (not << Paginate.hasNext) nextRoute "Next »"
+            prevNextLink (not << Paginate.hasNext) nextRoute "Next »"
 
         prevNextLink isDisabled route content =
             let
                 ( itemClass, linkAttrs ) =
                     if isDisabled products then
                         ( " disabled", [ tabindex -1 ] )
+
                     else
                         ( "", [] )
             in
-                li [ class <| "page-item" ++ itemClass ]
-                    [ a (class "page-link" :: linkAttrs ++ routeLinkAttributes route)
-                        [ text content ]
-                    ]
+            li [ class <| "page-item" ++ itemClass ]
+                [ a (class "page-link" :: linkAttrs ++ routeLinkAttributes route)
+                    [ text content ]
+                ]
 
         productRows =
             List.map renderProduct (Paginate.getCurrent products)
@@ -242,16 +248,17 @@ list routeConstructor pagination addToCartForms products =
                     [ cartForm addToCartForms product variants ]
                 ]
     in
-        if productsCount /= 0 then
-            [ sortHtml
-            , paginationHtml
-            , table [ class "products-table table table-striped table-sm mb-2" ]
-                [ tbody [] <| productRows ]
-            , paginationHtml
-            , SeedAttribute.legend
-            ]
-        else
-            []
+    if productsCount /= 0 then
+        [ sortHtml
+        , paginationHtml
+        , table [ class "products-table table table-striped table-sm mb-2" ]
+            [ tbody [] <| productRows ]
+        , paginationHtml
+        , SeedAttribute.legend
+        ]
+
+    else
+        []
 
 
 cartForm : CartForms -> Product -> Dict Int ProductVariant -> Html Msg
@@ -354,6 +361,7 @@ cartForm addToCartForms product variants =
         htmlWhen test renderer =
             if test then
                 renderer ()
+
             else
                 text ""
 
@@ -363,10 +371,10 @@ cartForm addToCartForms product variants =
         fromProductId (ProductId i) =
             i
     in
-        form formAttributes
-            [ selectedPrice
-            , htmlWhen hasMultipleVariants variantSelect
-            , addToCartInput
-            , small [ class "text-muted d-block" ]
-                [ text <| "Item #" ++ selectedItemNumber ]
-            ]
+    form formAttributes
+        [ selectedPrice
+        , htmlWhen hasMultipleVariants variantSelect
+        , addToCartInput
+        , small [ class "text-muted d-block" ]
+            [ text <| "Item #" ++ selectedItemNumber ]
+        ]

@@ -35,6 +35,7 @@ details pagination addToCartForms products =
             if List.length subCategories > 0 then
                 List.map subCategoryCard subCategories
                     |> div [ class "row" ]
+
             else
                 text ""
 
@@ -52,16 +53,16 @@ details pagination addToCartForms products =
                     ]
                 ]
     in
-        [ div [ class "d-flex align-items-center" ]
-            [ img
-                [ class "img-fluid"
-                , src <| Images.media <| "categories/" ++ category.imageURL
-                ]
-                []
-            , h1 [ class "mb-0 pl-2" ] [ text category.name ]
+    [ div [ class "d-flex align-items-center" ]
+        [ img
+            [ class "img-fluid"
+            , src <| Images.media <| "categories/" ++ category.imageURL
             ]
-        , hr [ class "mt-2" ] []
-        , Markdown.toHtml [] category.description
-        , subCategoryCards
+            []
+        , h1 [ class "mb-0 pl-2" ] [ text category.name ]
         ]
-            ++ ProductViews.list (CategoryDetails category.slug) pagination addToCartForms products
+    , hr [ class "mt-2" ] []
+    , Markdown.toHtml [] category.description
+    , subCategoryCards
+    ]
+        ++ ProductViews.list (CategoryDetails category.slug) pagination addToCartForms products

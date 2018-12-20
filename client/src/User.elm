@@ -1,12 +1,11 @@
-module User
-    exposing
-        ( UserId(..)
-        , AuthStatus(..)
-        , User
-        , unauthorized
-        , decoder
-        , storeDetails
-        )
+module User exposing
+    ( AuthStatus(..)
+    , User
+    , UserId(..)
+    , decoder
+    , storeDetails
+    , unauthorized
+    )
 
 import Json.Decode as Decode exposing (Decoder)
 import Ports
@@ -43,10 +42,10 @@ decoder =
                 (Decode.field "token" Decode.string)
                 |> Decode.map Authorized
     in
-        Decode.oneOf
-            [ authorizedUserDecoder
-            , Decode.succeed unauthorized
-            ]
+    Decode.oneOf
+        [ authorizedUserDecoder
+        , Decode.succeed unauthorized
+        ]
 
 
 storeDetails : AuthStatus -> Cmd msg
@@ -60,4 +59,4 @@ storeDetails authStatus =
                 (UserId id) =
                     user.id
             in
-                Ports.storeAuthDetails ( user.authToken, id )
+            Ports.storeAuthDetails ( user.authToken, id )

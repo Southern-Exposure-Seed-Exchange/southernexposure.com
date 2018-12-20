@@ -1,11 +1,10 @@
-module Auth.EditAddress
-    exposing
-        ( Form
-        , Msg
-        , initial
-        , update
-        , view
-        )
+module Auth.EditAddress exposing
+    ( Form
+    , Msg
+    , initial
+    , update
+    , view
+    )
 
 import Address exposing (AddressId(..))
 import Api
@@ -20,6 +19,7 @@ import RemoteData exposing (WebData)
 import Routing exposing (Route(..))
 import Update.Utils exposing (noCommand)
 import User exposing (AuthStatus)
+
 
 
 -- Model
@@ -134,13 +134,14 @@ selectAddress ((AddressId i) as id) model addresses =
         insertForm address =
             Dict.insert i (Address.fromModel address) model.forms
     in
-        if i == 0 then
-            { model | selectedAddress = Nothing }
-        else
-            { model
-                | selectedAddress = Just id
-                , forms = Maybe.map insertForm maybeAddress |> Maybe.withDefault model.forms
-            }
+    if i == 0 then
+        { model | selectedAddress = Nothing }
+
+    else
+        { model
+            | selectedAddress = Just id
+            , forms = Maybe.map insertForm maybeAddress |> Maybe.withDefault model.forms
+        }
 
 
 findAddress : AddressId -> List Address.Model -> Maybe Address.Model
@@ -152,6 +153,7 @@ findAddress id addresses =
         addr :: addrs ->
             if addr.id == Just id then
                 Just addr
+
             else
                 findAddress id addrs
 
@@ -178,19 +180,20 @@ updateAddress authStatus isDefault ({ model } as addressForm) =
         withNewDefault =
             if isDefault then
                 { addressForm | model = modelWithDefault }
+
             else
                 addressForm
     in
-        case ( authStatus, addressForm.model.id ) of
-            ( User.Authorized user, Just (AddressId addressId) ) ->
-                Api.post (Api.CustomerEditAddress addressId)
-                    |> Api.withToken user.authToken
-                    |> Api.withJsonBody (Address.encode withNewDefault)
-                    |> Api.withErrorHandler (Decode.succeed ())
-                    |> Api.sendRequest (UpdateResponse <| AddressId addressId)
+    case ( authStatus, addressForm.model.id ) of
+        ( User.Authorized user, Just (AddressId addressId) ) ->
+            Api.post (Api.CustomerEditAddress addressId)
+                |> Api.withToken user.authToken
+                |> Api.withJsonBody (Address.encode withNewDefault)
+                |> Api.withErrorHandler (Decode.succeed ())
+                |> Api.sendRequest (UpdateResponse <| AddressId addressId)
 
-            _ ->
-                Cmd.none
+        _ ->
+            Cmd.none
 
 
 
@@ -244,6 +247,7 @@ view model locations { shippingAddresses, billingAddresses } =
                             ]
                         ]
                     ]
+
             else
                 text ""
 
@@ -283,23 +287,24 @@ view model locations { shippingAddresses, billingAddresses } =
                 ( Just ( _, form ), Just address ) ->
                     if form.model == address && not model.changeToDefault then
                         True
+
                     else
                         False
 
                 _ ->
                     True
     in
-        [ h1 [] [ text "Edit Addresses" ]
-        , hr [] []
-        , Html.form [ onSubmit Update ]
-            [ div [ class "row" ]
-                [ div [ class "col text-right" ]
-                    [ addressSelect "Shipping Addresses" SelectShipping shippingAddresses ]
-                , div [ class "col text-left" ]
-                    [ addressSelect "Billing Addresses" SelectBilling billingAddresses ]
-                ]
-            , addressForm
-            , defaultCheckbox
-            , buttons
+    [ h1 [] [ text "Edit Addresses" ]
+    , hr [] []
+    , Html.form [ onSubmit Update ]
+        [ div [ class "row" ]
+            [ div [ class "col text-right" ]
+                [ addressSelect "Shipping Addresses" SelectShipping shippingAddresses ]
+            , div [ class "col text-left" ]
+                [ addressSelect "Billing Addresses" SelectBilling billingAddresses ]
             ]
+        , addressForm
+        , defaultCheckbox
+        , buttons
         ]
+    ]

@@ -1,10 +1,5 @@
 module Main exposing (main)
 
-import Dict
-import Json.Decode as Decode
-import Json.Encode as Encode
-import Paginate exposing (Paginated)
-import RemoteData exposing (WebData)
 import Address
 import AdvancedSearch
 import Api
@@ -18,14 +13,19 @@ import Browser
 import Browser.Navigation
 import Cart
 import Checkout
+import Dict
+import Json.Decode as Decode
+import Json.Encode as Encode
 import Locations
 import Messages exposing (Msg(..))
 import Model exposing (Model)
-import PageData exposing (PageData, ProductData, CartItemId(..))
-import Product exposing (ProductId(..), ProductVariantId(..))
+import PageData exposing (CartItemId(..), PageData, ProductData)
+import Paginate exposing (Paginated)
 import Ports
+import Product exposing (ProductId(..), ProductVariantId(..))
 import QuickOrder
-import Routing exposing (Route(..), reverse, parseRoute)
+import RemoteData exposing (WebData)
+import Routing exposing (Route(..), parseRoute, reverse)
 import Search exposing (UniqueSearch(..))
 import SeedAttribute exposing (SeedAttribute)
 import SiteUI
@@ -33,9 +33,9 @@ import SiteUI.Search as SiteSearch
 import StaticPage exposing (StaticPage)
 import Task
 import Time
-import Update.Utils exposing (extraCommand, noCommand, discardCommand, updateAndCommand, withCommand, batchCommand, maybeCommand)
-import User exposing (User, AuthStatus)
+import Update.Utils exposing (batchCommand, discardCommand, extraCommand, maybeCommand, noCommand, updateAndCommand, withCommand)
 import Url exposing (Url)
+import User exposing (AuthStatus, User)
 import View exposing (view)
 
 
@@ -90,6 +90,7 @@ init flags url key =
                     (\cmd_ ->
                         if route == Checkout && flags.authToken /= Nothing then
                             Cmd.none
+
                         else
                             cmd_
                     )
@@ -98,14 +99,14 @@ init flags url key =
             Maybe.map2 reAuthorize flags.authUserId flags.authToken
                 |> Maybe.withDefault (redirectIfAuthRequired key route)
     in
-        ( model
-        , Cmd.batch
-            [ cmd
-            , getNavigationData
-            , authorizationCmd
-            , Task.perform NewZone Time.here
-            ]
-        )
+    ( model
+    , Cmd.batch
+        [ cmd
+        , getNavigationData
+        , authorizationCmd
+        , Task.perform NewZone Time.here
+        ]
+    )
 
 
 
@@ -230,9 +231,9 @@ fetchDataForRoute ({ route, pageData, key } as model) =
                                                     ""
                                                 )
                             in
-                                { pageData | checkoutDetails = RemoteData.Loading }
-                                    |> fetchLocationsOnce
-                                    |> getDetails
+                            { pageData | checkoutDetails = RemoteData.Loading }
+                                |> fetchLocationsOnce
+                                |> getDetails
 
                 CheckoutSuccess orderId _ ->
                     case model.currentUser of
@@ -250,7 +251,7 @@ fetchDataForRoute ({ route, pageData, key } as model) =
         doNothing =
             ( pageData, Cmd.none )
     in
-        ( { model | pageData = data }, cmd )
+    ( { model | pageData = data }, cmd )
 
 
 fetchLocationsOnce : PageData -> ( PageData, Cmd Msg )
@@ -333,8 +334,8 @@ getAddressDetails authStatus pageData =
                         |> Api.withToken user.authToken
                         |> Api.sendRequest GetAddressDetails
             in
-                fetchLocationsOnce pageData
-                    |> updateAndCommand getDetails
+            fetchLocationsOnce pageData
+                |> updateAndCommand getDetails
 
 
 getCartDetails : String -> Cmd Msg
@@ -352,10 +353,10 @@ getAnonymousCartDetails maybeCartToken =
             Encode.object
                 [ ( "sessionToken", Encode.string <| Maybe.withDefault "" maybeCartToken ) ]
     in
-        Api.post Api.CartDetailsAnonymous
-            |> Api.withJsonBody parameters
-            |> Api.withJsonResponse PageData.cartDetailsDecoder
-            |> Api.sendRequest GetCartDetails
+    Api.post Api.CartDetailsAnonymous
+        |> Api.withJsonBody parameters
+        |> Api.withJsonResponse PageData.cartDetailsDecoder
+        |> Api.sendRequest GetCartDetails
 
 
 reAuthorize : Int -> String -> Cmd Msg
@@ -367,10 +368,10 @@ reAuthorize userId token =
                 , ( "token", Encode.string token )
                 ]
     in
-        Api.post Api.CustomerAuthorize
-            |> Api.withJsonBody authParameters
-            |> Api.withJsonResponse User.decoder
-            |> Api.sendRequest ReAuthorize
+    Api.post Api.CustomerAuthorize
+        |> Api.withJsonBody authParameters
+        |> Api.withJsonResponse User.decoder
+        |> Api.sendRequest ReAuthorize
 
 
 addToCustomerCart : String -> Int -> ProductVariantId -> Cmd Msg
@@ -382,11 +383,11 @@ addToCustomerCart token quantity (ProductVariantId variantId) =
                 , ( "quantity", Encode.int quantity )
                 ]
     in
-        Api.post Api.CartAddCustomer
-            |> Api.withJsonBody body
-            |> Api.withJsonResponse (Decode.succeed token)
-            |> Api.withToken token
-            |> Api.sendRequest (SubmitAddToCartResponse quantity)
+    Api.post Api.CartAddCustomer
+        |> Api.withJsonBody body
+        |> Api.withJsonResponse (Decode.succeed token)
+        |> Api.withToken token
+        |> Api.sendRequest (SubmitAddToCartResponse quantity)
 
 
 addToAnonymousCart : Maybe String -> Int -> ProductVariantId -> Cmd Msg
@@ -402,10 +403,10 @@ addToAnonymousCart maybeSessionToken quantity (ProductVariantId variantId) =
         encodeMaybe encoder =
             Maybe.map encoder >> Maybe.withDefault Encode.null
     in
-        Api.post Api.CartAddAnonymous
-            |> Api.withJsonBody body
-            |> Api.withStringResponse
-            |> Api.sendRequest (SubmitAddToCartResponse quantity)
+    Api.post Api.CartAddAnonymous
+        |> Api.withJsonBody body
+        |> Api.withStringResponse
+        |> Api.sendRequest (SubmitAddToCartResponse quantity)
 
 
 getCustomerCartItemsCount : String -> Cmd Msg
@@ -458,14 +459,14 @@ update msg ({ pageData, key } as model) =
                     { model | currentUser = User.unauthorized, cartItemCount = 0 }
                         |> fetchDataForRoute
             in
-                ( updatedModel
-                , Cmd.batch
-                    [ redirectIfAuthRequired key model.route
-                    , Ports.removeAuthDetails ()
-                    , Ports.setCartItemCount 0
-                    , fetchCmd
-                    ]
-                )
+            ( updatedModel
+            , Cmd.batch
+                [ redirectIfAuthRequired key model.route
+                , Ports.removeAuthDetails ()
+                , Ports.setCartItemCount 0
+                , fetchCmd
+                ]
+            )
 
         OtherTabLoggedIn authData ->
             ( model, reAuthorize authData.userId authData.token )
@@ -487,8 +488,8 @@ update msg ({ pageData, key } as model) =
                         _ ->
                             ( m, Cmd.none )
             in
-                { model | cartItemCount = quantity }
-                    |> fetchCommand
+            { model | cartItemCount = quantity }
+                |> fetchCommand
 
         ChangeCartFormVariantId productId variantId ->
             model
@@ -507,15 +508,15 @@ update msg ({ pageData, key } as model) =
 
                 ( variantId, quantity ) =
                     Dict.get productId model.addToCartForms
-                        |> Maybe.withDefault ({ variant = Nothing, quantity = 1 })
-                        |> \v -> ( v.variant |> Maybe.withDefault defaultVariant, v.quantity )
+                        |> Maybe.withDefault { variant = Nothing, quantity = 1 }
+                        |> (\v -> ( v.variant |> Maybe.withDefault defaultVariant, v.quantity ))
             in
-                case model.currentUser of
-                    User.Authorized user ->
-                        performRequest (addToCustomerCart user.authToken)
+            case model.currentUser of
+                User.Authorized user ->
+                    performRequest (addToCustomerCart user.authToken)
 
-                    User.Anonymous ->
-                        performRequest (addToAnonymousCart model.maybeSessionToken)
+                User.Anonymous ->
+                    performRequest (addToAnonymousCart model.maybeSessionToken)
 
         -- TODO: error/success alert
         SubmitAddToCartResponse quantity response ->
@@ -539,7 +540,7 @@ update msg ({ pageData, key } as model) =
                 ( searchData, cmd ) =
                     SiteSearch.update key subMsg model.searchData
             in
-                ( { model | searchData = searchData }, cmd )
+            ( { model | searchData = searchData }, cmd )
 
         AdvancedSearchMsg subMsg ->
             ( { model | advancedSearchData = AdvancedSearch.update subMsg model.advancedSearchData }
@@ -551,12 +552,12 @@ update msg ({ pageData, key } as model) =
                 ( updatedForm, maybeAuthStatus, cmd ) =
                     CreateAccount.update key subMsg model.createAccountForm model.maybeSessionToken
             in
-                ( { model
-                    | createAccountForm = updatedForm
-                    , currentUser = maybeAuthStatus |> Maybe.withDefault model.currentUser
-                  }
-                , Cmd.map CreateAccountMsg cmd
-                )
+            ( { model
+                | createAccountForm = updatedForm
+                , currentUser = maybeAuthStatus |> Maybe.withDefault model.currentUser
+              }
+            , Cmd.map CreateAccountMsg cmd
+            )
 
         LoginMsg subMsg ->
             let
@@ -571,12 +572,12 @@ update msg ({ pageData, key } as model) =
                         _ ->
                             Cmd.none
             in
-                ( { model
-                    | loginForm = updatedForm
-                    , currentUser = maybeAuthStatus |> Maybe.withDefault model.currentUser
-                  }
-                , Cmd.batch [ Cmd.map LoginMsg cmd, cartItemsCommand ]
-                )
+            ( { model
+                | loginForm = updatedForm
+                , currentUser = maybeAuthStatus |> Maybe.withDefault model.currentUser
+              }
+            , Cmd.batch [ Cmd.map LoginMsg cmd, cartItemsCommand ]
+            )
 
         ResetPasswordMsg subMsg ->
             let
@@ -588,18 +589,18 @@ update msg ({ pageData, key } as model) =
                         _ ->
                             Cmd.none
             in
-                ResetPassword.update key subMsg model.resetPasswordForm model.maybeSessionToken
-                    |> (\( form, maybeAuthStatus, cmd ) ->
-                            ( { model
-                                | resetPasswordForm = form
-                                , currentUser = maybeAuthStatus |> Maybe.withDefault model.currentUser
-                              }
-                            , Cmd.batch
-                                [ Cmd.map ResetPasswordMsg cmd
-                                , cartItemsCommand maybeAuthStatus
-                                ]
-                            )
-                       )
+            ResetPassword.update key subMsg model.resetPasswordForm model.maybeSessionToken
+                |> (\( form, maybeAuthStatus, cmd ) ->
+                        ( { model
+                            | resetPasswordForm = form
+                            , currentUser = maybeAuthStatus |> Maybe.withDefault model.currentUser
+                          }
+                        , Cmd.batch
+                            [ Cmd.map ResetPasswordMsg cmd
+                            , cartItemsCommand maybeAuthStatus
+                            ]
+                        )
+                   )
 
         EditLoginMsg subMsg ->
             EditLogin.update key subMsg model.editLoginForm model.currentUser
@@ -622,18 +623,18 @@ update msg ({ pageData, key } as model) =
                     Maybe.map Cart.fromCartDetails
                         >> Maybe.withDefault form
             in
-                model.pageData.cartDetails
-                    |> RemoteData.withDefault PageData.blankCartDetails
-                    |> Cart.update subMsg model.currentUser model.maybeSessionToken model.editCartForm
-                    |> (\( form, maybeDetails, cmd ) ->
-                            ( { model
-                                | pageData = updatedPageData maybeDetails
-                                , editCartForm = updatedForm form maybeDetails
-                              }
-                            , cmd
-                            )
-                                |> updateAndCommand (updateCartItemCountFromDetails maybeDetails)
-                       )
+            model.pageData.cartDetails
+                |> RemoteData.withDefault PageData.blankCartDetails
+                |> Cart.update subMsg model.currentUser model.maybeSessionToken model.editCartForm
+                |> (\( form, maybeDetails, cmd ) ->
+                        ( { model
+                            | pageData = updatedPageData maybeDetails
+                            , editCartForm = updatedForm form maybeDetails
+                          }
+                        , cmd
+                        )
+                            |> updateAndCommand (updateCartItemCountFromDetails maybeDetails)
+                   )
 
         QuickOrderMsg subMsg ->
             QuickOrder.update subMsg model.quickOrderForms model.currentUser model.maybeSessionToken
@@ -644,14 +645,14 @@ update msg ({ pageData, key } as model) =
                                     |> Maybe.map (\( q, t ) -> updateSessionTokenAndCartItemCount m q t)
                                     |> Maybe.withDefault ( m, Cmd.none )
                         in
-                            ( { model | quickOrderForms = forms }
-                            , Cmd.batch
-                                [ Cmd.map QuickOrderMsg cmd
-                                , Maybe.map (always <| Routing.newUrl key Cart) maybeQuantityAndToken
-                                    |> Maybe.withDefault Cmd.none
-                                ]
-                            )
-                                |> updateAndCommand newQuantityAndToken
+                        ( { model | quickOrderForms = forms }
+                        , Cmd.batch
+                            [ Cmd.map QuickOrderMsg cmd
+                            , Maybe.map (always <| Routing.newUrl key Cart) maybeQuantityAndToken
+                                |> Maybe.withDefault Cmd.none
+                            ]
+                        )
+                            |> updateAndCommand newQuantityAndToken
                    )
 
         CheckoutMsg subMsg ->
@@ -686,24 +687,24 @@ update msg ({ pageData, key } as model) =
                                             RemoteData.Success checkoutDetails
                                     }
                             in
-                                ( { model_ | pageData = updatedPageData }
-                                , cmd
-                                )
+                            ( { model_ | pageData = updatedPageData }
+                            , cmd
+                            )
 
                         Nothing ->
                             ( model_, cmd )
             in
-                Checkout.update subMsg
-                    model.checkoutForm
-                    model.currentUser
-                    model.maybeSessionToken
-                    pageData.checkoutDetails
-                    |> (\( form, maybeOutMsg, cmd ) ->
-                            ( { model | checkoutForm = form }
-                            , Cmd.map CheckoutMsg cmd
-                            )
-                                |> handleOutMsg maybeOutMsg
-                       )
+            Checkout.update subMsg
+                model.checkoutForm
+                model.currentUser
+                model.maybeSessionToken
+                pageData.checkoutDetails
+                |> (\( form, maybeOutMsg, cmd ) ->
+                        ( { model | checkoutForm = form }
+                        , Cmd.map CheckoutMsg cmd
+                        )
+                            |> handleOutMsg maybeOutMsg
+                   )
 
         ReAuthorize response ->
             case response of
@@ -727,8 +728,8 @@ update msg ({ pageData, key } as model) =
                 updatedPageData =
                     { pageData | productDetails = response }
             in
-                ( { model | pageData = updatedPageData }, Cmd.none )
-                    |> extraCommand (always Ports.scrollToTop)
+            ( { model | pageData = updatedPageData }, Cmd.none )
+                |> extraCommand (always Ports.scrollToTop)
 
         -- TODO: Handle navigation loading errors - maybe w/ a global error list
         GetNavigationData response ->
@@ -739,47 +740,47 @@ update msg ({ pageData, key } as model) =
                 updatedPageData =
                     { pageData | advancedSearch = response }
             in
-                ( { model | pageData = updatedPageData }, Cmd.none )
+            ( { model | pageData = updatedPageData }, Cmd.none )
 
         GetPageDetailsData response ->
             let
                 updatedPageData =
                     { pageData | pageDetails = response }
             in
-                ( { model | pageData = updatedPageData }
-                , Cmd.none
-                )
-                    |> extraCommand (always Ports.scrollToTop)
+            ( { model | pageData = updatedPageData }
+            , Cmd.none
+            )
+                |> extraCommand (always Ports.scrollToTop)
 
         GetAddressLocations response ->
             let
                 updatedPageData =
                     { pageData | locations = response }
             in
-                ( { model | pageData = updatedPageData }, Cmd.none )
+            ( { model | pageData = updatedPageData }, Cmd.none )
 
         GetMyAccountDetails response ->
             let
                 updatedPageData =
                     { pageData | myAccount = response }
             in
-                ( { model | pageData = updatedPageData }, Cmd.none )
+            ( { model | pageData = updatedPageData }, Cmd.none )
 
         GetAddressDetails response ->
             let
                 updatedPageData =
                     { pageData | addressDetails = response }
             in
-                ( { model | pageData = updatedPageData }, Cmd.none )
+            ( { model | pageData = updatedPageData }, Cmd.none )
 
         GetCartDetails response ->
             let
                 updatedPageData =
                     { pageData | cartDetails = response }
             in
-                { model | pageData = updatedPageData }
-                    |> resetEditCartForm response
-                    |> updateCartItemCountFromDetails (RemoteData.toMaybe response)
+            { model | pageData = updatedPageData }
+                |> resetEditCartForm response
+                |> updateCartItemCountFromDetails (RemoteData.toMaybe response)
 
         GetCartItemCount response ->
             { model | cartItemCount = response |> RemoteData.toMaybe |> Maybe.withDefault 0 }
@@ -795,35 +796,36 @@ update msg ({ pageData, key } as model) =
                         RemoteData.Success { items } ->
                             if List.isEmpty items then
                                 Routing.newUrl key Cart
+
                             else
                                 Cmd.none
 
                         _ ->
                             Cmd.none
             in
-                (\a -> Tuple.pair a cmd) <|
-                    case ( pageData.checkoutDetails, response ) of
-                        ( RemoteData.Success _, RemoteData.Success _ ) ->
-                            { model | pageData = updatedPageData }
+            (\a -> Tuple.pair a cmd) <|
+                case ( pageData.checkoutDetails, response ) of
+                    ( RemoteData.Success _, RemoteData.Success _ ) ->
+                        { model | pageData = updatedPageData }
 
-                        ( _, RemoteData.Success details ) ->
-                            { model
-                                | pageData = updatedPageData
-                                , checkoutForm =
-                                    Checkout.initialWithDefaults
-                                        details.shippingAddresses
-                                        details.billingAddresses
-                            }
+                    ( _, RemoteData.Success details ) ->
+                        { model
+                            | pageData = updatedPageData
+                            , checkoutForm =
+                                Checkout.initialWithDefaults
+                                    details.shippingAddresses
+                                    details.billingAddresses
+                        }
 
-                        _ ->
-                            { model | pageData = updatedPageData }
+                    _ ->
+                        { model | pageData = updatedPageData }
 
         GetCheckoutSuccessDetails response ->
             let
                 updatedPageData =
                     { pageData | orderDetails = response }
             in
-                { model | pageData = updatedPageData } |> noCommand
+            { model | pageData = updatedPageData } |> noCommand
 
         CategoryPaginationMsg subMsg ->
             pageData.categoryDetails
@@ -864,15 +866,16 @@ updatePageFromPagination key route paginated =
         newPage =
             Paginate.getPage paginated
     in
-        case maybePage of
-            Nothing ->
+    case maybePage of
+        Nothing ->
+            Cmd.none
+
+        Just page ->
+            if page == newPage then
                 Cmd.none
 
-            Just page ->
-                if page == newPage then
-                    Cmd.none
-                else
-                    Routing.newUrl key <| newRouteConstructor newPage
+            else
+                Routing.newUrl key <| newRouteConstructor newPage
 
 
 clearSearchForm : ( Model, Cmd msg ) -> ( Model, Cmd msg )
@@ -906,7 +909,7 @@ updateCartQuantity (ProductId productId) quantity model =
                 Just v ->
                     Just { v | quantity = quantity }
     in
-        { model | addToCartForms = addToCartForms }
+    { model | addToCartForms = addToCartForms }
 
 
 updateCartVariant : ProductId -> ProductVariantId -> Model -> Model
@@ -923,7 +926,7 @@ updateCartVariant (ProductId productId) variantId model =
                 Just v ->
                     Just { v | variant = Just variantId }
     in
-        { model | addToCartForms = addToCartForms }
+    { model | addToCartForms = addToCartForms }
 
 
 resetEditCartForm : WebData PageData.CartDetails -> Model -> Model
@@ -947,9 +950,9 @@ updateCartItemCountFromDetails maybeCartDetails model =
                 itemCount =
                     List.foldl (.quantity >> (+)) 0 cartDetails.items
             in
-                ( { model | cartItemCount = itemCount }
-                , Ports.setCartItemCount itemCount
-                )
+            ( { model | cartItemCount = itemCount }
+            , Ports.setCartItemCount itemCount
+            )
 
 
 updateSessionTokenAndCartItemCount : Model -> Int -> String -> ( Model, Cmd msg )
@@ -957,6 +960,7 @@ updateSessionTokenAndCartItemCount model quantity sessionToken =
     if String.isEmpty sessionToken then
         { model | cartItemCount = model.cartItemCount + quantity }
             |> withCommand (\m -> Ports.setCartItemCount m.cartItemCount)
+
     else if Just sessionToken /= model.maybeSessionToken then
         ( { model
             | maybeSessionToken = Just sessionToken
@@ -967,6 +971,7 @@ updateSessionTokenAndCartItemCount model quantity sessionToken =
             , Ports.setCartItemCount quantity
             ]
         )
+
     else
         ( { model | cartItemCount = model.cartItemCount + quantity }
         , Ports.setCartItemCount (model.cartItemCount + quantity)
@@ -977,5 +982,6 @@ redirectIfAuthRequired : Routing.Key -> Route -> Cmd msg
 redirectIfAuthRequired key route =
     if Routing.authRequired route then
         Routing.newUrl key <| PageDetails "home"
+
     else
         Cmd.none

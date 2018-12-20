@@ -1,18 +1,18 @@
-module Routing.Utils
-    exposing
-        ( fromStringParam
-        , fromStringWithDefaultParam
-        , fromIntParam
-        , optionalIntParam
-        , parseFlag
-        , joinPath
-        , queryParameter
-        , queryFlag
-        , withQueryStrings
-        , joinQueryStrings
-        )
+module Routing.Utils exposing
+    ( fromIntParam
+    , fromStringParam
+    , fromStringWithDefaultParam
+    , joinPath
+    , joinQueryStrings
+    , optionalIntParam
+    , parseFlag
+    , queryFlag
+    , queryParameter
+    , withQueryStrings
+    )
 
 import Url.Parser.Query as Query
+
 
 
 -- Parsing
@@ -61,6 +61,7 @@ queryFlag : String -> Bool -> String
 queryFlag flag showFlag =
     if showFlag then
         queryParameter ( flag, "1" )
+
     else
         ""
 
@@ -80,5 +81,6 @@ prependQueryStart : String -> String
 prependQueryStart queryString =
     if String.isEmpty queryString then
         ""
+
     else
         "?" ++ queryString

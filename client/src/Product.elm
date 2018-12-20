@@ -1,12 +1,11 @@
-module Product
-    exposing
-        ( ProductId(..)
-        , Product
-        , decoder
-        , ProductVariantId(..)
-        , ProductVariant
-        , variantDecoder
-        )
+module Product exposing
+    ( Product
+    , ProductId(..)
+    , ProductVariant
+    , ProductVariantId(..)
+    , decoder
+    , variantDecoder
+    )
 
 import Json.Decode as Decode exposing (Decoder)
 import Models.Fields exposing (Cents(..), Milligrams(..))

@@ -1,17 +1,17 @@
-module Products.Sorting
-    exposing
-        ( Option
-        , all
-        , default
-        , toQueryString
-        , fromQueryString
-        , toQueryValue
-        , fromQueryValue
-        , toDescription
-        )
+module Products.Sorting exposing
+    ( Option
+    , all
+    , default
+    , fromQueryString
+    , fromQueryValue
+    , toDescription
+    , toQueryString
+    , toQueryValue
+    )
 
-import Url.Parser as Url exposing ((<?>))
 import Routing.Utils exposing (fromStringParam)
+import Url.Parser as Url exposing ((<?>))
+
 
 
 -- MODEL
@@ -48,10 +48,11 @@ toQueryString data =
         defaultValue =
             toQueryValue default
     in
-        if value == defaultValue then
-            ""
-        else
-            "sortBy=" ++ value
+    if value == defaultValue then
+        ""
+
+    else
+        "sortBy=" ++ value
 
 
 fromQueryString :

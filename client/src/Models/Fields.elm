@@ -1,14 +1,13 @@
-module Models.Fields
-    exposing
-        ( Cents(..)
-        , centsMap
-        , centsMap2
-        , centsDecoder
-        , centsFromDecimal
-        , centsFromString
-        , Milligrams(..)
-        , milligramsToString
-        )
+module Models.Fields exposing
+    ( Cents(..)
+    , Milligrams(..)
+    , centsDecoder
+    , centsFromDecimal
+    , centsFromString
+    , centsMap
+    , centsMap2
+    , milligramsToString
+    )
 
 import Decimal exposing (Decimal)
 import Json.Decode as Decode exposing (Decoder)

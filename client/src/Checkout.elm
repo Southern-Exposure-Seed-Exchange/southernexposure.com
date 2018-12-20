@@ -1,37 +1,37 @@
-module Checkout
-    exposing
-        ( Form
-        , initial
-        , initialWithDefaults
-        , Msg
-        , OutMsg(..)
-        , subscriptions
-        , update
-        , getCustomerDetails
-        , getAnonymousDetails
-        , view
-        , successView
-        )
+module Checkout exposing
+    ( Form
+    , Msg
+    , OutMsg(..)
+    , getAnonymousDetails
+    , getCustomerDetails
+    , initial
+    , initialWithDefaults
+    , subscriptions
+    , successView
+    , update
+    , view
+    )
 
-import Dict
-import Html exposing (..)
-import Html.Attributes as A exposing (attribute, class, type_, colspan, src, for, id, rows, value, href, target, selected, checked, name, required, minlength, step)
-import Html.Events exposing (onSubmit, onInput, onCheck, onClick, targetValue, on)
-import Json.Decode as Decode exposing (Decoder)
-import Json.Encode as Encode exposing (Value)
-import RemoteData exposing (WebData)
 import Address exposing (AddressId(..))
 import Api
+import Dict
+import Html exposing (..)
+import Html.Attributes as A exposing (attribute, checked, class, colspan, for, href, id, minlength, name, required, rows, selected, src, step, target, type_, value)
+import Html.Events exposing (on, onCheck, onClick, onInput, onSubmit, targetValue)
+import Json.Decode as Decode exposing (Decoder)
+import Json.Encode as Encode exposing (Value)
 import Locations exposing (AddressLocations, Region)
-import Models.Fields exposing (Cents(..), centsMap2, centsMap, centsFromString, milligramsToString)
+import Models.Fields exposing (Cents(..), centsFromString, centsMap, centsMap2, milligramsToString)
 import OrderDetails
 import PageData
 import Ports
+import RemoteData exposing (WebData)
 import Time
 import Update.Utils exposing (nothingAndNoCommand)
 import User exposing (AuthStatus)
 import Views.Format as Format
 import Views.Images as Images
+
 
 
 -- Model
@@ -97,19 +97,19 @@ initialWithDefaults shippingAddresses billingAddresses =
                 ExistingAddress _ ->
                     False
     in
-        { email = ""
-        , password = ""
-        , passwordConfirm = ""
-        , shippingAddress = shippingAddress
-        , makeShippingDefault = isNew shippingAddress
-        , billingAddress = billingAddress
-        , makeBillingDefault = isNew billingAddress
-        , billingSameAsShipping = False
-        , storeCredit = ""
-        , memberNumber = Nothing
-        , comment = ""
-        , errors = Api.initialErrors
-        }
+    { email = ""
+    , password = ""
+    , passwordConfirm = ""
+    , shippingAddress = shippingAddress
+    , makeShippingDefault = isNew shippingAddress
+    , billingAddress = billingAddress
+    , makeBillingDefault = isNew billingAddress
+    , billingSameAsShipping = False
+    , storeCredit = ""
+    , memberNumber = Nothing
+    , comment = ""
+    , errors = Api.initialErrors
+    }
 
 
 
@@ -221,6 +221,7 @@ update msg model authStatus maybeSessionToken checkoutDetails =
                 , Nothing
                 , Ports.scrollToTop
                 )
+
             else
                 case checkoutDetails of
                     RemoteData.Success details ->
@@ -249,7 +250,7 @@ update msg model authStatus maybeSessionToken checkoutDetails =
                                     User.Anonymous ->
                                         model.email
                         in
-                            ( model, Nothing, Ports.collectStripeToken ( customerEmail, finalTotal ) )
+                        ( model, Nothing, Ports.collectStripeToken ( customerEmail, finalTotal ) )
 
                     _ ->
                         ( model, Nothing, Cmd.none )
@@ -262,10 +263,11 @@ update msg model authStatus maybeSessionToken checkoutDetails =
                 outMsg =
                     if authStatus == User.Anonymous && newAuthStatus /= authStatus then
                         AnonymousOrderCompleted orderId newAuthStatus
+
                     else
                         CustomerOrderCompleted orderId
             in
-                ( initial, Just outMsg, Cmd.none )
+            ( initial, Just outMsg, Cmd.none )
 
         SubmitResponse (RemoteData.Success (Err errors)) ->
             let
@@ -318,17 +320,17 @@ update msg model authStatus maybeSessionToken checkoutDetails =
                         NewAddress _ ->
                             identity
             in
-                ( { model
-                    | shippingAddress = updatedShippingForm
-                    , billingAddress = updatedBillingForm
-                    , errors =
-                        Dict.fromList generalErrors
-                            |> addAddresErrorIfExisting "shipping" model.shippingAddress
-                            |> addAddresErrorIfExisting "billing" model.billingAddress
-                  }
-                , Nothing
-                , Ports.scrollToTop
-                )
+            ( { model
+                | shippingAddress = updatedShippingForm
+                , billingAddress = updatedBillingForm
+                , errors =
+                    Dict.fromList generalErrors
+                        |> addAddresErrorIfExisting "shipping" model.shippingAddress
+                        |> addAddresErrorIfExisting "billing" model.billingAddress
+              }
+            , Nothing
+            , Ports.scrollToTop
+            )
 
         SubmitResponse _ ->
             model |> nothingAndNoCommand
@@ -347,6 +349,7 @@ selectAddress : Int -> CheckoutAddress
 selectAddress addressId =
     if addressId == 0 then
         NewAddress Address.initialForm
+
     else
         ExistingAddress (Address.AddressId addressId)
 
@@ -384,6 +387,7 @@ refreshDetails authStatus maybeSessionToken oldModel newModel =
         applyArguments cmdFunction =
             if shouldUpdate then
                 cmdFunction addressArguments
+
             else
                 Cmd.none
 
@@ -415,6 +419,7 @@ refreshDetails authStatus maybeSessionToken oldModel newModel =
 
                             ( oldState, newState ) ->
                                 oldState /= newState
+
                     else
                         True
 
@@ -438,7 +443,7 @@ refreshDetails authStatus maybeSessionToken oldModel newModel =
                 NewAddress addrForm ->
                     ( Just addrForm.model.country, Just addrForm.model.state, Nothing )
     in
-        ( newModel, Nothing, refreshCommand )
+    ( newModel, Nothing, refreshCommand )
 
 
 findBy : (a -> Bool) -> List a -> Maybe a
@@ -450,6 +455,7 @@ findBy pred l =
         x :: xs ->
             if pred x then
                 Just x
+
             else
                 findBy pred xs
 
@@ -465,7 +471,7 @@ limitStoreCredit checkoutDetails =
                 |> .total
                 |> centsMap2 min checkoutDetails.storeCredit
     in
-        centsMap2 min maximumStoreCredit
+    centsMap2 min maximumStoreCredit
 
 
 getCustomerDetails :
@@ -492,16 +498,17 @@ getCustomerDetails msg token maybeCountry maybeRegion maybeAddressId maybeMember
                     (\num ->
                         if String.length num > 3 then
                             Just num
+
                         else
                             Nothing
                     )
                 |> encodeMaybe Encode.string
     in
-        Api.post Api.CheckoutDetailsCustomer
-            |> Api.withJsonBody data
-            |> Api.withJsonResponse PageData.checkoutDetailsDecoder
-            |> Api.withToken token
-            |> Api.sendRequest msg
+    Api.post Api.CheckoutDetailsCustomer
+        |> Api.withJsonBody data
+        |> Api.withJsonResponse PageData.checkoutDetailsDecoder
+        |> Api.withToken token
+        |> Api.sendRequest msg
 
 
 getAnonymousDetails :
@@ -521,10 +528,10 @@ getAnonymousDetails msg sessionToken maybeCountry maybeRegion memberNumber =
                 , ( "sessionToken", Encode.string sessionToken )
                 ]
     in
-        Api.post Api.CheckoutDetailsAnonymous
-            |> Api.withJsonBody data
-            |> Api.withJsonResponse PageData.checkoutDetailsDecoder
-            |> Api.sendRequest msg
+    Api.post Api.CheckoutDetailsAnonymous
+        |> Api.withJsonBody data
+        |> Api.withJsonResponse PageData.checkoutDetailsDecoder
+        |> Api.sendRequest msg
 
 
 placeOrder : Form -> AuthStatus -> Maybe String -> String -> WebData PageData.CheckoutDetails -> Cmd Msg
@@ -580,6 +587,7 @@ placeOrder model authStatus maybeSessionToken stripeTokenId checkoutDetails =
                             >> encodeAddress model.shippingAddress
                         )
                     |> Maybe.withDefault (encodeAddress model.shippingAddress model.makeShippingDefault)
+
             else
                 encodeAddress model.billingAddress model.makeBillingDefault
 
@@ -602,7 +610,7 @@ placeOrder model authStatus maybeSessionToken stripeTokenId checkoutDetails =
                         formWithDefault =
                             { form | model = formModelWithDefault }
                     in
-                        Address.encode formWithDefault
+                    Address.encode formWithDefault
 
         isDefaultAddress address { shippingAddresses, billingAddresses } =
             case address of
@@ -625,19 +633,19 @@ placeOrder model authStatus maybeSessionToken stripeTokenId checkoutDetails =
                     Decode.map (\orderId -> ( orderId, authStatus ))
                         (Decode.field "orderId" Decode.int)
     in
-        case authStatus of
-            User.Anonymous ->
-                Api.post Api.CheckoutPlaceOrderAnonymous
-                    |> Api.withJsonBody anonymousData
-                    |> Api.withErrorHandler decoder
-                    |> Api.sendRequest SubmitResponse
+    case authStatus of
+        User.Anonymous ->
+            Api.post Api.CheckoutPlaceOrderAnonymous
+                |> Api.withJsonBody anonymousData
+                |> Api.withErrorHandler decoder
+                |> Api.sendRequest SubmitResponse
 
-            User.Authorized user ->
-                Api.post Api.CheckoutPlaceOrderCustomer
-                    |> Api.withToken user.authToken
-                    |> Api.withJsonBody customerData
-                    |> Api.withErrorHandler decoder
-                    |> Api.sendRequest SubmitResponse
+        User.Authorized user ->
+            Api.post Api.CheckoutPlaceOrderCustomer
+                |> Api.withToken user.authToken
+                |> Api.withJsonBody customerData
+                |> Api.withErrorHandler decoder
+                |> Api.sendRequest SubmitResponse
 
 
 {-| TODO: This is probably repeated other places, stick in a Json.Utils module.
@@ -679,6 +687,7 @@ view model authStatus locations checkoutDetails =
                         ]
                     , billingAddressText
                     ]
+
             else
                 addressForm
                     { cardTitle = "Billing Details"
@@ -701,6 +710,7 @@ view model authStatus locations checkoutDetails =
                 NewAddress form ->
                     if form.model /= Address.initial then
                         Address.card form.model locations
+
                     else
                         text ""
 
@@ -746,8 +756,8 @@ view model authStatus locations checkoutDetails =
                 (Cents credit) =
                     checkoutDetails.storeCredit
             in
-                min credit orderTotal
-                    |> Cents
+            min credit orderTotal
+                |> Cents
 
         memberNumberForm =
             div [ class "col-6" ]
@@ -772,53 +782,53 @@ view model authStatus locations checkoutDetails =
                     ]
                 ]
     in
-        [ h1 [] [ text "Checkout" ]
-        , hr [] []
-        , form [ onSubmit Submit ]
-            [ generalErrors
-            , registrationCard
-            , div [ class "row mb-3" ]
-                [ addressForm
-                    { cardTitle = "Shipping Details"
-                    , msg = ShippingMsg
-                    , selectMsg = SelectShipping
-                    , defaultMsg = ToggleShippingDefault
-                    , model = model.shippingAddress
-                    , makeDefault = model.makeShippingDefault
-                    , billingSameAsShipping = model.billingSameAsShipping
-                    , prefix = "shipping"
-                    , locations = locations
-                    , selectAddresses = checkoutDetails.shippingAddresses
-                    , generalErrors =
-                        Dict.get "shipping" model.errors
-                            |> Maybe.withDefault []
-                    }
-                , billingCard
+    [ h1 [] [ text "Checkout" ]
+    , hr [] []
+    , form [ onSubmit Submit ]
+        [ generalErrors
+        , registrationCard
+        , div [ class "row mb-3" ]
+            [ addressForm
+                { cardTitle = "Shipping Details"
+                , msg = ShippingMsg
+                , selectMsg = SelectShipping
+                , defaultMsg = ToggleShippingDefault
+                , model = model.shippingAddress
+                , makeDefault = model.makeShippingDefault
+                , billingSameAsShipping = model.billingSameAsShipping
+                , prefix = "shipping"
+                , locations = locations
+                , selectAddresses = checkoutDetails.shippingAddresses
+                , generalErrors =
+                    Dict.get "shipping" model.errors
+                        |> Maybe.withDefault []
+                }
+            , billingCard
+            ]
+        , div [ class "row mb-3" ]
+            [ storeCreditForm, memberNumberForm ]
+        , div [ class "mb-3" ]
+            [ h4 [] [ text "Order Summary" ]
+            , summaryTable checkoutDetails model.storeCredit
+            ]
+        , div [ class "form-group" ]
+            [ label [ class "h4", for "commentsTextarea" ]
+                [ text "Additional Comments" ]
+            , textarea
+                [ id "commentsTextarea"
+                , class "form-control"
+                , rows 4
+                , onInput Comment
+                , value model.comment
                 ]
-            , div [ class "row mb-3" ]
-                [ storeCreditForm, memberNumberForm ]
-            , div [ class "mb-3" ]
-                [ h4 [] [ text "Order Summary" ]
-                , summaryTable checkoutDetails model.storeCredit
-                ]
-            , div [ class "form-group" ]
-                [ label [ class "h4", for "commentsTextarea" ]
-                    [ text "Additional Comments" ]
-                , textarea
-                    [ id "commentsTextarea"
-                    , class "form-control"
-                    , rows 4
-                    , onInput Comment
-                    , value model.comment
-                    ]
-                    []
-                ]
-            , div [ class "form-group text-right" ]
-                [ button [ class "btn btn-primary", type_ "submit" ]
-                    [ text "Pay with Credit Card" ]
-                ]
+                []
+            ]
+        , div [ class "form-group text-right" ]
+            [ button [ class "btn btn-primary", type_ "submit" ]
+                [ text "Pay with Credit Card" ]
             ]
         ]
+    ]
 
 
 registrationForm : Form -> Html Msg
@@ -834,8 +844,10 @@ registrationForm model =
         inputClass errors =
             if hasErrors && List.isEmpty errors then
                 class "form-control is-valid"
+
             else if hasErrors && not (List.isEmpty errors) then
                 class "form-control is-invalid"
+
             else
                 class "form-control"
 
@@ -892,6 +904,7 @@ registrationForm model =
         errorHtml errors =
             if List.isEmpty errors then
                 text ""
+
             else
                 errors
                     |> List.map text
@@ -904,29 +917,29 @@ registrationForm model =
         autocomplete =
             attribute "autocomplete"
     in
-        div [ class "row" ]
-            [ div [ class "col-md-4" ]
-                [ wrapper
-                    [ fieldLabel "emailInput" "Email"
-                    , emailInput
-                    , errorHtml emailErrors
-                    ]
-                ]
-            , div [ class "col-md-4" ]
-                [ wrapper
-                    [ fieldLabel "passwordInput" "Password"
-                    , passwordInput
-                    , errorHtml passwordErrors
-                    ]
-                ]
-            , div [ class "col-md-4" ]
-                [ wrapper
-                    [ fieldLabel "passwordConfirmInput" "Confirm Password"
-                    , passwordConfirmInput
-                    , errorHtml confirmErrors
-                    ]
+    div [ class "row" ]
+        [ div [ class "col-md-4" ]
+            [ wrapper
+                [ fieldLabel "emailInput" "Email"
+                , emailInput
+                , errorHtml emailErrors
                 ]
             ]
+        , div [ class "col-md-4" ]
+            [ wrapper
+                [ fieldLabel "passwordInput" "Password"
+                , passwordInput
+                , errorHtml passwordErrors
+                ]
+            ]
+        , div [ class "col-md-4" ]
+            [ wrapper
+                [ fieldLabel "passwordConfirmInput" "Confirm Password"
+                , passwordConfirmInput
+                , errorHtml confirmErrors
+                ]
+            ]
+        ]
 
 
 type alias AddressFormConfig =
@@ -950,12 +963,14 @@ addressForm config =
         sameAsShippingCheckbox =
             if config.prefix == "billing" then
                 sameAddressesCheckbox config.billingSameAsShipping
+
             else
                 text ""
 
         selectHtml =
             if not (List.isEmpty config.selectAddresses) then
                 addressSelect
+
             else
                 text ""
 
@@ -999,28 +1014,29 @@ addressForm config =
                             ]
                         ]
             in
-                div []
-                    [ content
-                    , if shouldShow then
-                        checkbox
-                      else
-                        text ""
-                    ]
+            div []
+                [ content
+                , if shouldShow then
+                    checkbox
+
+                  else
+                    text ""
+                ]
 
         addressSelect =
             Address.select config.selectMsg addressId config.selectAddresses True
                 |> List.singleton
                 |> div [ class "form-group" ]
     in
-        addressCard
-            [ h4 [ class "card-title" ]
-                [ span [ class "mr-4" ] [ text config.cardTitle ]
-                , sameAsShippingCheckbox
-                ]
-            , selectHtml
-            , Api.errorHtml config.generalErrors
-            , addressHtml
+    addressCard
+        [ h4 [ class "card-title" ]
+            [ span [ class "mr-4" ] [ text config.cardTitle ]
+            , sameAsShippingCheckbox
             ]
+        , selectHtml
+        , Api.errorHtml config.generalErrors
+        , addressHtml
+        ]
 
 
 addressCard : List (Html msg) -> Html msg
@@ -1088,12 +1104,14 @@ summaryTable ({ items, charges } as checkoutDetails) creditString =
         subTotalRow =
             if totals.subTotal /= totals.total then
                 footerRow "Sub-Total" totals.subTotal "font-weight-bold"
+
             else
                 text ""
 
         taxRow =
             if charges.tax.amount == Cents 0 then
                 text ""
+
             else
                 chargeRow charges.tax
 
@@ -1141,11 +1159,11 @@ summaryTable ({ items, charges } as checkoutDetails) creditString =
                     credit
                         |> centsMap2 (\total c -> total - c) totals.total
     in
-        table [ class "table table-striped table-sm checkout-products-table" ]
-            [ tableHeader
-            , tbody [] <| List.map productRow items
-            , tableFooter
-            ]
+    table [ class "table table-striped table-sm checkout-products-table" ]
+        [ tableHeader
+        , tbody [] <| List.map productRow items
+        , tableFooter
+        ]
 
 
 successView : Time.Zone -> msg -> Int -> Bool -> AddressLocations -> PageData.OrderDetails -> List (Html msg)
@@ -1154,6 +1172,7 @@ successView zone logoutMsg orderId newAccountCreated locations orderDetails =
         newAccountAlert =
             if not newAccountCreated then
                 text ""
+
             else
                 div [ class "alert alert-info clearfix" ]
                     [ button [ class "btn btn-primary float-right ml-3", onClick logoutMsg ]
@@ -1181,41 +1200,42 @@ successView zone logoutMsg orderId newAccountCreated locations orderDetails =
                     [ b [] [ text "Comment: " ]
                     , text orderDetails.order.comment
                     ]
+
             else
                 text ""
 
         orderDate =
             orderDetails.order.createdAt
     in
-        [ h1 [] [ text "Order Complete" ]
-        , hr [] []
-        , h2 [] [ text "Thanks for your order!" ]
-        , newAccountAlert
-        , p [] [ text "We will review your order today & will get in touch with you if we need any clarifications." ]
-        , p []
-            [ text "Please "
-            , contactLink
-            , text " as soon as possible if you have special shipping requirements."
-            ]
-        , p [ class "text-center font-weight-bold text-primary mb-2" ]
-            [ text "We will email you a tracking number once your order has shipped."
-            ]
-        , h3 []
-            [ text <| "Order #" ++ String.fromInt orderId
-            , small [] [ text <| " " ++ Format.date zone orderDate ]
-            ]
-        , div [ class "row mb-3" ]
-            [ div [ class "col-6" ]
-                [ OrderDetails.addressCard locations
-                    "Shipping Details"
-                    orderDetails.shippingAddress
-                ]
-            , div [ class "col-6" ]
-                [ OrderDetails.addressCard locations
-                    "Billing Details"
-                    orderDetails.billingAddress
-                ]
-            ]
-        , commentHtml
-        , OrderDetails.orderTable orderDetails
+    [ h1 [] [ text "Order Complete" ]
+    , hr [] []
+    , h2 [] [ text "Thanks for your order!" ]
+    , newAccountAlert
+    , p [] [ text "We will review your order today & will get in touch with you if we need any clarifications." ]
+    , p []
+        [ text "Please "
+        , contactLink
+        , text " as soon as possible if you have special shipping requirements."
         ]
+    , p [ class "text-center font-weight-bold text-primary mb-2" ]
+        [ text "We will email you a tracking number once your order has shipped."
+        ]
+    , h3 []
+        [ text <| "Order #" ++ String.fromInt orderId
+        , small [] [ text <| " " ++ Format.date zone orderDate ]
+        ]
+    , div [ class "row mb-3" ]
+        [ div [ class "col-6" ]
+            [ OrderDetails.addressCard locations
+                "Shipping Details"
+                orderDetails.shippingAddress
+            ]
+        , div [ class "col-6" ]
+            [ OrderDetails.addressCard locations
+                "Billing Details"
+                orderDetails.billingAddress
+            ]
+        ]
+    , commentHtml
+    , OrderDetails.orderTable orderDetails
+    ]

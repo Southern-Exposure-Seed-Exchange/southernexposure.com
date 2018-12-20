@@ -45,6 +45,7 @@ view ({ route, pageData, navigationData, zone } as model) =
                         [ div [ class "col-md-10" ] pageContent
                         ]
                     ]
+
             else
                 div [ class "container" ]
                     [ div [ class "row" ]
@@ -63,8 +64,10 @@ view ({ route, pageData, navigationData, zone } as model) =
                 CategoryDetails _ pagination ->
                     if Paginate.isLoading pageData.categoryDetails then
                         [ text "Loading..." ]
+
                     else if Paginate.getError pageData.categoryDetails /= Nothing then
                         notFoundView
+
                     else
                         CategoryViews.details pagination
                             model.addToCartForms
@@ -78,6 +81,7 @@ view ({ route, pageData, navigationData, zone } as model) =
                 SearchResults data pagination ->
                     if Paginate.isLoading pageData.searchResults then
                         [ text "Loading..." ]
+
                     else
                         searchResultsView data pagination model.addToCartForms pageData.searchResults
 
@@ -161,16 +165,16 @@ view ({ route, pageData, navigationData, zone } as model) =
                                 AllProducts ->
                                     "All Products"
 
-                                AttributeSearch (SeedAttribute.Organic) ->
+                                AttributeSearch SeedAttribute.Organic ->
                                     "Organic Products"
 
-                                AttributeSearch (SeedAttribute.Heirloom) ->
+                                AttributeSearch SeedAttribute.Heirloom ->
                                     "Heirloom Products"
 
-                                AttributeSearch (SeedAttribute.Regional) ->
+                                AttributeSearch SeedAttribute.Regional ->
                                     "South-Eastern Products"
 
-                                AttributeSearch (SeedAttribute.Ecological) ->
+                                AttributeSearch SeedAttribute.Ecological ->
                                     "Ecologically Grown Products"
 
                 PageDetails _ ->
@@ -244,13 +248,13 @@ view ({ route, pageData, navigationData, zone } as model) =
                 _ ->
                     []
     in
-        Document pageTitle
-            [ SiteHeader.view SearchMsg model.searchData model.currentUser model.cartItemCount
-            , SiteNavigation.view navigationData activeCategories model.searchData
-            , SiteBreadcrumbs.view route pageData
-            , middleContent
-            , SiteFooter.view
-            ]
+    Document pageTitle
+        [ SiteHeader.view SearchMsg model.searchData model.currentUser model.cartItemCount
+        , SiteNavigation.view navigationData activeCategories model.searchData
+        , SiteBreadcrumbs.view route pageData
+        , middleContent
+        , SiteFooter.view
+        ]
 
 
 withIntermediateText : (a -> List (Html msg)) -> WebData a -> List (Html msg)
@@ -265,6 +269,7 @@ withIntermediateText subView data =
         RemoteData.Failure (Http.BadStatus code) ->
             if code == 404 then
                 notFoundView
+
             else
                 [ text <| "Bad Status: " ++ String.fromInt code ]
 
@@ -288,12 +293,13 @@ staticPageView { name, slug, content } =
         header =
             if slug == "home" then
                 text ""
+
             else
                 h1 [] [ text name ]
     in
-        [ header
-        , Markdown.toHtml [] content
-        ]
+    [ header
+    , Markdown.toHtml [] content
+    ]
 
 
 searchResultsView : Search.Data -> Pagination.Data -> CartForms -> PageData.SearchResults -> List (Html Msg)
@@ -312,16 +318,16 @@ searchResultsView ({ query } as data) pagination addToCartForms products =
                         AllProducts ->
                             "All Products"
 
-                        AttributeSearch (SeedAttribute.Organic) ->
+                        AttributeSearch SeedAttribute.Organic ->
                             "Organic Products"
 
-                        AttributeSearch (SeedAttribute.Heirloom) ->
+                        AttributeSearch SeedAttribute.Heirloom ->
                             "Heirloom Products"
 
-                        AttributeSearch (SeedAttribute.Regional) ->
+                        AttributeSearch SeedAttribute.Regional ->
                             "South-Eastern Products"
 
-                        AttributeSearch (SeedAttribute.Ecological) ->
+                        AttributeSearch SeedAttribute.Ecological ->
                             "Ecologically Grown Products"
 
         searchDescription =
@@ -330,12 +336,14 @@ searchResultsView ({ query } as data) pagination addToCartForms products =
                     [ queryDescription
                     , filterDescriptions
                     ]
+
             else
                 text ""
 
         queryDescription =
             if String.isEmpty query then
                 text ""
+
             else
                 span []
                     [ text "Found "
@@ -391,8 +399,8 @@ searchResultsView ({ query } as data) pagination addToCartForms products =
                 |> List.map (\( _, name ) -> b [] [ text name ])
                 |> List.intersperse (text ", ")
     in
-        [ h1 [] [ text header ]
-        , hr [] []
-        , searchDescription
-        ]
-            ++ ProductViews.list (SearchResults data) pagination addToCartForms products
+    [ h1 [] [ text header ]
+    , hr [] []
+    , searchDescription
+    ]
+        ++ ProductViews.list (SearchResults data) pagination addToCartForms products

@@ -1,8 +1,7 @@
-module StaticPage
-    exposing
-        ( StaticPage
-        , decoder
-        )
+module StaticPage exposing
+    ( StaticPage
+    , decoder
+    )
 
 import Json.Decode as Decode exposing (Decoder)
 

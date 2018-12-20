@@ -1,12 +1,11 @@
-module SiteUI
-    exposing
-        ( NavigationData
-        , navigationDecoder
-        )
+module SiteUI exposing
+    ( NavigationData
+    , navigationDecoder
+    )
 
+import Category exposing (Category, CategoryId(..))
 import Dict exposing (Dict)
 import Json.Decode as Decode exposing (Decoder)
-import Category exposing (Category, CategoryId(..))
 
 
 type alias NavigationData =

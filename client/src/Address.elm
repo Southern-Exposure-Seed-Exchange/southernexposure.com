@@ -1,20 +1,19 @@
-module Address
-    exposing
-        ( AddressId(..)
-        , Form
-        , Model
-        , Msg
-        , card
-        , decoder
-        , encode
-        , form
-        , fromModel
-        , horizontalForm
-        , initial
-        , initialForm
-        , select
-        , update
-        )
+module Address exposing
+    ( AddressId(..)
+    , Form
+    , Model
+    , Msg
+    , card
+    , decoder
+    , encode
+    , form
+    , fromModel
+    , horizontalForm
+    , initial
+    , initialForm
+    , select
+    , update
+    )
 
 import Api
 import Dict
@@ -25,6 +24,7 @@ import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode exposing (Value)
 import Locations exposing (AddressLocations, Location, Region(..), regionDecoder, regionEncoder)
 import Views.HorizontalForm as Form
+
 
 
 -- Model
@@ -109,24 +109,24 @@ encode { model } =
         encodedState =
             regionEncoder model.state
     in
-        [ ( "firstName", model.firstName )
-        , ( "lastName", model.lastName )
-        , ( "companyName", model.companyName )
-        , ( "addressOne", model.street )
-        , ( "addressTwo", model.addressTwo )
-        , ( "city", model.city )
-        , ( "zipCode", model.zipCode )
-        , ( "country", model.country )
-        ]
-            |> List.map (Tuple.mapSecond Encode.string)
-            |> (::)
-                ( "id"
-                , Maybe.withDefault Encode.null <|
-                    Maybe.map (\(AddressId i) -> Encode.int i) model.id
-                )
-            |> (::) ( "state", encodedState )
-            |> (::) ( "isDefault", Encode.bool model.isDefault )
-            |> Encode.object
+    [ ( "firstName", model.firstName )
+    , ( "lastName", model.lastName )
+    , ( "companyName", model.companyName )
+    , ( "addressOne", model.street )
+    , ( "addressTwo", model.addressTwo )
+    , ( "city", model.city )
+    , ( "zipCode", model.zipCode )
+    , ( "country", model.country )
+    ]
+        |> List.map (Tuple.mapSecond Encode.string)
+        |> (::)
+            ( "id"
+            , Maybe.withDefault Encode.null <|
+                Maybe.map (\(AddressId i) -> Encode.int i) model.id
+            )
+        |> (::) ( "state", encodedState )
+        |> (::) ( "isDefault", Encode.bool model.isDefault )
+        |> Encode.object
 
 
 
@@ -176,6 +176,7 @@ updateModel msg model =
                 "US" ->
                     if List.member str Locations.armedForcesCodes then
                         { model | state = ArmedForces str }
+
                     else
                         { model | state = USState str }
 
@@ -193,17 +194,21 @@ updateModel msg model =
                 newRegion =
                     if str == "US" then
                         USState "AL"
+
                     else if str == "CA" then
                         CAProvince "AB"
+
                     else if model.country == "CA" || model.country == "US" then
                         Custom ""
+
                     else
                         model.state
             in
-                if model.country /= str then
-                    { model | country = str, state = newRegion }
-                else
-                    model
+            if model.country /= str then
+                { model | country = str, state = newRegion }
+
+            else
+                model
 
 
 
@@ -216,6 +221,7 @@ card address locations =
         notBlank str =
             if not (String.isEmpty str) then
                 Just <| text str
+
             else
                 Nothing
 
@@ -226,20 +232,21 @@ card address locations =
         countryHtml =
             if address.country == "US" then
                 Nothing
+
             else
                 Locations.findName locations.countries address.country
                     |> Maybe.map text
     in
-        [ Just <| b [] [ text <| address.firstName ++ " " ++ address.lastName ]
-        , notBlank address.companyName
-        , Just <| text address.street
-        , notBlank address.addressTwo
-        , Just <| text <| address.city ++ ", " ++ stateString ++ " " ++ address.zipCode
-        , countryHtml
-        ]
-            |> List.filterMap identity
-            |> List.intersperse (br [] [])
-            |> Html.address []
+    [ Just <| b [] [ text <| address.firstName ++ " " ++ address.lastName ]
+    , notBlank address.companyName
+    , Just <| text address.street
+    , notBlank address.addressTwo
+    , Just <| text <| address.city ++ ", " ++ stateString ++ " " ++ address.zipCode
+    , countryHtml
+    ]
+        |> List.filterMap identity
+        |> List.intersperse (br [] [])
+        |> Html.address []
 
 
 {-| TODO: Add Region to description
@@ -287,22 +294,23 @@ select selectMsg maybeAddressId addresses newAddressOption =
                 option [ selected (Just (AddressId 0) == maybeAddressId), value "0" ]
                     [ text "Add a New Address..." ]
                     :: options
+
             else
                 option [ selected <| Nothing == maybeAddressId, value "0" ]
                     [ text "Select an Address..." ]
                     :: options
     in
-        addresses
-            |> List.map
-                (\a ->
-                    option
-                        [ value <| String.fromInt <| fromAddressId a.id
-                        , isSelected a
-                        ]
-                        (addressDescription a)
-                )
-            |> addNewOption
-            |> Html.select [ class "form-control", onSelectInt selectMsg ]
+    addresses
+        |> List.map
+            (\a ->
+                option
+                    [ value <| String.fromInt <| fromAddressId a.id
+                    , isSelected a
+                    ]
+                    (addressDescription a)
+            )
+        |> addNewOption
+        |> Html.select [ class "form-control", onSelectInt selectMsg ]
 
 
 form : Form -> String -> AddressLocations -> Html Msg
@@ -335,18 +343,18 @@ form { model, errors } inputPrefix locations =
         stateCode =
             .state >> Locations.fromRegion
     in
-        div []
-            [ generalErrors
-            , field .firstName FirstName "First Name" "firstName" "given-name" True
-            , field .lastName LastName "Last Name" "lastName" "family-name" True
-            , field .companyName CompanyName "Company Name" "companyName" "organization" False
-            , field .street Street "Street Address" "addressOne" "street-address" True
-            , field .addressTwo AddressTwo "Address Line 2" "addressTwo" "address-line2" False
-            , field .city City "City" "city" "address-level2" True
-            , regionField
-            , field .zipCode ZipCode "Zip Code" "zipCode" "postal-code" True
-            , selectField .country Country locations.countries "Country" "country"
-            ]
+    div []
+        [ generalErrors
+        , field .firstName FirstName "First Name" "firstName" "given-name" True
+        , field .lastName LastName "Last Name" "lastName" "family-name" True
+        , field .companyName CompanyName "Company Name" "companyName" "organization" False
+        , field .street Street "Street Address" "addressOne" "street-address" True
+        , field .addressTwo AddressTwo "Address Line 2" "addressTwo" "address-line2" False
+        , field .city City "City" "city" "address-level2" True
+        , regionField
+        , field .zipCode ZipCode "Zip Code" "zipCode" "postal-code" True
+        , selectField .country Country locations.countries "Country" "country"
+        ]
 
 
 horizontalForm : Form -> AddressLocations -> List (Html Msg)
@@ -389,15 +397,15 @@ horizontalForm { model, errors } locations =
         stateCode =
             .state >> Locations.fromRegion
     in
-        [ requiredField .firstName FirstName "First Name" "firstName" "text"
-        , requiredField .lastName LastName "Last Name" "lastName" "text"
-        , requiredField .street Street "Street Address" "addressOne" "text"
-        , optionalField .addressTwo AddressTwo "Address Line 2" "addressTwo" "text"
-        , requiredField .city City "City" "city" "text"
-        , regionField
-        , requiredField .zipCode ZipCode "Zip Code" "zipCode" "text"
-        , countrySelect
-        ]
+    [ requiredField .firstName FirstName "First Name" "firstName" "text"
+    , requiredField .lastName LastName "Last Name" "lastName" "text"
+    , requiredField .street Street "Street Address" "addressOne" "text"
+    , optionalField .addressTwo AddressTwo "Address Line 2" "addressTwo" "text"
+    , requiredField .city City "City" "city" "text"
+    , regionField
+    , requiredField .zipCode ZipCode "Zip Code" "zipCode" "text"
+    , countrySelect
+    ]
 
 
 {-| TODO: Refactor into separate Views.Form module. Turn parameters into a Config type.
@@ -413,6 +421,7 @@ inputField errors prefix inputValue inputMsg labelText inputName autocompleteTyp
                 [ text labelText
                 , if not isRequired then
                     small [ class "text-muted" ] [ text " (optional)" ]
+
                   else
                     text ""
                 ]
@@ -426,6 +435,7 @@ inputField errors prefix inputValue inputMsg labelText inputName autocompleteTyp
                     |> List.map text
                     |> List.intersperse (br [] [])
                     |> div [ class "invalid-feedback" ]
+
             else
                 text ""
 
@@ -438,25 +448,25 @@ inputField errors prefix inputValue inputMsg labelText inputName autocompleteTyp
         fieldErrors =
             Dict.get inputName errors |> Maybe.withDefault []
     in
-        div [ class "form-group mb-2" ]
-            [ fieldLabel
-            , input
-                [ id <| prefix ++ "-" ++ inputName ++ "Input"
-                , classList
-                    [ ( "form-control", True )
-                    , ( "is-invalid", hasErrors )
-                    , ( "is-valid", isValid )
-                    ]
-                , name inputName
-                , type_ "text"
-                , required isRequired
-                , onInput inputMsg
-                , value inputValue
-                , autocomplete autocompleteType
+    div [ class "form-group mb-2" ]
+        [ fieldLabel
+        , input
+            [ id <| prefix ++ "-" ++ inputName ++ "Input"
+            , classList
+                [ ( "form-control", True )
+                , ( "is-invalid", hasErrors )
+                , ( "is-valid", isValid )
                 ]
-                []
-            , errorHtml
+            , name inputName
+            , type_ "text"
+            , required isRequired
+            , onInput inputMsg
+            , value inputValue
+            , autocomplete autocompleteType
             ]
+            []
+        , errorHtml
+        ]
 
 
 {-| TODO: Refactor into Locations module? Or Views.Form if can't combine w/ HorizontalForm.
@@ -483,6 +493,7 @@ locationSelect errors prefix selectedValue selectMsg locations labelText inputNa
                     |> List.map text
                     |> List.intersperse (br [] [])
                     |> div [ class "invalid-feedback" ]
+
             else
                 text ""
 
@@ -495,17 +506,17 @@ locationSelect errors prefix selectedValue selectMsg locations labelText inputNa
         formHasErrors =
             not <| Dict.isEmpty errors
     in
-        div [ class "form-group mb-2" ]
-            [ fieldLabel
-            , List.map toOption locations
-                |> Html.select
-                    [ id inputId
-                    , classList
-                        [ ( "form-control", True )
-                        , ( "is-invalid", fieldHasErrors )
-                        , ( "is-valid", formHasErrors && not fieldHasErrors )
-                        ]
-                    , onSelect
+    div [ class "form-group mb-2" ]
+        [ fieldLabel
+        , List.map toOption locations
+            |> Html.select
+                [ id inputId
+                , classList
+                    [ ( "form-control", True )
+                    , ( "is-invalid", fieldHasErrors )
+                    , ( "is-valid", formHasErrors && not fieldHasErrors )
                     ]
-            , errorHtml
-            ]
+                , onSelect
+                ]
+        , errorHtml
+        ]

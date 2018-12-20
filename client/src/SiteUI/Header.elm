@@ -1,7 +1,7 @@
 module SiteUI.Header exposing (view)
 
-import Html exposing (Html, div, a, img, h1, br, ul, li, text, small)
-import Html.Attributes exposing (id, class, href, src)
+import Html exposing (Html, a, br, div, h1, img, li, small, text, ul)
+import Html.Attributes exposing (class, href, id, src)
 import Html.Events.Extra exposing (onClickPreventDefault)
 import Messages exposing (Msg(..))
 import Routing exposing (Route(..))
@@ -37,12 +37,12 @@ logoAndName =
             a (routeLinkAttributes <| PageDetails "home")
                 [ text "Southern Exposure", br [] [], text "Seed Exchange" ]
     in
-        div [ class "media" ]
-            [ a (routeLinkAttributes <| PageDetails "home") [ logoImage ]
-            , div [ id "site-title", class "media-body my-auto" ]
-                [ h1 [ class "media-heading m-0" ] [ titleLink ]
-                ]
+    div [ class "media" ]
+        [ a (routeLinkAttributes <| PageDetails "home") [ logoImage ]
+        , div [ id "site-title", class "media-body my-auto" ]
+            [ h1 [ class "media-heading m-0" ] [ titleLink ]
             ]
+        ]
 
 
 linksAndSearch : (SiteSearch.Msg -> Msg) -> SiteSearch.Data -> AuthStatus -> Int -> List (Html Msg)
@@ -71,6 +71,7 @@ linksAndSearch searchTagger searchData authStatus cartItemCount =
         cartLink =
             if cartItemCount > 0 then
                 routeLink ("Cart (" ++ String.fromInt cartItemCount ++ ")") Cart
+
             else
                 text ""
 
@@ -81,10 +82,10 @@ linksAndSearch searchTagger searchData authStatus cartItemCount =
             li [ class "d-inline-block ml-1" ]
                 [ a (class "p-2" :: attrs) [ text content ] ]
     in
-        [ quickLinks
-        , SiteSearch.form searchTagger "primary" searchData
-        , small []
-            [ a (routeLinkAttributes AdvancedSearch)
-                [ text "Advanced Search" ]
-            ]
+    [ quickLinks
+    , SiteSearch.form searchTagger "primary" searchData
+    , small []
+        [ a (routeLinkAttributes AdvancedSearch)
+            [ text "Advanced Search" ]
         ]
+    ]

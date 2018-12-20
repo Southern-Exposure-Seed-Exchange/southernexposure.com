@@ -2,11 +2,11 @@ module SiteUI.Breadcrumbs exposing (view)
 
 import Html exposing (..)
 import Html.Attributes exposing (class)
-import Paginate
-import RemoteData
 import Messages exposing (Msg(..))
 import PageData exposing (PageData)
+import Paginate
 import Products.Pagination as Pagination
+import RemoteData
 import Routing exposing (Route(..))
 import Views.Utils exposing (routeLinkAttributes)
 
@@ -17,6 +17,7 @@ view route pageData =
         items =
             if List.isEmpty childItems then
                 [ activeItem "Home" ]
+
             else
                 inactiveItem "Home" (PageDetails "home") :: childItems
 
@@ -130,4 +131,4 @@ view route pageData =
         maybeToList f =
             Maybe.map f >> Maybe.withDefault []
     in
-        div [ class "container pb-3" ] [ ol [ class "breadcrumb mb-0" ] items ]
+    div [ class "container pb-3" ] [ ol [ class "breadcrumb mb-0" ] items ]

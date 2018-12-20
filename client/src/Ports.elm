@@ -1,21 +1,20 @@
-port module Ports
-    exposing
-        ( setPageTitle
-        , scrollToTop
-        , scrollToID
-        , collapseMobileMenus
-        , storeAuthDetails
-        , removeAuthDetails
-        , loggedIn
-        , loggedOut
-        , storeCartSessionToken
-        , removeCartSessionToken
-        , newCartSessionToken
-        , setCartItemCount
-        , cartItemCountChanged
-        , collectStripeToken
-        , stripeTokenReceived
-        )
+port module Ports exposing
+    ( cartItemCountChanged
+    , collapseMobileMenus
+    , collectStripeToken
+    , loggedIn
+    , loggedOut
+    , newCartSessionToken
+    , removeAuthDetails
+    , removeCartSessionToken
+    , scrollToID
+    , scrollToTop
+    , setCartItemCount
+    , setPageTitle
+    , storeAuthDetails
+    , storeCartSessionToken
+    , stripeTokenReceived
+    )
 
 -- Page Change
 

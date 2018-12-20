@@ -1,11 +1,10 @@
-module Auth.Login
-    exposing
-        ( Form
-        , Msg
-        , initial
-        , update
-        , view
-        )
+module Auth.Login exposing
+    ( Form
+    , Msg
+    , initial
+    , update
+    , view
+    )
 
 import Api
 import Dict
@@ -19,6 +18,7 @@ import Routing exposing (Route(..), reverse)
 import Update.Utils exposing (nothingAndNoCommand)
 import User exposing (AuthStatus, UserId(..))
 import Views.Utils exposing (routeLinkAttributes)
+
 
 
 -- MODEL
@@ -130,6 +130,7 @@ rememberAuth : Bool -> AuthStatus -> Cmd msg
 rememberAuth remember authStatus =
     if remember then
         User.storeDetails authStatus
+
     else
         Cmd.none
 
@@ -254,10 +255,10 @@ view tagger model =
                     [ text "Create an Account" ]
                 ]
     in
-        [ h1 [] [ text "Please Sign In" ]
-        , hr [] []
-        , div [ class "row" ]
-            [ div [ class "col-sm-6" ] [ loginForm ]
-            , div [ class "col-sm-6" ] [ createAccountSection ]
-            ]
+    [ h1 [] [ text "Please Sign In" ]
+    , hr [] []
+    , div [ class "row" ]
+        [ div [ class "col-sm-6" ] [ loginForm ]
+        , div [ class "col-sm-6" ] [ createAccountSection ]
         ]
+    ]

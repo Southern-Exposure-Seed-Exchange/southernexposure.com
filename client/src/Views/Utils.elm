@@ -1,10 +1,9 @@
-module Views.Utils
-    exposing
-        ( htmlOrBlank
-        , icon
-        , onIntInput
-        , routeLinkAttributes
-        )
+module Views.Utils exposing
+    ( htmlOrBlank
+    , icon
+    , onIntInput
+    , routeLinkAttributes
+    )
 
 import Html exposing (Attribute, Html, i, text)
 import Html.Attributes exposing (class, href)

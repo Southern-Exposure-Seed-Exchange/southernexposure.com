@@ -1,11 +1,10 @@
-module Views.HorizontalForm
-    exposing
-        ( genericErrorText
-        , inputRow
-        , selectRow
-        , submitButton
-        , withLabel
-        )
+module Views.HorizontalForm exposing
+    ( genericErrorText
+    , inputRow
+    , selectRow
+    , submitButton
+    , withLabel
+    )
 
 import Api
 import Dict
@@ -24,6 +23,7 @@ genericErrorText hasErrors =
                     ++ "please correct any errors highlighted below "
                     ++ "& resubmit the form."
             ]
+
     else
         text ""
 
@@ -53,32 +53,35 @@ inputRow errors inputValue inputMsg isRequired labelText errorField inputType =
         inputClass =
             if List.isEmpty fieldErrors && not (Dict.isEmpty errors) then
                 "form-control is-valid"
+
             else if List.isEmpty fieldErrors then
                 "form-control"
+
             else
                 "form-control is-invalid"
 
         errorHtml =
             if List.isEmpty fieldErrors then
                 text ""
+
             else
                 fieldErrors
                     |> List.map text
                     |> List.intersperse (br [] [])
                     |> div [ class "invalid-feedback" ]
     in
-        input
-            [ id <| "input" ++ inputId
-            , name inputId
-            , class inputClass
-            , type_ inputType
-            , value inputValue
-            , required isRequired
-            , onInput inputMsg
-            ]
-            []
-            |> (\i -> [ i, errorHtml ])
-            |> withLabel labelText isRequired
+    input
+        [ id <| "input" ++ inputId
+        , name inputId
+        , class inputClass
+        , type_ inputType
+        , value inputValue
+        , required isRequired
+        , onInput inputMsg
+        ]
+        []
+        |> (\i -> [ i, errorHtml ])
+        |> withLabel labelText isRequired
 
 
 selectRow : (String -> Result String a) -> (a -> msg) -> String -> Bool -> List (Html msg) -> Html msg
@@ -101,9 +104,9 @@ selectRow parser msg labelText isRequired options =
                 Err e ->
                     Decode.fail e
     in
-        select [ id inputId, class "form-control", onSelect ] options
-            |> List.singleton
-            |> withLabel labelText isRequired
+    select [ id inputId, class "form-control", onSelect ] options
+        |> List.singleton
+        |> withLabel labelText isRequired
 
 
 withLabel : String -> Bool -> List (Html msg) -> Html msg
@@ -116,14 +119,15 @@ withLabel labelText isRequired input =
             if not isRequired then
                 small [ class "horizontal-optional-text d-block text-muted mr-1" ]
                     [ text "(optional)" ]
+
             else
                 text ""
     in
-        div [ class "form-group form-row align-items-center" ]
-            [ label
-                [ class "col-sm-3 col-form-label text-right font-weight-bold"
-                , for <| "input" ++ inputId
-                ]
-                [ text <| labelText ++ ":", optionalHtml ]
-            , div [ class "col" ] input
+    div [ class "form-group form-row align-items-center" ]
+        [ label
+            [ class "col-sm-3 col-form-label text-right font-weight-bold"
+            , for <| "input" ++ inputId
             ]
+            [ text <| labelText ++ ":", optionalHtml ]
+        , div [ class "col" ] input
+        ]

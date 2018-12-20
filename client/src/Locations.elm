@@ -1,17 +1,16 @@
-module Locations
-    exposing
-        ( Location
-        , locationDecoder
-        , findName
-        , AddressLocations
-        , addressLocationsDecoder
-        , Region(..)
-        , fromRegion
-        , regionName
-        , armedForcesCodes
-        , regionDecoder
-        , regionEncoder
-        )
+module Locations exposing
+    ( AddressLocations
+    , Location
+    , Region(..)
+    , addressLocationsDecoder
+    , armedForcesCodes
+    , findName
+    , fromRegion
+    , locationDecoder
+    , regionDecoder
+    , regionEncoder
+    , regionName
+    )
 
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode exposing (Value)
@@ -39,6 +38,7 @@ findName locations code =
         x :: xs ->
             if x.code == code then
                 Just x.name
+
             else
                 findName xs code
 
@@ -130,15 +130,15 @@ regionEncoder region =
         regionObject key value =
             Encode.object [ ( key, Encode.string value ) ]
     in
-        case region of
-            USState code ->
-                regionObject "state" code
+    case region of
+        USState code ->
+            regionObject "state" code
 
-            ArmedForces code ->
-                regionObject "armedForces" code
+        ArmedForces code ->
+            regionObject "armedForces" code
 
-            CAProvince code ->
-                regionObject "province" code
+        CAProvince code ->
+            regionObject "province" code
 
-            Custom str ->
-                regionObject "custom" str
+        Custom str ->
+            regionObject "custom" str

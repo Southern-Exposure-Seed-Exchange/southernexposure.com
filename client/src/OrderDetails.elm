@@ -1,15 +1,14 @@
-module OrderDetails
-    exposing
-        ( view
-        , orderTable
-        , addressCard
-        )
+module OrderDetails exposing
+    ( addressCard
+    , orderTable
+    , view
+    )
 
+import Address
 import Html exposing (..)
 import Html.Attributes exposing (class, colspan)
-import Address
 import Locations exposing (AddressLocations)
-import Models.Fields exposing (Cents(..), milligramsToString, centsMap, centsMap2)
+import Models.Fields exposing (Cents(..), centsMap, centsMap2, milligramsToString)
 import PageData
 import Time
 import Views.Format as Format
@@ -94,6 +93,7 @@ orderTable ({ order, lineItems, products } as details) =
         taxRow =
             if orderTotals.tax == Cents 0 then
                 text ""
+
             else
                 footerRow "" order.taxDescription orderTotals.tax
 
@@ -114,24 +114,24 @@ orderTable ({ order, lineItems, products } as details) =
                 Just a ->
                     f a
     in
-        table [ class "table table-striped table-sm" ]
-            [ thead []
-                [ tr [ class "font-weight-bold" ]
-                    [ th [] [ text "Product" ]
-                    , th [ class "text-right" ] [ text "Quantity" ]
-                    , th [ class "text-right" ] [ text "Price" ]
-                    , th [ class "text-right" ] [ text "Total" ]
-                    ]
+    table [ class "table table-striped table-sm" ]
+        [ thead []
+            [ tr [ class "font-weight-bold" ]
+                [ th [] [ text "Product" ]
+                , th [ class "text-right" ] [ text "Quantity" ]
+                , th [ class "text-right" ] [ text "Price" ]
+                , th [ class "text-right" ] [ text "Total" ]
                 ]
-            , tbody [] <| List.map productRow products
-            , tfoot [] <|
-                [ footerRow "font-weight-bold" "Sub-Total" subTotal
-                , htmlOrBlank chargeRow maybeShippingCharge
-                ]
-                    ++ List.map chargeRow surcharges
-                    ++ [ taxRow
-                       , htmlOrBlank chargeRow maybeStoreCredit
-                       , htmlOrBlank chargeRow maybeMemberDiscount
-                       , footerRow "font-weight-bold" "Total" total
-                       ]
             ]
+        , tbody [] <| List.map productRow products
+        , tfoot [] <|
+            [ footerRow "font-weight-bold" "Sub-Total" subTotal
+            , htmlOrBlank chargeRow maybeShippingCharge
+            ]
+                ++ List.map chargeRow surcharges
+                ++ [ taxRow
+                   , htmlOrBlank chargeRow maybeStoreCredit
+                   , htmlOrBlank chargeRow maybeMemberDiscount
+                   , footerRow "font-weight-bold" "Total" total
+                   ]
+        ]

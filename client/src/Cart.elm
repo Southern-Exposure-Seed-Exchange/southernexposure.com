@@ -1,28 +1,28 @@
-module Cart
-    exposing
-        ( Form
-        , initial
-        , fromCartDetails
-        , update
-        , view
-        )
+module Cart exposing
+    ( Form
+    , fromCartDetails
+    , initial
+    , update
+    , view
+    )
 
+import Api
 import Dict exposing (Dict)
 import Html exposing (..)
-import Html.Attributes as A exposing (class, colspan, src, type_, value, step, href, disabled)
-import Html.Events exposing (onSubmit, onClick)
+import Html.Attributes as A exposing (class, colspan, disabled, href, src, step, type_, value)
+import Html.Events exposing (onClick, onSubmit)
 import Html.Keyed as Keyed
 import Json.Encode as Encode
-import RemoteData
-import Api
-import Messages exposing (Msg(..), EditCartMessage(..))
+import Messages exposing (EditCartMessage(..), Msg(..))
 import Models.Fields exposing (Cents(..), centsMap)
 import PageData exposing (CartDetails, CartItemId(..))
+import RemoteData
 import Routing exposing (Route(..))
 import User exposing (AuthStatus, User)
 import Views.Format as Format
 import Views.Images as Images
-import Views.Utils exposing (icon, routeLinkAttributes, onIntInput, htmlOrBlank)
+import Views.Utils exposing (htmlOrBlank, icon, onIntInput, routeLinkAttributes)
+
 
 
 -- MODEL
@@ -97,15 +97,16 @@ updateCart authStatus maybeCartToken { quantities } { items } =
                 [ ( "quantities", Encode.object changed ) ]
                     ++ encodedCartToken maybeCartToken
     in
-        if List.isEmpty changed then
-            Cmd.none
-        else
-            case authStatus of
-                User.Anonymous ->
-                    anonymousUpdateRequest encodedQuantities
+    if List.isEmpty changed then
+        Cmd.none
 
-                User.Authorized user ->
-                    customerUpdateRequest user encodedQuantities
+    else
+        case authStatus of
+            User.Anonymous ->
+                anonymousUpdateRequest encodedQuantities
+
+            User.Authorized user ->
+                customerUpdateRequest user encodedQuantities
 
 
 removeItem : AuthStatus -> Maybe String -> Form -> CartItemId -> Cmd Msg
@@ -120,12 +121,12 @@ removeItem authStatus maybeCartToken model itemId =
                 ]
                     ++ encodedCartToken maybeCartToken
     in
-        case authStatus of
-            User.Anonymous ->
-                anonymousUpdateRequest encodedDelete
+    case authStatus of
+        User.Anonymous ->
+            anonymousUpdateRequest encodedDelete
 
-            User.Authorized user ->
-                customerUpdateRequest user encodedDelete
+        User.Authorized user ->
+            customerUpdateRequest user encodedDelete
 
 
 anonymousUpdateRequest : Encode.Value -> Cmd Msg
@@ -247,6 +248,7 @@ view { quantities } ({ items, charges } as cartDetails) =
         taxRow =
             if charges.tax.amount == Cents 0 then
                 text ""
+
             else
                 chargeRow charges.tax
 
@@ -268,6 +270,7 @@ view { quantities } ({ items, charges } as cartDetails) =
         totalRow =
             if totals.total /= totals.subTotal then
                 footerRow "font-weight-bold" "Total" totals.total
+
             else
                 text ""
 
@@ -275,22 +278,23 @@ view { quantities } ({ items, charges } as cartDetails) =
             changedQuantities quantities items
                 |> List.isEmpty
     in
-        if not (List.isEmpty items) then
-            [ h1 [] [ text "Shopping Cart" ]
-            , hr [] []
-            , p [ class "text-center font-weight-bold" ]
-                [ text <| "Total Items: " ++ String.fromInt itemCount ++ " Amount: " ++ Format.cents totals.total
-                ]
-            , form [ onSubmit <| EditCartMsg Submit ]
-                [ cartTable
-                , buttons
-                ]
+    if not (List.isEmpty items) then
+        [ h1 [] [ text "Shopping Cart" ]
+        , hr [] []
+        , p [ class "text-center font-weight-bold" ]
+            [ text <| "Total Items: " ++ String.fromInt itemCount ++ " Amount: " ++ Format.cents totals.total
             ]
-        else
-            [ h1 [] [ text "Shopping Cart" ]
-            , hr [] []
-            , p [] [ text "You haven't added anything to your Shopping Cart yet!" ]
+        , form [ onSubmit <| EditCartMsg Submit ]
+            [ cartTable
+            , buttons
             ]
+        ]
+
+    else
+        [ h1 [] [ text "Shopping Cart" ]
+        , hr [] []
+        , p [] [ text "You haven't added anything to your Shopping Cart yet!" ]
+        ]
 
 
 
@@ -314,6 +318,7 @@ changedQuantities quantities =
                     if formQuantity /= quantity then
                         ( String.fromInt <| fromCartItemId id, Encode.int formQuantity )
                             :: acc
+
                     else
                         acc
         )

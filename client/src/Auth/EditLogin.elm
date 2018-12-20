@@ -1,11 +1,10 @@
-module Auth.EditLogin
-    exposing
-        ( Form
-        , Msg
-        , initial
-        , update
-        , view
-        )
+module Auth.EditLogin exposing
+    ( Form
+    , Msg
+    , initial
+    , update
+    , view
+    )
 
 import Api
 import Dict
@@ -20,6 +19,7 @@ import Routing exposing (Route(..))
 import Update.Utils exposing (noCommand)
 import User exposing (AuthStatus(..))
 import Views.HorizontalForm as Form
+
 
 
 -- MODEL
@@ -48,10 +48,10 @@ encoder { email, password } =
         nullable =
             Maybe.map Encode.string >> Maybe.withDefault Encode.null
     in
-        Encode.object
-            [ ( "email", nullable email )
-            , ( "password", nullable password )
-            ]
+    Encode.object
+        [ ( "email", nullable email )
+        , ( "password", nullable password )
+        ]
 
 
 
@@ -72,53 +72,55 @@ update key msg model authStatus =
         nothingIfBlank str =
             if String.isEmpty str then
                 Nothing
+
             else
                 Just str
     in
-        case msg of
-            Email email ->
-                { model | email = nothingIfBlank email }
+    case msg of
+        Email email ->
+            { model | email = nothingIfBlank email }
+                |> noCommand
+
+        Password password ->
+            { model | password = nothingIfBlank password }
+                |> noCommand
+
+        PasswordConfirm password ->
+            { model | passwordConfirm = nothingIfBlank password }
+                |> noCommand
+
+        Submit ->
+            if model.password /= model.passwordConfirm then
+                { model
+                    | errors =
+                        Api.initialErrors
+                            |> Api.addError "passwordConfirm" "Passwords do not match."
+                            |> Api.addError "password" "Passwords do not match."
+                }
                     |> noCommand
 
-            Password password ->
-                { model | password = nothingIfBlank password }
-                    |> noCommand
-
-            PasswordConfirm password ->
-                { model | passwordConfirm = nothingIfBlank password }
-                    |> noCommand
-
-            Submit ->
-                if model.password /= model.passwordConfirm then
-                    { model
-                        | errors =
-                            Api.initialErrors
-                                |> Api.addError "passwordConfirm" "Passwords do not match."
-                                |> Api.addError "password" "Passwords do not match."
-                    }
-                        |> noCommand
-                else
-                    case authStatus of
-                        Authorized user ->
-                            ( { model | errors = Dict.empty }
-                            , updateLoginDetails model user.authToken
-                            )
-
-                        _ ->
-                            ( initial, Routing.newUrl key Login )
-
-            SubmitResponse response ->
-                case response of
-                    RemoteData.Success (Err errors) ->
-                        ( { model | errors = errors }
-                        , Ports.scrollToID "edit-form"
+            else
+                case authStatus of
+                    Authorized user ->
+                        ( { model | errors = Dict.empty }
+                        , updateLoginDetails model user.authToken
                         )
 
-                    RemoteData.Success (Ok _) ->
-                        ( initial, Cmd.batch [ Routing.newUrl key MyAccount, Ports.scrollToTop ] )
-
                     _ ->
-                        model |> noCommand
+                        ( initial, Routing.newUrl key Login )
+
+        SubmitResponse response ->
+            case response of
+                RemoteData.Success (Err errors) ->
+                    ( { model | errors = errors }
+                    , Ports.scrollToID "edit-form"
+                    )
+
+                RemoteData.Success (Ok _) ->
+                    ( initial, Cmd.batch [ Routing.newUrl key MyAccount, Ports.scrollToTop ] )
+
+                _ ->
+                    model |> noCommand
 
 
 updateLoginDetails : Form -> String -> Cmd Msg
@@ -161,7 +163,7 @@ view tagger model authStatus =
             , Form.submitButton "Update"
             ]
     in
-        [ h1 [] [ text "Edit Login Details" ]
-        , hr [] []
-        , form [ id "edit-form", onSubmit <| tagger Submit ] inputs
-        ]
+    [ h1 [] [ text "Edit Login Details" ]
+    , hr [] []
+    , form [ id "edit-form", onSubmit <| tagger Submit ] inputs
+    ]

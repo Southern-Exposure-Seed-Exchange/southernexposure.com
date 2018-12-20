@@ -1,9 +1,8 @@
-module Views.Format
-    exposing
-        ( cents
-        , centsNumber
-        , date
-        )
+module Views.Format exposing
+    ( cents
+    , centsNumber
+    , date
+    )
 
 import DateFormat
 import Decimal
@@ -31,6 +30,7 @@ cents : Cents -> String
 cents ((Cents i) as c) =
     if i < 0 then
         "−$" ++ centsNumber (Cents <| abs i)
+
     else
         "$" ++ centsNumber c
 
