@@ -35,7 +35,8 @@ import Servant
 
 import Auth
 import Models
-import Models.Fields (ArmedForcesRegionCode, armedForcesRegion, Cents(..), LineItemType(..))
+import Models.Fields
+    (ArmedForcesRegionCode, armedForcesRegion, Cents(..), creditLineItemTypes)
 import Routes.CommonData
     ( AuthorizationData, toAuthorizationData, AddressData(..), toAddressData
     , fromAddressData
@@ -490,12 +491,12 @@ myAccountRoute authToken maybeLimit = do
                     E.on $ op E.^. OrderProductOrderId E.==. o E.^. OrderId
                     let lineTotal = E.sub_select $ E.from $ \ol_ -> do
                             E.where_ $ ol_ E.^. OrderLineItemOrderId E.==. o E.^. OrderId
-                                E.&&. ol_ E.^. OrderLineItemType E.!=. E.val StoreCreditLine
+                                E.&&. ol_ E.^. OrderLineItemType `E.notIn` E.valList creditLineItemTypes
                             return $ E.sum_ $ ol_ E.^. OrderLineItemAmount
-                        storeCredit = E.sub_select $ E.from $ \sc_ -> do
-                            E.where_ $ sc_ E.^. OrderLineItemOrderId E.==. o E.^. OrderId
-                                E.&&. sc_ E.^. OrderLineItemType E.==. E.val StoreCreditLine
-                            return $ E.sum_ $ sc_ E.^. OrderLineItemAmount
+                        creditTotal = E.sub_select $ E.from $ \cl_ -> do
+                            E.where_ $ cl_ E.^. OrderLineItemOrderId E.==. o E.^. OrderId
+                                E.&&. cl_ E.^. OrderLineItemType `E.in_` E.valList creditLineItemTypes
+                            return $ E.sum_ $ cl_ E.^. OrderLineItemAmount
                     E.groupBy (o E.^. OrderId, sa E.^. AddressId)
                     E.where_ $ o E.^. OrderCustomerId E.==. E.val customerId
                     E.orderBy [E.desc $ o E.^. OrderCreatedAt]
@@ -504,11 +505,11 @@ myAccountRoute authToken maybeLimit = do
                         ( o E.^. OrderId
                         , sa
                         , o E.^. OrderStatus
-                        , calculateTotal op lineTotal storeCredit
+                        , calculateTotal op lineTotal creditTotal
                         , o E.^. OrderCreatedAt
                         )
             return $ map makeDetails orderData
-          calculateTotal orderProduct maybeLineTotal maybeStoreCredit =
+          calculateTotal orderProduct maybeLineTotal maybeCreditTotal =
             let
                 productTax =
                     orderProduct E.^. OrderProductTax
@@ -519,7 +520,7 @@ myAccountRoute authToken maybeLimit = do
                 subTotal =
                     E.sum_ $ productTax E.+. (E.castNum productQuantity E.*. productPrice)
             in
-                subTotal E.+. maybeLineTotal E.-. maybeStoreCredit
+                subTotal E.+. maybeLineTotal E.-. maybeCreditTotal
           makeDetails (orderId, shippingAddress, status, total, createdAt) =
               MyAccountOrderDetails
                 { maodId = E.unValue orderId

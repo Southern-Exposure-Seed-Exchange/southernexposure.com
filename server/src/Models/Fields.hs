@@ -267,3 +267,8 @@ instance ToJSON LineItemType
 instance FromJSON LineItemType
 
 derivePersistField "LineItemType"
+
+-- | An enumeration of `LineItemType`s containing only credits.
+creditLineItemTypes :: [LineItemType]
+creditLineItemTypes
+    = [StoreCreditLine, MemberDiscountLine]
