@@ -492,11 +492,11 @@ myAccountRoute authToken maybeLimit = do
                     let lineTotal = E.sub_select $ E.from $ \ol_ -> do
                             E.where_ $ ol_ E.^. OrderLineItemOrderId E.==. o E.^. OrderId
                                 E.&&. ol_ E.^. OrderLineItemType `E.notIn` E.valList creditLineItemTypes
-                            return $ E.sum_ $ ol_ E.^. OrderLineItemAmount
+                            return $ sum0_ $ ol_ E.^. OrderLineItemAmount
                         creditTotal = E.sub_select $ E.from $ \cl_ -> do
                             E.where_ $ cl_ E.^. OrderLineItemOrderId E.==. o E.^. OrderId
                                 E.&&. cl_ E.^. OrderLineItemType `E.in_` E.valList creditLineItemTypes
-                            return $ E.sum_ $ cl_ E.^. OrderLineItemAmount
+                            return $ sum0_ $ cl_ E.^. OrderLineItemAmount
                     E.groupBy (o E.^. OrderId, sa E.^. AddressId)
                     E.where_ $ o E.^. OrderCustomerId E.==. E.val customerId
                     E.orderBy [E.desc $ o E.^. OrderCreatedAt]
@@ -509,7 +509,7 @@ myAccountRoute authToken maybeLimit = do
                         , o E.^. OrderCreatedAt
                         )
             return $ map makeDetails orderData
-          calculateTotal orderProduct maybeLineTotal maybeCreditTotal =
+          calculateTotal orderProduct lineTotal creditTotal =
             let
                 productTax =
                     orderProduct E.^. OrderProductTax
@@ -518,17 +518,19 @@ myAccountRoute authToken maybeLimit = do
                 productPrice =
                     orderProduct E.^. OrderProductPrice
                 subTotal =
-                    E.sum_ $ productTax E.+. (E.castNum productQuantity E.*. productPrice)
+                    sum0_ $ productTax E.+. (E.castNum productQuantity E.*. productPrice)
             in
-                subTotal E.+. maybeLineTotal E.-. maybeCreditTotal
+                subTotal E.+. lineTotal E.-. creditTotal
           makeDetails (orderId, shippingAddress, status, total, createdAt) =
               MyAccountOrderDetails
                 { maodId = E.unValue orderId
                 , maodShippingAddress = toAddressData shippingAddress
                 , maodOrderStatus = E.unValue status
-                , maodOrderTotal = Cents $ maybe 0 round (E.unValue total :: Maybe Rational)
+                , maodOrderTotal = Cents $ round (E.unValue total :: Rational)
                 , maodCreated = E.unValue createdAt
                 }
+          -- Sum a column, defaulting to 0 for empty results or all NULL values
+          sum0_ eValue = E.coalesceDefault [E.sum_ eValue] $ E.val 0
 
 
 -- EDIT DETAILS
