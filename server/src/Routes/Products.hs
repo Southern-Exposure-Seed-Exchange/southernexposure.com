@@ -7,6 +7,8 @@ module Routes.Products
     ) where
 
 import Data.Aeson ((.=), (.:), (.:?), ToJSON(..), FromJSON(..), object, withObject)
+import Data.Char (isAlpha)
+import Data.Maybe (listToMaybe)
 import Database.Persist ((==.), (<-.), Entity(..), selectList, get, getBy)
 import Servant ((:>), (:<|>)(..), Capture, QueryParam, ReqBody, Get, Post, JSON, throwError, err404)
 
@@ -125,9 +127,9 @@ productsSearchRoute :: Maybe T.Text -> Maybe Int -> Maybe Int -> ProductsSearchP
 productsSearchRoute maybeSort maybePage maybePerPage parameters = do
     let queryFilters p
             | pspQuery parameters /= "" && pspSearchDescription parameters =
-                foldl1 (E.&&.) . map (nameOrDescription p) . T.words $ pspQuery parameters
+                foldl1 (E.&&.) . map (nameOrDescriptionOrSku p) . T.words $ pspQuery parameters
             | pspQuery parameters /= "" =
-                foldl1 (E.&&.) . map (nameFilter p) . T.words $ pspQuery parameters
+                foldl1 (E.&&.) . map (nameOrSku p) . T.words $ pspQuery parameters
             | otherwise =
                 E.val True
         organicFilter =
@@ -154,11 +156,17 @@ productsSearchRoute maybeSort maybePage maybePerPage parameters = do
     return $ ProductsSearchData searchData productsCount catName
     where fuzzyILike f s =
             f `E.ilike` ((E.%) E.++. E.val s E.++. (E.%))
-          nameOrDescription p w =
+          maybeFuzzyILike f =
+              maybe (E.val False) (\justVal -> f `fuzzyILike` justVal)
+          numericSku =
+              listToMaybe . filter (/= "") . T.split isAlpha
+          nameOrDescriptionOrSku p w =
                 (p E.^. ProductName) `fuzzyILike` w E.||.
-                (p E.^. ProductLongDescription) `fuzzyILike` w
-          nameFilter p w =
-                (p E.^. ProductName) `fuzzyILike` w
+                (p E.^. ProductLongDescription) `fuzzyILike` w E.||.
+                (p E.^. ProductBaseSku) `maybeFuzzyILike` numericSku w
+          nameOrSku p w =
+                (p E.^. ProductName) `fuzzyILike` w E.||.
+                (p E.^. ProductBaseSku) `maybeFuzzyILike` numericSku w
           attributeFilter selector attribute sa =
               if selector parameters then
                 sa E.?. attribute E.==. E.just (E.val True)
