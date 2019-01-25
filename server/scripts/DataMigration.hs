@@ -208,7 +208,7 @@ makeSeedAttributes mysql = do
 splitSku :: T.Text -> (T.Text, T.Text)
 splitSku fullSku =
     case T.split isAlpha fullSku of
-         [baseSku, ""] ->
+         baseSku : "" : _ ->
             case T.stripPrefix baseSku fullSku of
                 Just skuSuffix ->
                     (baseSku, skuSuffix)
