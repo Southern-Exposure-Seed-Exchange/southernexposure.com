@@ -275,7 +275,14 @@ cartForm addToCartForms product variants =
 
         selectedPrice =
             maybeSelectedVariant
-                |> htmlOrBlank (\v -> h4 [] [ text <| Format.cents v.price ])
+                |> htmlOrBlank (\v -> h4 [] [ text <| renderPrice v.price ])
+
+        renderPrice price =
+            if price == Cents 0 then
+                "Free!"
+
+            else
+                Format.cents price
 
         hasMultipleVariants =
             Dict.size variants > 1
