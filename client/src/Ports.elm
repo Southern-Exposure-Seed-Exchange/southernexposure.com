@@ -30,7 +30,7 @@ port collapseMobileMenus : () -> Cmd msg
 
 scrollToTop : Cmd msg
 scrollToTop =
-    scrollToID "main"
+    scrollToID "site-header"
 
 
 scrollToID : String -> Cmd msg
