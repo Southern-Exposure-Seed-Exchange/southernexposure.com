@@ -15,7 +15,6 @@ import Html exposing (..)
 import Html.Attributes exposing (class, for, id, required, selected, type_, value)
 import Html.Events exposing (on, onInput, onSubmit, targetValue)
 import Json.Encode as Encode exposing (Value)
-import Locations exposing (AddressLocations)
 import Ports
 import RemoteData exposing (WebData)
 import Routing exposing (Route(..), reverse)
@@ -32,15 +31,6 @@ type alias Form =
     { email : String
     , password : String
     , passwordConfirm : String
-    , firstName : String
-    , lastName : String
-    , street : String
-    , addressTwo : String
-    , city : String
-    , state : String
-    , zipCode : String
-    , country : String
-    , phoneNumber : String
     , errors : Api.FormErrors
     }
 
@@ -50,15 +40,6 @@ initial =
     { email = ""
     , password = ""
     , passwordConfirm = ""
-    , firstName = ""
-    , lastName = ""
-    , street = ""
-    , addressTwo = ""
-    , city = ""
-    , state = "AL"
-    , zipCode = ""
-    , country = "US"
-    , phoneNumber = ""
     , errors = Api.initialErrors
     }
 
@@ -66,44 +47,16 @@ initial =
 encode : Form -> Maybe String -> Value
 encode model maybeSessionToken =
     let
-        encodedState =
-            Tuple.pair "state" <|
-                case model.country of
-                    "US" ->
-                        if List.member model.state Locations.armedForcesCodes then
-                            stateWithKey "armedForces"
-
-                        else
-                            stateWithKey "state"
-
-                    "CA" ->
-                        stateWithKey "province"
-
-                    _ ->
-                        stateWithKey "custom"
-
         encodedToken =
             maybeSessionToken
                 |> Maybe.map Encode.string
                 |> Maybe.withDefault Encode.null
                 |> Tuple.pair "sessionToken"
-
-        stateWithKey key =
-            Encode.object [ ( key, Encode.string model.state ) ]
     in
     [ ( "email", model.email )
     , ( "password", model.password )
-    , ( "firstName", model.firstName )
-    , ( "lastName", model.lastName )
-    , ( "addressOne", model.street )
-    , ( "addressTwo", model.addressTwo )
-    , ( "city", model.city )
-    , ( "zipCode", model.zipCode )
-    , ( "country", model.country )
-    , ( "telephone", model.phoneNumber )
     ]
         |> List.map (Tuple.mapSecond Encode.string)
-        |> (::) encodedState
         |> (::) encodedToken
         |> Encode.object
 
@@ -116,15 +69,6 @@ type Msg
     = Email String
     | Password String
     | PasswordConfirm String
-    | FirstName String
-    | LastName String
-    | Street String
-    | AddressTwo String
-    | City String
-    | State String
-    | ZipCode String
-    | Country String
-    | PhoneNumber String
     | SubmitForm
     | SubmitResponse (WebData (Result Api.FormErrors AuthStatus))
 
@@ -142,42 +86,6 @@ update key msg form maybeSessionToken =
 
         PasswordConfirm str ->
             { form | passwordConfirm = str }
-                |> nothingAndNoCommand
-
-        FirstName str ->
-            { form | firstName = str }
-                |> nothingAndNoCommand
-
-        LastName str ->
-            { form | lastName = str }
-                |> nothingAndNoCommand
-
-        Street str ->
-            { form | street = str }
-                |> nothingAndNoCommand
-
-        AddressTwo str ->
-            { form | addressTwo = str }
-                |> nothingAndNoCommand
-
-        City str ->
-            { form | city = str }
-                |> nothingAndNoCommand
-
-        State str ->
-            { form | state = str }
-                |> nothingAndNoCommand
-
-        ZipCode str ->
-            { form | zipCode = str }
-                |> nothingAndNoCommand
-
-        Country str ->
-            { form | country = str }
-                |> nothingAndNoCommand
-
-        PhoneNumber str ->
-            { form | phoneNumber = str }
                 |> nothingAndNoCommand
 
         SubmitForm ->
@@ -232,48 +140,21 @@ createNewAccount form maybeSessionToken =
 
 
 -- VIEW
--- TODO: This was the first form validation so it's pretty ad-hoc, refactor,
--- maybe with a custom type for each Fields & functions to pull proper data out
--- of each field? Maybe wait til we have multiple validation forms and pull out
--- commonalities? Brainstorm a bit.
 
 
-view : (Msg -> msg) -> Form -> AddressLocations -> List (Html msg)
-view tagger model locations =
+{-| TODO: This was the first form validation so it's pretty ad-hoc, refactor,
+maybe with a custom type for each Fields & functions to pull proper data out
+of each field? Maybe wait til we have multiple validation forms and pull out
+commonalities? Brainstorm a bit.
+-}
+view : (Msg -> msg) -> Form -> List (Html msg)
+view tagger model =
     let
         requiredField s msg =
             inputField s msg True
 
-        optionalField s msg =
-            inputField s msg False
-
         inputField selector msg =
             Form.inputRow model.errors (selector model) (tagger << msg)
-
-        selectRow msg =
-            Form.selectRow Ok (tagger << msg)
-
-        countrySelect =
-            List.map (locationToOption .country) locations.countries
-                |> selectRow Country "Country" True
-
-        locationToOption selector { code, name } =
-            option [ value code, selected <| selector model == code ]
-                [ text name ]
-
-        regionField =
-            case model.country of
-                "US" ->
-                    regionSelect "State" (locations.states ++ locations.armedForces)
-
-                "CA" ->
-                    regionSelect "Province" locations.provinces
-
-                _ ->
-                    requiredField .state State "State / Province" "state" "state"
-
-        regionSelect labelText =
-            List.map (locationToOption .state) >> selectRow State labelText True
     in
     [ h1 [] [ text "Create an Account" ]
     , hr [] []
@@ -284,18 +165,6 @@ view tagger model locations =
             , requiredField .email Email "Email" "email" "email"
             , requiredField .password Password "Password" "password" "password"
             , requiredField .passwordConfirm PasswordConfirm "Confirm Password" "passwordConfirm" "password"
-            ]
-        , fieldset []
-            [ legend [] [ text "Contact Information" ]
-            , requiredField .firstName FirstName "First Name" "firstName" "text"
-            , requiredField .lastName LastName "Last Name" "lastName" "text"
-            , requiredField .street Street "Street Address" "addressOne" "text"
-            , optionalField .addressTwo AddressTwo "Address Line 2" "addressTwo" "text"
-            , requiredField .city City "City" "city" "text"
-            , regionField
-            , requiredField .zipCode ZipCode "Zip Code" "zipCode" "text"
-            , countrySelect
-            , requiredField .phoneNumber PhoneNumber "Phone Number" "telephone" "tel"
             ]
         , Form.submitButton "Register"
         ]

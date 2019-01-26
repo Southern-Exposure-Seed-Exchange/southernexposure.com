@@ -157,7 +157,7 @@ fetchDataForRoute ({ route, pageData, key } as model) =
                     )
 
                 CreateAccount ->
-                    fetchLocationsOnce pageData
+                    doNothing
 
                 CreateAccountSuccess ->
                     doNothing

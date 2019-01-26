@@ -89,9 +89,7 @@ view ({ route, pageData, navigationData, zone } as model) =
                     withIntermediateText staticPageView pageData.pageDetails
 
                 CreateAccount ->
-                    withIntermediateText
-                        (CreateAccount.view CreateAccountMsg model.createAccountForm)
-                        pageData.locations
+                    CreateAccount.view CreateAccountMsg model.createAccountForm
 
                 CreateAccountSuccess ->
                     CreateAccount.successView
