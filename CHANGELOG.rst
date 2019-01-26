@@ -5,6 +5,8 @@ CHANGELOG
 v0.6.0
 ======
 
+* Show ``Free!`` for the prices of free Products, instead of no text in the Add
+  to Cart forms.
 * Don't collect contact addresses from Customers.
 * Allow Customers to have an infinite number of Addresses.
 * Show the links above the recent Order summary on the My Account page.
