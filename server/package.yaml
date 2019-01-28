@@ -33,6 +33,7 @@ dependencies:
     - bcrypt
     - blaze-html
     - blaze-markup
+    - ca-province-codes
     - containers
     - esqueleto
     - exceptions
@@ -64,7 +65,6 @@ library:
         - Config
         - Models
         - Models.Fields
-        - Models.ProvinceCodes
 
 tests:
     sese-website-test:

@@ -46,6 +46,7 @@ import Server
 import Validation (Validation(..))
 
 import qualified Crypto.BCrypt as BCrypt
+import qualified Data.CAProvinceCodes as CACodes
 import qualified Data.ISO3166_CountryCodes as CountryCodes
 import qualified Data.StateCodes as StateCodes
 import qualified Data.Text as T
@@ -54,7 +55,6 @@ import qualified Data.UUID.V4 as UUID4
 import qualified Database.Esqueleto as E
 import qualified Emails
 import qualified Models.Fields as Fields
-import qualified Models.ProvinceCodes as ProvinceCodes
 import qualified Validation as V
 
 
@@ -119,7 +119,7 @@ data LocationData =
         { ldCountries :: [Location CountryCodes.CountryCode]
         , ldUSStates :: [Location StateCodes.StateCode]
         , ldAFRegions :: [Location ArmedForcesRegionCode]
-        , ldCAProvinces :: [Location ProvinceCodes.ProvinceCode]
+        , ldCAProvinces :: [Location CACodes.Code]
         }
 
 instance ToJSON LocationData where
@@ -152,7 +152,7 @@ locationRoute =
                 $ enumFrom minBound
 
         provinces =
-            map (\c -> Location c $ ProvinceCodes.toName c) ProvinceCodes.all
+            map (\c -> Location c $ CACodes.toName c) CACodes.all
     in
         return LocationData
             { ldCountries = countries

@@ -33,13 +33,13 @@ import Models
 import Models.Fields
 import Utils
 
+import qualified Data.CAProvinceCodes as CACodes
 import qualified Data.ISO3166_CountryCodes as CountryCodes
 import qualified Data.IntMap as IntMap
 import qualified Data.StateCodes as StateCodes
 import qualified Data.Text as T
 import qualified Data.UUID as UUID
 import qualified Data.UUID.V4 as UUID4
-import qualified Models.ProvinceCodes as ProvinceCodes
 import qualified System.IO.Streams as Streams
 
 
@@ -344,15 +344,15 @@ makeAddresses mysql = do
                                     _ ->
                                         error $ "Invalid State Code: " ++ T.unpack zone
                     CountryCodes.CA ->
-                        case ProvinceCodes.fromMName zone of
+                        case CACodes.fromName zone of
                             Just provinceCode ->
                                 CAProvince provinceCode
                             Nothing ->
                                 case zone of
                                     "Yukon Territory" ->
-                                        CAProvince ProvinceCodes.YT
+                                        CAProvince CACodes.YT
                                     "Newfoundland" ->
-                                        CAProvince ProvinceCodes.NL
+                                        CAProvince CACodes.NL
                                     _ ->
                                         error $ "Invalid Canadian Province: " ++ T.unpack zone
                     _ ->

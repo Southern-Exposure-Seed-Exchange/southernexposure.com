@@ -18,11 +18,9 @@ import GHC.Generics (Generic)
 import Numeric.Natural (Natural)
 import Text.Read (readMaybe, readPrec)
 
-import Models.ProvinceCodes (ProvinceCode)
-
+import qualified Data.CAProvinceCodes as CACodes
 import qualified Data.StateCodes as StateCodes
 import qualified Data.Text as T
-import qualified Models.ProvinceCodes as ProvinceCodes
 import qualified Web.Stripe.Types as Stripe
 
 
@@ -89,7 +87,7 @@ armedForcesRegion = \case
 data Region
     = USState StateCode
     | USArmedForces ArmedForcesRegionCode
-    | CAProvince ProvinceCode
+    | CAProvince CACodes.Code
     | CustomRegion T.Text
     deriving (Show, Read, Eq, Generic)
 
@@ -139,7 +137,7 @@ regionName = \case
     USArmedForces code ->
         armedForcesRegion code
     CAProvince code ->
-        ProvinceCodes.toName code
+        CACodes.toName code
     CustomRegion region ->
         region
 
