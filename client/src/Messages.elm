@@ -1,7 +1,4 @@
-module Messages exposing
-    ( EditCartMessage(..)
-    , Msg(..)
-    )
+module Messages exposing (Msg(..))
 
 import AdvancedSearch
 import Auth.CreateAccount as CreateAccount
@@ -10,6 +7,7 @@ import Auth.EditLogin as EditLogin
 import Auth.Login as Login
 import Auth.ResetPassword as ResetPassword
 import Browser exposing (UrlRequest)
+import Cart
 import Checkout
 import Locations exposing (AddressLocations)
 import PageData exposing (ProductData)
@@ -23,13 +21,6 @@ import SiteUI.Search as SiteSearch
 import StaticPage exposing (StaticPage)
 import Time
 import User
-
-
-type EditCartMessage
-    = Quantity PageData.CartItemId Int
-    | Remove PageData.CartItemId
-    | Submit
-    | UpdateResponse (WebData PageData.CartDetails)
 
 
 type Msg
@@ -57,7 +48,7 @@ type Msg
     | ResetPasswordMsg ResetPassword.Msg
     | EditLoginMsg EditLogin.Msg
     | EditAddressMsg EditAddress.Msg
-    | EditCartMsg EditCartMessage
+    | EditCartMsg Cart.Msg
     | QuickOrderMsg QuickOrder.Msg
     | CheckoutMsg Checkout.Msg
       -- API Requests

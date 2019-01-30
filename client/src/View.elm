@@ -118,6 +118,7 @@ view ({ route, pageData, navigationData, zone } as model) =
 
                 Cart ->
                     withIntermediateText (Cart.view model.editCartForm) pageData.cartDetails
+                        |> List.map (Html.map EditCartMsg)
 
                 QuickOrder ->
                     QuickOrder.view model.quickOrderForms

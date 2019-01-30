@@ -1,5 +1,6 @@
 module Cart exposing
     ( Form
+    , Msg
     , fromCartDetails
     , initial
     , update
@@ -13,7 +14,6 @@ import Html.Attributes as A exposing (class, colspan, disabled, href, src, step,
 import Html.Events exposing (onClick, onSubmit)
 import Html.Keyed as Keyed
 import Json.Encode as Encode
-import Messages exposing (EditCartMessage(..), Msg(..))
 import Models.Fields exposing (Cents(..), centsMap)
 import PageData exposing (CartDetails, CartItemId(..))
 import RemoteData
@@ -51,8 +51,15 @@ fromCartDetails { items } =
 -- UPDATE
 
 
+type Msg
+    = Quantity PageData.CartItemId Int
+    | Remove PageData.CartItemId
+    | Submit
+    | UpdateResponse (RemoteData.WebData PageData.CartDetails)
+
+
 update :
-    EditCartMessage
+    Msg
     -> AuthStatus
     -> Maybe String
     -> Form
@@ -134,7 +141,7 @@ anonymousUpdateRequest body =
     Api.post Api.CartUpdateAnonymous
         |> Api.withJsonBody body
         |> Api.withJsonResponse PageData.cartDetailsDecoder
-        |> Api.sendRequest (EditCartMsg << UpdateResponse)
+        |> Api.sendRequest UpdateResponse
 
 
 customerUpdateRequest : User -> Encode.Value -> Cmd Msg
@@ -143,7 +150,7 @@ customerUpdateRequest user body =
         |> Api.withToken user.authToken
         |> Api.withJsonBody body
         |> Api.withJsonResponse PageData.cartDetailsDecoder
-        |> Api.sendRequest (EditCartMsg << UpdateResponse)
+        |> Api.sendRequest UpdateResponse
 
 
 
@@ -198,7 +205,7 @@ view { quantities } ({ items, charges } as cartDetails) =
                         [ class "cart-quantity form-control mx-auto"
                         , type_ "number"
                         , value <| String.fromInt <| Maybe.withDefault 1 <| Dict.get (fromCartItemId id) quantities
-                        , onIntInput <| EditCartMsg << Quantity id
+                        , onIntInput <| Quantity id
                         , A.min "1"
                         , A.step "1"
                         ]
@@ -227,7 +234,7 @@ view { quantities } ({ items, charges } as cartDetails) =
                 , td [ class "text-right align-middle" ]
                     [ text <| Format.cents (centsMap ((*) quantity) variant.price) ]
                 , td [ class "text-center align-middle" ]
-                    [ button [ class "btn btn-link text-danger", onClick <| EditCartMsg <| Remove id ]
+                    [ button [ class "btn btn-link text-danger", onClick <| Remove id ]
                         [ icon "times" ]
                     ]
                 ]
@@ -284,7 +291,7 @@ view { quantities } ({ items, charges } as cartDetails) =
         , p [ class "text-center font-weight-bold" ]
             [ text <| "Total Items: " ++ String.fromInt itemCount ++ " Amount: " ++ Format.cents totals.total
             ]
-        , form [ onSubmit <| EditCartMsg Submit ]
+        , form [ onSubmit Submit ]
             [ cartTable
             , buttons
             ]

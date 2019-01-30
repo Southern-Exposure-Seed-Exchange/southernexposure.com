@@ -631,7 +631,7 @@ update msg ({ pageData, key } as model) =
                             | pageData = updatedPageData maybeDetails
                             , editCartForm = updatedForm form maybeDetails
                           }
-                        , cmd
+                        , Cmd.map EditCartMsg cmd
                         )
                             |> updateAndCommand (updateCartItemCountFromDetails maybeDetails)
                    )
