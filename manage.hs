@@ -1,7 +1,6 @@
 #!/usr/bin/env stack
 {- stack
     script
-    --ghc-build standard
     --ghc-options -Wall
     --ghc-options -Wcompat
     --ghc-options -Wincomplete-record-updates
