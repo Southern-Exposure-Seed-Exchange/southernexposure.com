@@ -1047,7 +1047,7 @@ addressCard contents =
 
 sameAddressesCheckbox : Bool -> Html Msg
 sameAddressesCheckbox billingSameAsShipping =
-    small [ class "d-inline form-check" ]
+    small [ class "d-inline-block form-check" ]
         [ label [ class "form-check-label" ]
             [ input
                 [ class "form-check-input"
