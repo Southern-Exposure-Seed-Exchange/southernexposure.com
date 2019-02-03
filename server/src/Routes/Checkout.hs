@@ -10,8 +10,8 @@ module Routes.Checkout
 
 import Control.Applicative ((<|>))
 import Control.Arrow (first)
+import Control.Exception.Safe (MonadThrow, throwM, Exception, try)
 import Control.Monad ((>=>), (<=<), when, void)
-import Control.Monad.Catch (MonadThrow, throwM, Exception, try)
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Monad.Reader (asks)
 import Data.Aeson ((.:), (.:?), (.=), FromJSON(..), ToJSON(..), withObject, object)

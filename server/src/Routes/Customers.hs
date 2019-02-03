@@ -12,8 +12,8 @@ module Routes.Customers
     , customerRoutes
     ) where
 
+import Control.Exception.Safe (throwM, Exception, try)
 import Control.Monad ((>=>), (<=<), when, void)
-import Control.Monad.Catch (throwM, Exception, try)
 import Control.Monad.IO.Class (liftIO)
 import Data.Aeson (ToJSON(..), FromJSON(..), (.=), (.:), (.:?), withObject, object)
 import Data.Int (Int64)

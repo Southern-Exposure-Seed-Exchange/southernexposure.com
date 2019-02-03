@@ -36,7 +36,7 @@ dependencies:
     - ca-province-codes
     - containers
     - esqueleto
-    - exceptions
+    - safe-exceptions
     - HaskellNet
     - HaskellNet-SSL
     - iso3166-country-codes
