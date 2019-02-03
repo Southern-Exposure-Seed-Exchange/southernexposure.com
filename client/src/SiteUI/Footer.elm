@@ -50,7 +50,7 @@ view =
                 , text " (540) 894-9480"
                 , break
                 , abbr [ title "Fax" ] [ text "F:" ]
-                , text " (540) 894-9481"
+                , text " (540) 266-1021"
                 ]
     in
     div [ id "footer", class "container" ]
@@ -70,7 +70,7 @@ view =
                     , contactAddress
                     ]
                 , div [ class "col-sm-12 text-center" ]
-                    [ text "Copyright © 2017 Southern Exposure Seed Exchange" ]
+                    [ text "Copyright © 2019 Southern Exposure Seed Exchange" ]
                 ]
             ]
         ]
