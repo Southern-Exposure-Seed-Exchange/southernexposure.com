@@ -19,6 +19,10 @@
 -- TODO: Make a `BuildTarget = Client | Server` type that chooses cwd
 --       directory & output function/prefix.
 -- TODO: Async Client/Server Dependency Installations?
+-- TODO: Run haddock & hoogle servers:
+--       https://lexi-lambda.github.io/blog/2018/02/10/an-opinionated-guide-to-haskell-in-2018/
+-- TODO: Run elm linters(xref, analyse, etc.):
+--       https://dev.to/zwilias/elm-tools-571a
 import Control.Concurrent (threadDelay, forkIO)
 import Control.Monad ((>=>), forever, void, when)
 import Control.Monad.Loops (whileM_)
