@@ -5,7 +5,7 @@ sudo: false
 # Have Travis Setup Node, We Will Provide the Server Build Tools
 language: node_js
 node_js:
-    - "node"
+    - "11"
 
 cache:
     directories:
