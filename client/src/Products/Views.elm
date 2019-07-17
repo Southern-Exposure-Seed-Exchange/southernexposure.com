@@ -361,19 +361,20 @@ cartForm addToCartForms product variants =
                 appendPrice s =
                     if isSelected then
                         [ s ]
+
                     else
                         s :: [ Format.cents variant.price ]
             in
-                milligramsToString variant.weight
-                    ++ "g"
-                    |> appendPrice
-                    |> String.join " - "
-                    |> text
-                    |> List.singleton
-                    |> option
-                        [ value <| String.fromInt <| fromVariantId variant.id
-                        , selected (Just variant == maybeSelectedVariant)
-                        ]
+            milligramsToString variant.weight
+                ++ "g"
+                |> appendPrice
+                |> String.join " - "
+                |> text
+                |> List.singleton
+                |> option
+                    [ value <| String.fromInt <| fromVariantId variant.id
+                    , selected (Just variant == maybeSelectedVariant)
+                    ]
 
         htmlWhen test renderer =
             if test then
