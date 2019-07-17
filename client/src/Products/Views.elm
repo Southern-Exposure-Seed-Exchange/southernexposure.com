@@ -354,16 +354,26 @@ cartForm addToCartForms product variants =
                 |> on "change"
 
         variantOption variant =
-            [ milligramsToString variant.weight ++ "g"
-            , Format.cents variant.price
-            ]
-                |> String.join " - "
-                |> text
-                |> List.singleton
-                |> option
-                    [ value <| String.fromInt <| fromVariantId variant.id
-                    , selected (Just variant == maybeSelectedVariant)
-                    ]
+            let
+                isSelected =
+                    Just variant == maybeSelectedVariant
+
+                appendPrice s =
+                    if isSelected then
+                        [ s ]
+                    else
+                        s :: [ Format.cents variant.price ]
+            in
+                milligramsToString variant.weight
+                    ++ "g"
+                    |> appendPrice
+                    |> String.join " - "
+                    |> text
+                    |> List.singleton
+                    |> option
+                        [ value <| String.fromInt <| fromVariantId variant.id
+                        , selected (Just variant == maybeSelectedVariant)
+                        ]
 
         htmlWhen test renderer =
             if test then
