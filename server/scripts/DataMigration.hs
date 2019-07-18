@@ -15,6 +15,7 @@ import Data.Maybe (maybeToList, fromMaybe)
 import Data.Monoid ((<>))
 import Data.Pool (destroyAllResources)
 import Data.Scientific (Scientific)
+import Data.Time (hoursToTimeZone, localTimeToUTC)
 import Database.MySQL.Base
     ( MySQLConn, Query(..), query_, close, MySQLValue(..), prepareStmt, queryStmt )
 import Database.Persist
@@ -57,6 +58,7 @@ main = do
     customers <- makeCustomers mysqlConn
     addresses <- makeAddresses mysqlConn
     carts <- makeCustomerCarts mysqlConn
+    coupons <- makeCoupons mysqlConn
     flip runSqlPool psqlConn $
         dropNewDatabaseRows >>
         insertCategories categories >>=
@@ -67,7 +69,8 @@ main = do
         insertCustomers customers >>= \customerMap ->
         insertAddresses customerMap addresses >>
         insertCharges >>
-        insertCustomerCarts variantMap customerMap carts
+        insertCustomerCarts variantMap customerMap carts >>
+        insertCoupons coupons
     close mysqlConn
     destroyAllResources psqlConn
 
@@ -395,6 +398,60 @@ makeCustomerCarts mysql = do
         updateCartMap _ _ = error "Invalid arguments to updateCartMap."
 
 
+makeCoupons :: MySQLConn -> IO [Coupon]
+makeCoupons mysql = do
+    coupons <- mysqlQuery mysql $
+        "SELECT c.coupon_id, coupon_type, coupon_code, " <>
+        "       coupon_amount, coupon_minimum_order, coupon_expire_date, " <>
+        "       uses_per_coupon, uses_per_user, coupon_active, " <>
+        "       date_created, coupon_name, coupon_description " <>
+        "FROM coupons AS c " <>
+        "RIGHT JOIN coupons_description AS cd ON cd.coupon_id=c.coupon_id " <>
+        "WHERE coupon_type <> \"G\""
+    return $ map makeCoupon coupons
+    where
+    toUTC =
+            localTimeToUTC $ hoursToTimeZone (-5)
+    makeCoupon
+         [ _, MySQLText type_, MySQLText code
+         , MySQLDecimal amount, MySQLDecimal minOrder, MySQLDateTime expirationDate
+         , MySQLInt32 usesPerCoupon, MySQLInt32 usesPerCustomer, MySQLText isActive
+         , MySQLDateTime createdDate, MySQLText name, MySQLText description
+         ] =
+            Coupon
+                { couponCode =
+                    code
+                , couponName =
+                    name
+                , couponDescription =
+                    description
+                , couponIsActive =
+                    isActive == "Y"
+                , couponDiscount =
+                    case type_ of
+                        "S" ->
+                            FreeShipping
+                        "P" ->
+                            PercentageDiscount $ floor amount
+                        "F" ->
+                            FlatDiscount . Cents . floor $ amount * 100
+                        _ ->
+                            error $ "makeCoupons encountered unexpected coupon type: "
+                                ++ T.unpack type_
+                , couponMinimumOrder =
+                    Cents . floor $ 100 * minOrder
+                , couponExpirationDate =
+                    toUTC expirationDate
+                , couponTotalUses =
+                    fromIntegral usesPerCoupon
+                , couponUsesPerCustomer =
+                    fromIntegral usesPerCustomer
+                , couponCreatedDate =
+                    toUTC createdDate
+                }
+    makeCoupon _ = error "Invalid arguments to makeCoupon."
+
+
 -- Persistent Model Saving Functions
 
 insertCategories :: [(Int, Int, Category)] -> SqlWriteT IO (OldIdMap CategoryId)
@@ -562,6 +619,10 @@ insertCustomerCarts variantMap customerMap =
                                 , cartItemQuantity = quantity
                                 }
                             [ CartItemQuantity +=. quantity ]
+
+
+insertCoupons :: [Coupon] -> SqlWriteT IO ()
+insertCoupons = insertMany_
 
 
 -- Utils
