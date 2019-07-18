@@ -822,7 +822,7 @@ createLineItems currentTime customerId maybeTaxRate shippingAddress items orderI
         maybe (return Nothing) (fmap Just . insertEntity . makeLine MemberDiscountLine)
             $ ccMemberDiscount charges
     maybeCouponDiscount <-
-        maybe (return Nothing) (fmap Just . insertEntity . makeLine CouponDiscountLine . snd)
+        maybe (return Nothing) (fmap Just . insertEntity . makeLine CouponDiscountLine)
             $ ccCouponDiscount charges
     return
         ( sum (map (orderLineItemAmount . entityVal) surcharges)

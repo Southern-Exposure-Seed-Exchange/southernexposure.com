@@ -142,7 +142,7 @@ data CartCharges =
         , ccShippingMethods :: [CartCharge]
         , ccProductTotal :: Cents
         , ccMemberDiscount :: Maybe CartCharge
-        , ccCouponDiscount :: Maybe (CouponId, CartCharge)
+        , ccCouponDiscount :: Maybe CartCharge
         , ccGrandTotal :: Cents
         }
 
@@ -248,15 +248,12 @@ getCharges maybeTaxRate maybeCountry items includeMemberDiscount maybeCoupon =
             else Nothing
         calculatedMemberDiscount =
             Cents . round $ (5 % 100) * toRational subTotal
-        couponCredit ms (Entity couponId coupon) =
+        couponCredit ms (Entity _ coupon) =
             if couponMinimumOrder coupon <= Cents subTotal then
-                Just
-                    ( couponId
-                    , CartCharge
-                        { ccDescription = "Coupon " <> couponCode coupon
-                        , ccAmount = calculatedCouponDiscount coupon ms
-                        }
-                    )
+                Just $ CartCharge
+                    { ccDescription = "Coupon " <> couponCode coupon
+                    , ccAmount = calculateCouponDiscount coupon ms subTotal
+                    }
             else
                 Nothing
         sumGrandTotal cc =
@@ -267,7 +264,7 @@ getCharges maybeTaxRate maybeCountry items includeMemberDiscount maybeCoupon =
                         + amt ccTax
                         + mAmt (listToMaybe . ccShippingMethods)
                         - mAmt ccMemberDiscount
-                        - mAmt (fmap snd . ccCouponDiscount)
+                        - mAmt ccCouponDiscount
             }
             where amt f = ccAmount $ f cc
                   mAmt f = maybe (Cents 0) ccAmount $ f cc
