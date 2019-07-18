@@ -120,7 +120,9 @@ instance Exception CheckoutDetailsError
 withCheckoutDetailsErrors :: App a -> App a
 withCheckoutDetailsErrors =
     try >=> eitherM handle
-    where handle = \case
+    where
+        handle :: CheckoutDetailsError -> App a
+        handle = \case
             DetailsCouponError couponError ->
                 handleCouponErrors couponError
 
@@ -252,14 +254,16 @@ anonymousDetailsRoute parameters =
         isValidMemberNumber =
             maybe False ((> 3) . T.length) $ adpMemberNumber parameters
     in
-        runDB $ do
+        withCheckoutDetailsErrors . runDB $ do
             currentTime <- liftIO getCurrentTime
             maybeTaxRate <- getTaxRate maybeCountry $ adpShippingRegion parameters
-            maybeCoupon <- sequence $ getCoupon currentTime Nothing <$> adpCouponCode parameters
+            maybeCoupon <- mapException DetailsCouponError $ sequence
+                $ getCoupon currentTime Nothing <$> adpCouponCode parameters
             items <- getCartItems maybeTaxRate $ \c ->
                 c E.^. CartSessionToken E.==. E.just (E.val $ adpCartToken parameters)
             charges <- getCharges maybeTaxRate maybeCountry items isValidMemberNumber maybeCoupon
-            checkCouponMeetsMinimum maybeCoupon charges
+            mapException DetailsCouponError
+                $ checkCouponMeetsMinimum maybeCoupon charges
             return CheckoutDetailsData
                 { cddShippingAddresses = []
                 , cddBillingAddresses = []
@@ -332,7 +336,9 @@ instance Exception PlaceOrderError
 withPlaceOrderErrors :: CustomerAddress -> App a -> App a
 withPlaceOrderErrors shippingAddress =
     try >=> eitherM handle
-    where handle = \case
+    where
+        handle :: PlaceOrderError -> App a
+        handle = \case
             CartNotFound ->
                 serverError err404
             NoShippingMethod ->
