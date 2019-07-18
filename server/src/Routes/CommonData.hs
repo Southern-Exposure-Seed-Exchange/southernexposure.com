@@ -19,7 +19,8 @@ module Routes.CommonData
 
 import Data.Aeson ((.=), (.:), (.:?), ToJSON(..), FromJSON(..), object, withObject)
 import Data.List (intersect)
-import Data.Maybe (mapMaybe)
+import Data.Maybe (mapMaybe, listToMaybe)
+import Data.Monoid ((<>))
 import Data.Ratio ((%))
 import Database.Persist ((==.), Entity(..), SelectOpt(Asc), selectList, getBy)
 import Numeric.Natural (Natural)
@@ -141,15 +142,18 @@ data CartCharges =
         , ccShippingMethods :: [CartCharge]
         , ccProductTotal :: Cents
         , ccMemberDiscount :: Maybe CartCharge
+        , ccCouponDiscount :: Maybe (CouponId, CartCharge)
+        , ccGrandTotal :: Cents
         }
 
--- TODO: Add Product Total & Don't Calculate in Frontend
+-- TODO: Add Product & Grand Total - Don't Calculate Either in Frontend
 instance ToJSON CartCharges where
     toJSON charges =
         object [ "tax" .= ccTax charges
                , "surcharges" .= ccSurcharges charges
                , "shippingMethods" .= ccShippingMethods charges
                , "memberDiscount" .= ccMemberDiscount charges
+               , "couponDiscount" .= ccCouponDiscount charges
                ]
 
 
@@ -210,17 +214,22 @@ getCartItems maybeTaxRate whereQuery = do
 
 {-| Calculate the Charges for a set of Cart Items.
 
-Tax, Shipping, & the Membership Discount are all based off of the Product
-subtotal.
+Tax, Shipping, & the Membership/Coupon Discounts are all based off of the
+Product subtotal.
+
+If the product subtotal does not meet the minimum order amount for
+a coupon, no coupon discount will be applied. It is up to the calling code
+to properly return an error for the user.
 
 -}
 getCharges
-    :: Maybe TaxRate        -- ^ Applies tax to the Products if specified.
-    -> Maybe Country        -- ^ Used to calculate the Shipping charge.
-    -> [CartItemData]       -- ^ The cart items (see `getCartItems`)
-    -> Bool                 -- ^ Include the 5% Member Discount?
+    :: Maybe TaxRate            -- ^ Applies tax to the Products if specified.
+    -> Maybe Country            -- ^ Used to calculate the Shipping charge.
+    -> [CartItemData]           -- ^ The cart items (see `getCartItems`)
+    -> Bool                     -- ^ Include the 5% Member Discount?
+    -> Maybe (Entity Coupon)    -- ^ A Coupon to apply.
     -> AppSQL CartCharges
-getCharges maybeTaxRate maybeCountry items includeMemberDiscount =
+getCharges maybeTaxRate maybeCountry items includeMemberDiscount maybeCoupon =
     let
         variant item =
             (\(Entity _ v) -> v) $ cidVariant item
@@ -239,15 +248,51 @@ getCharges maybeTaxRate maybeCountry items includeMemberDiscount =
             else Nothing
         calculatedMemberDiscount =
             Cents . round $ (5 % 100) * toRational subTotal
+        couponCredit ms (Entity couponId coupon) =
+            if couponMinimumOrder coupon <= Cents subTotal then
+                Just
+                    ( couponId
+                    , CartCharge
+                        { ccDescription = "Coupon " <> couponCode coupon
+                        , ccAmount = calculatedCouponDiscount coupon ms
+                        }
+                    )
+            else
+                Nothing
+        calculatedCouponDiscount coupon shipMethods =
+            case (couponDiscount coupon, shipMethods) of
+                (FreeShipping, m:_) ->
+                    ccAmount m
+                (FreeShipping, []) ->
+                    Cents 0
+                -- TODO: Should Flat have a max of subTotal or grandTotal?
+                (FlatDiscount (Cents amt), _) ->
+                    Cents $ min amt subTotal
+                (PercentageDiscount percent, _) ->
+                    Cents . round $ subTotal * percent % 100
+        sumGrandTotal cc =
+            cc {
+                ccGrandTotal =
+                    ccProductTotal cc
+                        + sum (map ccAmount $ ccSurcharges cc)
+                        + amt ccTax
+                        + mAmt (listToMaybe . ccShippingMethods)
+                        - mAmt ccMemberDiscount
+                        - mAmt (fmap snd . ccCouponDiscount)
+            }
+            where amt f = ccAmount $ f cc
+                  mAmt f = maybe (Cents 0) ccAmount $ f cc
     in do
         surcharges <- getSurcharges items
         shippingMethods <- getShippingMethods maybeCountry items subTotal
-        return CartCharges
+        return $ sumGrandTotal CartCharges
             { ccTax = CartCharge (maybe "" taxRateDescription maybeTaxRate) $ Cents taxTotal
             , ccSurcharges = surcharges
             , ccShippingMethods = shippingMethods
             , ccProductTotal = Cents subTotal
             , ccMemberDiscount = memberDiscount
+            , ccCouponDiscount = maybeCoupon >>= couponCredit shippingMethods
+            , ccGrandTotal = 0
             }
 
 
