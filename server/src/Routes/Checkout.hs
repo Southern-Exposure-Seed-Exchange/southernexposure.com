@@ -10,21 +10,21 @@ module Routes.Checkout
 
 import Control.Applicative ((<|>))
 import Control.Arrow (first)
-import Control.Exception.Safe (MonadThrow, throwM, Exception, try)
-import Control.Monad ((>=>), (<=<), when, void)
+import Control.Exception.Safe (MonadThrow, MonadCatch, throwM, Exception, try)
+import Control.Monad ((>=>), (<=<), when, unless, void)
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Monad.Reader (asks)
 import Data.Aeson ((.:), (.:?), (.=), FromJSON(..), ToJSON(..), withObject, object)
 import Data.Foldable (asum)
 import Data.Int (Int64)
 import Data.List (partition, find)
-import Data.Maybe (listToMaybe, fromMaybe)
+import Data.Maybe (listToMaybe, fromMaybe, isJust)
 import Data.Monoid ((<>))
 import Data.Time.Clock (getCurrentTime, UTCTime)
 import Data.Typeable (Typeable)
 import Database.Persist
     ( (==.), (=.), (-=.), Entity(..), insert, insert_, insertEntity, get, getBy
-    , selectList, update, updateWhere, delete, deleteWhere
+    , selectList, update, updateWhere, delete, deleteWhere, count
     )
 import Numeric.Natural (Natural)
 import Servant ((:<|>)(..), (:>), AuthProtect, JSON, Post, ReqBody, err404)
@@ -78,7 +78,52 @@ checkoutRoutes =
     :<|> customerSuccessRoute
 
 
+-- COUPON ERRORS
+
+data CouponError
+    = CouponNotFound
+    | CouponInactive
+    | CouponExpired
+    | CouponMaxUses
+    | CouponCustomerMaxUses
+    | CouponBelowOrderMinimum Cents
+    deriving (Show, Typeable)
+
+instance Exception CouponError
+
+handleCouponErrors :: CouponError -> App a
+handleCouponErrors = V.singleFieldError "coupon" . \case
+    CouponNotFound ->
+        "Sorry, we couldn't find a coupon with that code."
+    CouponExpired ->
+        "Sorry, that coupon has expired."
+    CouponInactive ->
+        "Sorry, that coupon is no longer active."
+    CouponMaxUses ->
+        "Sorry, that coupon has reached it's maximum number of uses."
+    CouponCustomerMaxUses ->
+        "Sorry, you've used that coupon the maximum amount of times."
+    CouponBelowOrderMinimum minimumAmount ->
+        "Sorry, a minimum subtotal of " <> formatCents minimumAmount
+            <> " is required to use this coupon."
+
+
 -- CART/ADDRESS DETAILS
+
+
+newtype CheckoutDetailsError
+    = DetailsCouponError CouponError
+    deriving (Show, Typeable)
+
+instance Exception CheckoutDetailsError
+
+withCheckoutDetailsErrors :: App a -> App a
+withCheckoutDetailsErrors =
+    try >=> eitherM handle
+    where handle = \case
+            DetailsCouponError couponError ->
+                handleCouponErrors couponError
+
 
 
 data CustomerDetailsParameters =
@@ -87,6 +132,7 @@ data CustomerDetailsParameters =
         , cdpShippingCountry :: Maybe Country
         , cdpExistingAddress :: Maybe AddressId
         , cdpMemberNumber :: Maybe T.Text
+        , cdpCouponCode :: Maybe T.Text
         }
 
 instance FromJSON CustomerDetailsParameters where
@@ -95,7 +141,8 @@ instance FromJSON CustomerDetailsParameters where
             <$> v .:? "region"
             <*> v .:? "country"
             <*> v .:? "addressId"
-            <*> v .: "memberNumber"
+            <*> v .:? "memberNumber"
+            <*> v .:? "couponCode"
 
 data CheckoutDetailsData =
     CheckoutDetailsData
@@ -129,7 +176,8 @@ customerDetailsRoute token parameters = do
     let hasValidMemberNumber =
             (> 3) . T.length . fromMaybe (customerMemberNumber customer)
                 $ cdpMemberNumber parameters
-    runDB $ do
+    currentTime <- liftIO getCurrentTime
+    withCheckoutDetailsErrors . runDB $ do
         customerAddresses <- selectList
             [AddressCustomerId ==. customerId, AddressIsActive ==. True] []
         let (shippingAddresses, billingAddresses) =
@@ -138,9 +186,13 @@ customerDetailsRoute token parameters = do
             (maybeCountry, maybeRegion) =
                 getShippingArea parameters shippingAddresses
         maybeTaxRate <- getTaxRate maybeCountry maybeRegion
+        maybeCoupon <- mapException DetailsCouponError $ sequence
+            $ getCoupon currentTime (Just customerId) <$> cdpCouponCode parameters
         items <- getCartItems maybeTaxRate $ \c ->
             c E.^. CartCustomerId E.==. E.just (E.val customerId)
-        charges <- getCharges maybeTaxRate maybeCountry items hasValidMemberNumber
+        charges <- getCharges maybeTaxRate maybeCountry items hasValidMemberNumber maybeCoupon
+        mapException DetailsCouponError
+            $ checkCouponMeetsMinimum maybeCoupon charges
         return CheckoutDetailsData
             { cddShippingAddresses = map toAddressData shippingAddresses
             , cddBillingAddresses = map toAddressData billingAddresses
@@ -175,6 +227,7 @@ data AnonymousDetailsParameters =
         { adpShippingCountry :: Maybe Country
         , adpShippingRegion :: Maybe Region
         , adpMemberNumber :: Maybe T.Text
+        , adpCouponCode :: Maybe T.Text
         , adpCartToken :: T.Text
         }
 
@@ -184,6 +237,7 @@ instance FromJSON AnonymousDetailsParameters where
             <$> v .:? "country"
             <*> v .:? "region"
             <*> v .:? "memberNumber"
+            <*> v .:? "couponCode"
             <*> v .: "sessionToken"
 
 type AnonymousDetailsRoute =
@@ -199,10 +253,13 @@ anonymousDetailsRoute parameters =
             maybe False ((> 3) . T.length) $ adpMemberNumber parameters
     in
         runDB $ do
+            currentTime <- liftIO getCurrentTime
             maybeTaxRate <- getTaxRate maybeCountry $ adpShippingRegion parameters
+            maybeCoupon <- sequence $ getCoupon currentTime Nothing <$> adpCouponCode parameters
             items <- getCartItems maybeTaxRate $ \c ->
                 c E.^. CartSessionToken E.==. E.just (E.val $ adpCartToken parameters)
-            charges <- getCharges maybeTaxRate maybeCountry items isValidMemberNumber
+            charges <- getCharges maybeTaxRate maybeCountry items isValidMemberNumber maybeCoupon
+            checkCouponMeetsMinimum maybeCoupon charges
             return CheckoutDetailsData
                 { cddShippingAddresses = []
                 , cddBillingAddresses = []
@@ -211,6 +268,51 @@ anonymousDetailsRoute parameters =
                 , cddStoreCredit = 0
                 , cddMemberNumber = ""
                 }
+
+
+-- | Get the Coupon from a code, if it is valid. Does not validate
+-- the minimum order size, since the CartCharges are needed for
+-- that. Throws CouponError.
+getCoupon :: UTCTime -> Maybe CustomerId -> T.Text -> AppSQL (Entity Coupon)
+getCoupon currentTime maybeCustomerId couponCode = do
+    maybeCoupon <- getBy $ UniqueCoupon couponCode
+    case maybeCoupon of
+        Nothing ->
+            throwM CouponNotFound
+        Just e@(Entity couponId coupon) -> do
+            unless (couponIsActive coupon)
+                $ throwM CouponInactive
+            when (currentTime > couponExpirationDate coupon)
+                $ throwM CouponExpired
+            totalUses <- count [OrderCouponId ==. Just couponId]
+            when (totalUses >= fromIntegral (couponTotalUses coupon))
+                $ throwM CouponMaxUses
+            checkCustomerUses e
+            return e
+    where
+        checkCustomerUses :: Entity Coupon -> AppSQL ()
+        checkCustomerUses (Entity couponId coupon) =
+            case maybeCustomerId of
+                Just customerId -> do
+                    customerUses <- count
+                        [ OrderCouponId ==. Just couponId
+                        , OrderCustomerId ==. customerId
+                        ]
+                    when (customerUses >= fromIntegral (couponUsesPerCustomer coupon))
+                        $ throwM CouponCustomerMaxUses
+                Nothing -> return ()
+
+-- | Ensure the product total equals or exceeds the Coupon
+-- minimum by seeing if it was removed from the CartCharges. If
+-- it does not meet the minimum, throw a CouponError.
+checkCouponMeetsMinimum :: MonadThrow m => Maybe (Entity Coupon) -> CartCharges -> m ()
+checkCouponMeetsMinimum maybeCoupon CartCharges { ccCouponDiscount } =
+    case (maybeCoupon, ccCouponDiscount) of
+        (Just (Entity _ coupon), Nothing) ->
+            throwM $ CouponBelowOrderMinimum $ couponMinimumOrder coupon
+        _ ->
+            return ()
+
 
 
 -- PLACE ORDER
@@ -840,3 +942,9 @@ getCheckoutProducts orderId = do
 eitherM :: Monad m => (b -> m a) -> Either b a -> m a
 eitherM handler =
     either handler return
+
+
+mapException
+    :: (Exception e1, Exception e2, MonadThrow m, MonadCatch m)
+    => (e1 -> e2) -> m a -> m a
+mapException transform = try >=> eitherM (throwM . transform)
