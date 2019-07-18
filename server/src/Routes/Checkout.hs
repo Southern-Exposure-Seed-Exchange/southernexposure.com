@@ -793,9 +793,12 @@ deleteCart :: CartId -> AppSQL ()
 deleteCart cartId =
     deleteWhere [CartItemCartId ==. cartId] >> delete cartId
 
--- | Create the Shipping, Surcharge, & MemberDiscount OrderLineItems for an
--- Order, returning the total amount of all items & the ID of a Coupon(if
--- applied).
+-- | Create the Shipping, Surcharge, MemberDiscount, & CouponDiscount
+-- OrderLineItems for an Order, returning the total amount of all items
+-- & the ID of a Coupon(if applied).
+--
+-- Note that this returns an Integer instead of Cents for the lineItem
+-- total since the credit lines may be larger than the charge lines.
 --
 -- May throw a PlaceOrderError exception.
 createLineItems
