@@ -8,7 +8,7 @@ module Routes.Carts
     , cartRoutes
     ) where
 
-import Control.Monad ((>=>), void, join)
+import Control.Monad ((>=>), void)
 import Control.Monad.IO.Class (liftIO)
 import Data.Aeson ((.:), (.:?), (.=), FromJSON(..), ToJSON(..), object, withObject)
 import Data.Int (Int64)
@@ -375,7 +375,7 @@ type CustomerCountRoute =
 
 customerCountRoute :: AuthToken -> App ItemCountData
 customerCountRoute = validateToken >=> \(Entity customerId _) ->
-    fmap (ItemCountData . round . fromMaybe (0 :: Rational) . join . fmap E.unValue . listToMaybe) . runDB $ do
+    fmap (ItemCountData . round . fromMaybe (0 :: Rational) . (E.unValue =<<) . listToMaybe) . runDB $ do
         maybeCart <- getBy . UniqueCustomerCart $ Just customerId
         case maybeCart of
             Nothing ->
