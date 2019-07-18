@@ -275,7 +275,6 @@ installServerDependencies jobCount serverDirectory =
 
 buildAndStartServer :: FilePath -> IORef (Maybe ProcessData) -> IORef (Maybe ProcessHandle) -> String -> IO ()
 buildAndStartServer serverDirectory buildRef serverRef jobCount = do
-    printInfo "Building Server"
     buildProcess <- run "stack"
         [ "build"
         , "--pedantic"
@@ -287,6 +286,7 @@ buildAndStartServer serverDirectory buildRef serverRef jobCount = do
         ] serverDirectory printServerOutput
     currentTime <- getCurrentTime
     writeIORef buildRef (Just (buildProcess, currentTime))
+    printInfo "Building Server"
     buildResult <- waitOrAbort currentTime buildProcess
     case buildResult of
         Just ExitSuccess -> do
