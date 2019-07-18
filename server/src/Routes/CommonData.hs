@@ -259,17 +259,6 @@ getCharges maybeTaxRate maybeCountry items includeMemberDiscount maybeCoupon =
                     )
             else
                 Nothing
-        calculatedCouponDiscount coupon shipMethods =
-            case (couponDiscount coupon, shipMethods) of
-                (FreeShipping, m:_) ->
-                    ccAmount m
-                (FreeShipping, []) ->
-                    Cents 0
-                -- TODO: Should Flat have a max of subTotal or grandTotal?
-                (FlatDiscount (Cents amt), _) ->
-                    Cents $ min amt subTotal
-                (PercentageDiscount percent, _) ->
-                    Cents . round $ subTotal * percent % 100
         sumGrandTotal cc =
             cc {
                 ccGrandTotal =
@@ -295,6 +284,20 @@ getCharges maybeTaxRate maybeCountry items includeMemberDiscount maybeCoupon =
             , ccGrandTotal = 0
             }
 
+-- | Calculate the discount of a Coupon, given the Coupon, a list of
+-- shipping methods, & the order sub-total.
+calculateCouponDiscount :: Coupon -> [CartCharge] -> Natural -> Cents
+calculateCouponDiscount coupon shipMethods subTotal =
+    case (couponDiscount coupon, shipMethods) of
+        (FreeShipping, m:_) ->
+            ccAmount m
+        (FreeShipping, []) ->
+            Cents 0
+        -- TODO: Should Flat have a max of subTotal or grandTotal?
+        (FlatDiscount (Cents amt), _) ->
+            Cents $ min amt subTotal
+        (PercentageDiscount percent, _) ->
+            Cents . round $ toRational subTotal * (fromIntegral percent % 100)
 
 getSurcharges :: [CartItemData] -> AppSQL [CartCharge]
 getSurcharges items =
