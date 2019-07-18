@@ -127,6 +127,20 @@ ShippingMethod
     priority Natural
 
 
+Coupon
+    code T.Text
+    name T.Text
+    description T.Text
+    isActive Bool
+    discount CouponType
+    minimumOrder Cents
+    expirationDate UTCTime
+    totalUses Natural
+    usesPerCustomer Natural
+    createdDate UTCTime
+    UniqueCoupon code
+
+
 Address
     firstName T.Text
     lastName T.Text
@@ -142,6 +156,7 @@ Address
     isActive Bool
     isDefault Bool
 
+
 Order
     customerId CustomerId
     status OrderStatus
@@ -149,6 +164,7 @@ Order
     shippingAddressId AddressId
     taxDescription T.Text
     customerComment T.Text
+    couponId CouponId Maybe
     stripeChargeId StripeChargeId Maybe
     createdAt UTCTime
 

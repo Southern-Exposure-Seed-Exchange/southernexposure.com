@@ -173,11 +173,12 @@ instance FromJSON Country where
 
 
 type Threshold = Cents
+
 type Percent = Natural
 
 data ShippingRate
     = Flat Threshold Cents
-    | Percentage Threshold Percent
+    | Percentage Threshold Percent -- ^ Percent field is 1/10 of a percent(`53 == 5.3%`).
     deriving (Show, Read, Generic)
 
 derivePersistField "ShippingRate"
@@ -236,6 +237,18 @@ instance FromJSON StripeChargeId where
         StripeChargeId . Stripe.ChargeId <$> parseJSON j
 
 
+-- COUPONS
+
+data CouponType
+    = FlatDiscount Cents
+    | PercentageDiscount Percent    -- ^ Percent field is whole percentage(`5 == 5`).
+    | FreeShipping
+    deriving (Show, Read, Generic)
+
+derivePersistField "CouponType"
+
+
+
 -- ORDERS
 
 
@@ -259,6 +272,7 @@ data LineItemType
     | SurchargeLine
     | StoreCreditLine
     | MemberDiscountLine
+    | CouponDiscountLine
     deriving (Show, Read, Generic)
 
 instance ToJSON LineItemType
@@ -268,5 +282,5 @@ derivePersistField "LineItemType"
 
 -- | An enumeration of `LineItemType`s containing only credits.
 creditLineItemTypes :: [LineItemType]
-creditLineItemTypes
-    = [StoreCreditLine, MemberDiscountLine]
+creditLineItemTypes =
+    [StoreCreditLine, MemberDiscountLine, CouponDiscountLine]
