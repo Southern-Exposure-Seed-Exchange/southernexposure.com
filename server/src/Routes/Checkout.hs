@@ -324,6 +324,7 @@ data PlaceOrderError
     | NoShippingMethod
     | StripeError Stripe.StripeError
     | CardChargeError
+    | PlaceOrderCouponError CouponError
     deriving (Show, Typeable)
 
 instance Exception PlaceOrderError
@@ -352,6 +353,8 @@ withPlaceOrderErrors shippingAddress =
                 V.singleError
                     $ "An error occured while charging your card. Please try again or "
                     <> "contact us for help."
+            PlaceOrderCouponError couponError ->
+                handleCouponErrors couponError
 
 
 
@@ -378,6 +381,7 @@ data CustomerPlaceOrderParameters =
         , cpopBillingAddress :: CustomerAddress
         , cpopStoreCredit :: Maybe Cents
         , cpopMemberNumber :: T.Text
+        , cpopCouponCode :: Maybe T.Text
         , cpopComment :: T.Text
         , cpopStripeToken :: T.Text
         }
@@ -389,6 +393,7 @@ instance FromJSON CustomerPlaceOrderParameters where
             <*> v .: "billingAddress"
             <*> v .:? "storeCredit"
             <*> v .: "memberNumber"
+            <*> v .:? "couponCode"
             <*> v .: "comment"
             <*> v .: "stripeToken"
 
@@ -458,7 +463,7 @@ customerPlaceOrderRoute token = validate >=> \parameters -> do
         (billingAddress, orderId, orderTotal, cartId, appliedCredit) <-
             createAddressesAndOrder ce shippingParameter (cpopBillingAddress parameters)
                 (cpopStoreCredit parameters) (cpopMemberNumber parameters)
-                (cpopComment parameters) currentTime
+                (cpopCouponCode parameters) (cpopComment parameters) currentTime
         setCustomerCard stripeConfig customer stripeCustomerId billingAddress stripeToken
         when (orderTotal > 0) $
             chargeCustomer stripeConfig stripeCustomerId orderId orderTotal
@@ -479,14 +484,18 @@ customerPlaceOrderRoute token = validate >=> \parameters -> do
                     newId <- createStripeCustomer stripeConfig (customerEmail customer) stripeToken
                     update customerId [CustomerStripeId =. Just newId]
                     return newId
-          createAddressesAndOrder customer@(Entity customerId _) shippingParam billingParam maybeStoreCredit memberNumber comment currentTime = do
+          createAddressesAndOrder
+            :: Entity Customer -> CustomerAddress -> CustomerAddress
+            -> Maybe Cents -> T.Text -> Maybe T.Text -> T.Text -> UTCTime
+            -> AppSQL (Address, OrderId, Cents, CartId, Cents)
+          createAddressesAndOrder customer@(Entity customerId _) shippingParam billingParam maybeStoreCredit memberNumber maybeCouponCode comment currentTime = do
             shippingAddress <- getOrInsertAddress Shipping customerId shippingParam
             billingAddress <- getOrInsertAddress Billing customerId billingParam
             (Entity cartId _) <- getBy (UniqueCustomerCart $ Just customerId)
                 >>= maybe (throwM CartNotFound) return
             (orderId, orderTotal, appliedCredit) <- createOrder
                 customer cartId shippingAddress (entityKey billingAddress)
-                maybeStoreCredit memberNumber comment currentTime
+                maybeStoreCredit memberNumber maybeCouponCode comment currentTime
             return (entityVal billingAddress, orderId, orderTotal, cartId, appliedCredit)
           getOrInsertAddress :: AddressType -> CustomerId -> CustomerAddress -> AppSQL (Entity Address)
           getOrInsertAddress addrType customerId = \case
@@ -534,6 +543,7 @@ data AnonymousPlaceOrderParameters =
         , apopShippingAddress :: AddressData
         , apopBillingAddress :: AddressData
         , apopMemberNumber :: T.Text
+        , apopCouponCode :: Maybe T.Text
         , apopComment :: T.Text
         , apopCartToken :: T.Text
         , apopStripeToken :: T.Text
@@ -547,6 +557,7 @@ instance FromJSON AnonymousPlaceOrderParameters where
             <*> v .: "shippingAddress"
             <*> v .: "billingAddress"
             <*> v .: "memberNumber"
+            <*> v .:? "couponCode"
             <*> v .: "comment"
             <*> v .: "sessionToken"
             <*> v .: "stripeToken"
@@ -574,7 +585,8 @@ instance Validation AnonymousPlaceOrderParameters where
                   , T.length (apopMemberNumber parameters) > 0 &&
                     T.length (apopMemberNumber parameters) < 4
                   )
-                ] )
+                ]
+              )
             ]
             ++ map (first $ T.append "shipping-") shippingValidators
             ++ map (first $ T.append "billing-") billingValidators
@@ -631,7 +643,8 @@ anonymousPlaceOrderRoute = validate >=> \parameters -> do
         billingId <- insert billingAddress
         (orderId, orderTotal, _) <- createOrder (Entity customerId customer)
             cartId (Entity shippingId shippingAddress) billingId Nothing
-            memberNumber (apopComment parameters) currentTime
+            memberNumber (apopCouponCode parameters) (apopComment parameters)
+            currentTime
         stripeCardId <- getFirstStripeCard stripeConfig stripeCustomerId
         updateCardAddress stripeConfig stripeCustomerId stripeCardId billingAddress
         chargeCustomer stripeConfig stripeCustomerId orderId orderTotal
@@ -700,8 +713,27 @@ getFirstStripeCard stripeConfig stripeCustomerId =
 --
 -- TODO: Turn all the parameters into a `CreateOrderParams` data type so we
 -- can pass them by field name.
-createOrder :: Entity Customer -> CartId -> Entity Address -> AddressId -> Maybe Cents -> T.Text -> T.Text -> UTCTime -> AppSQL (OrderId, Cents, Cents)
-createOrder (Entity customerId customer) cartId shippingEntity billingId maybeStoreCredit memberNumber comment currentTime = do
+createOrder
+    :: Entity Customer
+    -- ^ Customer placing the Order
+    -> CartId
+    -- ^ Cart ID that should be turned into an Order
+    -> Entity Address
+    -- ^ Shipping Address
+    -> AddressId
+    -- ^ Billing Address ID
+    -> Maybe Cents
+    -- ^ Store Credit
+    -> T.Text
+    -- ^ Member Number
+    -> Maybe T.Text
+    -- ^ Coupon Code
+    -> T.Text
+    -- ^ Order Comment
+    -> UTCTime
+    -- ^ Current Time
+    -> AppSQL (OrderId, Cents, Cents)
+createOrder (Entity customerId customer) cartId shippingEntity billingId maybeStoreCredit memberNumber maybeCouponCode comment currentTime = do
     let (Entity shippingId shippingAddress) = shippingEntity
     maybeTaxRate <- getTaxRate (Just $ addressCountry shippingAddress)
         (Just $ addressState shippingAddress)
@@ -714,9 +746,13 @@ createOrder (Entity customerId customer) cartId shippingEntity billingId maybeSt
         , orderCustomerComment = comment
         , orderTaxDescription = maybe "" taxRateDescription maybeTaxRate
         , orderStripeChargeId = Nothing
+        , orderCouponId = Nothing
         , orderCreatedAt = currentTime
         }
-    lineTotal <- createLineItems maybeTaxRate shippingAddress items orderId memberNumber
+    (lineTotal, maybeCouponId) <- createLineItems currentTime customerId
+        maybeTaxRate shippingAddress items orderId memberNumber maybeCouponCode
+    when (isJust maybeCouponId) $
+        update orderId [OrderCouponId =. maybeCouponId]
     productTotals <- createProducts maybeTaxRate items orderId
     let totalCharges = lineTotal + sum productTotals
     case maybeStoreCredit of
@@ -742,12 +778,27 @@ deleteCart cartId =
     deleteWhere [CartItemCartId ==. cartId] >> delete cartId
 
 -- | Create the Shipping, Surcharge, & MemberDiscount OrderLineItems for an
--- Order, returning the total amount of all items.
+-- Order, returning the total amount of all items & the ID of a Coupon(if
+-- applied).
 --
 -- May throw a PlaceOrderError exception.
-createLineItems :: Maybe TaxRate -> Address -> [CartItemData] -> OrderId -> T.Text -> AppSQL Cents
-createLineItems maybeTaxRate shippingAddress items orderId memberNumber = do
-    charges <- getCharges maybeTaxRate (Just $ addressCountry shippingAddress) items (T.length memberNumber >= 4)
+createLineItems
+    :: UTCTime
+    -> CustomerId
+    -> Maybe TaxRate
+    -> Address
+    -> [CartItemData]
+    -> OrderId
+    -> T.Text
+    -> Maybe T.Text
+    -> AppSQL (Cents, Maybe CouponId)
+createLineItems currentTime customerId maybeTaxRate shippingAddress items orderId memberNumber maybeCouponCode = do
+    maybeCoupon <- mapException PlaceOrderCouponError $ sequence
+        $ getCoupon currentTime (Just customerId) <$> maybeCouponCode
+    charges <- getCharges maybeTaxRate
+        (Just $ addressCountry shippingAddress) items
+        (T.length memberNumber >= 4) maybeCoupon
+    mapException PlaceOrderCouponError $ checkCouponMeetsMinimum maybeCoupon charges
     shippingCharge <-
         case ccShippingMethods charges of
             [] ->
@@ -759,17 +810,28 @@ createLineItems maybeTaxRate shippingAddress items orderId memberNumber = do
     maybeMemberDiscount <-
         maybe (return Nothing) (fmap Just . insertEntity . makeLine MemberDiscountLine)
             $ ccMemberDiscount charges
-    return $
-        sum (map (orderLineItemAmount . entityVal) surcharges)
-        + orderLineItemAmount (entityVal shippingLine)
-        - maybe 0 (orderLineItemAmount . entityVal) maybeMemberDiscount
-    where makeLine lineType charge =
+    maybeCouponDiscount <-
+        maybe (return Nothing) (fmap Just . insertEntity . makeLine CouponDiscountLine . snd)
+            $ ccCouponDiscount charges
+    return
+        ( sum (map (orderLineItemAmount . entityVal) surcharges)
+            + orderLineItemAmount (entityVal shippingLine)
+            - maybeLineAmount maybeMemberDiscount
+            - maybeLineAmount maybeCouponDiscount
+        , entityKey <$> maybeCoupon
+        )
+    where
+        makeLine :: LineItemType -> CartCharge -> OrderLineItem
+        makeLine lineType charge =
             OrderLineItem
                 { orderLineItemOrderId = orderId
                 , orderLineItemType = lineType
                 , orderLineItemDescription = ccDescription charge
                 , orderLineItemAmount = ccAmount charge
                 }
+        maybeLineAmount :: Maybe (Entity OrderLineItem) -> Cents
+        maybeLineAmount =
+            maybe 0 (orderLineItemAmount . entityVal)
 
 createProducts :: Maybe TaxRate -> [CartItemData] -> OrderId -> AppSQL [Cents]
 createProducts maybeTaxRate items orderId =
