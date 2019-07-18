@@ -701,7 +701,10 @@ chargeCustomer stripeConfig stripeCustomerId orderId orderTotal = do
             let
                 stripeChargeId = StripeChargeId $ Stripe.chargeId stripeCharge
             in
-                update orderId [OrderStripeChargeId =. Just stripeChargeId]
+                update orderId
+                    [ OrderStatus =. PaymentReceived
+                    , OrderStripeChargeId =. Just stripeChargeId
+                    ]
 
 
 -- | Return the first Stripe Card Id for a Stripe Customer. This is useful
