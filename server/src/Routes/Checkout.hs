@@ -288,10 +288,12 @@ getCoupon currentTime maybeCustomerId couponCode = do
                 $ throwM CouponInactive
             when (currentTime > couponExpirationDate coupon)
                 $ throwM CouponExpired
-            totalUses <- count [OrderCouponId ==. Just couponId]
-            when (totalUses >= fromIntegral (couponTotalUses coupon))
-                $ throwM CouponMaxUses
-            checkCustomerUses e
+            when (couponTotalUses coupon /= 0) $ do
+                totalUses <- count [OrderCouponId ==. Just couponId]
+                when (totalUses >= fromIntegral (couponTotalUses coupon))
+                    $ throwM CouponMaxUses
+            when (couponUsesPerCustomer coupon /= 0) $
+                checkCustomerUses e
             return e
     where
         checkCustomerUses :: Entity Coupon -> AppSQL ()
