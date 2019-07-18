@@ -765,22 +765,27 @@ createOrder (Entity customerId customer) cartId shippingEntity billingId maybeSt
     when (isJust maybeCouponId) $
         update orderId [OrderCouponId =. maybeCouponId]
     productTotals <- createProducts maybeTaxRate items orderId
-    let totalCharges = lineTotal + sum productTotals
-    case maybeStoreCredit of
-        Nothing ->
-            return (orderId, totalCharges, 0)
-        Just c ->
-            if c > 0 && totalCharges > 0 then do
-                let storeCredit = min (customerStoreCredit customer) $ min totalCharges c
-                insert_ OrderLineItem
-                    { orderLineItemOrderId = orderId
-                    , orderLineItemType = StoreCreditLine
-                    , orderLineItemDescription = "Store Credit"
-                    , orderLineItemAmount = storeCredit
-                    }
-                return (orderId, totalCharges - storeCredit, storeCredit)
-            else
-                return (orderId, totalCharges, 0)
+    let totalCharges = lineTotal + fromIntegral (fromCents $ sum productTotals)
+    if totalCharges < 0 then
+        -- TODO: Throw an error? This means credits > charges which shouldn't happen...
+        return (orderId, 0, 0)
+    else
+        let totalInCents = Cents $ fromIntegral totalCharges in
+        case maybeStoreCredit of
+            Nothing ->
+                return (orderId, totalInCents, 0)
+            Just c ->
+                if c > 0 && totalInCents > 0 then do
+                    let storeCredit = min (customerStoreCredit customer) $ min totalInCents c
+                    insert_ OrderLineItem
+                        { orderLineItemOrderId = orderId
+                        , orderLineItemType = StoreCreditLine
+                        , orderLineItemDescription = "Store Credit"
+                        , orderLineItemAmount = storeCredit
+                        }
+                    return (orderId, totalInCents - storeCredit, storeCredit)
+                else
+                    return (orderId, totalInCents, 0)
 
 
 -- | Delete a Cart & all it's Items.
@@ -802,7 +807,7 @@ createLineItems
     -> OrderId
     -> T.Text
     -> Maybe T.Text
-    -> AppSQL (Cents, Maybe CouponId)
+    -> AppSQL (Integer, Maybe CouponId)
 createLineItems currentTime customerId maybeTaxRate shippingAddress items orderId memberNumber maybeCouponCode = do
     maybeCoupon <- mapException PlaceOrderCouponError $ sequence
         $ getCoupon currentTime (Just customerId) <$> maybeCouponCode
@@ -825,13 +830,16 @@ createLineItems currentTime customerId maybeTaxRate shippingAddress items orderI
         maybe (return Nothing) (fmap Just . insertEntity . makeLine CouponDiscountLine)
             $ ccCouponDiscount charges
     return
-        ( sum (map (orderLineItemAmount . entityVal) surcharges)
-            + orderLineItemAmount (entityVal shippingLine)
+        ( sum (map (centsToInteger . orderLineItemAmount . entityVal) surcharges)
+            + centsToInteger (orderLineItemAmount $ entityVal shippingLine)
             - maybeLineAmount maybeMemberDiscount
             - maybeLineAmount maybeCouponDiscount
         , entityKey <$> maybeCoupon
         )
     where
+        centsToInteger :: Cents -> Integer
+        centsToInteger =
+            fromIntegral . fromCents
         makeLine :: LineItemType -> CartCharge -> OrderLineItem
         makeLine lineType charge =
             OrderLineItem
@@ -840,9 +848,9 @@ createLineItems currentTime customerId maybeTaxRate shippingAddress items orderI
                 , orderLineItemDescription = ccDescription charge
                 , orderLineItemAmount = ccAmount charge
                 }
-        maybeLineAmount :: Maybe (Entity OrderLineItem) -> Cents
+        maybeLineAmount :: Maybe (Entity OrderLineItem) -> Integer
         maybeLineAmount =
-            maybe 0 (orderLineItemAmount . entityVal)
+            maybe 0 (centsToInteger . orderLineItemAmount . entityVal)
 
 createProducts :: Maybe TaxRate -> [CartItemData] -> OrderId -> AppSQL [Cents]
 createProducts maybeTaxRate items orderId =
