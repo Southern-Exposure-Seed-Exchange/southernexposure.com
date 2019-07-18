@@ -12,6 +12,7 @@ module Routes.CommonData
     , CartCharges(..)
     , getCharges
     , CartCharge(..)
+    , calculateCouponDiscount
     , AddressData(..)
     , fromAddressData
     , toAddressData
@@ -161,7 +162,7 @@ data CartCharge =
     CartCharge
         { ccDescription :: T.Text
         , ccAmount :: Cents
-        }
+        } deriving (Show)
 
 instance ToJSON CartCharge where
     toJSON charge =

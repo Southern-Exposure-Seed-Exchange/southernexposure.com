@@ -139,6 +139,7 @@ Coupon
     usesPerCustomer Natural
     createdDate UTCTime
     UniqueCoupon code
+    deriving Show
 
 
 Address

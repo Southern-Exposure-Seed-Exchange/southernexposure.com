@@ -248,7 +248,7 @@ productionBuild = do
     printInfo "Building Server"
     serverDirectory <- getServerDirectory
     jobCount <- stackJobCount
-    liftIO $ run "stack" ["build", "--pedantic", jobCount, "--color", "always", "--ghc-options", "-O2"]
+    liftIO $ run "stack" ["build", "--test", "--pedantic", jobCount, "--color", "always", "--ghc-options", "-O2"]
         serverDirectory printServerOutput
         >>= exitOnError "Server"
     where exitOnError description =
@@ -276,7 +276,15 @@ installServerDependencies jobCount serverDirectory =
 buildAndStartServer :: FilePath -> IORef (Maybe ProcessData) -> IORef (Maybe ProcessHandle) -> String -> IO ()
 buildAndStartServer serverDirectory buildRef serverRef jobCount = do
     printInfo "Building Server"
-    buildProcess <- run "stack" ["build", "--pedantic", jobCount, "--color", "always"] serverDirectory printServerOutput
+    buildProcess <- run "stack"
+        [ "build"
+        , "--pedantic"
+        , jobCount
+        , "--test"
+        , "--test-arguments=--color=always"
+        , "--color"
+        , "always"
+        ] serverDirectory printServerOutput
     currentTime <- getCurrentTime
     writeIORef buildRef (Just (buildProcess, currentTime))
     buildResult <- waitOrAbort currentTime buildProcess
