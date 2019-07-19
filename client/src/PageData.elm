@@ -658,12 +658,13 @@ type alias CartCharges =
     , surcharges : List CartCharge
     , shippingMethod : Maybe CartCharge
     , memberDiscount : Maybe CartCharge
+    , couponDiscount : Maybe CartCharge
     }
 
 
 cartChargesDecoder : Decoder CartCharges
 cartChargesDecoder =
-    Decode.map4 CartCharges
+    Decode.map5 CartCharges
         (Decode.field "tax" cartChargeDecoder)
         (Decode.field "surcharges" <| Decode.list cartChargeDecoder)
         (Decode.field "shippingMethods" <|
@@ -671,6 +672,7 @@ cartChargesDecoder =
                 Decode.list cartChargeDecoder
         )
         (Decode.field "memberDiscount" <| Decode.nullable cartChargeDecoder)
+        (Decode.field "couponDiscount" <| Decode.nullable cartChargeDecoder)
 
 
 
