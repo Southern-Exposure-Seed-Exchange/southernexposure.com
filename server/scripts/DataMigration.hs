@@ -20,7 +20,7 @@ import Database.MySQL.Base
     ( MySQLConn, Query(..), query_, close, MySQLValue(..), prepareStmt, queryStmt )
 import Database.Persist
     ( (<-.), (+=.), Entity(..), Filter, getBy, insert, insertMany_, upsert
-    , deleteWhere, selectKeysList, insert_
+    , deleteWhere, selectKeysList, insert_, selectList
     )
 import Database.Persist.Postgresql
     ( ConnectionPool, SqlWriteT, createPostgresqlPool, toSqlKey, fromSqlKey
@@ -549,6 +549,17 @@ insertCharges = do
         ] []
     void . insert $
         Surcharge "Fall Item Fee" (Cents 200) (Cents 400) fallCategoryIds True
+    let priorityRate = PriorityShippingFee (Cents 500) 5
+    priorityExcludedCategories <- do
+        let categorySlugs =
+                [ "potatoes"
+                , "sweet-potatoes"
+                , "garlic"
+                , "perennial-onions"
+                , "mushrooms"
+                , "ginseng-goldenseal"
+                ]
+        map entityKey <$> selectList [CategorySlug <-. categorySlugs] []
     void . insert $
         ShippingMethod "Shipping to USA" [Country CountryCodes.US]
             [ Flat (Cents 0) (Cents 350)
@@ -557,7 +568,9 @@ insertCharges = do
             , Flat (Cents 12000) (Cents 650)
             , Percentage (Cents 50000000) 5
             ]
+            priorityRate
             []
+            priorityExcludedCategories
             True
             2
     void . insert $
@@ -569,14 +582,18 @@ insertCharges = do
             , Percentage (Cents 12000) 8
             , Percentage (Cents 50000000) 10
             ]
+            priorityRate
             []
+            priorityExcludedCategories
             True
             2
     getBy (UniqueCategorySlug "request-a-catalog") >>=
         maybe (return ()) (\(Entity catId _) -> void . insert $
             ShippingMethod "Free Shipping" [Country CountryCodes.US]
                 [Flat (Cents 0) (Cents 0)]
+                priorityRate
                 [catId]
+                priorityExcludedCategories
                 True
                 1
             )

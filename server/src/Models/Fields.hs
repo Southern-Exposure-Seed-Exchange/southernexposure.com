@@ -183,6 +183,13 @@ data ShippingRate
 
 derivePersistField "ShippingRate"
 
+-- | The Flat Fee & Percentage Fee for adding Priority S&H to an Order.
+data PriorityShippingFee
+    = PriorityShippingFee Cents Percent -- ^ Percent field is a whole percent(`1 == 1%`).
+    deriving (Show, Read, Generic)
+
+derivePersistField "PriorityShippingFee"
+
 
 -- ADDRESSES
 

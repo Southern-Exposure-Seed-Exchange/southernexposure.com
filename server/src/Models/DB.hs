@@ -122,7 +122,9 @@ ShippingMethod
     description T.Text
     countries [Country]
     rates [ShippingRate]
+    priorityRate PriorityShippingFee
     categoryIds [CategoryId]
+    excludedPriorityCategoryIds [CategoryId]
     isActive Bool
     priority Natural
 
