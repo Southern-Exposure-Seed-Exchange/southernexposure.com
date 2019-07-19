@@ -1,6 +1,7 @@
 module Messages exposing (Msg(..))
 
 import AdvancedSearch
+import Api
 import Auth.CreateAccount as CreateAccount
 import Auth.EditAddress as EditAddress
 import Auth.EditLogin as EditLogin
@@ -62,7 +63,7 @@ type Msg
     | GetAddressDetails (WebData PageData.AddressDetails)
     | GetCartDetails (WebData PageData.CartDetails)
     | GetCartItemCount (WebData Int)
-    | GetCheckoutDetails (WebData PageData.CheckoutDetails)
+    | GetCheckoutDetails (WebData (Result Api.FormErrors PageData.CheckoutDetails))
     | GetCheckoutSuccessDetails (WebData PageData.OrderDetails)
     | CategoryPaginationMsg (Paginate.Msg ProductData PageData.CategoryDetails)
     | SearchPaginationMsg (Paginate.Msg ProductData String)

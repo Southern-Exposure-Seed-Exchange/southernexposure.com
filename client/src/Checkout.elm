@@ -133,7 +133,7 @@ type Msg
     | Submit
     | TokenReceived String
     | SubmitResponse (WebData (Result Api.FormErrors ( Int, AuthStatus )))
-    | RefreshDetails (WebData PageData.CheckoutDetails)
+    | RefreshDetails (WebData (Result Api.FormErrors PageData.CheckoutDetails))
 
 
 type OutMsg
@@ -335,11 +335,14 @@ update msg model authStatus maybeSessionToken checkoutDetails =
         SubmitResponse _ ->
             model |> nothingAndNoCommand
 
-        RefreshDetails (RemoteData.Success details) ->
+        RefreshDetails (RemoteData.Success (Ok details)) ->
             ( model
             , Just (DetailsRefreshed details)
             , Cmd.none
             )
+
+        RefreshDetails (RemoteData.Success (Err formErrors)) ->
+            { model | errors = formErrors } |> nothingAndNoCommand
 
         RefreshDetails _ ->
             model |> nothingAndNoCommand
@@ -475,7 +478,7 @@ limitStoreCredit checkoutDetails =
 
 
 getCustomerDetails :
-    (WebData PageData.CheckoutDetails -> msg)
+    (WebData (Result Api.FormErrors PageData.CheckoutDetails) -> msg)
     -> String
     -> Maybe String
     -> Maybe Region
@@ -506,13 +509,13 @@ getCustomerDetails msg token maybeCountry maybeRegion maybeAddressId maybeMember
     in
     Api.post Api.CheckoutDetailsCustomer
         |> Api.withJsonBody data
-        |> Api.withJsonResponse PageData.checkoutDetailsDecoder
+        |> Api.withErrorHandler PageData.checkoutDetailsDecoder
         |> Api.withToken token
         |> Api.sendRequest msg
 
 
 getAnonymousDetails :
-    (WebData PageData.CheckoutDetails -> msg)
+    (WebData (Result Api.FormErrors PageData.CheckoutDetails) -> msg)
     -> String
     -> Maybe String
     -> Maybe Region
@@ -530,7 +533,7 @@ getAnonymousDetails msg sessionToken maybeCountry maybeRegion memberNumber =
     in
     Api.post Api.CheckoutDetailsAnonymous
         |> Api.withJsonBody data
-        |> Api.withJsonResponse PageData.checkoutDetailsDecoder
+        |> Api.withErrorHandler PageData.checkoutDetailsDecoder
         |> Api.sendRequest msg
 
 

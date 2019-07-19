@@ -789,11 +789,16 @@ update msg ({ pageData, key } as model) =
         GetCheckoutDetails response ->
             let
                 updatedPageData =
-                    { pageData | checkoutDetails = response }
+                    case response of
+                        RemoteData.Success (Ok det) ->
+                            { pageData | checkoutDetails = RemoteData.Success det }
+
+                        _ ->
+                            pageData
 
                 cmd =
                     case response of
-                        RemoteData.Success { items } ->
+                        RemoteData.Success (Ok { items }) ->
                             if List.isEmpty items then
                                 Routing.newUrl key Cart
 
@@ -805,10 +810,10 @@ update msg ({ pageData, key } as model) =
             in
             (\a -> Tuple.pair a cmd) <|
                 case ( pageData.checkoutDetails, response ) of
-                    ( RemoteData.Success _, RemoteData.Success _ ) ->
+                    ( RemoteData.Success _, RemoteData.Success (Ok _) ) ->
                         { model | pageData = updatedPageData }
 
-                    ( _, RemoteData.Success details ) ->
+                    ( _, RemoteData.Success (Ok details) ) ->
                         { model
                             | pageData = updatedPageData
                             , checkoutForm =
