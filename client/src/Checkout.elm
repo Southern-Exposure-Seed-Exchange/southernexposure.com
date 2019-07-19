@@ -855,7 +855,10 @@ view model authStatus locations checkoutDetails =
             [ storeCreditForm, memberNumberForm ]
         , div [ class "mb-3" ]
             [ h4 [] [ text "Order Summary" ]
-            , summaryTable checkoutDetails model.storeCredit
+            , summaryTable checkoutDetails
+                model.storeCredit
+                model.couponCode
+                (Dict.get "coupon" model.errors)
             ]
         , div [ class "form-group" ]
             [ label [ class "h4", for "commentsTextarea" ]
@@ -1107,8 +1110,8 @@ sameAddressesCheckbox billingSameAsShipping =
         ]
 
 
-summaryTable : PageData.CheckoutDetails -> String -> Html msg
-summaryTable ({ items, charges } as checkoutDetails) creditString =
+summaryTable : PageData.CheckoutDetails -> String -> String -> Maybe (List String) -> Html Msg
+summaryTable ({ items, charges } as checkoutDetails) creditString couponCode couponErrors =
     let
         tableHeader =
             thead [ class "font-weight-bold" ]
@@ -1144,7 +1147,8 @@ summaryTable ({ items, charges } as checkoutDetails) creditString =
                     ++ [ taxRow
                        , storeCreditRow
                        , memberDiscountRow
-                       , footerRow "Total" finalTotal "font-weight-bold"
+                       , couponDiscountRow
+                       , totalRow
                        ]
 
         subTotalRow =
@@ -1178,19 +1182,84 @@ summaryTable ({ items, charges } as checkoutDetails) creditString =
                 Just credit ->
                     footerRow "Store Credit" (centsMap negate credit) ""
 
+        totalRow =
+            if charges.couponDiscount == Nothing then
+                splitFooterRow "total-row-coupon-input"
+                    "text-right font-weight-bold"
+                    "Total"
+                    finalTotal
+                <|
+                    div [ class "form-group form-inline" ]
+                        [ input
+                            [ class "form-control form-control-sm"
+                            , type_ "text"
+                            , onInput CouponCode
+                            , value couponCode
+                            , A.placeholder "Coupon Code"
+                            ]
+                            []
+                        , button
+                            [ class "btn btn-sm btn-link ml-2"
+                            , type_ "button"
+                            , onClick ApplyCoupon
+                            ]
+                            [ text "Apply" ]
+                        , couponErrors
+                            |> Maybe.map (\errs -> small [] [ Api.errorHtml errs ])
+                            |> Maybe.withDefault (text "")
+                        ]
+
+            else
+                footerRow "Total" finalTotal "font-weight-bold"
+
         maybeAppliedCredit =
             centsFromString creditString
                 |> Maybe.map (limitStoreCredit checkoutDetails)
 
         memberDiscountRow =
             charges.memberDiscount
-                |> Maybe.map (\c -> { c | amount = centsMap negate c.amount })
+                |> Maybe.map negateChargeAmount
                 |> maybeChargeRow
+
+        couponDiscountRow =
+            case charges.couponDiscount of
+                Nothing ->
+                    text ""
+
+                Just { description, amount } ->
+                    tr [ class "checkout-coupon-line" ]
+                        [ td [ colspan 4, class "text-right clearfix" ]
+                            [ button
+                                [ class "btn btn-sm btn-link float-left py-0"
+                                , type_ "button"
+                                , onClick RemoveCoupon
+                                ]
+                                [ small [] [ text "[Remove]" ] ]
+                            , text <| description ++ ":"
+                            ]
+                        , td [ class "text-right" ]
+                            [ text <| Format.cents <| centsMap negate amount ]
+                        ]
+
+        negateChargeAmount c =
+            { c | amount = centsMap negate c.amount }
 
         footerRow content amount rowClass =
             tr [ class rowClass ]
                 [ td [ colspan 4, class "text-right" ] [ text <| content ++ ":" ]
                 , td [ class "text-right" ] [ text <| Format.cents amount ]
+                ]
+
+        -- Similar to footerRow, but more customizable with the left cell split
+        -- in half.
+        splitFooterRow rowClass rightClass content amount splitContent =
+            tr [ class rowClass ]
+                [ td [ colspan 2 ]
+                    [ splitContent ]
+                , td [ colspan 2, class rightClass ]
+                    [ text <| content ++ ":" ]
+                , td [ class rightClass ]
+                    [ text <| Format.cents amount ]
                 ]
 
         totals =
