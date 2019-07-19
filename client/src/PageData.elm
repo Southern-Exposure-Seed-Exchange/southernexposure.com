@@ -385,6 +385,9 @@ orderTotals { lineItems, products } =
 
                         MemberDiscount ->
                             ( centsMap2 (+) charge.amount cs, ds )
+
+                        CouponDiscount ->
+                            ( centsMap2 (+) charge.amount cs, ds )
                 )
                 ( Cents 0, Cents 0 )
                 lineItems
@@ -501,6 +504,7 @@ type LineItemType
     | Surcharge
     | StoreCredit
     | MemberDiscount
+    | CouponDiscount
 
 
 lineItemTypeDecoder : Decoder LineItemType
@@ -519,6 +523,9 @@ lineItemTypeDecoder =
 
                 "MemberDiscountLine" ->
                     Decode.succeed MemberDiscount
+
+                "CouponDiscountLine" ->
+                    Decode.succeed CouponDiscount
 
                 _ ->
                     Decode.fail <| "Invalid LineItemType: " ++ str
