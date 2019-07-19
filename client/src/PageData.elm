@@ -258,7 +258,7 @@ type alias CartDetails =
 
 blankCartDetails : CartDetails
 blankCartDetails =
-    CartDetails [] (CartCharges (CartCharge "" (Cents 0)) [] Nothing Nothing)
+    CartDetails [] (CartCharges (CartCharge "" (Cents 0)) [] Nothing Nothing Nothing)
 
 
 cartDetailsDecoder : Decoder CartDetails
@@ -275,9 +275,13 @@ cartTotals { items, charges } =
             List.foldl (\item acc -> itemTotal item |> addCents acc) (Cents 0) items
 
         memberDiscount =
-            charges.memberDiscount
-                |> Maybe.map .amount
-                |> Maybe.withDefault (Cents 0)
+            maybeDiscountAmount charges.memberDiscount
+
+        couponDiscount =
+            maybeDiscountAmount charges.couponDiscount
+
+        maybeDiscountAmount =
+            Maybe.map .amount >> Maybe.withDefault (Cents 0)
 
         shippingAmount =
             charges.shippingMethod
@@ -298,10 +302,14 @@ cartTotals { items, charges } =
                 |> addCents surchargeAmount
                 |> addCents shippingAmount
                 |> addCents taxAmount
-                |> centsMap2 (\discount runningTotal -> runningTotal - discount) memberDiscount
+                |> subtractCents memberDiscount
+                |> subtractCents couponDiscount
 
         addCents =
             centsMap2 (+)
+
+        subtractCents =
+            centsMap2 (\toRemove amount -> amount - toRemove)
     in
     { subTotal = subTotal
     , total = total

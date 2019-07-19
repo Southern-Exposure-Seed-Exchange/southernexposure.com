@@ -53,6 +53,7 @@ type alias Form =
     , billingSameAsShipping : Bool
     , storeCredit : String
     , memberNumber : Maybe String
+    , couponCode : String
     , comment : String
     , errors : Api.FormErrors
     }
@@ -70,6 +71,7 @@ initial =
     , billingSameAsShipping = False
     , storeCredit = ""
     , memberNumber = Nothing
+    , couponCode = ""
     , comment = ""
     , errors = Api.initialErrors
     }
@@ -107,6 +109,7 @@ initialWithDefaults shippingAddresses billingAddresses =
     , billingSameAsShipping = False
     , storeCredit = ""
     , memberNumber = Nothing
+    , couponCode = ""
     , comment = ""
     , errors = Api.initialErrors
     }
@@ -129,7 +132,10 @@ type Msg
     | BillingSameAsShipping Bool
     | StoreCredit String
     | MemberNumber String
+    | CouponCode String
     | Comment String
+    | ApplyCoupon
+    | RemoveCoupon
     | Submit
     | TokenReceived String
     | SubmitResponse (WebData (Result Api.FormErrors ( Int, AuthStatus )))
@@ -164,7 +170,7 @@ update msg model authStatus maybeSessionToken checkoutDetails =
                 | shippingAddress = selectAddress addressId
                 , makeShippingDefault = False
             }
-                |> refreshDetails authStatus maybeSessionToken model
+                |> refreshDetails authStatus maybeSessionToken False model
 
         ToggleShippingDefault makeDefault ->
             { model | makeShippingDefault = makeDefault }
@@ -175,7 +181,7 @@ update msg model authStatus maybeSessionToken checkoutDetails =
                 subMsg
                 model
                 (\f -> { model | shippingAddress = f })
-                |> refreshDetails authStatus maybeSessionToken model
+                |> refreshDetails authStatus maybeSessionToken False model
 
         SelectBilling addressId ->
             { model
@@ -205,7 +211,18 @@ update msg model authStatus maybeSessionToken checkoutDetails =
 
         MemberNumber memberNumber ->
             { model | memberNumber = Just memberNumber }
-                |> refreshDetails authStatus maybeSessionToken model
+                |> refreshDetails authStatus maybeSessionToken False model
+
+        CouponCode code ->
+            { model | couponCode = code }
+                |> nothingAndNoCommand
+
+        ApplyCoupon ->
+            refreshDetails authStatus maybeSessionToken True model model
+
+        RemoveCoupon ->
+            { model | couponCode = "" }
+                |> refreshDetails authStatus maybeSessionToken True model
 
         Comment comment ->
             { model | comment = comment } |> nothingAndNoCommand
@@ -368,8 +385,8 @@ updateAddressForm addr msg model updater =
                 |> (NewAddress >> updater)
 
 
-refreshDetails : AuthStatus -> Maybe String -> Form -> Form -> ( Form, Maybe a, Cmd Msg )
-refreshDetails authStatus maybeSessionToken oldModel newModel =
+refreshDetails : AuthStatus -> Maybe String -> Bool -> Form -> Form -> ( Form, Maybe a, Cmd Msg )
+refreshDetails authStatus maybeSessionToken forceUpdate oldModel newModel =
     let
         refreshCommand =
             case authStatus of
@@ -385,6 +402,7 @@ refreshDetails authStatus maybeSessionToken oldModel newModel =
                                 maybeRegion
                                 maybeAddressId
                                 newModel.memberNumber
+                                newModel.couponCode
                         )
 
         applyArguments cmdFunction =
@@ -405,9 +423,10 @@ refreshDetails authStatus maybeSessionToken oldModel newModel =
                         maybeCountry
                         maybeRegion
                         (Maybe.withDefault "" newModel.memberNumber)
+                        newModel.couponCode
 
         shouldUpdate =
-            addressChanged || memberNumberChanged
+            addressChanged || memberNumberChanged || forceUpdate
 
         addressChanged =
             case ( oldModel.shippingAddress, newModel.shippingAddress ) of
@@ -484,8 +503,9 @@ getCustomerDetails :
     -> Maybe Region
     -> Maybe AddressId
     -> Maybe String
+    -> String
     -> Cmd msg
-getCustomerDetails msg token maybeCountry maybeRegion maybeAddressId maybeMemberNumber =
+getCustomerDetails msg token maybeCountry maybeRegion maybeAddressId maybeMemberNumber couponCode =
     let
         data =
             Encode.object
@@ -493,6 +513,7 @@ getCustomerDetails msg token maybeCountry maybeRegion maybeAddressId maybeMember
                 , ( "country", encodeMaybe Encode.string maybeCountry )
                 , ( "addressId", encodeMaybe (\(AddressId i) -> Encode.int i) maybeAddressId )
                 , ( "memberNumber", encodedMemberNumber )
+                , ( "couponCode", encodeStringAsMaybe couponCode )
                 ]
 
         encodedMemberNumber =
@@ -506,6 +527,13 @@ getCustomerDetails msg token maybeCountry maybeRegion maybeAddressId maybeMember
                             Nothing
                     )
                 |> encodeMaybe Encode.string
+
+        encodedCouponCode =
+            if String.isEmpty couponCode then
+                Encode.null
+
+            else
+                Encode.string couponCode
     in
     Api.post Api.CheckoutDetailsCustomer
         |> Api.withJsonBody data
@@ -520,8 +548,9 @@ getAnonymousDetails :
     -> Maybe String
     -> Maybe Region
     -> String
+    -> String
     -> Cmd msg
-getAnonymousDetails msg sessionToken maybeCountry maybeRegion memberNumber =
+getAnonymousDetails msg sessionToken maybeCountry maybeRegion memberNumber couponCode =
     let
         data =
             Encode.object
@@ -529,12 +558,24 @@ getAnonymousDetails msg sessionToken maybeCountry maybeRegion memberNumber =
                 , ( "country", encodeMaybe Encode.string maybeCountry )
                 , ( "memberNumber", Encode.string memberNumber )
                 , ( "sessionToken", Encode.string sessionToken )
+                , ( "couponCode", encodeStringAsMaybe couponCode )
                 ]
     in
     Api.post Api.CheckoutDetailsAnonymous
         |> Api.withJsonBody data
         |> Api.withErrorHandler PageData.checkoutDetailsDecoder
         |> Api.sendRequest msg
+
+
+{-| If a String is empty, encode it as null, otherwise encode the String.
+-}
+encodeStringAsMaybe : String -> Value
+encodeStringAsMaybe str =
+    if String.isEmpty str then
+        Encode.null
+
+    else
+        Encode.string str
 
 
 placeOrder : Form -> AuthStatus -> Maybe String -> String -> WebData PageData.CheckoutDetails -> Cmd Msg
@@ -546,6 +587,7 @@ placeOrder model authStatus maybeSessionToken stripeTokenId checkoutDetails =
                 , ( "billingAddress", encodedBillingAddress )
                 , ( "storeCredit", encodedStoreCredit )
                 , ( "memberNumber", encodedMemberNumber )
+                , ( "couponCode", encodeStringAsMaybe model.couponCode )
                 , ( "comment", Encode.string model.comment )
                 , ( "stripeToken", Encode.string stripeTokenId )
                 ]
@@ -555,6 +597,7 @@ placeOrder model authStatus maybeSessionToken stripeTokenId checkoutDetails =
                 [ ( "shippingAddress", encodedShippingAddress )
                 , ( "billingAddress", encodedBillingAddress )
                 , ( "memberNumber", encodedMemberNumber )
+                , ( "couponCode", encodeStringAsMaybe model.couponCode )
                 , ( "comment", Encode.string model.comment )
                 , ( "sessionToken", encodeMaybe Encode.string maybeSessionToken )
                 , ( "email", Encode.string model.email )
