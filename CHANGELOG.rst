@@ -5,6 +5,8 @@ CHANGELOG
 v0.6.0
 ======
 
+* Allow priority shipping charges to have both a flat fee and percentage fee
+  based on the Order sub-total. Default all priority charges to $5 + 5%.
 * Show ``Free!`` for the prices of free Products, instead of no text in the Add
   to Cart forms.
 * Don't collect contact addresses from Customers.
