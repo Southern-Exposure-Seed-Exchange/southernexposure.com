@@ -243,7 +243,8 @@ view { quantities } ({ items, charges } as cartDetails) =
             tfoot [] <|
                 [ footerRow "font-weight-bold" "Sub-Total" totals.subTotal ]
                     ++ List.map chargeRow charges.surcharges
-                    ++ [ htmlOrBlank chargeRow charges.shippingMethod
+                    ++ [ htmlOrBlank chargeRow <|
+                            Maybe.map .charge charges.shippingMethod
                        , taxRow
                        , memberDiscountRow
                        , totalRow
