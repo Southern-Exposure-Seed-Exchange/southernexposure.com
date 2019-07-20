@@ -258,7 +258,14 @@ type alias CartDetails =
 
 blankCartDetails : CartDetails
 blankCartDetails =
-    CartDetails [] (CartCharges (CartCharge "" (Cents 0)) [] Nothing Nothing Nothing)
+    CartDetails []
+        (CartCharges (CartCharge "" (Cents 0))
+            []
+            Nothing
+            Nothing
+            Nothing
+            Nothing
+        )
 
 
 cartDetailsDecoder : Decoder CartDetails
@@ -275,18 +282,21 @@ cartTotals { items, charges } =
             List.foldl (\item acc -> itemTotal item |> addCents acc) (Cents 0) items
 
         memberDiscount =
-            maybeDiscountAmount charges.memberDiscount
+            maybeAmount charges.memberDiscount
 
         couponDiscount =
-            maybeDiscountAmount charges.couponDiscount
+            maybeAmount charges.couponDiscount
 
-        maybeDiscountAmount =
+        maybeAmount =
             Maybe.map .amount >> Maybe.withDefault (Cents 0)
 
         shippingAmount =
             charges.shippingMethod
-                |> Maybe.map .amount
+                |> Maybe.map (.charge >> .amount)
                 |> Maybe.withDefault (Cents 0)
+
+        priorityAmount =
+            maybeAmount charges.priorityShipping
 
         surchargeAmount =
             charges.surcharges |> List.foldl (\i -> addCents i.amount) (Cents 0)
@@ -301,6 +311,7 @@ cartTotals { items, charges } =
             subTotal
                 |> addCents surchargeAmount
                 |> addCents shippingAmount
+                |> addCents priorityAmount
                 |> addCents taxAmount
                 |> subtractCents memberDiscount
                 |> subtractCents couponDiscount
@@ -664,7 +675,8 @@ cartChargeDecoder =
 type alias CartCharges =
     { tax : CartCharge
     , surcharges : List CartCharge
-    , shippingMethod : Maybe CartCharge
+    , shippingMethod : Maybe ShippingCharge
+    , priorityShipping : Maybe CartCharge
     , memberDiscount : Maybe CartCharge
     , couponDiscount : Maybe CartCharge
     }
@@ -672,15 +684,42 @@ type alias CartCharges =
 
 cartChargesDecoder : Decoder CartCharges
 cartChargesDecoder =
-    Decode.map5 CartCharges
+    Decode.map6 CartCharges
         (Decode.field "tax" cartChargeDecoder)
         (Decode.field "surcharges" <| Decode.list cartChargeDecoder)
         (Decode.field "shippingMethods" <|
             Decode.map List.head <|
-                Decode.list cartChargeDecoder
+                Decode.list shippingChargeDecoder
         )
+        (Decode.field "priorityShipping" <| Decode.nullable cartChargeDecoder)
         (Decode.field "memberDiscount" <| Decode.nullable cartChargeDecoder)
         (Decode.field "couponDiscount" <| Decode.nullable cartChargeDecoder)
+
+
+type alias ShippingCharge =
+    { charge : CartCharge
+    , priorityFee : Maybe PriorityFee
+    }
+
+
+shippingChargeDecoder : Decoder ShippingCharge
+shippingChargeDecoder =
+    Decode.map2 ShippingCharge
+        (Decode.field "charge" cartChargeDecoder)
+        (Decode.field "priorityFee" <| Decode.nullable priorityFeeDecoder)
+
+
+type alias PriorityFee =
+    { flat : Cents
+    , percent : Int
+    }
+
+
+priorityFeeDecoder : Decoder PriorityFee
+priorityFeeDecoder =
+    Decode.map2 PriorityFee
+        (Decode.field "flat" centsDecoder)
+        (Decode.field "percent" Decode.int)
 
 
 

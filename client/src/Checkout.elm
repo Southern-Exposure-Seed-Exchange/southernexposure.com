@@ -53,6 +53,7 @@ type alias Form =
     , billingSameAsShipping : Bool
     , storeCredit : String
     , memberNumber : Maybe String
+    , priorityShipping : Bool
     , couponCode : String
     , comment : String
     , errors : Api.FormErrors
@@ -71,6 +72,7 @@ initial =
     , billingSameAsShipping = False
     , storeCredit = ""
     , memberNumber = Nothing
+    , priorityShipping = False
     , couponCode = ""
     , comment = ""
     , errors = Api.initialErrors
@@ -109,6 +111,7 @@ initialWithDefaults shippingAddresses billingAddresses =
     , billingSameAsShipping = False
     , storeCredit = ""
     , memberNumber = Nothing
+    , priorityShipping = False
     , couponCode = ""
     , comment = ""
     , errors = Api.initialErrors
@@ -132,6 +135,7 @@ type Msg
     | BillingSameAsShipping Bool
     | StoreCredit String
     | MemberNumber String
+    | TogglePriorityShipping Bool
     | CouponCode String
     | Comment String
     | ApplyCoupon
@@ -212,6 +216,10 @@ update msg model authStatus maybeSessionToken checkoutDetails =
         MemberNumber memberNumber ->
             { model | memberNumber = Just memberNumber }
                 |> refreshDetails authStatus maybeSessionToken False model
+
+        TogglePriorityShipping isChecked ->
+            { model | priorityShipping = isChecked }
+                |> refreshDetails authStatus maybeSessionToken True model
 
         CouponCode code ->
             { model | couponCode = code }
@@ -403,6 +411,7 @@ refreshDetails authStatus maybeSessionToken forceUpdate oldModel newModel =
                                 maybeAddressId
                                 newModel.memberNumber
                                 newModel.couponCode
+                                newModel.priorityShipping
                         )
 
         applyArguments cmdFunction =
@@ -424,6 +433,7 @@ refreshDetails authStatus maybeSessionToken forceUpdate oldModel newModel =
                         maybeRegion
                         (Maybe.withDefault "" newModel.memberNumber)
                         newModel.couponCode
+                        newModel.priorityShipping
 
         shouldUpdate =
             addressChanged || memberNumberChanged || forceUpdate
@@ -504,8 +514,9 @@ getCustomerDetails :
     -> Maybe AddressId
     -> Maybe String
     -> String
+    -> Bool
     -> Cmd msg
-getCustomerDetails msg token maybeCountry maybeRegion maybeAddressId maybeMemberNumber couponCode =
+getCustomerDetails msg token maybeCountry maybeRegion maybeAddressId maybeMemberNumber couponCode priorityShipping =
     let
         data =
             Encode.object
@@ -514,6 +525,7 @@ getCustomerDetails msg token maybeCountry maybeRegion maybeAddressId maybeMember
                 , ( "addressId", encodeMaybe (\(AddressId i) -> Encode.int i) maybeAddressId )
                 , ( "memberNumber", encodedMemberNumber )
                 , ( "couponCode", encodeStringAsMaybe couponCode )
+                , ( "priorityShipping", Encode.bool priorityShipping )
                 ]
 
         encodedMemberNumber =
@@ -549,8 +561,9 @@ getAnonymousDetails :
     -> Maybe Region
     -> String
     -> String
+    -> Bool
     -> Cmd msg
-getAnonymousDetails msg sessionToken maybeCountry maybeRegion memberNumber couponCode =
+getAnonymousDetails msg sessionToken maybeCountry maybeRegion memberNumber couponCode priorityShipping =
     let
         data =
             Encode.object
@@ -559,6 +572,7 @@ getAnonymousDetails msg sessionToken maybeCountry maybeRegion memberNumber coupo
                 , ( "memberNumber", Encode.string memberNumber )
                 , ( "sessionToken", Encode.string sessionToken )
                 , ( "couponCode", encodeStringAsMaybe couponCode )
+                , ( "priorityShipping", Encode.bool priorityShipping )
                 ]
     in
     Api.post Api.CheckoutDetailsAnonymous
@@ -827,6 +841,75 @@ view model authStatus locations checkoutDetails =
                         []
                     ]
                 ]
+
+        priorityShippingForm =
+            div [ class "col-6" ]
+                [ h5 [] [ text "Priority Shipping & Handling" ]
+                , p []
+                    [ b [] [ text "Rush my order!" ]
+                    , text <|
+                        " Select this option to put your order at the top of our "
+                            ++ "stack and guarantee your order will be shipped "
+                            ++ "within 2 business days via USPS Priority Mail. "
+                    , text <|
+                        Maybe.withDefault "" <|
+                            Maybe.map priorityFeeCost priorityFee
+                    ]
+                , p []
+                    [ text <|
+                        "We cannot apply priority shipping and handling to seasonal "
+                            ++ "items(potatoes, sweet potatoes, garlic, perennial "
+                            ++ "onions, ginseng, & goldenseal)."
+                    ]
+                , Maybe.withDefault priorityNotAvailable <|
+                    Maybe.map (always <| text "") priorityFee
+                , div [ class "form-check" ]
+                    [ input
+                        [ id "priority-shipping-input"
+                        , class "form-check-input"
+                        , type_ "checkbox"
+                        , checked model.priorityShipping
+                        , onCheck TogglePriorityShipping
+                        , A.disabled <| priorityFee == Nothing
+                        ]
+                        []
+                    , label
+                        [ class "form-check-label"
+                        , for "priority-shipping-input"
+                        ]
+                        [ text "Add Priority Shipping & Handling" ]
+                    ]
+                ]
+
+        priorityFeeCost fee =
+            "This adds an additional cost to your order: "
+                ++ formatPriorityFee fee
+
+        priorityNotAvailable =
+            p [ class "text-danger font-weight-bold" ]
+                [ text <|
+                    "Sorry, priority shipping is not available "
+                        ++ "due to the contents of your cart."
+                ]
+
+        formatPriorityFee { flat, percent } =
+            case ( flat, percent ) of
+                ( Cents 0, _ ) ->
+                    String.fromInt percent ++ "% of your order sub-total."
+
+                ( _, 0 ) ->
+                    Format.cents flat
+
+                _ ->
+                    String.join " "
+                        [ Format.cents flat
+                        , "plus"
+                        , String.fromInt percent ++ "% of your order sub-total."
+                        ]
+
+        priorityFee =
+            checkoutDetails.charges.shippingMethod
+                |> Maybe.andThen .priorityFee
     in
     [ h1 [] [ text "Checkout" ]
     , hr [] []
@@ -852,7 +935,7 @@ view model authStatus locations checkoutDetails =
             , billingCard
             ]
         , div [ class "row mb-3" ]
-            [ storeCreditForm, memberNumberForm ]
+            [ storeCreditForm, memberNumberForm, priorityShippingForm ]
         , div [ class "mb-3" ]
             [ h4 [] [ text "Order Summary" ]
             , summaryTable checkoutDetails
@@ -1142,7 +1225,8 @@ summaryTable ({ items, charges } as checkoutDetails) creditString couponCode cou
         tableFooter =
             tfoot [] <|
                 subTotalRow
-                    :: maybeChargeRow charges.shippingMethod
+                    :: maybeChargeRow (Maybe.map .charge charges.shippingMethod)
+                    :: maybeChargeRow charges.priorityShipping
                     :: List.map chargeRow charges.surcharges
                     ++ [ taxRow
                        , storeCreditRow

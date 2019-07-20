@@ -214,6 +214,7 @@ fetchDataForRoute ({ route, pageData, key } as model) =
                                         Nothing
                                         Nothing
                                         ""
+                                        False
                                     )
 
                         User.Anonymous ->
@@ -231,6 +232,7 @@ fetchDataForRoute ({ route, pageData, key } as model) =
                                                     (Just <| .state Address.initial)
                                                     ""
                                                     ""
+                                                    False
                                                 )
                             in
                             { pageData | checkoutDetails = RemoteData.Loading }
