@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 import Data.Ratio ((%))
 import Data.Text (Text)
 import Data.Time (UTCTime(..), Day(..), DiffTime, secondsToDiffTime)
@@ -7,6 +8,7 @@ import qualified Hedgehog.Range as Range
 import Numeric.Natural (Natural)
 import Test.Tasty
 import Test.Tasty.Hedgehog
+import Test.Tasty.HUnit
 
 import Models
 import Models.Fields
@@ -22,9 +24,11 @@ tests =
 
 commonData :: TestTree
 commonData =
-    testGroup "CommonData Module" [ couponTests ]
+    testGroup "CommonData Module" [ couponTests, priorityFeeTests ]
 
 
+
+-- COUPON
 couponTests :: TestTree
 couponTests = testGroup "Coupon Discount Calculations"
     [ testProperty "Free Shipping" freeShipping
@@ -72,8 +76,47 @@ couponTests = testGroup "Coupon Discount Calculations"
         if amount > subTotal then result === subTotal else result === amount
 
 
+-- PRIORITY S&H
+priorityFeeTests :: TestTree
+priorityFeeTests = testGroup "Priority S&H Calculations"
+    [ testCase "No Shipping Methods" noMethods
+    , testProperty "Priority S&H Not Available" noPriorityAvailable
+    , testProperty "Fee Correctly Calculated" calculatedCorrectly
+    , testCase "Only Flat Rate Calculation" onlyFlat
+    , testCase "Only Percentage Rate Calculation" onlyPercent
+    ]
+  where
+    noMethods :: Assertion
+    noMethods =
+        calculatePriorityFee [] 9001 @?= Nothing
+    noPriorityAvailable :: Property
+    noPriorityAvailable = property $ do
+        method <- forAll genCartCharge
+        (Cents subTotal) <- forAll genCents
+        calculatePriorityFee [ShippingCharge method Nothing] subTotal === Nothing
+    calculatedCorrectly :: Property
+    calculatedCorrectly = property $ do
+        method <- forAll genCartCharge
+        pr@(PriorityShippingFee (Cents flat) percent) <- forAll genPriorityFee
+        (Cents subTotal) <- forAll genCents
+        let percentAmount = toRational subTotal * (fromIntegral percent % 100)
+        calculatePriorityFee [ShippingCharge method $ Just pr] subTotal
+            === Just (Cents $ round $ percentAmount + toRational flat)
+    onlyFlat :: Assertion
+    onlyFlat =
+        calculatePriorityFee [makeShippingCharge (PriorityShippingFee 200 0)] 1000
+            @?= Just 200
+    onlyPercent :: Assertion
+    onlyPercent =
+        calculatePriorityFee [makeShippingCharge (PriorityShippingFee 0 10)] 1000
+            @?= Just 100
+    makeShippingCharge :: PriorityShippingFee -> ShippingCharge
+    makeShippingCharge fee = ShippingCharge (CartCharge "" 900) (Just fee)
 
 
+
+
+-- GENERATORS
 
 
 -- Generate an active coupon with minimum order size of 0 to $10.00
@@ -105,6 +148,12 @@ genCartCharge =
     CartCharge
         <$> genText
         <*> genCentRange (Range.linear 1 1000)
+
+genPriorityFee :: Gen PriorityShippingFee
+genPriorityFee =
+    PriorityShippingFee
+        <$> genCentRange (Range.linear 1 1000)
+        <*> genWholePercentage
 
 
 genCentRange :: Range Natural -> Gen Cents

@@ -190,6 +190,10 @@ data PriorityShippingFee
 
 derivePersistField "PriorityShippingFee"
 
+instance ToJSON PriorityShippingFee where
+    toJSON (PriorityShippingFee flat percent) =
+        object [ "flat" .= flat, "percent" .= percent ]
+
 
 -- ADDRESSES
 

@@ -41,7 +41,7 @@ import Server
 import Routes.CommonData
     ( AuthorizationData, toAuthorizationData, CartItemData(..), CartCharges(..)
     , CartCharge(..), getCartItems, getCharges, AddressData(..), toAddressData
-    , fromAddressData
+    , fromAddressData, ShippingCharge(..)
     )
 import Routes.Utils (hashPassword, generateUniqueToken)
 import Validation (Validation(..))
@@ -111,8 +111,9 @@ handleCouponErrors = V.singleFieldError "coupon" . \case
 -- CART/ADDRESS DETAILS
 
 
-newtype CheckoutDetailsError
-    = DetailsCouponError CouponError
+data CheckoutDetailsError
+    = PriorityShippingNotAvailable
+    | DetailsCouponError CouponError
     deriving (Show, Typeable)
 
 instance Exception CheckoutDetailsError
@@ -123,6 +124,10 @@ withCheckoutDetailsErrors =
     where
         handle :: CheckoutDetailsError -> App a
         handle = \case
+            PriorityShippingNotAvailable ->
+                V.singleFieldError "priority-shipping"
+                    $ "Sorry, priority shipping & handling is not available "
+                        <> "with the items currently in your cart."
             DetailsCouponError couponError ->
                 handleCouponErrors couponError
 
@@ -135,6 +140,7 @@ data CustomerDetailsParameters =
         , cdpExistingAddress :: Maybe AddressId
         , cdpMemberNumber :: Maybe T.Text
         , cdpCouponCode :: Maybe T.Text
+        , cdpPriorityShipping :: Bool
         }
 
 instance FromJSON CustomerDetailsParameters where
@@ -145,6 +151,7 @@ instance FromJSON CustomerDetailsParameters where
             <*> v .:? "addressId"
             <*> v .:? "memberNumber"
             <*> v .:? "couponCode"
+            <*> v .:  "priorityShipping"
 
 data CheckoutDetailsData =
     CheckoutDetailsData
@@ -178,6 +185,8 @@ customerDetailsRoute token parameters = do
     let hasValidMemberNumber =
             (> 3) . T.length . fromMaybe (customerMemberNumber customer)
                 $ cdpMemberNumber parameters
+        priorityShipping =
+            cdpPriorityShipping parameters
     currentTime <- liftIO getCurrentTime
     withCheckoutDetailsErrors . runDB $ do
         customerAddresses <- selectList
@@ -192,9 +201,11 @@ customerDetailsRoute token parameters = do
             $ getCoupon currentTime (Just customerId) <$> cdpCouponCode parameters
         items <- getCartItems maybeTaxRate $ \c ->
             c E.^. CartCustomerId E.==. E.just (E.val customerId)
-        charges <- getCharges maybeTaxRate maybeCountry items hasValidMemberNumber maybeCoupon
+        charges <- getCharges maybeTaxRate maybeCountry items
+            hasValidMemberNumber maybeCoupon priorityShipping
         mapException DetailsCouponError
             $ checkCouponMeetsMinimum maybeCoupon charges
+        checkPriorityShippingAvailable priorityShipping charges
         return CheckoutDetailsData
             { cddShippingAddresses = map toAddressData shippingAddresses
             , cddBillingAddresses = map toAddressData billingAddresses
@@ -230,6 +241,7 @@ data AnonymousDetailsParameters =
         , adpShippingRegion :: Maybe Region
         , adpMemberNumber :: Maybe T.Text
         , adpCouponCode :: Maybe T.Text
+        , adpPriorityShipping :: Bool
         , adpCartToken :: T.Text
         }
 
@@ -240,7 +252,8 @@ instance FromJSON AnonymousDetailsParameters where
             <*> v .:? "region"
             <*> v .:? "memberNumber"
             <*> v .:? "couponCode"
-            <*> v .: "sessionToken"
+            <*> v .:  "priorityShipping"
+            <*> v .:  "sessionToken"
 
 type AnonymousDetailsRoute =
        ReqBody '[JSON] AnonymousDetailsParameters
@@ -251,6 +264,8 @@ anonymousDetailsRoute parameters =
     let
         maybeCountry =
             adpShippingCountry parameters
+        priorityShipping =
+            adpPriorityShipping parameters
         isValidMemberNumber =
             maybe False ((> 3) . T.length) $ adpMemberNumber parameters
     in
@@ -261,9 +276,11 @@ anonymousDetailsRoute parameters =
                 $ getCoupon currentTime Nothing <$> adpCouponCode parameters
             items <- getCartItems maybeTaxRate $ \c ->
                 c E.^. CartSessionToken E.==. E.just (E.val $ adpCartToken parameters)
-            charges <- getCharges maybeTaxRate maybeCountry items isValidMemberNumber maybeCoupon
+            charges <- getCharges maybeTaxRate maybeCountry items
+                isValidMemberNumber maybeCoupon priorityShipping
             mapException DetailsCouponError
                 $ checkCouponMeetsMinimum maybeCoupon charges
+            checkPriorityShippingAvailable priorityShipping charges
             return CheckoutDetailsData
                 { cddShippingAddresses = []
                 , cddBillingAddresses = []
@@ -319,6 +336,16 @@ checkCouponMeetsMinimum maybeCoupon CartCharges { ccCouponDiscount } =
         _ ->
             return ()
 
+-- | Throw an error if priority shipping is selected & the shipping method
+-- does not have priority shipping available.
+checkPriorityShippingAvailable :: MonadThrow m => Bool -> CartCharges -> m ()
+checkPriorityShippingAvailable hasPriority charges =
+    when hasPriority $
+        case ccShippingMethods charges of
+            ShippingCharge _ Nothing:_ ->
+                throwM PriorityShippingNotAvailable
+            _ ->
+                return ()
 
 
 -- PLACE ORDER
@@ -814,9 +841,10 @@ createLineItems
 createLineItems currentTime customerId maybeTaxRate shippingAddress items orderId memberNumber maybeCouponCode = do
     maybeCoupon <- mapException PlaceOrderCouponError $ sequence
         $ getCoupon currentTime (Just customerId) <$> maybeCouponCode
+    -- TODO priority S&H
     charges <- getCharges maybeTaxRate
         (Just $ addressCountry shippingAddress) items
-        (T.length memberNumber >= 4) maybeCoupon
+        (T.length memberNumber >= 4) maybeCoupon False
     mapException PlaceOrderCouponError $ checkCouponMeetsMinimum maybeCoupon charges
     shippingCharge <-
         case ccShippingMethods charges of
@@ -824,7 +852,7 @@ createLineItems currentTime customerId maybeTaxRate shippingAddress items orderI
                 throwM NoShippingMethod
             charge : _ ->
                 return charge
-    shippingLine <- insertEntity $ makeLine ShippingLine shippingCharge
+    shippingLine <- insertEntity . makeLine ShippingLine $ scCharge shippingCharge
     surcharges <- mapM (insertEntity . makeLine SurchargeLine) $ ccSurcharges charges
     maybeMemberDiscount <-
         maybe (return Nothing) (fmap Just . insertEntity . makeLine MemberDiscountLine)

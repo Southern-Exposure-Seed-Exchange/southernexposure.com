@@ -233,7 +233,7 @@ customerDetailsRoute = validateToken >=> \(Entity customerId customer) ->
             c E.^. CartCustomerId E.==. E.just (E.val customerId)
         charges <- getCharges taxRate shippingCountry items
             (not . T.null $ customerMemberNumber customer)
-            Nothing
+            Nothing False
         return $ CartDetailsData items charges
     where getTaxAndShippingCountry customerId = do
             maybeShippingAddress <-
@@ -270,7 +270,7 @@ anonymousDetailsRoute parameters =
     runDB $ do
         items <- getCartItems Nothing $ \c ->
             c E.^. CartSessionToken E.==. E.just (E.val $ adpCartToken parameters)
-        charges <- getCharges Nothing Nothing items False Nothing
+        charges <- getCharges Nothing Nothing items False Nothing False
         return $ CartDetailsData items charges
 
 

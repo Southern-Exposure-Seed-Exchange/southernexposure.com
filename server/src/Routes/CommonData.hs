@@ -11,8 +11,10 @@ module Routes.CommonData
     , getCartItems
     , CartCharges(..)
     , getCharges
+    , ShippingCharge(..)
     , CartCharge(..)
     , calculateCouponDiscount
+    , calculatePriorityFee
     , AddressData(..)
     , fromAddressData
     , toAddressData
@@ -140,7 +142,8 @@ data CartCharges =
     CartCharges
         { ccTax :: CartCharge
         , ccSurcharges :: [CartCharge]
-        , ccShippingMethods :: [CartCharge]
+        , ccShippingMethods :: [ShippingCharge]
+        , ccPriorityShippingFee :: Maybe CartCharge
         , ccProductTotal :: Cents
         , ccMemberDiscount :: Maybe CartCharge
         , ccCouponDiscount :: Maybe CartCharge
@@ -153,8 +156,21 @@ instance ToJSON CartCharges where
         object [ "tax" .= ccTax charges
                , "surcharges" .= ccSurcharges charges
                , "shippingMethods" .= ccShippingMethods charges
+               , "priorityShipping" .= ccPriorityShippingFee charges
                , "memberDiscount" .= ccMemberDiscount charges
                , "couponDiscount" .= ccCouponDiscount charges
+               ]
+
+data ShippingCharge =
+    ShippingCharge
+        { scCharge :: CartCharge
+        , scPriorityFee :: Maybe PriorityShippingFee
+        } deriving (Show)
+
+instance ToJSON ShippingCharge where
+    toJSON charge =
+        object [ "charge" .= scCharge charge
+               , "priorityFee" .= scPriorityFee charge
                ]
 
 
@@ -229,8 +245,9 @@ getCharges
     -> [CartItemData]           -- ^ The cart items (see `getCartItems`)
     -> Bool                     -- ^ Include the 5% Member Discount?
     -> Maybe (Entity Coupon)    -- ^ A Coupon to apply.
+    -> Bool                     -- ^ Include Priority S&H
     -> AppSQL CartCharges
-getCharges maybeTaxRate maybeCountry items includeMemberDiscount maybeCoupon =
+getCharges maybeTaxRate maybeCountry items includeMemberDiscount maybeCoupon priorityShipping =
     let
         variant item =
             (\(Entity _ v) -> v) $ cidVariant item
@@ -253,8 +270,15 @@ getCharges maybeTaxRate maybeCountry items includeMemberDiscount maybeCoupon =
             if couponMinimumOrder coupon <= Cents subTotal then
                 Just $ CartCharge
                     { ccDescription = "Coupon " <> couponCode coupon
-                    , ccAmount = calculateCouponDiscount coupon ms subTotal
+                    , ccAmount =
+                        calculateCouponDiscount coupon (map scCharge ms) subTotal
                     }
+            else
+                Nothing
+        priorityCharge ms =
+            if priorityShipping then
+                CartCharge "Priority Shipping & Handling"
+                    <$> calculatePriorityFee ms subTotal
             else
                 Nothing
         sumGrandTotal cc =
@@ -263,7 +287,8 @@ getCharges maybeTaxRate maybeCountry items includeMemberDiscount maybeCoupon =
                     ccProductTotal cc
                         + sum (map ccAmount $ ccSurcharges cc)
                         + amt ccTax
-                        + mAmt (listToMaybe . ccShippingMethods)
+                        + mAmt (listToMaybe . map scCharge . ccShippingMethods)
+                        + mAmt ccPriorityShippingFee
                         - mAmt ccMemberDiscount
                         - mAmt ccCouponDiscount
             }
@@ -276,6 +301,7 @@ getCharges maybeTaxRate maybeCountry items includeMemberDiscount maybeCoupon =
             { ccTax = CartCharge (maybe "" taxRateDescription maybeTaxRate) $ Cents taxTotal
             , ccSurcharges = surcharges
             , ccShippingMethods = shippingMethods
+            , ccPriorityShippingFee = priorityCharge shippingMethods
             , ccProductTotal = Cents subTotal
             , ccMemberDiscount = memberDiscount
             , ccCouponDiscount = maybeCoupon >>= couponCredit shippingMethods
@@ -296,6 +322,19 @@ calculateCouponDiscount coupon shipMethods subTotal =
             Cents $ min amt subTotal
         (PercentageDiscount percent, _) ->
             Cents . round $ toRational subTotal * (fromIntegral percent % 100)
+
+calculatePriorityFee :: [ShippingCharge] -> Natural -> Maybe Cents
+calculatePriorityFee shipMethods subTotal =
+    case shipMethods of
+        ShippingCharge _ (Just fee):_ ->
+            let (PriorityShippingFee (Cents flatRate) percentRate) = fee
+                percentAmount :: Rational
+                percentAmount =
+                    toRational subTotal * (fromIntegral percentRate % 100)
+            in
+                Just . Cents . round $ toRational flatRate + percentAmount
+        _ ->
+            Nothing
 
 getSurcharges :: [CartItemData] -> AppSQL [CartCharge]
 getSurcharges items =
@@ -321,7 +360,7 @@ getSurcharges items =
                 else
                     Just $ CartCharge (surchargeDescription surcharge) amount
 
-getShippingMethods :: Maybe Country -> [CartItemData] -> Natural -> AppSQL [CartCharge]
+getShippingMethods :: Maybe Country -> [CartItemData] -> Natural -> AppSQL [ShippingCharge]
 getShippingMethods maybeCountry items subTotal =
     case maybeCountry of
         Nothing ->
@@ -361,9 +400,21 @@ getShippingMethods maybeCountry items subTotal =
                             amount
                         Percentage _ percentage ->
                             Cents . round $ (toRational percentage / 100) * toRational subTotal
+                addPriorityFee charge =
+                    if priorityExcluded then
+                        ShippingCharge charge Nothing
+                    else
+                        ShippingCharge charge
+                            $ Just $ shippingMethodPriorityRate method
+                priorityExcluded =
+                    any productExcludesPriority (map cidProduct items)
+                productExcludesPriority (Entity _ prod) =
+                    not . null $ productCategoryIds prod `intersect`
+                        shippingMethodExcludedPriorityCategoryIds method
             in
                 if validCountry && validProducts then
-                    Just . CartCharge (shippingMethodDescription method)
+                    Just . addPriorityFee
+                        . CartCharge (shippingMethodDescription method)
                         . thresholdAmount $ shippingMethodRates method
                 else
                     Nothing

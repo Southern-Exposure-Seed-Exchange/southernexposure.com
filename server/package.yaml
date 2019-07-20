@@ -79,7 +79,9 @@ tests:
             - sese-website
             - tasty
             - tasty-hedgehog
+            - tasty-hunit
             - hedgehog
+            - HUnit
 
 executables:
     sese-website-exe:
