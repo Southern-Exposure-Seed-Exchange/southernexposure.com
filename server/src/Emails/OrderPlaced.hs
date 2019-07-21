@@ -166,21 +166,23 @@ orderTable order productData lineItems =
                 productData
         tax =
             sum $ map (\(op, _, _) -> orderProductTax op) productData
-        (maybeShippingLine, maybeStoreCredit, maybeMemberDiscount, maybeCouponDiscount, surcharges) =
-            foldl (\(shippingLine, creditLine, memberLine, couponLine, surchargeLines) lineItem ->
+        (maybeShippingLine, maybePriorityCharge, maybeStoreCredit, maybeMemberDiscount, maybeCouponDiscount, surcharges) =
+            foldl (\(shippingLine, priorityLine, creditLine, memberLine, couponLine, surchargeLines) lineItem ->
                 case orderLineItemType lineItem of
                     ShippingLine ->
-                        (Just lineItem, creditLine, memberLine, couponLine, surchargeLines)
+                        (Just lineItem, priorityLine, creditLine, memberLine, couponLine, surchargeLines)
+                    PriorityShippingLine ->
+                        (shippingLine, Just lineItem, creditLine, memberLine, couponLine, surchargeLines)
                     StoreCreditLine ->
-                        (shippingLine, Just lineItem, memberLine, couponLine, surchargeLines)
+                        (shippingLine, priorityLine, Just lineItem, memberLine, couponLine, surchargeLines)
                     SurchargeLine ->
-                        (shippingLine, creditLine, memberLine, couponLine, lineItem : surchargeLines)
+                        (shippingLine, priorityLine, creditLine, memberLine, couponLine, lineItem : surchargeLines)
                     MemberDiscountLine ->
-                        (shippingLine, creditLine, Just lineItem, couponLine, surchargeLines)
+                        (shippingLine, priorityLine, creditLine, Just lineItem, couponLine, surchargeLines)
                     CouponDiscountLine ->
-                        (shippingLine, creditLine, memberLine, Just lineItem, surchargeLines)
+                        (shippingLine, priorityLine, creditLine, memberLine, Just lineItem, surchargeLines)
 
-            ) (Nothing, Nothing, Nothing, Nothing, []) lineItems
+            ) (Nothing, Nothing, Nothing, Nothing, Nothing, []) lineItems
         total =
             subTotal + tax + sum (map orderLineItemAmount lineItems)
     in
@@ -197,6 +199,7 @@ orderTable order productData lineItems =
                     H.th H.! alignRight H.! A.colspan "4" $ "Sub-Total"
                     H.th . H.text $ formatCents subTotal
                 maybe (return ()) lineRow maybeShippingLine
+                maybe (return ()) lineRow maybePriorityCharge
                 mapM_ lineRow surcharges
                 when (tax > 0) $ H.tr $ do
                     H.th H.! A.colspan "4" H.! alignRight $ H.text $ orderTaxDescription order

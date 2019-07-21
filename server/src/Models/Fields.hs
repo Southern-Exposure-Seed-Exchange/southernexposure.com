@@ -280,6 +280,7 @@ derivePersistField "OrderStatus"
 
 data LineItemType
     = ShippingLine
+    | PriorityShippingLine
     | SurchargeLine
     | StoreCreditLine
     | MemberDiscountLine
