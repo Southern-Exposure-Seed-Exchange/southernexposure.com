@@ -399,6 +399,9 @@ orderTotals { lineItems, products } =
                         Surcharge ->
                             ( cs, centsMap2 (+) charge.amount ds )
 
+                        PriorityShipping ->
+                            ( cs, centsMap2 (+) charge.amount ds )
+
                         StoreCredit ->
                             ( centsMap2 (+) charge.amount cs, ds )
 
@@ -523,6 +526,7 @@ type LineItemType
     | Surcharge
     | StoreCredit
     | MemberDiscount
+    | PriorityShipping
     | CouponDiscount
 
 
@@ -542,6 +546,9 @@ lineItemTypeDecoder =
 
                 "MemberDiscountLine" ->
                     Decode.succeed MemberDiscount
+
+                "PriorityShippingLine" ->
+                    Decode.succeed PriorityShipping
 
                 "CouponDiscountLine" ->
                     Decode.succeed CouponDiscount
