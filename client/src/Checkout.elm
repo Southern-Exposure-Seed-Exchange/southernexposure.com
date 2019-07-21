@@ -857,12 +857,6 @@ view model authStatus locations checkoutDetails =
                         Maybe.withDefault "" <|
                             Maybe.map priorityFeeCost priorityFee
                     ]
-                , p []
-                    [ text <|
-                        "We cannot apply priority shipping and handling to seasonal "
-                            ++ "items(potatoes, sweet potatoes, garlic, perennial "
-                            ++ "onions, ginseng, & goldenseal)."
-                    ]
                 , Maybe.withDefault priorityNotAvailable <|
                     Maybe.map (always <| text "") priorityFee
                 , div [ class "form-check" ]
@@ -880,6 +874,14 @@ view model authStatus locations checkoutDetails =
                         , for "priority-shipping-input"
                         ]
                         [ text "Add Priority Shipping & Handling" ]
+                    ]
+                , p [ class "text-danger" ]
+                    [ small []
+                        [ text <|
+                            "We cannot apply priority shipping and handling to seasonal "
+                                ++ "items(potatoes, sweet potatoes, garlic, perennial "
+                                ++ "onions, ginseng, & goldenseal)."
+                        ]
                     ]
                 ]
 
