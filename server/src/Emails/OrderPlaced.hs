@@ -148,8 +148,8 @@ addressTable shippingAddress maybeBillingAddress =
             addressLine $ addressAddressOne address
             addressLine $ addressAddressTwo address
             addressLine $
-                addressCity billingAddress <> ", " <> regionName (addressState billingAddress) <>
-                " " <> addressZipCode billingAddress
+                addressCity address <> ", " <> regionName (addressState address) <>
+                " " <> addressZipCode address
           addressLine t =
             unless (t == "") . H.p $ H.text t
 
