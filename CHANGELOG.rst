@@ -5,6 +5,7 @@ CHANGELOG
 v0.6.0
 ======
 
+* Don't collect a billing address if an Order is free.
 * Allow priority shipping charges to have both a flat fee and percentage fee
   based on the Order sub-total. Default all priority charges to $5 + 5%.
 * Show ``Free!`` for the prices of free Products, instead of no text in the Add

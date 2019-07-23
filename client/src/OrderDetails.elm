@@ -21,12 +21,19 @@ view zone orderId locations orderDetails =
         , small [] [ text <| " " ++ Format.date zone orderDetails.order.createdAt ]
         ]
     , hr [] []
-    , div [ class "row mb-3" ]
-        [ div [ class "col-6" ]
-            [ addressCard locations "Shipping Details" orderDetails.shippingAddress ]
-        , div [ class "col-6" ]
-            [ addressCard locations "Billing Details" orderDetails.billingAddress ]
-        ]
+    , div [ class "row mb-3" ] <|
+        case orderDetails.billingAddress of
+            Nothing ->
+                [ div [ class "col-12" ]
+                    [ addressCard locations "Shipping Details" orderDetails.shippingAddress ]
+                ]
+
+            Just billingAddress ->
+                [ div [ class "col-6" ]
+                    [ addressCard locations "Shipping Details" orderDetails.shippingAddress ]
+                , div [ class "col-6" ]
+                    [ addressCard locations "Billing Details" billingAddress ]
+                ]
     , orderTable orderDetails
     ]
 

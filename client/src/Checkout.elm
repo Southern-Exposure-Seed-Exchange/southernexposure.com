@@ -251,21 +251,8 @@ update msg model authStatus maybeSessionToken checkoutDetails =
                 case checkoutDetails of
                     RemoteData.Success details ->
                         let
-                            totals =
-                                PageData.cartTotals details
-
-                            storeCredit =
-                                model.storeCredit
-                                    |> centsFromString
-                                    |> Maybe.map (limitStoreCredit details)
-
                             (Cents finalTotal) =
-                                case storeCredit of
-                                    Nothing ->
-                                        totals.total
-
-                                    Just credit ->
-                                        centsMap2 (\total c -> total - c) totals.total credit
+                                getFinalTotal details model.storeCredit
 
                             customerEmail =
                                 case authStatus of
@@ -275,13 +262,17 @@ update msg model authStatus maybeSessionToken checkoutDetails =
                                     User.Anonymous ->
                                         model.email
                         in
-                        ( model, Nothing, Ports.collectStripeToken ( customerEmail, finalTotal ) )
+                        if PageData.isFreeCheckout checkoutDetails || finalTotal == 0 then
+                            ( model, Nothing, placeOrder model authStatus maybeSessionToken Nothing checkoutDetails )
+
+                        else
+                            ( model, Nothing, Ports.collectStripeToken ( customerEmail, finalTotal ) )
 
                     _ ->
                         ( model, Nothing, Cmd.none )
 
         TokenReceived stripeTokenId ->
-            ( model, Nothing, placeOrder model authStatus maybeSessionToken stripeTokenId checkoutDetails )
+            ( model, Nothing, placeOrder model authStatus maybeSessionToken (Just stripeTokenId) checkoutDetails )
 
         SubmitResponse (RemoteData.Success (Ok ( orderId, newAuthStatus ))) ->
             let
@@ -492,6 +483,27 @@ findBy pred l =
                 findBy pred xs
 
 
+{-| Get the final total by subtracting any store credit from the grand total.
+-}
+getFinalTotal : PageData.CheckoutDetails -> String -> Cents
+getFinalTotal checkoutDetails storeCreditString =
+    let
+        storeCredit =
+            storeCreditString
+                |> centsFromString
+                |> Maybe.map (limitStoreCredit checkoutDetails)
+
+        grandTotal =
+            checkoutDetails.charges.grandTotal
+    in
+    case storeCredit of
+        Nothing ->
+            grandTotal
+
+        Just credit ->
+            centsMap2 (\total c -> total - c) grandTotal (limitStoreCredit checkoutDetails credit)
+
+
 {-| Limit the amount of store credit applied so the checkout total is never
 negative.
 -}
@@ -592,7 +604,7 @@ encodeStringAsMaybe str =
         Encode.string str
 
 
-placeOrder : Form -> AuthStatus -> Maybe String -> String -> WebData PageData.CheckoutDetails -> Cmd Msg
+placeOrder : Form -> AuthStatus -> Maybe String -> Maybe String -> WebData PageData.CheckoutDetails -> Cmd Msg
 placeOrder model authStatus maybeSessionToken stripeTokenId checkoutDetails =
     let
         customerData =
@@ -604,7 +616,7 @@ placeOrder model authStatus maybeSessionToken stripeTokenId checkoutDetails =
                 , ( "priorityShipping", Encode.bool model.priorityShipping )
                 , ( "couponCode", encodeStringAsMaybe model.couponCode )
                 , ( "comment", Encode.string model.comment )
-                , ( "stripeToken", Encode.string stripeTokenId )
+                , ( "stripeToken", encodeMaybe Encode.string stripeTokenId )
                 ]
 
         anonymousData =
@@ -618,7 +630,7 @@ placeOrder model authStatus maybeSessionToken stripeTokenId checkoutDetails =
                 , ( "sessionToken", encodeMaybe Encode.string maybeSessionToken )
                 , ( "email", Encode.string model.email )
                 , ( "password", Encode.string model.password )
-                , ( "stripeToken", Encode.string stripeTokenId )
+                , ( "stripeToken", encodeMaybe Encode.string stripeTokenId )
                 ]
 
         encodedStoreCredit =
@@ -642,7 +654,10 @@ placeOrder model authStatus maybeSessionToken stripeTokenId checkoutDetails =
             encodeAddress model.shippingAddress model.makeShippingDefault
 
         encodedBillingAddress =
-            if model.billingSameAsShipping then
+            if isFreeCheckout then
+                Encode.null
+
+            else if model.billingSameAsShipping then
                 RemoteData.toMaybe checkoutDetails
                     |> Maybe.map
                         (isDefaultAddress model.shippingAddress
@@ -652,6 +667,14 @@ placeOrder model authStatus maybeSessionToken stripeTokenId checkoutDetails =
 
             else
                 encodeAddress model.billingAddress model.makeBillingDefault
+
+        isFreeCheckout =
+            PageData.isFreeCheckout checkoutDetails || zeroTotalWithAppliedCredit
+
+        zeroTotalWithAppliedCredit =
+            RemoteData.toMaybe checkoutDetails
+                |> Maybe.map (\details -> getFinalTotal details model.storeCredit == Cents 0)
+                |> Maybe.withDefault False
 
         encodeAddress addr makeDefault =
             case addr of
@@ -749,6 +772,7 @@ view model authStatus locations checkoutDetails =
                         ]
                     , billingAddressText
                     ]
+                    freeCheckout
 
             else
                 addressForm
@@ -765,6 +789,7 @@ view model authStatus locations checkoutDetails =
                     , generalErrors =
                         Dict.get "billing" model.errors
                             |> Maybe.withDefault []
+                    , fullWidth = freeCheckout
                     }
 
         billingAddressText =
@@ -914,6 +939,12 @@ view model authStatus locations checkoutDetails =
         priorityFee =
             checkoutDetails.charges.shippingMethod
                 |> Maybe.andThen .priorityFee
+
+        (Cents finalTotal) =
+            getFinalTotal checkoutDetails model.storeCredit
+
+        freeCheckout =
+            finalTotal <= 0
     in
     [ h1 [] [ text "Checkout" ]
     , hr [] []
@@ -935,8 +966,13 @@ view model authStatus locations checkoutDetails =
                 , generalErrors =
                     Dict.get "shipping" model.errors
                         |> Maybe.withDefault []
+                , fullWidth = freeCheckout
                 }
-            , billingCard
+            , if freeCheckout then
+                text ""
+
+              else
+                billingCard
             ]
         , div [ class "row mb-3" ]
             [ storeCreditForm, memberNumberForm, priorityShippingForm ]
@@ -961,7 +997,13 @@ view model authStatus locations checkoutDetails =
             ]
         , div [ class "form-group text-right" ]
             [ button [ class "btn btn-primary", type_ "submit" ]
-                [ text "Pay with Credit Card" ]
+                [ text <|
+                    if freeCheckout then
+                        "Place Order"
+
+                    else
+                        "Pay with Credit Card"
+                ]
             ]
         ]
     ]
@@ -1090,6 +1132,7 @@ type alias AddressFormConfig =
     , locations : AddressLocations
     , selectAddresses : List Address.Model
     , generalErrors : List String
+    , fullWidth : Bool
     }
 
 
@@ -1173,11 +1216,20 @@ addressForm config =
         , Api.errorHtml config.generalErrors
         , addressHtml
         ]
+        config.fullWidth
 
 
-addressCard : List (Html msg) -> Html msg
-addressCard contents =
-    div [ class "col-md-6" ]
+addressCard : List (Html msg) -> Bool -> Html msg
+addressCard contents fullWidth =
+    let
+        divClass =
+            if fullWidth then
+                "col-md-12"
+
+            else
+                "col-md-6"
+    in
+    div [ class divClass ]
         [ div [ class "card" ] [ div [ class "card-body pt-3" ] contents ] ]
 
 
@@ -1427,18 +1479,28 @@ successView zone logoutMsg orderId newAccountCreated locations orderDetails =
         [ text <| "Order #" ++ String.fromInt orderId
         , small [] [ text <| " " ++ Format.date zone orderDate ]
         ]
-    , div [ class "row mb-3" ]
-        [ div [ class "col-6" ]
-            [ OrderDetails.addressCard locations
-                "Shipping Details"
-                orderDetails.shippingAddress
-            ]
-        , div [ class "col-6" ]
-            [ OrderDetails.addressCard locations
-                "Billing Details"
-                orderDetails.billingAddress
-            ]
-        ]
+    , div [ class "row mb-3" ] <|
+        case orderDetails.billingAddress of
+            Just billingAddress ->
+                [ div [ class "col-6" ]
+                    [ OrderDetails.addressCard locations
+                        "Shipping Details"
+                        orderDetails.shippingAddress
+                    ]
+                , div [ class "col-6" ]
+                    [ OrderDetails.addressCard locations
+                        "Billing Details"
+                        billingAddress
+                    ]
+                ]
+
+            Nothing ->
+                [ div [ class "col-12" ]
+                    [ OrderDetails.addressCard locations
+                        "Shipping Details"
+                        orderDetails.shippingAddress
+                    ]
+                ]
     , commentHtml
     , OrderDetails.orderTable orderDetails
     ]

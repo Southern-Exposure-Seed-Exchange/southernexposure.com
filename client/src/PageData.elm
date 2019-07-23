@@ -24,6 +24,7 @@ module PageData exposing
     , categoryDetailsDecoder
     , checkoutDetailsDecoder
     , initial
+    , isFreeCheckout
     , myAccountDecoder
     , orderDetailsDecoder
     , orderTotals
@@ -265,6 +266,7 @@ blankCartDetails =
             Nothing
             Nothing
             Nothing
+            (Cents 0)
         )
 
 
@@ -352,6 +354,13 @@ checkoutDetailsDecoder =
         (Decode.field "memberNumber" Decode.string)
 
 
+isFreeCheckout : WebData CheckoutDetails -> Bool
+isFreeCheckout =
+    RemoteData.toMaybe
+        >> Maybe.map (.charges >> .grandTotal >> (\t -> t == Cents 0))
+        >> Maybe.withDefault False
+
+
 
 -- Order Details
 
@@ -361,7 +370,7 @@ type alias OrderDetails =
     , lineItems : List OrderLineItem
     , products : List OrderProduct
     , shippingAddress : Address.Model
-    , billingAddress : Address.Model
+    , billingAddress : Maybe Address.Model
     }
 
 
@@ -372,7 +381,7 @@ orderDetailsDecoder =
         (Decode.field "lineItems" <| Decode.list lineItemDecoder)
         (Decode.field "products" <| Decode.list orderProductDecoder)
         (Decode.field "shippingAddress" Address.decoder)
-        (Decode.field "billingAddress" Address.decoder)
+        (Decode.field "billingAddress" <| Decode.nullable Address.decoder)
 
 
 orderTotals : OrderDetails -> { subTotal : Cents, tax : Cents, total : Cents }
@@ -679,6 +688,12 @@ cartChargeDecoder =
         (Decode.field "amount" centsDecoder)
 
 
+{-| TODO: Currently grand total is only used to see if checkout is free. Should
+replace most calculations with simply using the grandTotal field.
+
+TODO: Use the productTotal field that the server returns as well.
+
+-}
 type alias CartCharges =
     { tax : CartCharge
     , surcharges : List CartCharge
@@ -686,12 +701,13 @@ type alias CartCharges =
     , priorityShipping : Maybe CartCharge
     , memberDiscount : Maybe CartCharge
     , couponDiscount : Maybe CartCharge
+    , grandTotal : Cents
     }
 
 
 cartChargesDecoder : Decoder CartCharges
 cartChargesDecoder =
-    Decode.map6 CartCharges
+    Decode.map7 CartCharges
         (Decode.field "tax" cartChargeDecoder)
         (Decode.field "surcharges" <| Decode.list cartChargeDecoder)
         (Decode.field "shippingMethods" <|
@@ -701,6 +717,7 @@ cartChargesDecoder =
         (Decode.field "priorityShipping" <| Decode.nullable cartChargeDecoder)
         (Decode.field "memberDiscount" <| Decode.nullable cartChargeDecoder)
         (Decode.field "couponDiscount" <| Decode.nullable cartChargeDecoder)
+        (Decode.field "grandTotal" centsDecoder)
 
 
 type alias ShippingCharge =
