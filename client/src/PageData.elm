@@ -658,7 +658,6 @@ type alias CartItem =
     { id : CartItemId
     , product : Product
     , variant : ProductVariant
-    , maybeSeedAttribute : Maybe SeedAttribute
     , quantity : Int
     , tax : Cents
     }
@@ -666,11 +665,10 @@ type alias CartItem =
 
 cartItemDecoder : Decoder CartItem
 cartItemDecoder =
-    Decode.map6 CartItem
+    Decode.map5 CartItem
         (Decode.field "id" <| Decode.map CartItemId Decode.int)
         (Decode.field "product" Product.decoder)
         (Decode.field "variant" Product.variantDecoder)
-        (Decode.field "seedAttribute" <| Decode.nullable SeedAttribute.decoder)
         (Decode.field "quantity" Decode.int)
         (Decode.field "tax" centsDecoder)
 

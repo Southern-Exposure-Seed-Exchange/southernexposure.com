@@ -121,7 +121,6 @@ data CartItemData =
         { cidItemId :: CartItemId
         , cidProduct :: Entity Product
         , cidVariant :: Entity ProductVariant
-        , cidMaybeSeedAttribute :: Maybe (Entity SeedAttribute)
         , cidQuantity :: Natural
         , cidTax :: Cents
         }
@@ -131,7 +130,6 @@ instance ToJSON CartItemData where
         object [ "id" .= cidItemId item
                , "product" .= cidProduct item
                , "variant" .= cidVariant item
-               , "seedAttribute" .= cidMaybeSeedAttribute item
                , "quantity" .= cidQuantity item
                , "tax" .= cidTax item
                ]
@@ -197,16 +195,15 @@ getCartItems
     -> AppSQL [CartItemData]
 getCartItems maybeTaxRate whereQuery = do
     items <- E.select $ E.from
-        $ \(ci `E.InnerJoin` c `E.InnerJoin` v `E.InnerJoin` p `E.LeftOuterJoin` sa) -> do
-            E.on (sa E.?. SeedAttributeProductId E.==. E.just (p E.^. ProductId))
+        $ \(ci `E.InnerJoin` c `E.InnerJoin` v `E.InnerJoin` p) -> do
             E.on (p E.^. ProductId E.==. v E.^. ProductVariantProductId)
             E.on (v E.^. ProductVariantId E.==. ci E.^. CartItemProductVariantId)
             E.on (c E.^. CartId E.==. ci E.^. CartItemCartId)
             E.where_ $ whereQuery c
             E.orderBy [E.asc $ p E.^. ProductName]
-            return (ci E.^. CartItemId, p, v, sa, ci E.^. CartItemQuantity)
+            return (ci E.^. CartItemId, p, v, ci E.^. CartItemQuantity)
     return $ map toItemData items
-    where toItemData (i, p, v, sa, q) =
+    where toItemData (i, p, v, q) =
             let
                 quantity =
                     E.unValue q
@@ -223,7 +220,6 @@ getCartItems maybeTaxRate whereQuery = do
                     { cidItemId = E.unValue i
                     , cidProduct = p
                     , cidVariant = v
-                    , cidMaybeSeedAttribute = sa
                     , cidQuantity = quantity
                     , cidTax =
                         maybe (Cents 0) (applyTaxRate productTotal $ entityId p) maybeTaxRate
