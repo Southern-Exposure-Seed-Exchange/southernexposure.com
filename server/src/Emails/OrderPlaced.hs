@@ -3,7 +3,7 @@
 module Emails.OrderPlaced (Parameters(..), fetchData, get) where
 
 import Control.Monad (when, unless)
-import Data.Maybe (listToMaybe)
+import Data.Maybe (listToMaybe, fromMaybe, isJust)
 import Data.Monoid ((<>))
 import Data.Time (formatTime, defaultTimeLocale, hoursToTimeZone, utcToZonedTime)
 import Database.Persist (Entity(..))
@@ -25,7 +25,7 @@ import qualified Text.Blaze.Html5.Attributes as A
 data Parameters =
     Parameters
         { customer :: Customer
-        , billingAddress :: Address
+        , billingAddress :: Maybe Address
         , shippingAddress :: Address
         , order :: Entity Order
         , lineItems :: [OrderLineItem]
@@ -38,8 +38,8 @@ type ProductData = [(OrderProduct, Product, ProductVariant)]
 fetchData :: OrderId -> AppSQL (Maybe Parameters)
 fetchData orderId = do
     maybeCustomerOrderAddresses <- fmap listToMaybe . E.select . E.from $
-        \(o `E.InnerJoin` c `E.InnerJoin` sa `E.InnerJoin` ba) -> do
-            E.on $ ba E.^. AddressId E.==. o E.^. OrderBillingAddressId
+        \(o `E.InnerJoin` c `E.InnerJoin` sa `E.LeftOuterJoin` ba) -> do
+            E.on $ ba E.?. AddressId E.==. o E.^. OrderBillingAddressId
             E.on $ sa E.^. AddressId E.==. o E.^. OrderShippingAddressId
             E.on $ c E.^. CustomerId E.==. o E.^. OrderCustomerId
             E.where_ $ o E.^. OrderId E.==. E.val orderId
@@ -54,8 +54,8 @@ fetchData orderId = do
     return $ case maybeCustomerOrderAddresses of
         Nothing ->
             Nothing
-        Just (Entity _ customer, order, Entity _ shipping, Entity _ billing) ->
-            Just $ Parameters customer billing shipping order lineItems productData
+        Just (Entity _ customer, order, Entity _ shipping, maybeBilling) ->
+            Just $ Parameters customer (entityVal <$> maybeBilling) shipping order lineItems productData
     where productDataFromEntities =
             map (\(a, b, c) -> (entityVal a, entityVal b, entityVal c))
 
@@ -71,7 +71,7 @@ showOrderId = show . E.unSqlBackendKey . unOrderKey
 
 
 render :: Address
-       -> Address
+       -> Maybe Address
        -> Entity Order
        -> [(OrderProduct, Product, ProductVariant)]
        -> [OrderLineItem]
@@ -79,7 +79,7 @@ render :: Address
 render shippingAddress billingAddress (Entity orderId order) productData lineItems =
     let
         customerName =
-            addressName billingAddress
+            addressName $ fromMaybe shippingAddress billingAddress
         orderNumber =
             T.pack $ showOrderId orderId
         orderDate =
@@ -122,13 +122,13 @@ render shippingAddress billingAddress (Entity orderId order) productData lineIte
                 H.p "Southern Exposure Seed Exchange"
 
 
-addressTable :: Address -> Address -> H.Html
-addressTable shippingAddress billingAddress =
+addressTable :: Address -> Maybe Address -> H.Html
+addressTable shippingAddress maybeBillingAddress =
     let
         shippingText = do
             "Ship to:"
             addressHtml shippingAddress
-        billingText = do
+        billingText billingAddress = do
             "Bill to:"
             addressHtml billingAddress
             H.strong . H.text $ "Payment Method: Credit Card"
@@ -136,10 +136,12 @@ addressTable shippingAddress billingAddress =
         H.table $ do
             H.thead $ H.tr $ do
                 H.th "Shipping Information"
-                H.th "Billing Information"
+                when (isJust maybeBillingAddress) $
+                    H.th "Billing Information"
             H.tbody $ H.tr $ do
                 H.td H.! A.style "vertical-align:top;" $ shippingText
-                H.td H.! A.style "vertical-align:top;" $ billingText
+                maybe (return ()) ((H.td H.! A.style "vertical-align:top;") . billingText)
+                    maybeBillingAddress
     where addressHtml address = H.address $ do
             addressLine $ addressName address
             addressLine $ addressCompanyName address

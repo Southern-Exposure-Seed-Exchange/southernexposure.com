@@ -159,6 +159,7 @@ instance ToJSON CartCharges where
                , "priorityShipping" .= ccPriorityShippingFee charges
                , "memberDiscount" .= ccMemberDiscount charges
                , "couponDiscount" .= ccCouponDiscount charges
+               , "grandTotal" .= ccGrandTotal charges
                ]
 
 data ShippingCharge =

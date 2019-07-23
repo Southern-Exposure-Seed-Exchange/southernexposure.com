@@ -163,7 +163,7 @@ Address
 Order
     customerId CustomerId
     status OrderStatus
-    billingAddressId AddressId
+    billingAddressId AddressId Maybe
     shippingAddressId AddressId
     taxDescription T.Text
     customerComment T.Text

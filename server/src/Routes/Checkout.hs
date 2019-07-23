@@ -371,6 +371,8 @@ checkPriorityShippingAvailable hasPriority charges =
 data PlaceOrderError
     = CartNotFound
     | AddressNotFound AddressType
+    | BillingAddressRequired
+    | StripeTokenRequired
     | NoShippingMethod
     | StripeError Stripe.StripeError
     | CardChargeError
@@ -399,6 +401,13 @@ withPlaceOrderErrors shippingAddress =
             AddressNotFound Billing ->
                 V.singleFieldError "billing-"
                     "Please choose again or try adding a new address."
+            BillingAddressRequired ->
+                V.singleFieldError "billing-"
+                    "A billing address is required with non-free orders."
+            StripeTokenRequired ->
+                V.singleFieldError "" $
+                    "An error occured when verifying your order total. " <>
+                    "Please refresh the page or contact us."
             StripeError stripeError ->
                 V.singleError $ Stripe.errorMsg stripeError
             CardChargeError ->
@@ -430,34 +439,34 @@ instance FromJSON CustomerAddress where
 data CustomerPlaceOrderParameters =
     CustomerPlaceOrderParameters
         { cpopShippingAddress :: CustomerAddress
-        , cpopBillingAddress :: CustomerAddress
+        , cpopBillingAddress :: Maybe CustomerAddress
         , cpopStoreCredit :: Maybe Cents
         , cpopMemberNumber :: T.Text
         , cpopPriorityShipping :: Bool
         , cpopCouponCode :: Maybe T.Text
         , cpopComment :: T.Text
-        , cpopStripeToken :: T.Text
+        , cpopStripeToken :: Maybe T.Text
         }
 
 instance FromJSON CustomerPlaceOrderParameters where
     parseJSON = withObject "CustomerPlaceOrderParameters" $ \v ->
         CustomerPlaceOrderParameters
             <$> v .: "shippingAddress"
-            <*> v .: "billingAddress"
+            <*> v .:? "billingAddress"
             <*> v .:? "storeCredit"
             <*> v .: "memberNumber"
             <*> v .: "priorityShipping"
             <*> v .:? "couponCode"
             <*> v .: "comment"
-            <*> v .: "stripeToken"
+            <*> v .:? "stripeToken"
 
 instance Validation CustomerPlaceOrderParameters where
     validators parameters = do
         shippingValidators <- validateAddress $ cpopShippingAddress parameters
-        billingValidators <- validateAddress $ cpopBillingAddress parameters
+        billingValidators <- maybeValidate validateAddress $ cpopBillingAddress parameters
         return $
             ( "", [ ( "There was an error processing your payment, please try again."
-                    , T.null $ cpopStripeToken parameters )
+                    , whenJust T.null $ cpopStripeToken parameters )
                   ] )
             : ( "memberNumber"
               , [ ( "Invalid Member Number"
@@ -481,6 +490,10 @@ instance Validation CustomerPlaceOrderParameters where
                                 ]
                               )
                             ]
+              maybeValidate =
+                maybe (return [])
+              whenJust =
+                maybe False
 
 newtype PlaceOrderData =
     PlaceOrderData
@@ -507,21 +520,26 @@ customerPlaceOrderRoute token = validate >=> \parameters -> do
     ce@(Entity customerId customer) <- validateToken token
     let memberNumberParameter = cpopMemberNumber parameters
         shippingParameter = cpopShippingAddress parameters
-        stripeToken = cpopStripeToken parameters
+        maybeStripeToken = cpopStripeToken parameters
     currentTime <- liftIO getCurrentTime
     when (not (T.null memberNumberParameter) && memberNumberParameter /= customerMemberNumber customer)
         $ runDB $ update customerId [CustomerMemberNumber =. cpopMemberNumber parameters]
     stripeConfig <- asks getStripeConfig
     orderId <- withPlaceOrderErrors shippingParameter . runDB $ do
-        stripeCustomerId <- getOrCreateStripeCustomer stripeConfig ce stripeToken
-        (billingAddress, orderId, orderTotal, cartId, appliedCredit) <-
+        (maybeBillingAddress, orderId, orderTotal, cartId, appliedCredit) <-
             createAddressesAndOrder ce shippingParameter (cpopBillingAddress parameters)
                 (cpopStoreCredit parameters) (cpopMemberNumber parameters)
                 (cpopPriorityShipping parameters) (cpopCouponCode parameters)
                 (cpopComment parameters) currentTime
-        setCustomerCard stripeConfig customer stripeCustomerId billingAddress stripeToken
-        when (orderTotal > 0) $
-            chargeCustomer stripeConfig stripeCustomerId orderId orderTotal
+        when (orderTotal > 0) $ case (maybeBillingAddress, maybeStripeToken) of
+            (Just billingAddress, Just stripeToken) -> do
+                stripeCustomerId <- getOrCreateStripeCustomer stripeConfig ce stripeToken
+                setCustomerCard stripeConfig customer stripeCustomerId billingAddress stripeToken
+                chargeCustomer stripeConfig stripeCustomerId orderId orderTotal
+            (Nothing, _) ->
+                throwM BillingAddressRequired
+            (_, Nothing) ->
+                throwM StripeTokenRequired
         when (appliedCredit > 0) $
             update customerId [CustomerStoreCredit -=. appliedCredit]
         deleteCart cartId
@@ -540,18 +558,18 @@ customerPlaceOrderRoute token = validate >=> \parameters -> do
                     update customerId [CustomerStripeId =. Just newId]
                     return newId
           createAddressesAndOrder
-            :: Entity Customer -> CustomerAddress -> CustomerAddress
+            :: Entity Customer -> CustomerAddress -> Maybe CustomerAddress
             -> Maybe Cents -> T.Text -> Bool -> Maybe T.Text -> T.Text -> UTCTime
-            -> AppSQL (Address, OrderId, Cents, CartId, Cents)
+            -> AppSQL (Maybe Address, OrderId, Cents, CartId, Cents)
           createAddressesAndOrder customer@(Entity customerId _) shippingParam billingParam maybeStoreCredit memberNumber priorityShipping maybeCouponCode comment currentTime = do
             shippingAddress <- getOrInsertAddress Shipping customerId shippingParam
-            billingAddress <- getOrInsertAddress Billing customerId billingParam
+            billingAddress <- sequence $ getOrInsertAddress Billing customerId <$> billingParam
             (Entity cartId _) <- getBy (UniqueCustomerCart $ Just customerId)
                 >>= maybe (throwM CartNotFound) return
             (orderId, orderTotal, appliedCredit) <- createOrder
-                customer cartId shippingAddress (entityKey billingAddress)
+                customer cartId shippingAddress (entityKey <$> billingAddress)
                 maybeStoreCredit memberNumber priorityShipping maybeCouponCode comment currentTime
-            return (entityVal billingAddress, orderId, orderTotal, cartId, appliedCredit)
+            return (entityVal <$> billingAddress, orderId, orderTotal, cartId, appliedCredit)
           getOrInsertAddress :: AddressType -> CustomerId -> CustomerAddress -> AppSQL (Entity Address)
           getOrInsertAddress addrType customerId = \case
             ExistingAddress addrId makeDefault -> do
@@ -596,13 +614,13 @@ data AnonymousPlaceOrderParameters =
         { apopEmail :: T.Text
         , apopPassword :: T.Text
         , apopShippingAddress :: AddressData
-        , apopBillingAddress :: AddressData
+        , apopBillingAddress :: Maybe AddressData
         , apopMemberNumber :: T.Text
         , apopPriorityShipping :: Bool
         , apopCouponCode :: Maybe T.Text
         , apopComment :: T.Text
         , apopCartToken :: T.Text
-        , apopStripeToken :: T.Text
+        , apopStripeToken :: Maybe T.Text
         }
 
 instance FromJSON AnonymousPlaceOrderParameters where
@@ -623,7 +641,8 @@ instance Validation AnonymousPlaceOrderParameters where
     validators parameters = do
         emailDoesntExist <- V.doesntExist . UniqueEmail $ apopEmail parameters
         shippingValidators <- validators $ apopShippingAddress parameters
-        billingValidators <- validators $ apopBillingAddress parameters
+        billingValidators <- maybe (return []) validators
+            $ apopBillingAddress parameters
         return $
             [ ( "email"
               , [ V.required $ apopEmail parameters
@@ -677,15 +696,13 @@ anonymousPlaceOrderRoute = validate >=> \parameters -> do
         shippingParameter = NewAddress $ apopShippingAddress parameters
     stripeConfig <- asks getStripeConfig
     (orderId, orderData) <- withPlaceOrderErrors shippingParameter . runDB $ do
-        stripeCustomerId <- createStripeCustomer stripeConfig (apopEmail parameters)
-            $ apopStripeToken parameters
         let customer = Customer
                 { customerEmail = apopEmail parameters
                 , customerStoreCredit = Cents 0
                 , customerMemberNumber = memberNumber
                 , customerEncryptedPassword = encryptedPass
                 , customerAuthToken = authToken
-                , customerStripeId = Just stripeCustomerId
+                , customerStripeId = Nothing
                 , customerIsAdmin = False
                 }
         customerId <- insert customer
@@ -694,17 +711,26 @@ anonymousPlaceOrderRoute = validate >=> \parameters -> do
             >>= maybe (throwM CartNotFound) return
         let shippingAddress = fromAddressData Shipping customerId
                 $ apopShippingAddress parameters
-            billingAddress = fromAddressData Billing customerId
-                $ apopBillingAddress parameters
+            maybeBillingAddress = fromAddressData Billing customerId
+                <$> apopBillingAddress parameters
         shippingId <- insert shippingAddress
-        billingId <- insert billingAddress
+        billingId <- sequence $ insert <$> maybeBillingAddress
         (orderId, orderTotal, _) <- createOrder (Entity customerId customer)
             cartId (Entity shippingId shippingAddress) billingId Nothing
             memberNumber (apopPriorityShipping parameters)
             (apopCouponCode parameters) (apopComment parameters) currentTime
-        stripeCardId <- getFirstStripeCard stripeConfig stripeCustomerId
-        updateCardAddress stripeConfig stripeCustomerId stripeCardId billingAddress
-        chargeCustomer stripeConfig stripeCustomerId orderId orderTotal
+        when (orderTotal > 0) $ case (maybeBillingAddress, apopStripeToken parameters) of
+            (Just billingAddress, Just stripeToken) -> do
+                stripeCustomerId <- createStripeCustomer stripeConfig (apopEmail parameters)
+                    stripeToken
+                update customerId [CustomerStripeId =. Just stripeCustomerId]
+                stripeCardId <- getFirstStripeCard stripeConfig stripeCustomerId
+                updateCardAddress stripeConfig stripeCustomerId stripeCardId billingAddress
+                chargeCustomer stripeConfig stripeCustomerId orderId orderTotal
+            (Nothing, _) ->
+                throwM BillingAddressRequired
+            (_, Nothing) ->
+                throwM StripeTokenRequired
         deleteCart cartId
         return
             ( orderId
@@ -780,7 +806,7 @@ createOrder
     -- ^ Cart ID that should be turned into an Order
     -> Entity Address
     -- ^ Shipping Address
-    -> AddressId
+    -> Maybe AddressId
     -- ^ Billing Address ID
     -> Maybe Cents
     -- ^ Store Credit
@@ -957,7 +983,7 @@ data OrderDetails =
         , odLineItems :: [Entity OrderLineItem]
         , odProducts :: [CheckoutProduct]
         , odShippingAddress :: AddressData
-        , odBillingAddress :: AddressData
+        , odBillingAddress :: Maybe AddressData
         }
 
 instance ToJSON OrderDetails where
@@ -1044,7 +1070,7 @@ customerSuccessRoute token parameters = do
             , odLineItems = lineItems
             , odProducts = products
             , odShippingAddress = toAddressData shipping
-            , odBillingAddress = toAddressData billing
+            , odBillingAddress = toAddressData <$> billing
             }
     where handleError = \case
             OrderNotFound ->
@@ -1057,11 +1083,11 @@ data SuccessError
 instance Exception SuccessError
 
 
-getOrderAndAddress :: CustomerId -> OrderId -> AppSQL (Maybe (Entity Order, Entity Address, Entity Address))
+getOrderAndAddress :: CustomerId -> OrderId -> AppSQL (Maybe (Entity Order, Entity Address, Maybe (Entity Address)))
 getOrderAndAddress customerId orderId =
     fmap listToMaybe . E.select . E.from
-        $ \(o `E.InnerJoin` s `E.InnerJoin` b) -> do
-            E.on $ o E.^. OrderBillingAddressId E.==. b E.^. AddressId
+        $ \(o `E.InnerJoin` s `E.LeftOuterJoin` b) -> do
+            E.on $ o E.^. OrderBillingAddressId E.==. b E.?. AddressId
             E.on $ o E.^. OrderShippingAddressId E.==. s E.^. AddressId
             E.where_ $
                 o E.^. OrderId E.==. E.val orderId E.&&.
