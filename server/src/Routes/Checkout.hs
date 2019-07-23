@@ -373,6 +373,7 @@ data PlaceOrderError
     | AddressNotFound AddressType
     | BillingAddressRequired
     | StripeTokenRequired
+    | NotEnoughStoreCredit
     | NoShippingMethod
     | StripeError Stripe.StripeError
     | CardChargeError
@@ -408,6 +409,9 @@ withPlaceOrderErrors shippingAddress =
                 V.singleFieldError "" $
                     "An error occured when verifying your order total. " <>
                     "Please refresh the page or contact us."
+            NotEnoughStoreCredit ->
+                V.singleFieldError "store-credit"
+                    "You cannot apply more store credit than you have."
             StripeError stripeError ->
                 V.singleError $ Stripe.errorMsg stripeError
             CardChargeError ->
@@ -540,6 +544,8 @@ customerPlaceOrderRoute token = validate >=> \parameters -> do
                 throwM BillingAddressRequired
             (_, Nothing) ->
                 throwM StripeTokenRequired
+        when (appliedCredit > customerStoreCredit customer) $
+            throwM NotEnoughStoreCredit
         when (appliedCredit > 0) $
             update customerId [CustomerStoreCredit -=. appliedCredit]
         deleteCart cartId
