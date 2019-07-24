@@ -184,4 +184,18 @@ OrderProduct
     price Cents
     tax Cents
     UniqueOrderProduct orderId productVariantId
+
+
+ProductSale
+    price Cents
+    productVariantId ProductVariantId
+    startDate UTCTime
+    endDate UTCTime
+
+CategorySale
+    name T.Text
+    type SaleType
+    startDate UTCTime
+    endDate UTCTime
+    categoryIds [CategoryId]
 |]

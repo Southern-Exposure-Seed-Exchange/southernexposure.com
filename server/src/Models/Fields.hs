@@ -296,3 +296,14 @@ derivePersistField "LineItemType"
 creditLineItemTypes :: [LineItemType]
 creditLineItemTypes =
     [StoreCreditLine, MemberDiscountLine, CouponDiscountLine]
+
+
+
+-- CATEGORY SALES
+
+data SaleType
+    = FlatSale Cents
+    | PercentSale Percent       -- ^ Percent field is whole percentage(`5 == 5%`)
+    deriving (Show, Read, Generic)
+
+derivePersistField "SaleType"

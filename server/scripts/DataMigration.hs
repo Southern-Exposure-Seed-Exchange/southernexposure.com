@@ -15,7 +15,10 @@ import Data.Maybe (maybeToList, fromMaybe)
 import Data.Monoid ((<>))
 import Data.Pool (destroyAllResources)
 import Data.Scientific (Scientific)
-import Data.Time (hoursToTimeZone, localTimeToUTC)
+import Data.Time
+    ( LocalTime(..), Day, UTCTime, hoursToTimeZone, localTimeToUTC
+    , getCurrentTimeZone, midnight
+    )
 import Database.MySQL.Base
     ( MySQLConn, Query(..), query_, close, MySQLValue(..), prepareStmt, queryStmt )
 import Database.Persist
@@ -50,9 +53,11 @@ main = do
     psqlConn <- connectToPostgres
     mysqlProducts <- makeProducts mysqlConn
     categories <- makeCategories mysqlConn
+    categorySales <- makeCategorySales mysqlConn
     let products = nubBy (\(_, p1) (_, p2) -> productBaseSku p1 == productBaseSku p2)
             $ map (\(_, catId, _, _, _, _, p) -> (catId, p)) mysqlProducts
         variants = makeVariants mysqlProducts
+    productSales <- makeProductSales mysqlConn
     attributes <- makeSeedAttributes mysqlConn
     pages <- makePages mysqlConn
     customers <- makeCustomers mysqlConn
@@ -61,10 +66,12 @@ main = do
     coupons <- makeCoupons mysqlConn
     flip runSqlPool psqlConn $
         dropNewDatabaseRows >>
-        insertCategories categories >>=
-        insertProducts products >>
+        insertCategories categories >>= \categoryMap ->
+        insertCategorySales categorySales categoryMap >>
+        insertProducts products categoryMap >>
         insertVariants variants >>= \variantMap ->
         insertAttributes attributes >>
+        insertProductSales productSales variantMap >>
         insertPages pages >>
         insertCustomers customers >>= \customerMap ->
         insertAddresses customerMap addresses >>
@@ -88,6 +95,9 @@ connectToPostgres =
 dropNewDatabaseRows :: SqlWriteT IO ()
 dropNewDatabaseRows =
     deleteWhere ([] :: [Filter SeedAttribute])
+        >> deleteWhere ([] :: [Filter ProductSale])
+        >> deleteWhere ([] :: [Filter CategorySale])
+        >> deleteWhere ([] :: [Filter Coupon])
         >> deleteWhere ([] :: [Filter TaxRate])
         >> deleteWhere ([] :: [Filter Surcharge])
         >> deleteWhere ([] :: [Filter ShippingMethod])
@@ -134,6 +144,44 @@ makeCategories mysql = do
                     , Category name (slugify name) Nothing description (T.pack . takeFileName $ T.unpack imgUrl) (fromIntegral catOrder)
                     )
           toData r = print r >> error "Category Lambda Did Not Match"
+
+
+makeCategorySales :: MySQLConn -> IO [([Int], CategorySale)]
+makeCategorySales mysql = do
+    sales <- mysqlQuery mysql $
+        "SELECT sale_name, sale_deduction_value, sale_deduction_type,"
+        <> "    sale_categories_selected, sale_date_start, sale_date_end "
+        <> "FROM salemaker_sales"
+    filter (\(_, cs) -> categorySaleName cs /= "" && categorySaleName cs /= "GuardN Inoculant")
+        <$> mapM makeCategorySale sales
+    where
+        makeCategorySale [ MySQLText name, MySQLDecimal deduction, MySQLInt8 deductionType
+                        , MySQLText categoryIds, MySQLDate startDay, MySQLDate endDay
+                        ] = do
+            utcStart <- dayToUTC startDay
+            utcEnd <- dayToUTC endDay
+            return
+                ( fixCategories categoryIds
+                , CategorySale
+                    { categorySaleName = name
+                    , categorySaleType = saleType deduction deductionType
+                    , categorySaleStartDate = utcStart
+                    , categorySaleEndDate = utcEnd
+                    , categorySaleCategoryIds = []
+                    }
+                )
+        makeCategorySale _ = error "Invalid arguments to makeProductSale"
+        saleType amount type_ = case type_ of
+            0 -> FlatSale . Cents $ floor amount
+            1 -> PercentSale $ floor amount
+            _ -> error $ "Could not read category sale type: " <> show type_
+        fixCategories str =
+            map readCategory . filter (/= "") $ T.split (== ',') str
+        readCategory str =
+            fromMaybe
+                (error $ "Could not read sale category ID: " <> T.unpack str)
+                (readMaybe $ T.unpack str)
+
 
 
 makeProducts :: MySQLConn -> IO [(Int32, Int, T.Text, Scientific, Float, Float, Product)]
@@ -219,6 +267,27 @@ splitSku fullSku =
                     (fullSku, "")
          _ ->
             (fullSku, "")
+
+
+makeProductSales :: MySQLConn -> IO [(Int, ProductSale)]
+makeProductSales mysql = do
+    sales <- mysqlQuery mysql $
+        "SELECT products_id, specials_new_products_price, expires_date,"
+        <> "    specials_date_available "
+        <> "FROM specials"
+    mapM makeProductSale sales
+    where
+        makeProductSale [ MySQLInt32 productId, MySQLDecimal salePrice, MySQLDate endDate
+                        , MySQLDate startDate
+                        ] = do
+            utcStart <- dayToUTC startDate
+            utcEnd <- dayToUTC endDate
+            return
+                ( fromIntegral productId
+                , ProductSale (Cents . round $ 100 * salePrice) (toSqlKey 0)
+                    utcStart utcEnd
+                )
+        makeProductSale _ = error "Invalid arguemnts to makeProductSale."
 
 
 makePages :: MySQLConn -> IO [Page]
@@ -466,6 +535,27 @@ insertCategories =
             return $ IntMap.insert mysqlId categoryId intMap
 
 
+insertCategorySales :: [([Int], CategorySale)] -> OldIdMap CategoryId -> SqlWriteT IO ()
+insertCategorySales sales categoryIdMap =
+    mapM_ insertSale sales
+    where
+        insertSale (categoryIds, sale) =
+            insert $ sale
+                { categorySaleCategoryIds = fixIds categoryIds
+                }
+        fixIds ids =
+            case ids of
+                [] ->
+                    []
+                oldId : rest ->
+                    case IntMap.lookup oldId categoryIdMap of
+                        Nothing ->
+                            error $ "Could not find old category ID: " <> show oldId
+                        Just newId ->
+                            newId : fixIds rest
+
+
+
 insertProducts :: [(Int, Product)] -> OldIdMap CategoryId -> SqlWriteT IO ()
 insertProducts products categoryIdMap =
     mapM_ insertProduct products
@@ -500,6 +590,18 @@ insertAttributes =
                     lift . putStrLn $ "No product for: " ++ show attribute
                 Just (Entity prodId _) ->
                     void . insert $ attribute { seedAttributeProductId = prodId }
+
+
+insertProductSales :: [(Int, ProductSale)] -> OldIdMap ProductVariantId -> SqlWriteT IO ()
+insertProductSales sales variantIdMap =
+    mapM_ insertSale sales
+    where
+        insertSale (oldVariantId, sale) =
+            case IntMap.lookup oldVariantId variantIdMap of
+                Nothing ->
+                    lift . putStrLn $ "Could not find old variant ID: " <> show oldVariantId
+                Just variantId ->
+                    insert_ $ sale { productSaleProductVariantId = variantId }
 
 
 insertPages :: [Page] -> SqlWriteT IO ()
@@ -651,3 +753,9 @@ mysqlQuery conn queryString =
 insertIntoIdMap :: OldIdMap a -> IntMap.Key -> a -> OldIdMap a
 insertIntoIdMap intMap key value =
     IntMap.insert key value intMap
+
+
+dayToUTC :: Day -> IO UTCTime
+dayToUTC day = do
+    timezone <- getCurrentTimeZone
+    return . localTimeToUTC timezone $ LocalTime day midnight
