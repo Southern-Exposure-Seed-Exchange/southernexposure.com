@@ -30,7 +30,7 @@ import qualified Database.Esqueleto as E
 
 paginatedSelect :: Maybe T.Text -> Maybe Int -> Maybe Int
                 -> (E.SqlExpr (Entity Product) -> E.SqlExpr (Maybe (Entity SeedAttribute)) -> E.SqlExpr (E.Value Bool))
-                -> App ([Entity Product], Int)
+                -> AppSQL ([Entity Product], Int)
 paginatedSelect maybeSorting maybePage maybePerPage productFilters =
     let sorting = fromMaybe "" maybeSorting in
     case sorting of
@@ -52,26 +52,25 @@ paginatedSelect maybeSorting maybePage maybePerPage productFilters =
             fromIntegral $ fromMaybe 1 maybePage
           offset =
             (page - 1) * perPage
-          productsSelect ordering =
-            runDB $ do
-                products <- E.select $ E.from $ \(p `E.LeftOuterJoin` sa) -> do
-                    E.on (E.just (p E.^. ProductId) E.==. sa E.?. SeedAttributeProductId)
-                    E.where_ $ productFilters p sa
-                    _ <- ordering p
-                    E.limit perPage
-                    E.offset offset
-                    return p
-                productsCount <- E.select $ E.from $ \(p `E.LeftOuterJoin` sa) -> do
-                    E.on (E.just (p E.^. ProductId) E.==. sa E.?. SeedAttributeProductId)
-                    E.where_ $ productFilters p sa
-                    return (E.countRows :: E.SqlExpr (E.Value Int))
-                return (products, E.unValue $ head productsCount)
+          productsSelect ordering = do
+            products <- E.select $ E.from $ \(p `E.LeftOuterJoin` sa) -> do
+                E.on (E.just (p E.^. ProductId) E.==. sa E.?. SeedAttributeProductId)
+                E.where_ $ productFilters p sa
+                _ <- ordering p
+                E.limit perPage
+                E.offset offset
+                return p
+            productsCount <- E.select $ E.from $ \(p `E.LeftOuterJoin` sa) -> do
+                E.on (E.just (p E.^. ProductId) E.==. sa E.?. SeedAttributeProductId)
+                E.where_ $ productFilters p sa
+                return (E.countRows :: E.SqlExpr (E.Value Int))
+            return (products, E.unValue $ head productsCount)
 
 variantSorted :: (E.SqlExpr (E.Value (Maybe Cents)) -> [E.SqlExpr E.OrderBy])
               -> Int64 -> Int64
               -> (E.SqlExpr (Entity Product) -> E.SqlExpr (Maybe (Entity SeedAttribute)) -> E.SqlExpr (E.Value Bool))
-              -> App ([Entity Product], Int)
-variantSorted ordering offset perPage filters = runDB $ do
+              -> AppSQL ([Entity Product], Int)
+variantSorted ordering offset perPage filters = do
     productsAndPrice <- E.select $ E.from $ \(p `E.InnerJoin` v `E.LeftOuterJoin` sa) -> do
         E.on (E.just (p E.^. ProductId) E.==. sa E.?. SeedAttributeProductId)
         E.on (p E.^. ProductId E.==. v E.^. ProductVariantProductId)

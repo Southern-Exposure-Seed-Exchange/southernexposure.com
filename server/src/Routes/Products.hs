@@ -66,8 +66,8 @@ productDetailsRoute slug = do
         case maybeProduct of
             Nothing ->
                 throwError err404
-            Just e@(Entity productId prod) -> do
-                (variants, maybeAttribute, categories) <- runDB $
+            Just e@(Entity productId prod) ->  runDB $ do
+                (variants, maybeAttribute, categories) <-
                     (,,) <$> selectList [ProductVariantProductId ==. productId] []
                         <*> getBy (UniqueAttribute productId)
                         <*> selectList [CategoryId <-. productCategoryIds prod] []
@@ -124,7 +124,7 @@ type ProductsSearchRoute =
     :> Post '[JSON] ProductsSearchData
 
 productsSearchRoute :: Maybe T.Text -> Maybe Int -> Maybe Int -> ProductsSearchParameters -> App ProductsSearchData
-productsSearchRoute maybeSort maybePage maybePerPage parameters = do
+productsSearchRoute maybeSort maybePage maybePerPage parameters = runDB $ do
     let queryFilters p
             | pspQuery parameters /= "" && pspSearchDescription parameters =
                 foldl1 (E.&&.) . map (nameOrDescriptionOrSku p) . T.words $ pspQuery parameters
@@ -144,7 +144,7 @@ productsSearchRoute maybeSort maybePage maybePerPage parameters = do
         Nothing ->
             return (const $ E.val True, Nothing)
         Just cId -> do
-            name <- fmap categoryName <$> runDB (get cId)
+            name <- fmap categoryName <$> get cId
             categories <- getChildCategoryIds cId
             return (\p -> p E.^. ProductCategoryIds `E.in_` E.valList (map (: []) categories), name)
     (products, productsCount) <- paginatedSelect

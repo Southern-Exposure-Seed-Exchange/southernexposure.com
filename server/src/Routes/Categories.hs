@@ -111,8 +111,8 @@ categoryDetailsRoute slug maybeSort maybePage maybePerPage = do
     case maybeCategory of
         Nothing ->
             throwError err404
-        Just e@(Entity categoryId _) -> do
-            subCategories <- runDB $ selectList [CategoryParentId ==. Just categoryId] [Asc CategoryName]
+        Just e@(Entity categoryId _) -> runDB $ do
+            subCategories <- selectList [CategoryParentId ==. Just categoryId] [Asc CategoryName]
             descendants <- getChildCategoryIds categoryId
             (products, productsCount) <- paginatedSelect
                 maybeSort maybePage maybePerPage

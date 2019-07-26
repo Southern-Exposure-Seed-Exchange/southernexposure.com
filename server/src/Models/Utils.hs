@@ -61,15 +61,15 @@ truncateDescription (Entity pId p) =
 
 -- | Return the ID's of a Category's Child Categories, including the passed
 -- CategoryId.
-getChildCategoryIds  :: Key Category -> App [Key Category]
+getChildCategoryIds  :: Key Category -> AppSQL [Key Category]
 getChildCategoryIds categoryId = do
-    childrenKeys <- runDB $ selectKeysList [CategoryParentId ==. Just categoryId] []
+    childrenKeys <- selectKeysList [CategoryParentId ==. Just categoryId] []
     subKeys <- concat <$> mapM getChildCategoryIds childrenKeys
     return $ categoryId : subKeys
 
-getParentCategories :: Key Category -> App [Entity Category]
+getParentCategories :: Key Category -> AppSQL [Entity Category]
 getParentCategories categoryId = do
-    maybeCategory <- runDB $ get categoryId
+    maybeCategory <- get categoryId
     flip (maybe $ return []) maybeCategory $ \category ->
         case categoryParentId category of
             Nothing ->
