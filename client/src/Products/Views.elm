@@ -241,7 +241,7 @@ list routeConstructor pagination addToCartForms products =
                         ]
                     ]
                 , td [ class "row-product-description" ]
-                    [ h3 [ class "mb-0" ]
+                    [ h3 [ class "mb-0 d-flex justify-content-between" ]
                         [ a (routeLinkAttributes <| ProductDetails product.slug)
                             [ Markdown.toHtml [] product.name ]
                         , htmlOrBlank SeedAttribute.icons maybeSeedAttribute

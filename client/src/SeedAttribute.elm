@@ -138,7 +138,7 @@ icons { isOrganic, isHeirloom, isRegional, isEcological } =
             (Tuple.second
                 >> (\attribute ->
                         img
-                            [ class "my-auto"
+                            [ class "mt-1 mb-auto"
                             , title <| toDescription attribute
                             , alt <| toString attribute
                             , src <| iconUrl attribute
@@ -146,4 +146,4 @@ icons { isOrganic, isHeirloom, isRegional, isEcological } =
                             []
                    )
             )
-        |> span [ class "d-inline-block ml-2" ]
+        |> span [ class "d-inline-flex" ]
