@@ -4,6 +4,7 @@ import Dict exposing (Dict)
 import Html exposing (..)
 import Html.Attributes as A exposing (attribute, class, for, id, selected, src, tabindex, type_, value)
 import Html.Events exposing (on, onInput, onSubmit, targetValue)
+import Html.Keyed as Keyed
 import Json.Decode as Decode
 import Markdown
 import Messages exposing (Msg(..))
@@ -230,10 +231,13 @@ list routeConstructor pagination addToCartForms products =
         renderProduct ( product, variants, maybeSeedAttribute ) =
             tr []
                 [ td [ class "row-product-image text-center align-middle" ]
-                    [ a (routeLinkAttributes <| ProductDetails product.slug)
-                        [ img
-                            [ src << Images.media <| "products/" ++ product.imageURL ]
-                            []
+                    [ Keyed.node "a"
+                        (routeLinkAttributes <| ProductDetails product.slug)
+                        [ ( "product-img-" ++ (String.fromInt <| (\(ProductId i) -> i) product.id)
+                          , img
+                                [ src << Images.media <| "products/" ++ product.imageURL ]
+                                []
+                          )
                         ]
                     ]
                 , td [ class "row-product-description" ]
