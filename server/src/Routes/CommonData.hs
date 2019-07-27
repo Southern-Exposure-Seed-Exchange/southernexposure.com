@@ -1,8 +1,13 @@
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards #-}
 module Routes.CommonData
     ( ProductData
     , getProductData
+    , VariantData(vdId, vdProductId)
+    , getVariantPrice
+    , applySalesToVariants
     , PredecessorCategory
     , categoryToPredecessor
     , AuthorizationData
@@ -20,12 +25,17 @@ module Routes.CommonData
     , toAddressData
     ) where
 
+import Prelude hiding (product)
+
+import Control.Monad.IO.Class (liftIO)
 import Data.Aeson ((.=), (.:), (.:?), ToJSON(..), FromJSON(..), object, withObject)
+import Data.Int (Int64)
 import Data.List (intersect)
-import Data.Maybe (mapMaybe, listToMaybe)
+import Data.Maybe (mapMaybe, listToMaybe, fromMaybe)
 import Data.Monoid ((<>))
 import Data.Ratio ((%))
-import Database.Persist ((==.), Entity(..), SelectOpt(Asc), selectList, getBy)
+import Data.Time (getCurrentTime)
+import Database.Persist ((==.), (>=.), (<=.), Entity(..), SelectOpt(Asc), selectList, getBy)
 import Numeric.Natural (Natural)
 
 import Models
@@ -34,6 +44,7 @@ import Server
 import Validation (Validation(..))
 
 import qualified Data.ISO3166_CountryCodes as CountryCodes
+import qualified Data.List as L
 import qualified Data.Map.Strict as M
 import qualified Data.Text as T
 import qualified Database.Esqueleto as E
@@ -46,7 +57,7 @@ import qualified Validation as V
 data ProductData =
     ProductData
         { pdProduct :: Entity Product
-        , pdVariants :: [Entity ProductVariant]
+        , pdVariants :: [VariantData]
         , pdSeedAttribute :: Maybe (Entity SeedAttribute)
         } deriving (Show)
 
@@ -57,12 +68,122 @@ instance ToJSON ProductData where
                , "seedAttribute" .= toJSON pdSeedAttribute
                ]
 
-getProductData :: Entity Product -> App ProductData
-getProductData e@(Entity productId _) =
-    runDB $ do
-        variants <- selectList [ProductVariantProductId ==. productId] []
-        maybeAttribute <- getBy $ UniqueAttribute productId
-        return $ ProductData e variants maybeAttribute
+data VariantData =
+    VariantData
+        { vdId :: ProductVariantId
+        , vdProductId :: ProductId
+        , vdSkuSuffix :: T.Text
+        , vdPrice :: Cents
+        , vdSalePrice :: Maybe Cents
+        , vdQuantity :: Int64
+        , vdWeight :: Milligrams
+        , vdIsActive :: Bool
+        } deriving (Show)
+
+instance ToJSON VariantData where
+    toJSON VariantData {..} =
+        object
+            [ "id" .= vdId
+            , "productId" .= vdProductId
+            , "skuSuffix" .= vdSkuSuffix
+            , "price" .= vdPrice
+            , "salePrice" .= vdSalePrice
+            , "quantity" .= vdQuantity
+            , "weight" .= vdWeight
+            , "isActive" .= vdIsActive
+            ]
+
+getVariantPrice :: VariantData -> Cents
+getVariantPrice VariantData { vdPrice, vdSalePrice } =
+    fromMaybe vdPrice vdSalePrice
+
+
+getProductData :: Entity Product -> AppSQL ProductData
+getProductData e@(Entity productId _) = do
+    variants <- selectList [ProductVariantProductId ==. productId] []
+        >>= applySalesToVariants e
+    maybeAttribute <- getBy $ UniqueAttribute productId
+    return $ ProductData e variants maybeAttribute
+
+-- | Apply any CategorySales & ProductSales to the ProductVariants while
+-- morphing them into VariantData values.
+applySalesToVariants :: Entity Product -> [Entity ProductVariant] -> AppSQL [VariantData]
+applySalesToVariants p vs =
+    mapM applyVariantSales vs >>= applyCategorySales p
+
+-- | Search for any Product Sales & apply them to the ProductVariant,
+-- transforming it into a VariantData.
+applyVariantSales :: Entity ProductVariant -> AppSQL VariantData
+applyVariantSales variant = do
+    currentTime <- liftIO getCurrentTime
+    maybeSale <- fmap (productSalePrice . entityVal) . listToMaybe <$>
+        selectList
+            [ ProductSaleProductVariantId ==. entityKey variant
+            , ProductSaleStartDate <=. currentTime
+            , ProductSaleEndDate >=. currentTime
+            ]
+            []
+    return $ makeData variant maybeSale
+    where
+        makeData :: Entity ProductVariant -> Maybe Cents -> VariantData
+        makeData (Entity variantId ProductVariant {..}) salePrice =
+            VariantData
+                { vdId = variantId
+                , vdProductId = productVariantProductId
+                , vdSkuSuffix = productVariantSkuSuffix
+                , vdPrice = productVariantPrice
+                , vdSalePrice = salePrice
+                , vdQuantity = productVariantQuantity
+                , vdWeight = productVariantWeight
+                , vdIsActive = productVariantIsActive
+                }
+
+-- | Get the CategorySales for the Product's Categories, than apply any
+-- amount if it is less than the Variant's current sale price.
+applyCategorySales :: Entity Product -> [VariantData] -> AppSQL [VariantData]
+applyCategorySales (Entity _ product) variants =
+    getCategorySales product >>= \case
+        [] ->
+            return variants
+        sale : _ ->
+            return $ map (applyCategorySale sale) variants
+
+-- | Apply the sale to the VariantData if there is no existing sale price
+-- or if the sale price is cheaper than any existing sale price.
+applyCategorySale :: CategorySale -> VariantData -> VariantData
+applyCategorySale sale variant =
+    let salePrice =
+            case categorySaleType sale of
+                FlatSale amount ->
+                    max 0 $ vdPrice variant - amount
+                PercentSale percent ->
+                    Cents . round $
+                        toRational (fromCents $ vdPrice variant)
+                        * (1 - (fromIntegral percent % 100))
+    in case vdSalePrice variant of
+        Nothing ->
+            variant { vdSalePrice = Just salePrice }
+        Just existingSalePrice ->
+            if existingSalePrice > salePrice then
+                variant { vdSalePrice = Just salePrice }
+            else
+                variant
+
+-- | Get any active sales for the given categories.
+getCategorySales :: Product -> AppSQL [CategorySale]
+getCategorySales product = do
+    currentTime <- liftIO getCurrentTime
+    categories <- map entityKey . concat <$>
+        mapM getParentCategories (productCategoryIds product)
+    activeSales <- map entityVal <$> selectList
+        [ CategorySaleStartDate <=. currentTime
+        , CategorySaleEndDate >=. currentTime
+        ]
+        []
+    return $ filter
+        (not . null . L.intersect categories . categorySaleCategoryIds)
+        activeSales
+
 
 
 -- Categories
@@ -120,7 +241,7 @@ data CartItemData =
     CartItemData
         { cidItemId :: CartItemId
         , cidProduct :: Entity Product
-        , cidVariant :: Entity ProductVariant
+        , cidVariant :: VariantData
         , cidQuantity :: Natural
         , cidTax :: Cents
         }
@@ -135,7 +256,6 @@ instance ToJSON CartItemData where
                ]
 
 
--- TODO: Add Grand Total & Don't Calculate in Frontend
 data CartCharges =
     CartCharges
         { ccTax :: CartCharge
@@ -148,7 +268,7 @@ data CartCharges =
         , ccGrandTotal :: Cents
         }
 
--- TODO: Add Product & Grand Total - Don't Calculate Either in Frontend
+-- TODO: Add Product Total - Don't Calculate in Frontend
 instance ToJSON CartCharges where
     toJSON charges =
         object [ "tax" .= ccTax charges
@@ -202,28 +322,33 @@ getCartItems maybeTaxRate whereQuery = do
             E.where_ $ whereQuery c
             E.orderBy [E.asc $ p E.^. ProductName]
             return (ci E.^. CartItemId, p, v, ci E.^. CartItemQuantity)
-    return $ map toItemData items
+    mapM toItemData items
     where toItemData (i, p, v, q) =
             let
                 quantity =
                     E.unValue q
-                productTotal =
-                    Cents
-                        $ fromCents (productVariantPrice $ fromEntity v)
-                        * quantity
-                fromEntity (Entity _ e) =
-                    e
-                entityId (Entity eId _) =
-                    eId
-            in
-                CartItemData
+                productTotal vd =
+                    Cents $ fromCents (getFinalPrice vd) * quantity
+                tax vd =
+                    case maybeTaxRate of
+                        Nothing ->
+                            Cents 0
+                        Just taxRate ->
+                            applyTaxRate (productTotal vd) (entityKey p) taxRate
+            in do
+                maybeCategorySale <- listToMaybe <$> getCategorySales (entityVal p)
+                variantData <- applyVariantSales v >>= \vd ->
+                    return $ maybe vd (`applyCategorySale` vd) maybeCategorySale
+                return CartItemData
                     { cidItemId = E.unValue i
                     , cidProduct = p
-                    , cidVariant = v
+                    , cidVariant = variantData
                     , cidQuantity = quantity
-                    , cidTax =
-                        maybe (Cents 0) (applyTaxRate productTotal $ entityId p) maybeTaxRate
+                    , cidTax = tax variantData
                     }
+          getFinalPrice variant =
+              fromMaybe (vdPrice variant) $ vdSalePrice variant
+
 
 
 {-| Calculate the Charges for a set of Cart Items.
@@ -246,12 +371,10 @@ getCharges
     -> AppSQL CartCharges
 getCharges maybeTaxRate maybeCountry items includeMemberDiscount maybeCoupon priorityShipping =
     let
-        variant item =
-            (\(Entity _ v) -> v) $ cidVariant item
         subTotal =
             foldl (\acc item -> acc + itemTotal item) 0 items
         itemTotal item =
-            fromIntegral (cidQuantity item) * fromCents (productVariantPrice $ variant item)
+            fromIntegral (cidQuantity item) * fromCents (getVariantPrice $ cidVariant item)
         taxTotal =
             foldl (\acc item -> acc + fromCents (cidTax item)) 0 items
         memberDiscount =

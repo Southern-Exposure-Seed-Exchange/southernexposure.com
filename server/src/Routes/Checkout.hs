@@ -41,7 +41,7 @@ import Server
 import Routes.CommonData
     ( AuthorizationData, toAuthorizationData, CartItemData(..), CartCharges(..)
     , CartCharge(..), getCartItems, getCharges, AddressData(..), toAddressData
-    , fromAddressData, ShippingCharge(..)
+    , fromAddressData, ShippingCharge(..), VariantData(..), getVariantPrice
     )
 import Routes.Utils (hashPassword, generateUniqueToken)
 import Validation (Validation(..))
@@ -962,17 +962,16 @@ createProducts maybeTaxRate items orderId =
                 + orderProductTax prod
           makeProduct CartItemData { cidVariant, cidQuantity } =
             let
-                (Entity variantId variant) = cidVariant
-                price = productVariantPrice variant
+                price = getVariantPrice cidVariant
                 productTotal = Cents $ fromCents price * cidQuantity
+                tax = applyTax productTotal (vdProductId cidVariant)
             in
                 OrderProduct
                     { orderProductOrderId = orderId
-                    , orderProductProductVariantId = variantId
+                    , orderProductProductVariantId = vdId cidVariant
                     , orderProductQuantity = cidQuantity
-                    , orderProductPrice = productVariantPrice variant
-                    , orderProductTax =
-                        applyTax productTotal (productVariantProductId variant)
+                    , orderProductPrice = price
+                    , orderProductTax = tax
                     }
           applyTax productTotal productId =
               maybe (Cents 0) (applyTaxRate productTotal productId) maybeTaxRate

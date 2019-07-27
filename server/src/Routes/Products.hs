@@ -41,7 +41,7 @@ productRoutes =
 data ProductDetailsData =
     ProductDetailsData
         { pddProduct :: Entity Product
-        , pddVariants :: [Entity ProductVariant]
+        , pddVariants :: [VariantData]
         , pddSeedAttribute :: Maybe (Entity SeedAttribute)
         , pddCategories :: [Entity Category]
         , pddPredecessors :: [PredecessorCategory]
@@ -68,7 +68,10 @@ productDetailsRoute slug = do
                 throwError err404
             Just e@(Entity productId prod) ->  runDB $ do
                 (variants, maybeAttribute, categories) <-
-                    (,,) <$> selectList [ProductVariantProductId ==. productId] []
+                    (,,)
+                        <$> (selectList [ProductVariantProductId ==. productId] []
+                                >>= applySalesToVariants e
+                            )
                         <*> getBy (UniqueAttribute productId)
                         <*> selectList [CategoryId <-. productCategoryIds prod] []
                 predecessors <- concat <$> mapM getParentCategories (productCategoryIds prod)
