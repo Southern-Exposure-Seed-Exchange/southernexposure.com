@@ -10,7 +10,7 @@ import Control.Monad.Logger (runNoLoggingT)
 import Data.ByteString.Lazy (ByteString)
 import Data.Char (isAlpha)
 import Data.Int (Int32)
-import Data.List (nubBy)
+import Data.List (nubBy, partition)
 import Data.Maybe (maybeToList, fromMaybe)
 import Data.Monoid ((<>))
 import Data.Pool (destroyAllResources)
@@ -22,8 +22,8 @@ import Data.Time
 import Database.MySQL.Base
     ( MySQLConn, Query(..), query_, close, MySQLValue(..), prepareStmt, queryStmt )
 import Database.Persist
-    ( (<-.), (+=.), Entity(..), Filter, getBy, insert, insertMany_, upsert
-    , deleteWhere, selectKeysList, insert_, selectList
+    ( (<-.), (+=.), (=.), Entity(..), Filter, getBy, insert, insertMany_, upsert
+    , deleteWhere, selectKeysList, insert_, selectList, update
     )
 import Database.Persist.Postgresql
     ( ConnectionPool, SqlWriteT, createPostgresqlPool, toSqlKey, fromSqlKey
@@ -54,8 +54,8 @@ main = do
     mysqlProducts <- makeProducts mysqlConn
     categories <- makeCategories mysqlConn
     categorySales <- makeCategorySales mysqlConn
-    let products = nubBy (\(_, p1) (_, p2) -> productBaseSku p1 == productBaseSku p2)
-            $ map (\(_, catId, _, _, _, _, p) -> (catId, p)) mysqlProducts
+    let products = mergeProducts
+            $ map (\(_, catId, _, _, _, _, _, p) -> (catId, p)) mysqlProducts
         variants = makeVariants mysqlProducts
     productSales <- makeProductSales mysqlConn
     attributes <- makeSeedAttributes mysqlConn
@@ -80,6 +80,25 @@ main = do
         insertCoupons coupons
     close mysqlConn
     destroyAllResources psqlConn
+  where
+    mergeProducts :: [(Int, Product)] -> [(Int, Product)]
+    mergeProducts xs = case xs of
+        [] ->
+            []
+        p : rest ->
+            let (matchingProducts, unmatched) =
+                    partition (\(_, p2) -> productBaseSku (snd p) == productBaseSku p2) rest
+            in foldl merge p matchingProducts : mergeProducts unmatched
+      where
+        merge (cat, prod) (_, nextProd) =
+            ( cat
+            , prod
+                { productIsActive =
+                    productIsActive prod || productIsActive nextProd
+                }
+            )
+
+
 
 
 type OldIdMap a = IntMap.IntMap a
@@ -170,7 +189,7 @@ makeCategorySales mysql = do
                     , categorySaleCategoryIds = []
                     }
                 )
-        makeCategorySale _ = error "Invalid arguments to makeProductSale"
+        makeCategorySale _ = error "Invalid arguments to makeCategorySale"
         saleType amount type_ = case type_ of
             0 -> FlatSale . Cents $ floor amount
             1 -> PercentSale $ floor amount
@@ -184,31 +203,32 @@ makeCategorySales mysql = do
 
 
 
-makeProducts :: MySQLConn -> IO [(Int32, Int, T.Text, Scientific, Float, Float, Product)]
+makeProducts :: MySQLConn -> IO [(Int32, Int, T.Text, Scientific, Float, Float, Bool, Product)]
 makeProducts mysql = do
     products <- mysqlQuery mysql $
         "SELECT products_id, master_categories_id, products_price,"
         <> "    products_quantity, products_weight, products_model,"
         <> "    products_image, products_status "
-        <> "FROM products "
-        <> "WHERE products_status=1"
+        <> "FROM products"
     mapM makeProduct products
     where
         makeProduct
          [ MySQLInt32 prodId, MySQLInt32 catId, MySQLDecimal prodPrice
          , MySQLFloat prodQty, MySQLFloat prodWeight, MySQLText prodSKU
-         , MySQLText prodImg, _] = do
+         , MySQLText prodImg, MySQLInt8 prodStatus] = do
              -- TODO: Just use join query?
             queryString <- prepareStmt mysql . Query $
                 "SELECT products_id, products_name, products_description "
                 <> "FROM products_description WHERE products_id=?"
             (_, descriptionStream) <- queryStmt mysql queryString [MySQLInt32 prodId]
-            [_, MySQLText name, MySQLText description] <- head <$> Streams.toList descriptionStream
-            _ <- return prodId
-            _ <- return prodQty
+            [_, MySQLText dbName, MySQLText description] <- head <$> Streams.toList descriptionStream
+            let name = if dbName == ""
+                    then "Inactive Product - " <> T.pack (show prodId)
+                    else dbName
             let (baseSku, skuSuffix) = splitSku prodSKU
+                isActive = prodStatus == 1
             return ( prodId, fromIntegral catId, skuSuffix
-                   , prodPrice, prodQty, prodWeight
+                   , prodPrice, prodQty, prodWeight, isActive
                    , Product
                         { productName = name
                         , productSlug = slugify name
@@ -217,15 +237,16 @@ makeProducts mysql = do
                         , productShortDescription = ""
                         , productLongDescription = description
                         , productImageUrl = T.pack . takeFileName $ T.unpack prodImg
+                        , productIsActive = isActive
                         }
                    )
         makeProduct _ = error "Invalid arguments to makeProduct."
 
 
-makeVariants :: [(Int32, Int, T.Text, Scientific, Float, Float, Product)] -> [(Int, T.Text, ProductVariant)]
+makeVariants :: [(Int32, Int, T.Text, Scientific, Float, Float, Bool, Product)] -> [(Int, T.Text, ProductVariant)]
 makeVariants =
     map makeVariant
-    where makeVariant (productId, _, suffix, price, qty, weight, prod) =
+    where makeVariant (productId, _, suffix, price, qty, weight, isActive, prod) =
             (fromIntegral productId, productBaseSku prod,) $
                 ProductVariant
                     (toSqlKey 0)
@@ -233,7 +254,7 @@ makeVariants =
                     (Cents . round $ 100 * price)
                     (floor qty)
                     (Milligrams . round $ 1000 * weight)
-                    True
+                    isActive
 
 
 makeSeedAttributes :: MySQLConn -> IO [(T.Text, SeedAttribute)]
@@ -569,15 +590,31 @@ insertProducts products categoryIdMap =
 insertVariants :: [(Int, T.Text, ProductVariant)] -> SqlWriteT IO (OldIdMap ProductVariantId)
 insertVariants =
     foldM insertVariant IntMap.empty
-    where insertVariant intMap (oldProductId, baseSku, variant) = do
+    where
+        insertVariant intMap (oldProductId, baseSku, variant) = do
             maybeProduct <- getBy $ UniqueBaseSku baseSku
             case maybeProduct of
                 Nothing ->
                     lift (putStrLn $ "No product for: " ++ show variant)
                         >> return intMap
-                Just (Entity prodId _) ->
-                    insertIntoIdMap intMap oldProductId
-                        <$> insert variant { productVariantProductId = prodId }
+                Just (Entity prodId _) -> do
+                    maybeExistingVariant <- getBy $ UniqueSku prodId $ productVariantSkuSuffix variant
+                    let variantWithProduct = variant { productVariantProductId = prodId }
+                    maybe
+                        (insertIntoIdMap intMap oldProductId <$> insert variantWithProduct)
+                        (handleExistingVariant intMap oldProductId variantWithProduct)
+                        maybeExistingVariant
+        handleExistingVariant intMap oldProductId variant (Entity variantId2 variant2)
+            | not (productVariantIsActive variant) =
+                let variant_ = variant { productVariantSkuSuffix = "X" } in
+                insertIntoIdMap intMap oldProductId <$> insert variant_
+            | productVariantIsActive variant && not (productVariantIsActive variant2) = do
+                update variantId2 [ProductVariantSkuSuffix =. "X"]
+                insertIntoIdMap intMap oldProductId <$> insert variant
+            | otherwise =
+                error $
+                    "Two active variants with same SKU:\n\t"
+                        <> show variant <> "\n\t" <> show variant2
 
 
 insertAttributes :: [(T.Text, SeedAttribute)] -> SqlWriteT IO ()

@@ -6,6 +6,7 @@ module Routes.Products
     , productRoutes
     ) where
 
+import Control.Monad (unless)
 import Data.Aeson ((.=), (.:), (.:?), ToJSON(..), FromJSON(..), object, withObject)
 import Data.Char (isAlpha)
 import Data.Maybe (listToMaybe)
@@ -66,7 +67,8 @@ productDetailsRoute slug = do
         case maybeProduct of
             Nothing ->
                 throwError err404
-            Just e@(Entity productId prod) ->  runDB $ do
+            Just e@(Entity productId prod) -> runDB $ do
+                unless (productIsActive prod) $ throwError err404
                 (variants, maybeAttribute, categories) <-
                     (,,)
                         <$> (selectList [ProductVariantProductId ==. productId] []
@@ -160,7 +162,7 @@ productsSearchRoute maybeSort maybePage maybePerPage parameters = runDB $ do
     where fuzzyILike f s =
             f `E.ilike` ((E.%) E.++. E.val s E.++. (E.%))
           maybeFuzzyILike f =
-              maybe (E.val False) (\justVal -> f `fuzzyILike` justVal)
+              maybe (E.val False) (f `fuzzyILike`)
           numericSku =
               listToMaybe . filter (/= "") . T.split isAlpha
           nameOrDescriptionOrSku p w =

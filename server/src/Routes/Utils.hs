@@ -8,7 +8,7 @@ module Routes.Utils
 
 import Control.Monad.Trans (liftIO)
 import Data.Int (Int64)
-import Data.Maybe (fromMaybe)
+import Data.Maybe (fromMaybe, listToMaybe)
 import Data.Text.Encoding (encodeUtf8, decodeUtf8)
 import Database.Persist (Entity(..), getBy, PersistEntityBackend, PersistEntity)
 import Database.Persist.Sql (SqlBackend)
@@ -55,16 +55,13 @@ paginatedSelect maybeSorting maybePage maybePerPage productFilters =
           productsSelect ordering = do
             products <- E.select $ E.from $ \(p `E.LeftOuterJoin` sa) -> do
                 E.on (E.just (p E.^. ProductId) E.==. sa E.?. SeedAttributeProductId)
-                E.where_ $ productFilters p sa
+                E.where_ $ productFilters p sa E.&&. p E.^. ProductIsActive E.==. E.val True
                 _ <- ordering p
                 E.limit perPage
                 E.offset offset
                 return p
-            productsCount <- E.select $ E.from $ \(p `E.LeftOuterJoin` sa) -> do
-                E.on (E.just (p E.^. ProductId) E.==. sa E.?. SeedAttributeProductId)
-                E.where_ $ productFilters p sa
-                return (E.countRows :: E.SqlExpr (E.Value Int))
-            return (products, E.unValue $ head productsCount)
+            productsCount <- countProducts productFilters
+            return (products, productsCount)
 
 variantSorted :: (E.SqlExpr (E.Value (Maybe Cents)) -> [E.SqlExpr E.OrderBy])
               -> Int64 -> Int64
@@ -77,16 +74,26 @@ variantSorted ordering offset perPage filters = do
         let minPrice = E.min_ $ v E.^. ProductVariantPrice
         E.groupBy $ p E.^. ProductId
         E.orderBy $ ordering minPrice
-        E.where_ $ filters p sa
+        E.where_ $ filters p sa E.&&. p E.^. ProductIsActive E.==. E.val True
         E.limit perPage
         E.offset offset
         return (p, minPrice)
-    pCount <- E.select $ E.from $ \(p `E.LeftOuterJoin` sa) -> do
-        E.on (E.just (p E.^. ProductId) E.==. sa E.?. SeedAttributeProductId)
-        E.where_ $ filters p sa
-        return (E.countRows :: E.SqlExpr (E.Value Int))
+    pCount <- countProducts filters
     let (ps, _) = unzip productsAndPrice
-    return (ps, E.unValue $ head pCount)
+    return (ps, pCount)
+
+-- | Count the number of results with the given filters.
+countProducts
+    :: (E.SqlExpr (Entity Product) -> E.SqlExpr (Maybe (Entity SeedAttribute)) -> E.SqlExpr (E.Value Bool))
+    -> AppSQL Int
+countProducts filters =
+    rowsToCount . E.select $ E.from $ \(p `E.LeftOuterJoin` sa) -> do
+        E.on (E.just (p E.^. ProductId) E.==. sa E.?. SeedAttributeProductId)
+        E.where_ $ filters p sa E.&&. p E.^. ProductIsActive E.==. E.val True
+        return (E.countRows :: E.SqlExpr (E.Value Int))
+  where
+    rowsToCount :: AppSQL [E.Value Int] -> AppSQL Int
+    rowsToCount = fmap $ maybe 0 E.unValue . listToMaybe
 
 
 -- CUSTOMERS
