@@ -25,6 +25,7 @@ import Models.Fields exposing (Cents(..), centsFromString, centsMap, centsMap2, 
 import OrderDetails
 import PageData
 import Ports
+import Product exposing (variantPrice)
 import RemoteData exposing (WebData)
 import Time
 import Update.Utils exposing (nothingAndNoCommand)
@@ -1274,8 +1275,9 @@ summaryTable ({ items, charges } as checkoutDetails) creditString couponCode cou
                         [ text <| "Item #" ++ product.baseSKU ++ variant.skuSuffix ]
                     ]
                 , td [ class "text-center" ] [ text <| String.fromInt quantity ]
-                , td [ class "text-right" ] [ text <| Format.cents variant.price ]
-                , td [ class "text-right" ] [ text <| Format.cents (centsMap ((*) quantity) variant.price) ]
+                , td [ class "text-right" ] [ text <| Format.cents <| variantPrice variant ]
+                , td [ class "text-right" ]
+                    [ text <| Format.cents <| centsMap ((*) quantity) <| variantPrice variant ]
                 ]
 
         tableFooter =

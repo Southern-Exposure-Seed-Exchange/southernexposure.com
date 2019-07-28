@@ -12,7 +12,7 @@ import Model exposing (CartForms)
 import Models.Fields exposing (Cents(..), Milligrams(..), milligramsToString)
 import PageData exposing (ProductData)
 import Paginate exposing (Paginated)
-import Product exposing (Product, ProductId(..), ProductVariant, ProductVariantId(..))
+import Product exposing (Product, ProductId(..), ProductVariant, ProductVariantId(..), variantPrice)
 import Products.Pagination as Pagination
 import Products.Sorting as Sorting
 import Routing exposing (Route(..))
@@ -279,14 +279,22 @@ cartForm addToCartForms product variants =
 
         selectedPrice =
             maybeSelectedVariant
-                |> htmlOrBlank (\v -> h4 [] [ text <| renderPrice v.price ])
+                |> htmlOrBlank (\v -> h4 [] [ renderPrice v ])
 
-        renderPrice price =
-            if price == Cents 0 then
-                "Free!"
+        renderPrice variant =
+            if variantPrice variant == Cents 0 then
+                text "Free!"
 
             else
-                Format.cents price
+                case variant.salePrice of
+                    Just salePrice ->
+                        div []
+                            [ Html.del [] [ text <| Format.cents variant.price ]
+                            , div [ class "text-danger" ] [ text <| Format.cents salePrice ]
+                            ]
+
+                    Nothing ->
+                        text <| Format.cents variant.price
 
         hasMultipleVariants =
             Dict.size variants > 1
@@ -367,7 +375,7 @@ cartForm addToCartForms product variants =
                         [ s ]
 
                     else
-                        s :: [ Format.cents variant.price ]
+                        s :: [ Format.cents <| variantPrice variant ]
             in
             milligramsToString variant.weight
                 ++ "g"

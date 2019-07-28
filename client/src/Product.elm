@@ -5,6 +5,7 @@ module Product exposing
     , ProductVariantId(..)
     , decoder
     , variantDecoder
+    , variantPrice
     )
 
 import Json.Decode as Decode exposing (Decoder)
@@ -42,24 +43,33 @@ type ProductVariantId
     = ProductVariantId Int
 
 
+{-| TODO: quantity & isActive are unused
+-}
 type alias ProductVariant =
     { id : ProductVariantId
     , product : ProductId
     , skuSuffix : String
     , price : Cents
+    , salePrice : Maybe Cents
     , quantity : Int
     , weight : Milligrams
     , isActive : Bool
     }
 
 
+variantPrice : ProductVariant -> Cents
+variantPrice { price, salePrice } =
+    Maybe.withDefault price salePrice
+
+
 variantDecoder : Decoder ProductVariant
 variantDecoder =
-    Decode.map7 ProductVariant
+    Decode.map8 ProductVariant
         (Decode.field "id" <| Decode.map ProductVariantId Decode.int)
         (Decode.field "productId" <| Decode.map ProductId Decode.int)
         (Decode.field "skuSuffix" Decode.string)
         (Decode.field "price" <| Decode.map Cents Decode.int)
+        (Decode.field "salePrice" <| Decode.nullable <| Decode.map Cents Decode.int)
         (Decode.field "quantity" Decode.int)
         (Decode.field "weight" <| Decode.map Milligrams Decode.int)
         (Decode.field "isActive" Decode.bool)

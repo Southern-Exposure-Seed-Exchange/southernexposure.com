@@ -16,6 +16,7 @@ import Html.Keyed as Keyed
 import Json.Encode as Encode
 import Models.Fields exposing (Cents(..), centsMap)
 import PageData exposing (CartDetails, CartItemId(..))
+import Product exposing (variantPrice)
 import RemoteData
 import Routing exposing (Route(..))
 import User exposing (AuthStatus, User)
@@ -230,9 +231,9 @@ view { quantities } ({ items, charges } as cartDetails) =
                         [ text <| "Item #" ++ product.baseSKU ++ variant.skuSuffix ]
                     ]
                 , td [ class "text-right align-middle" ]
-                    [ text <| Format.cents variant.price ]
+                    [ text <| Format.cents <| variantPrice variant ]
                 , td [ class "text-right align-middle" ]
-                    [ text <| Format.cents (centsMap ((*) quantity) variant.price) ]
+                    [ text <| Format.cents <| centsMap ((*) quantity) <| variantPrice variant ]
                 , td [ class "text-center align-middle" ]
                     [ button [ class "btn btn-link text-danger", onClick <| Remove id ]
                         [ icon "times" ]

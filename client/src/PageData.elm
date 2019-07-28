@@ -43,7 +43,7 @@ import Json.Decode as Decode exposing (Decoder)
 import Locations exposing (AddressLocations, Region, regionDecoder, regionEncoder)
 import Models.Fields exposing (Cents(..), Milligrams(..), centsDecoder, centsMap, centsMap2)
 import Paginate exposing (Paginated)
-import Product exposing (Product, ProductVariant, ProductVariantId(..))
+import Product exposing (Product, ProductVariant, ProductVariantId(..), variantPrice)
 import Products.Pagination as Pagination
 import Products.Sorting as Sorting
 import RemoteData exposing (WebData)
@@ -307,7 +307,8 @@ cartTotals { items, charges } =
             List.foldl (\item acc -> item.tax |> addCents acc) (Cents 0) items
 
         itemTotal { variant, quantity } =
-            (centsMap <| (*) quantity) variant.price
+            variantPrice variant
+                |> (centsMap <| (*) quantity)
 
         total =
             subTotal
