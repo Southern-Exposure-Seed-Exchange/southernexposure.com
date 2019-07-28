@@ -6,8 +6,11 @@ module Routes.CommonData
     ( ProductData
     , getProductData
     , VariantData(vdId, vdProductId)
+    , makeVariantData
     , getVariantPrice
     , applySalesToVariants
+    , applyCategorySale
+    , applyCategorySaleDiscount
     , PredecessorCategory
     , categoryToPredecessor
     , AuthorizationData
@@ -123,20 +126,25 @@ applyVariantSales variant = do
             , ProductSaleEndDate >=. currentTime
             ]
             []
-    return $ makeData variant maybeSale
-    where
-        makeData :: Entity ProductVariant -> Maybe Cents -> VariantData
-        makeData (Entity variantId ProductVariant {..}) salePrice =
-            VariantData
-                { vdId = variantId
-                , vdProductId = productVariantProductId
-                , vdSkuSuffix = productVariantSkuSuffix
-                , vdPrice = productVariantPrice
-                , vdSalePrice = salePrice
-                , vdQuantity = productVariantQuantity
-                , vdWeight = productVariantWeight
-                , vdIsActive = productVariantIsActive
-                }
+    return $ makeVariantData variant maybeSale
+
+makeVariantData :: Entity ProductVariant -> Maybe Cents -> VariantData
+makeVariantData (Entity variantId ProductVariant {..}) maybeSalePrice =
+    let
+        salePrice = maybeSalePrice >>= \price ->
+            if price < productVariantPrice
+                then return price
+                else Nothing
+    in VariantData
+        { vdId = variantId
+        , vdProductId = productVariantProductId
+        , vdSkuSuffix = productVariantSkuSuffix
+        , vdPrice = productVariantPrice
+        , vdSalePrice = salePrice
+        , vdQuantity = productVariantQuantity
+        , vdWeight = productVariantWeight
+        , vdIsActive = productVariantIsActive
+        }
 
 -- | Get the CategorySales for the Product's Categories, than apply any
 -- amount if it is less than the Variant's current sale price.
@@ -152,14 +160,7 @@ applyCategorySales (Entity _ product) variants =
 -- or if the sale price is cheaper than any existing sale price.
 applyCategorySale :: CategorySale -> VariantData -> VariantData
 applyCategorySale sale variant =
-    let salePrice =
-            case categorySaleType sale of
-                FlatSale amount ->
-                    max 0 $ vdPrice variant - amount
-                PercentSale percent ->
-                    Cents . round $
-                        toRational (fromCents $ vdPrice variant)
-                        * (1 - (fromIntegral percent % 100))
+    let salePrice = applyCategorySaleDiscount sale variant
     in case vdSalePrice variant of
         Nothing ->
             variant { vdSalePrice = Just salePrice }
@@ -168,6 +169,21 @@ applyCategorySale sale variant =
                 variant { vdSalePrice = Just salePrice }
             else
                 variant
+
+-- | Calculate the discounted price of a Variant, given a CategorySale.
+applyCategorySaleDiscount :: CategorySale -> VariantData -> Cents
+applyCategorySaleDiscount sale variant =
+    case categorySaleType sale of
+        FlatSale amount ->
+            Cents $ fromInteger $ max 0
+                $ asInteger (vdPrice variant) - asInteger amount
+        PercentSale percent ->
+            Cents . max 0 . round $
+                toRational (fromCents $ vdPrice variant)
+                * (1 - min 1 (fromIntegral percent % 100))
+  where
+    asInteger :: Cents -> Integer
+    asInteger = fromIntegral . fromCents
 
 -- | Get any active sales for the given categories.
 getCategorySales :: Product -> AppSQL [CategorySale]

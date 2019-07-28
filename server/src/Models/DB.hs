@@ -198,4 +198,5 @@ CategorySale
     startDate UTCTime
     endDate UTCTime
     categoryIds [CategoryId]
+    deriving Show
 |]

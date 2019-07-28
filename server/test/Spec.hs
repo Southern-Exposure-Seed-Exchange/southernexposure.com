@@ -1,14 +1,16 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE FlexibleContexts #-}
 import Data.Ratio ((%))
 import Data.Text (Text)
-import Data.Time (UTCTime(..), Day(..), DiffTime, secondsToDiffTime)
+import Data.Time (UTCTime(..), Day(..), DiffTime, secondsToDiffTime, getCurrentTime)
+import Database.Persist.Sql (Entity(..), ToBackendKey, SqlBackend, toSqlKey)
 import Hedgehog
 import qualified Hedgehog.Gen as Gen
 import qualified Hedgehog.Range as Range
 import Numeric.Natural (Natural)
 import Test.Tasty
 import Test.Tasty.Hedgehog
-import Test.Tasty.HUnit
+import Test.Tasty.HUnit hiding (assert)
 
 import Models
 import Models.Fields
@@ -24,7 +26,12 @@ tests =
 
 commonData :: TestTree
 commonData =
-    testGroup "CommonData Module" [ couponTests, priorityFeeTests ]
+    testGroup "CommonData Module"
+        [ couponTests
+        , priorityFeeTests
+        , categorySaleTests
+        , productSaleTests
+        ]
 
 
 
@@ -114,6 +121,99 @@ priorityFeeTests = testGroup "Priority S&H Calculations"
     makeShippingCharge fee = ShippingCharge (CartCharge "" 900) (Just fee)
 
 
+-- SALES
+categorySaleTests :: TestTree
+categorySaleTests = testGroup "Category Sale Calculations"
+    [ testProperty "Flat Amount Is Subtracted From Price" testFlatLessThanPrice
+    , testProperty "Flat Amount >= Price Makes Product Free" testFlatGreaterThanPrice
+    , testProperty "Percentage Sale Calculations" testPercentageProperty
+    , testCase "Percentage Sale Calculation" testPercentageUnit
+    , testProperty "Overrides An Existing Sale Price If Cheaper" testOverridesSalePrice
+    , testProperty "Doesn't Override An Existing Sale Price If More Expensive" testNoOverridesSalePrice
+    ]
+  where
+    testFlatLessThanPrice :: Property
+    testFlatLessThanPrice = property $ do
+        variantEntity <- forAll $ genEntity genProductVariant
+        let variantData = makeVariantData variantEntity Nothing
+        saleAmount <- forAll $ genCentRange $ Range.linear 1 (fromCents (getVariantPrice variantData) - 1)
+        sale <- forAll $ genCategorySale $ FlatSale saleAmount
+        applyCategorySaleDiscount sale variantData
+            === getVariantPrice variantData - saleAmount
+    testFlatGreaterThanPrice :: Property
+    testFlatGreaterThanPrice = property $ do
+        variantEntity <- forAll $ genEntity genProductVariant
+        let variantData = makeVariantData variantEntity Nothing
+            price = fromCents $ getVariantPrice variantData
+        saleAmount <- forAll $ genCentRange $ Range.linear price (price * 10)
+        sale <- forAll $ genCategorySale $ FlatSale saleAmount
+        applyCategorySaleDiscount sale variantData === 0
+    testPercentageProperty :: Property
+    testPercentageProperty = property $ do
+        variantEntity <- forAll $ genEntity genProductVariant
+        let variantData = makeVariantData variantEntity Nothing
+        salePercent <- forAll genWholePercentage
+        sale <- forAll $ genCategorySale $ PercentSale salePercent
+        let discountPercent = 1 - (fromIntegral salePercent % 100)
+        applyCategorySaleDiscount sale variantData ===
+            Cents (round $ toRational (fromCents $ getVariantPrice variantData) * discountPercent)
+    testPercentageUnit :: Assertion
+    testPercentageUnit = do
+        time <- getCurrentTime
+        let variantData = makeVariantData (makeVariant 1000) Nothing
+            sale = CategorySale "" (PercentSale 13) time time []
+        applyCategorySaleDiscount sale variantData @?= 870
+    testOverridesSalePrice :: Property
+    testOverridesSalePrice = property $ do
+        (variantEntity, price) <- forAll
+            $ makeVariantWithPrice $ Range.linear 2000 5000
+        let variantData = makeVariantData variantEntity (Just $ price - 1500)
+        saleAmount <- forAll $ genCentRange $ Range.linear 1501 $ fromCents price
+        sale <- forAll $ genCategorySale $ FlatSale saleAmount
+        getVariantPrice (applyCategorySale sale variantData) === price - saleAmount
+    testNoOverridesSalePrice :: Property
+    testNoOverridesSalePrice = property $ do
+        (variantEntity, price) <- forAll
+            $ makeVariantWithPrice $ Range.linear 2000 5000
+        let variantData = makeVariantData variantEntity (Just 200)
+        sale <- forAll $ do
+            let price_ = fromCents price
+            amount <- genCentRange $ Range.linear 0 (price_ - 199)
+            genCategorySale $ FlatSale amount
+        getVariantPrice (applyCategorySale sale variantData) === 200
+    makeVariant :: Cents -> Entity ProductVariant
+    makeVariant price =
+        Entity (toSqlKey 1)
+            $ ProductVariant (toSqlKey 1) "" price 1 (Milligrams 1) True
+    makeVariantWithPrice :: Range Natural -> Gen (Entity ProductVariant, Cents)
+    makeVariantWithPrice priceRange = do
+        entity <- genProductVariant
+        key <- genEntityKey
+        price <- genCentRange priceRange
+        let entityWithPrice = entity { productVariantPrice = price }
+        return (Entity key entityWithPrice, price)
+
+productSaleTests :: TestTree
+productSaleTests = testGroup "Product Sale Calculations"
+    [ testProperty "Sale Price Set If Less Than Price" testSalePrice
+    , testProperty "Sale Price Not Set If Greater Than or Equal to Price" testNoSalePrice
+    ]
+  where
+    testSalePrice :: Property
+    testSalePrice = property $ do
+        variant <- forAll $ genEntity genProductVariant
+        let normalPrice = productVariantPrice $ entityVal variant
+        salePrice <- forAll $ genCentRange $ Range.linear 0 (fromCents normalPrice - 1)
+        getVariantPrice (makeVariantData variant $ Just salePrice) === salePrice
+    testNoSalePrice :: Property
+    testNoSalePrice = property $ do
+        variant <- forAll $ genEntity genProductVariant
+        let normalPrice = fromCents $ productVariantPrice $ entityVal variant
+        salePrice <- forAll $ genCentRange $ Range.linear (normalPrice + 1) (normalPrice * 10)
+        getVariantPrice (makeVariantData variant $ Just salePrice)
+            === Cents normalPrice
+
+
 
 
 -- GENERATORS
@@ -154,6 +254,35 @@ genPriorityFee =
     PriorityShippingFee
         <$> genCentRange (Range.linear 1 1000)
         <*> genWholePercentage
+
+genProductVariant :: Gen ProductVariant
+genProductVariant =
+    ProductVariant
+        <$> fmap toSqlKey (Gen.integral $ Range.linear 1 100)
+        <*> genText
+        <*> genCentRange (Range.linear 1 999999)
+        <*> Gen.integral (Range.linear 1 1000)
+        <*> fmap Milligrams (Gen.integral (Range.linear 1 1000))
+        <*> Gen.bool
+
+genCategorySale :: SaleType -> Gen CategorySale
+genCategorySale saleType =
+    CategorySale
+        <$> genText
+        <*> pure saleType
+        <*> genUTCTime
+        <*> genUTCTime
+        <*> Gen.list (Range.linear 1 10) genEntityKey
+
+
+genEntity :: (ToBackendKey SqlBackend a) => Gen a -> Gen (Entity a)
+genEntity genModel =
+    Entity <$> genEntityKey <*> genModel
+
+
+genEntityKey :: (ToBackendKey SqlBackend a) => Gen (Key a)
+genEntityKey =
+    toSqlKey <$> Gen.int64 (Range.linear 1 1000)
 
 
 genCentRange :: Range Natural -> Gen Cents
