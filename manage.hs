@@ -415,7 +415,8 @@ prependOutput text color processOutput =
 
 printInBrackets :: String -> Color -> IO ()
 printInBrackets text sgrColor =
-    putStr "["
+    setSGR [Reset]
+        >> putStr "["
         >> setSGR [ SetConsoleIntensity BoldIntensity
                   , SetColor Foreground Vivid sgrColor
                   ]
