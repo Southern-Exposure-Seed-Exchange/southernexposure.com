@@ -28,7 +28,15 @@ import qualified Web.Stripe.Types as Stripe
 -- as arbitrary-percision numbers.
 newtype Cents =
     Cents { fromCents :: Natural }
-    deriving (Show, Read, Eq, Ord, Num, ToJSON, FromJSON, PersistField, PersistFieldSql)
+    deriving (Eq, Ord, Num, ToJSON, FromJSON, PersistField, PersistFieldSql)
+
+-- | Fallback to the `Natural` instance.
+instance Show Cents where
+    show = show . fromCents
+
+-- | Fallback to the `Natural` instance.
+instance Read Cents where
+    readPrec = Cents <$> readPrec
 
 formatCents :: Cents -> T.Text
 formatCents (Cents c) =
