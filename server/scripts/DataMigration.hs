@@ -52,35 +52,61 @@ main = do
     mysqlConn <- connectToMysql
     psqlConn <- connectToPostgres
     mysqlProducts <- makeProducts mysqlConn
+    putStrLn "Making Categories"
     categories <- makeCategories mysqlConn
+    putStrLn "Making Category Sales"
     categorySales <- makeCategorySales mysqlConn
+    putStrLn "Making Products/Variants"
     let products = mergeProducts
             $ map (\(_, catId, _, _, _, _, _, p) -> (catId, p)) mysqlProducts
         variants = makeVariants mysqlProducts
+    putStrLn "Making Products Sales"
     productSales <- makeProductSales mysqlConn
+    putStrLn "Making Seed Attributes"
     attributes <- makeSeedAttributes mysqlConn
+    putStrLn "Making Pages"
     pages <- makePages mysqlConn
+    putStrLn "Making Customers"
     customers <- makeCustomers mysqlConn
+    putStrLn "Making Addresses"
     addresses <- makeAddresses mysqlConn
+    putStrLn "Making Carts"
     carts <- makeCustomerCarts mysqlConn
+    putStrLn "Making Coupons"
     coupons <- makeCoupons mysqlConn
-    flip runSqlPool psqlConn $
-        dropNewDatabaseRows >>
-        insertCategories categories >>= \categoryMap ->
-        insertCategorySales categorySales categoryMap >>
-        insertProducts products categoryMap >>
-        insertVariants variants >>= \variantMap ->
-        insertAttributes attributes >>
-        insertProductSales productSales variantMap >>
-        insertPages pages >>
-        insertCustomers customers >>= \customerMap ->
-        insertAddresses customerMap addresses >>
-        insertCharges >>
-        insertCustomerCarts variantMap customerMap carts >>
+    flip runSqlPool psqlConn $ do
+        liftPutStrLn "Clearing Database"
+        dropNewDatabaseRows
+        liftPutStrLn "Inserting Categories"
+        categoryMap <- insertCategories categories
+        liftPutStrLn "Inserting Category Sales"
+        insertCategorySales categorySales categoryMap
+        liftPutStrLn "Inserting Products"
+        insertProducts products categoryMap
+        liftPutStrLn "Inserting Variants"
+        variantMap <- insertVariants variants
+        liftPutStrLn "Inserting Seed Attributes"
+        insertAttributes attributes
+        liftPutStrLn "Inserting Product Sales"
+        insertProductSales productSales variantMap
+        liftPutStrLn "Inserting Pages"
+        insertPages pages
+        liftPutStrLn "Inserting Customers"
+        customerMap <- insertCustomers customers
+        liftPutStrLn "Debugging Customers"
+        lift . print $ IntMap.lookup 33246 customerMap
+        liftPutStrLn "Inserting Addresses"
+        insertAddresses customerMap addresses
+        liftPutStrLn "Inserting Charges"
+        insertCharges
+        liftPutStrLn "Inserting Carts"
+        insertCustomerCarts variantMap customerMap carts
+        liftPutStrLn "Inserting Coupons"
         insertCoupons coupons
     close mysqlConn
     destroyAllResources psqlConn
   where
+    liftPutStrLn = lift . putStrLn
     mergeProducts :: [(Int, Product)] -> [(Int, Product)]
     mergeProducts xs = case xs of
         [] ->
