@@ -93,8 +93,6 @@ main = do
         insertPages pages
         liftPutStrLn "Inserting Customers"
         customerMap <- insertCustomers customers
-        liftPutStrLn "Debugging Customers"
-        lift . print $ IntMap.lookup 33246 customerMap
         liftPutStrLn "Inserting Addresses"
         insertAddresses customerMap addresses
         liftPutStrLn "Inserting Charges"
@@ -290,8 +288,7 @@ makeSeedAttributes mysql = do
         <> "    is_organic, is_heirloom, is_southern "
         <> "FROM sese_products_icons as i "
         <> "RIGHT JOIN products AS p "
-        <> "ON p.products_id=i.products_id "
-        <> "WHERE p.products_status=1"
+        <> "ON p.products_id=i.products_id"
     nubBy (\a1 a2 -> fst a1 == fst a2) <$> mapM toData attributes
     where toData [ MySQLInt32 _, MySQLText prodSku, MySQLInt8 isEco
                  , MySQLInt8 isOrg, MySQLInt8 isHeir, MySQLInt8 isRegion
@@ -776,7 +773,9 @@ insertCustomerCarts variantMap customerMap =
             in
                 case maybeCustomerId of
                     Nothing ->
-                        return ()
+                        lift . putStrLn
+                            $ "newCart: Could not find customer with ID "
+                                <> show oldCustomerId
                     Just customerId -> do
                         cartId <- insertCart customerId
                         mapM_ (insertCartItem cartId) variantsAndQuantities
@@ -792,7 +791,9 @@ insertCustomerCarts variantMap customerMap =
             in
                 case maybeVariantId of
                     Nothing ->
-                        return ()
+                        lift . putStrLn
+                            $ "insertCartItem: Could not find variant with ID "
+                                <> show oldVariantId
                     Just variantId ->
                         void $ upsert
                             CartItem
