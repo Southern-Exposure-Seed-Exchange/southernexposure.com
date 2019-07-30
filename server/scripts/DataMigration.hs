@@ -1,17 +1,18 @@
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE Rank2Types #-}
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeFamilies #-}
 
-import Control.Monad (foldM, void)
+import Control.Monad (foldM, void, unless)
 import Control.Monad.Trans.Class (lift)
 import Control.Monad.Logger (runNoLoggingT)
 import Data.ByteString.Lazy (ByteString)
 import Data.Char (isAlpha)
 import Data.Int (Int32)
 import Data.List (nubBy, partition)
-import Data.Maybe (maybeToList, fromMaybe)
+import Data.Maybe (maybeToList, fromMaybe, isJust)
 import Data.Monoid ((<>))
 import Data.Pool (destroyAllResources)
 import Data.Scientific (Scientific)
@@ -22,8 +23,9 @@ import Data.Time
 import Database.MySQL.Base
     ( MySQLConn, Query(..), query_, close, MySQLValue(..), prepareStmt, queryStmt )
 import Database.Persist
-    ( (<-.), (+=.), (=.), Entity(..), Filter, getBy, insert, insertMany_, upsert
-    , deleteWhere, selectKeysList, insert_, selectList, update
+    ( (<-.), (+=.), (=.), (==.), Entity(..), Filter, getBy, insert, insertMany_
+    , upsert, deleteWhere, selectKeysList, insert_, selectList, update, upsertBy
+    , selectFirst
     )
 import Database.Persist.Postgresql
     ( ConnectionPool, SqlWriteT, createPostgresqlPool, toSqlKey, fromSqlKey
@@ -38,6 +40,7 @@ import Models.Fields
 import Utils
 
 import qualified Data.CAProvinceCodes as CACodes
+import qualified Data.HashMap.Strict as M
 import qualified Data.ISO3166_CountryCodes as CountryCodes
 import qualified Data.IntMap as IntMap
 import qualified Data.StateCodes as StateCodes
@@ -346,21 +349,39 @@ makePages mysql =
         makePage _ = error "Invalid arguments to makePage."
 
 
-makeCustomers :: MySQLConn -> IO [(Int, Customer)]
+makeCustomers :: MySQLConn -> IO [([Int], Customer)]
 makeCustomers mysql = do
     storeCreditMap <- getStoreCreditMap mysql
-    customers <- mysqlQuery mysql
-        $ "SELECT c.customers_id, c.customers_email_address "
-        <> "FROM customers AS c "
-        <> "WHERE c.COWOA_account=0"
-    mapM (makeCustomer storeCreditMap) customers
+    customersWithAccounts <- customersToMap
+        <$> (customerQuery False >>= mapM (makeCustomer storeCreditMap))
+    customersNoAccounts <- customersToMap
+        <$> (customerQuery True >>= mapM (makeCustomer storeCreditMap))
+    let allCustomers = M.unionWith mergeCustomers customersWithAccounts customersNoAccounts
+    return $ M.elems allCustomers
     where
+        customerQuery checkoutWithoutAccount = do
+            queryString <- prepareStmt mysql . Query $
+                "SELECT customers_id, customers_email_address "
+                <> "FROM customers WHERE COWOA_account=?"
+            let cowoaVal = if checkoutWithoutAccount then 1 else 0
+            (_, customerStream) <- queryStmt mysql queryString [MySQLInt8 cowoaVal]
+            Streams.toList customerStream
         generateToken = UUID.toText <$> UUID4.nextRandom
+        customersToMap =
+            M.fromListWith mergeCustomers . map (\c@(_, cust) -> (customerEmail cust, c))
+        mergeCustomers (ids1, c1) (ids2, c2) =
+            ( ids1 <> ids2
+            , c1
+                { customerStoreCredit =
+                    customerStoreCredit c1 + customerStoreCredit c2
+                }
+            )
+        makeCustomer :: IntMap.IntMap Cents -> [MySQLValue] -> IO ([Int], Customer)
         makeCustomer creditMap [MySQLInt32 customerId, MySQLText email ] = do
             let storeCredit = fromMaybe 0
                     $ IntMap.lookup (fromIntegral customerId) creditMap
             token <- generateToken
-            return . (fromIntegral customerId,) $ Customer
+            return . ([fromIntegral customerId],) $ Customer
                 { customerEmail = email
                 , customerStoreCredit = storeCredit
                 -- TODO: Get an export of the latest member numbers from stonedge
@@ -395,30 +416,34 @@ makeAddresses mysql = do
         <> "      a.entry_postcode, a.entry_city, a.entry_state,"
         <> "      z.zone_name, co.countries_iso_code_2, c.customers_id,"
         <> "      c.customers_default_address_id "
-        <> "FROM customers AS c "
-        <> "RIGHT JOIN address_book AS a "
-        <> "    ON c.customers_default_address_id=a.address_book_id "
+        <> "FROM address_book AS a "
+        <> "RIGHT JOIN customers AS c "
+        <> "    ON c.customers_id=a.customers_id "
         <> "LEFT JOIN zones AS z "
         <> "    ON a.entry_zone_id=z.zone_id "
         <> "RIGHT JOIN countries as co "
         <> "    ON entry_country_id=co.countries_id "
-        <> "WHERE c.COWOA_account=0"
+        <> "WHERE a.address_book_id IS NOT NULL"
     mapM makeAddress customersAndAddresses
     where
+    fromNullableText def val =
+        case val of
+            MySQLText text -> text
+            _ -> def
     makeAddress
          [ MySQLInt32 addressId, MySQLText firstName, MySQLText lastName
-         , MySQLText companyName, MySQLText street, MySQLText addressTwo
+         , MySQLText companyName, MySQLText street, nullableAddressTwo
          , MySQLText zipCode, MySQLText city, MySQLText state
          , nullableZoneName, MySQLText rawCountryCode, MySQLInt32 customerId
          , MySQLInt32 defaultAddress
          ] =
         let
+            addressTwo_ =
+                fromNullableText "" nullableAddressTwo
+            addressTwo =
+                if addressTwo_ == city then "" else addressTwo_
             zone =
-                case nullableZoneName of
-                    MySQLText text ->
-                        text
-                    _ ->
-                        state
+                fromNullableText state nullableZoneName
             country =
                 case zone of
                     "Federated States Of Micronesia" ->
@@ -668,28 +693,56 @@ insertPages :: [Page] -> SqlWriteT IO ()
 insertPages = insertMany_
 
 
-insertCustomers :: [(Int, Customer)] -> SqlWriteT IO (OldIdMap CustomerId)
+insertCustomers :: [([Int], Customer)] -> SqlWriteT IO (OldIdMap CustomerId)
 insertCustomers =
     foldM insertCustomer IntMap.empty
-    where insertCustomer intMap (oldCustomerId, customer) =
-            insertIntoIdMap intMap oldCustomerId <$> insert customer
+    where insertCustomer intMap (oldCustomerIds, customer) = do
+            newId <- insert customer
+            return $ foldl (\newMap oldId -> insertIntoIdMap newMap oldId newId)
+                intMap oldCustomerIds
 
 
 -- | Replace the CustomerIds & insert the Addresses.
 insertAddresses :: OldIdMap CustomerId -> [Address] -> SqlWriteT IO ()
 insertAddresses customerMap =
     mapM_ insertAddress
-    where insertAddress address =
+    where insertAddress address@Address {..} =
             let
                 oldCustomerId =
-                    fromIntegral . fromSqlKey $ addressCustomerId address
+                    fromIntegral $ fromSqlKey addressCustomerId
             in
                 case IntMap.lookup oldCustomerId customerMap of
                     Nothing ->
                         error $ "insertAddress: Could Not Find Customer "
                                 ++ show oldCustomerId
-                    Just customerId ->
-                        insert_ $ address { addressCustomerId = customerId }
+                    Just customerId -> do
+                        existingAddress <- isJust <$> selectFirst
+                            [ AddressFirstName ==. addressFirstName
+                            , AddressLastName ==. addressLastName
+                            , AddressCompanyName ==. addressCompanyName
+                            , AddressAddressOne ==. addressAddressOne
+                            , AddressAddressTwo ==. addressAddressTwo
+                            , AddressCity ==. addressCity
+                            , AddressState ==. addressState
+                            , AddressZipCode ==. addressZipCode
+                            , AddressCountry ==. addressCountry
+                            , AddressType ==. addressType
+                            , AddressCustomerId ==. customerId
+                            ]
+                            []
+                        unless existingAddress $ do
+                            alreadyDefaultForType <- isJust <$> selectFirst
+                                [ AddressType ==. addressType
+                                , AddressCustomerId ==. customerId
+                                , AddressIsDefault ==. True
+                                ]
+                                []
+                            insert_ $ address
+                                { addressCustomerId =
+                                    customerId
+                                , addressIsDefault =
+                                    not alreadyDefaultForType && addressIsDefault
+                                }
 
 
 insertCharges :: SqlWriteT IO ()
@@ -780,18 +833,21 @@ insertCustomerCarts variantMap customerMap =
                         cartId <- insertCart customerId
                         mapM_ (insertCartItem cartId) variantsAndQuantities
           insertCart customerId =
-            insert Cart
-                { cartCustomerId = Just customerId
-                , cartSessionToken = Nothing
-                , cartExpirationTime = Nothing
-                }
+            entityKey <$> upsertBy (UniqueCustomerCart $ Just customerId)
+                (Cart
+                    { cartCustomerId = Just customerId
+                    , cartSessionToken = Nothing
+                    , cartExpirationTime = Nothing
+                    })
+                []
           insertCartItem cartId (oldVariantId, quantity) =
             let
                 maybeVariantId = IntMap.lookup oldVariantId variantMap
             in
                 case maybeVariantId of
                     Nothing ->
-                        lift . putStrLn
+                        -- Product #1639 was deleted in ZenCart
+                        unless (oldVariantId == 1639) $ lift . putStrLn
                             $ "insertCartItem: Could not find variant with ID "
                                 <> show oldVariantId
                     Just variantId ->
