@@ -247,7 +247,7 @@ fetchDataForRoute ({ route, pageData, key } as model) =
                                 |> batchCommand (getCheckoutSuccessDetails user.authToken orderId)
 
                         User.Anonymous ->
-                            doNothing
+                            ( pageData, redirectIfAuthRequired key model.route )
 
                 NotFound ->
                     doNothing
