@@ -735,34 +735,8 @@ insertAddresses customerMap =
                     Nothing ->
                         error $ "insertAddress: Could Not Find Customer "
                                 ++ show oldCustomerId
-                    Just customerId -> do
-                        existingAddress <- isJust <$> selectFirst
-                            [ AddressFirstName ==. addressFirstName
-                            , AddressLastName ==. addressLastName
-                            , AddressCompanyName ==. addressCompanyName
-                            , AddressAddressOne ==. addressAddressOne
-                            , AddressAddressTwo ==. addressAddressTwo
-                            , AddressCity ==. addressCity
-                            , AddressState ==. addressState
-                            , AddressZipCode ==. addressZipCode
-                            , AddressCountry ==. addressCountry
-                            , AddressType ==. addressType
-                            , AddressCustomerId ==. customerId
-                            ]
-                            []
-                        unless existingAddress $ do
-                            alreadyDefaultForType <- isJust <$> selectFirst
-                                [ AddressType ==. addressType
-                                , AddressCustomerId ==. customerId
-                                , AddressIsDefault ==. True
-                                ]
-                                []
-                            insert_ $ address
-                                { addressCustomerId =
-                                    customerId
-                                , addressIsDefault =
-                                    not alreadyDefaultForType && addressIsDefault
-                                }
+                    Just customerId ->
+                        insertUniqueAddress address { addressCustomerId = customerId }
 
 
 insertCharges :: SqlWriteT IO ()
@@ -991,6 +965,41 @@ makeRegion state country =
                             error $ "Invalid Canadian Province: " ++ T.unpack state
         _ ->
             CustomRegion state
+
+-- TODO: This runs pretty slow, see if we can speed it up by reducing
+-- queries. Maybe keep a map of Address -> ID as well as Customer->(Bool,Bool)
+-- for defaults. Then we can just query the map for existence instead of
+-- the database.
+insertUniqueAddress :: Address -> SqlWriteT IO AddressId
+insertUniqueAddress address@Address {..} = do
+    existingAddress <- selectFirst
+        [ AddressFirstName ==. addressFirstName
+        , AddressLastName ==. addressLastName
+        , AddressCompanyName ==. addressCompanyName
+        , AddressAddressOne ==. addressAddressOne
+        , AddressAddressTwo ==. addressAddressTwo
+        , AddressCity ==. addressCity
+        , AddressState ==. addressState
+        , AddressZipCode ==. addressZipCode
+        , AddressCountry ==. addressCountry
+        , AddressType ==. addressType
+        , AddressCustomerId ==. addressCustomerId
+        ]
+        []
+    case existingAddress of
+        Just addr ->
+            return $ entityKey addr
+        Nothing -> do
+            alreadyDefaultForType <- isJust <$> selectFirst
+                [ AddressType ==. addressType
+                , AddressCustomerId ==. addressCustomerId
+                , AddressIsDefault ==. True
+                ]
+                []
+            insert $ address
+                { addressIsDefault =
+                    not alreadyDefaultForType && addressIsDefault
+                }
 
 -- | Reduce duplicates in a list with a custom equality function
 -- & a function to merge duplicate items.
