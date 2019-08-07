@@ -50,6 +50,65 @@ import qualified Data.UUID.V4 as UUID4
 import qualified System.IO.Streams as Streams
 
 
+-- | A list of old product ids, base skus, and sku suffixes for products
+-- that were deleted in ZenCart and then recreated with the same SKU. These
+-- product IDs are still present in the orders_products table so we add an
+-- entry in the variant map after inserting all variants.
+recreatedProducts :: [(Int, T.Text, T.Text)]
+recreatedProducts =
+    [ (1039, "92504", "")       -- Allium Mix
+    , (1641, "92506", "")       -- Asiatic & Turban Garlic Sampler
+    ]
+
+-- | A list of old product ids, new Products, & new Variants for products
+-- that were deleted in ZenCart. These are necessary because the product
+-- IDs still exist in ZenCart's orders_products table. They are inserted
+-- and added to the variant map.
+deletedProducts :: [(Int, Product, ProductVariant)]
+deletedProducts =
+    [ ( 1639
+      , Product
+            { productName = "Free 2013 Catalog & Garden Guide"
+            , productSlug = slugify "Free 2013 Catalog & Garden Guide"
+            , productCategoryIds = []
+            , productBaseSku = "99001"
+            , productShortDescription = ""
+            , productLongDescription = ""
+            , productImageUrl = ""
+            , productIsActive = False
+            }
+      , ProductVariant
+            { productVariantProductId = toSqlKey 0
+            , productVariantSkuSuffix = ""
+            , productVariantPrice = 0
+            , productVariantQuantity = 0
+            , productVariantWeight = Milligrams 0
+            , productVariantIsActive = False
+            }
+      )
+    , ( 1811
+      , Product
+            { productName = "Lahontan White Softneck Garlic 8 oz."
+            , productSlug = slugify "Lahontan White Softneck Garlic 8 oz."
+            , productCategoryIds = []
+            , productBaseSku = "99965348"
+            , productShortDescription = ""
+            , productLongDescription = ""
+            , productImageUrl = ""
+            , productIsActive = False
+            }
+      , ProductVariant
+            { productVariantProductId = toSqlKey 0
+            , productVariantSkuSuffix = ""
+            , productVariantPrice = 1195
+            , productVariantQuantity = 0
+            , productVariantWeight = Milligrams 226
+            , productVariantIsActive = False
+            }
+      )
+    ]
+
+
 main :: IO ()
 main = do
     mysqlConn <- connectToMysql
@@ -384,7 +443,7 @@ makeCustomers mysql = do
             return . ([fromIntegral customerId],) $ Customer
                 { customerEmail = email
                 , customerStoreCredit = storeCredit
-                -- TODO: Get an export of the latest member numbers from stonedge
+                -- TODO: Get an export of the latest member numbers from stonedge?
                 , customerMemberNumber = ""
                 , customerEncryptedPassword = ""
                 , customerAuthToken = token
@@ -636,8 +695,10 @@ insertProducts products categoryIdMap =
 
 
 insertVariants :: [(Int, T.Text, ProductVariant)] -> SqlWriteT IO (OldIdMap ProductVariantId)
-insertVariants =
-    foldM insertVariant IntMap.empty
+insertVariants variantData = do
+    existing <- foldM insertVariant IntMap.empty variantData
+    withRecreated <- foldM insertRecreatedVariant existing recreatedProducts
+    foldM insertDeletedVariants withRecreated deletedProducts
     where
         insertVariant intMap (oldProductId, baseSku, variant) = do
             maybeProduct <- getBy $ UniqueBaseSku baseSku
@@ -663,6 +724,27 @@ insertVariants =
                 error $
                     "Two active variants with same SKU:\n\t"
                         <> show variant <> "\n\t" <> show variant2
+        insertRecreatedVariant intMap (oldProductId, baseSku, skuSuffix) = do
+            maybeProduct <- getBy $ UniqueBaseSku baseSku
+            case maybeProduct of
+                Nothing ->
+                    lift (putStrLn $ "No product for recreated product: "
+                            <> show oldProductId)
+                        >> return intMap
+                Just (Entity prodId _) -> do
+                    maybeVariant <- getBy $ UniqueSku prodId skuSuffix
+                    case maybeVariant of
+                        Nothing ->
+                            lift (putStrLn $ "No variant for recreated product: "
+                                    <> show oldProductId)
+                                >> return intMap
+                        Just (Entity varId _) ->
+                            return $ insertIntoIdMap intMap oldProductId varId
+        insertDeletedVariants intMap (oldProductId, newProduct, newVariant) = do
+            productId <- insert newProduct
+            let variant_ = newVariant { productVariantProductId = productId }
+            insertIntoIdMap intMap oldProductId <$> insert variant_
+
 
 
 insertAttributes :: [(T.Text, SeedAttribute)] -> SqlWriteT IO ()
