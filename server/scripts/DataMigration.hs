@@ -170,22 +170,16 @@ main = do
     destroyAllResources psqlConn
   where
     liftPutStrLn = lift . putStrLn
-    mergeProducts :: [(Int, Product)] -> [(Int, Product)]
-    mergeProducts xs = case xs of
-        [] ->
-            []
-        p : rest ->
-            let (matchingProducts, unmatched) =
-                    partition (\(_, p2) -> productBaseSku (snd p) == productBaseSku p2) rest
-            in foldl merge p matchingProducts : mergeProducts unmatched
-      where
-        merge (cat, prod) (_, nextProd) =
+    mergeProducts = nubByWith
+        (\(_, p1) (_, p2) -> productBaseSku p1 == productBaseSku p2)
+        (\(cat, prod) (_, nextProd) ->
             ( cat
             , prod
                 { productIsActive =
                     productIsActive prod || productIsActive nextProd
                 }
             )
+        )
 
 
 
@@ -238,14 +232,7 @@ makeCategories mysql = do
                  , MySQLInt32 parentId, MySQLInt32 catOrder
                  , MySQLText name, MySQLText description
                  ] =
-            let
-                imgUrl =
-                    case nullableImageUrl of
-                        MySQLText str ->
-                            str
-                        _ ->
-                            ""
-            in
+            let imgUrl = fromNullableText "" nullableImageUrl in
                 return
                     ( fromIntegral catId
                     , fromIntegral parentId
@@ -341,7 +328,7 @@ makeVariants =
                 ProductVariant
                     (toSqlKey 0)
                     (T.toUpper suffix)
-                    (Cents . round $ 100 * price)
+                    (dollarsToCents price)
                     (floor qty)
                     (Milligrams . round $ 1000 * weight)
                     isActive
@@ -394,7 +381,7 @@ makeProductSales mysql = do
             utcEnd <- dayToUTC endDate
             return
                 ( fromIntegral productId
-                , ProductSale (Cents . round $ 100 * salePrice) (toSqlKey 0)
+                , ProductSale (dollarsToCents salePrice) (toSqlKey 0)
                     utcStart utcEnd
                 )
         makeProductSale _ = error "Invalid arguemnts to makeProductSale."
@@ -467,7 +454,7 @@ getStoreCreditMap mysql = do
     return $ foldl updateCreditMap IntMap.empty customersAndAmounts
     where
         updateCreditMap m [MySQLInt32 customerId, MySQLDecimal amount] =
-            IntMap.insert (fromIntegral customerId) (Cents . round $ 100 * amount) m
+            IntMap.insert (fromIntegral customerId) (dollarsToCents amount) m
         updateCreditMap _ _ = error "Invalid arguments to updateCreditMap."
 
 
@@ -490,10 +477,6 @@ makeAddresses mysql = do
         <> "WHERE a.address_book_id IS NOT NULL"
     mapM makeAddress customersAndAddresses
     where
-    fromNullableText def val =
-        case val of
-            MySQLText text -> text
-            _ -> def
     makeAddress
          [ MySQLInt32 addressId, MySQLText firstName, MySQLText lastName
          , MySQLText companyName, MySQLText street, nullableAddressTwo
@@ -976,3 +959,32 @@ dayToUTC :: Day -> IO UTCTime
 dayToUTC day = do
     timezone <- getCurrentTimeZone
     return . localTimeToUTC timezone $ LocalTime day midnight
+
+fromNullableText :: T.Text -> MySQLValue -> T.Text
+fromNullableText def val =
+    case val of
+        MySQLText text -> text
+        _ -> def
+
+-- | Convert a Scientific dollar amount to Cents.
+--
+-- Note that if the thousandths digit of the dollar amount is `5`, we have
+-- to force rounding up since the `round` function will round towards the
+-- even integer.
+dollarsToCents :: Scientific -> Cents
+dollarsToCents dollars =
+    let tenthCents = dollars * 1000 in
+    if floor tenthCents `mod` 10 == (5 :: Integer) then
+        Cents . ceiling $ dollars * 100
+    else
+        Cents . round $ dollars * 100
+
+-- | Reduce duplicates in a list with a custom equality function
+-- & a function to merge duplicate items.
+nubByWith :: (a -> a -> Bool) -> (a -> a -> a) -> [a] -> [a]
+nubByWith eq merge xs = case xs of
+    [] ->
+        []
+    x : rest ->
+        let (matched, unmatched) = partition (eq x) rest
+        in foldl merge x matched : nubByWith eq merge unmatched
