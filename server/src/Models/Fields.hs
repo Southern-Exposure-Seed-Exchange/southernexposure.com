@@ -293,7 +293,7 @@ data LineItemType
     | StoreCreditLine
     | MemberDiscountLine
     | CouponDiscountLine
-    deriving (Show, Read, Generic)
+    deriving (Show, Eq, Read, Generic)
 
 instance ToJSON LineItemType
 instance FromJSON LineItemType

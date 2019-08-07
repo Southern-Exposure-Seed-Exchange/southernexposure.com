@@ -177,6 +177,7 @@ OrderLineItem json
     type LineItemType
     description T.Text
     amount Cents
+    deriving Show
 
 OrderProduct
     orderId OrderId
@@ -185,6 +186,7 @@ OrderProduct
     price Cents
     tax Cents
     UniqueOrderProduct orderId productVariantId
+    deriving Show
 
 
 ProductSale

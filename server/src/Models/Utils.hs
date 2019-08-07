@@ -8,6 +8,9 @@ module Models.Utils
     , applyTaxRate
     , mergeCarts
     , insertOrActivateAddress
+    , getOrderTax
+    , getLineItemTotal
+    , getOrderTotal
     ) where
 
 import Data.Char (isAlphaNum)
@@ -165,3 +168,38 @@ insertOrActivateAddress newAddress = do
                     , AddressCustomerId ==. addressCustomerId address
                     ]
                     []
+
+
+-- | Calculate the total tax from all of an Order's Products.
+getOrderTax :: [OrderProduct] -> Cents
+getOrderTax = sum . map orderProductTax
+
+-- | Calculate the total price from all of an Order's Products.
+getOrderSubtotal :: [OrderProduct] -> Cents
+getOrderSubtotal = sum . map
+    (\prod ->
+        orderProductPrice prod * Cents (orderProductQuantity prod)
+    )
+
+-- | Calculate the sum of all OrderLineItem charge's for an Order.
+-- Returns an `Integer` because the credits may outweigh the charges.
+getLineItemTotal :: [OrderLineItem] -> Integer
+getLineItemTotal = sum . map
+    (\item ->
+        let amount = integerCents $ orderLineItemAmount item in
+        if orderLineItemType item `elem` creditLineItemTypes then
+            (-1) * amount
+        else
+            amount
+    )
+
+-- | Calculate the final price for an Order.
+getOrderTotal :: [OrderLineItem] -> [OrderProduct] -> Cents
+getOrderTotal lineItems products = Cents . fromIntegral $
+    integerCents (getOrderSubtotal products)
+        + integerCents (getOrderTax products)
+        + getLineItemTotal lineItems
+
+-- | Convert a Cents value into it's integer equivalent.
+integerCents :: Cents -> Integer
+integerCents = toInteger . fromCents
