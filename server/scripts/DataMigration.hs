@@ -492,59 +492,9 @@ makeAddresses mysql = do
             zone =
                 fromNullableText state nullableZoneName
             country =
-                case zone of
-                    "Federated States Of Micronesia" ->
-                        Country CountryCodes.FM
-                    "Marshall Islands" ->
-                        Country CountryCodes.MH
-                    _ ->
-                        case readMaybe (T.unpack rawCountryCode) of
-                            Just countryCode ->
-                                Country countryCode
-                            Nothing ->
-                                case rawCountryCode of
-                                    "AN" ->
-                                        Country CountryCodes.BQ
-                                    _ ->
-                                        error $ "Invalid Country Code: " ++ T.unpack rawCountryCode
+                makeCountry zone rawCountryCode
             region =
-                case fromCountry country of
-                    CountryCodes.US ->
-                        case StateCodes.fromMName zone of
-                            Just stateCode ->
-                                USState stateCode
-                            Nothing ->
-                                case zone of
-                                    "Armed Forces Africa" ->
-                                        USArmedForces AE
-                                    "Armed Forces Canada" ->
-                                        USArmedForces AE
-                                    "Armed Forces Europe" ->
-                                        USArmedForces AE
-                                    "Armed Forces Middle East" ->
-                                        USArmedForces AE
-                                    "Armed Forces Pacific" ->
-                                        USArmedForces AP
-                                    "Armed Forces Americas" ->
-                                        USArmedForces AA
-                                    "Virgin Islands" ->
-                                        USState StateCodes.VI
-                                    _ ->
-                                        error $ "Invalid State Code: " ++ T.unpack zone
-                    CountryCodes.CA ->
-                        case CACodes.fromName zone of
-                            Just provinceCode ->
-                                CAProvince provinceCode
-                            Nothing ->
-                                case zone of
-                                    "Yukon Territory" ->
-                                        CAProvince CACodes.YT
-                                    "Newfoundland" ->
-                                        CAProvince CACodes.NL
-                                    _ ->
-                                        error $ "Invalid Canadian Province: " ++ T.unpack zone
-                    _ ->
-                        CustomRegion zone
+                makeRegion zone country
         in
             return Address
                 { addressFirstName = firstName
@@ -978,6 +928,69 @@ dollarsToCents dollars =
         Cents . ceiling $ dollars * 100
     else
         Cents . round $ dollars * 100
+
+makeCountry :: T.Text -> T.Text -> Country
+makeCountry state rawCountryCode =
+    case state of
+        "Federated States Of Micronesia" ->
+            Country CountryCodes.FM
+        "Marshall Islands" ->
+            Country CountryCodes.MH
+        _ ->
+            case readMaybe (T.unpack rawCountryCode) of
+                Just countryCode ->
+                    Country countryCode
+                Nothing ->
+                    case rawCountryCode of
+                        "AN" ->
+                            Country CountryCodes.BQ
+                        _ ->
+                            error $ "Invalid Country Code: " ++ T.unpack rawCountryCode
+
+makeRegion :: T.Text -> Country -> Region
+makeRegion state country =
+    case fromCountry country of
+        CountryCodes.US ->
+            let maybeCode =
+                    StateCodes.fromMName (T.toTitle state)
+                        <|> StateCodes.fromMName state
+                        <|> StateCodes.fromMText (T.toUpper state)
+                        <|> StateCodes.fromMText state
+            in case maybeCode of
+                Just stateCode ->
+                    USState stateCode
+                Nothing ->
+                    case state of
+                        "Armed Forces Africa" ->
+                            USArmedForces AE
+                        "Armed Forces Canada" ->
+                            USArmedForces AE
+                        "Armed Forces Europe" ->
+                            USArmedForces AE
+                        "Armed Forces Middle East" ->
+                            USArmedForces AE
+                        "Armed Forces Pacific" ->
+                            USArmedForces AP
+                        "Armed Forces Americas" ->
+                            USArmedForces AA
+                        "Virgin Islands" ->
+                            USState StateCodes.VI
+                        _ ->
+                            error $ "Invalid State Code: " ++ T.unpack state
+        CountryCodes.CA ->
+            case CACodes.fromName state of
+                Just provinceCode ->
+                    CAProvince provinceCode
+                Nothing ->
+                    case state of
+                        "Yukon Territory" ->
+                            CAProvince CACodes.YT
+                        "Newfoundland" ->
+                            CAProvince CACodes.NL
+                        _ ->
+                            error $ "Invalid Canadian Province: " ++ T.unpack state
+        _ ->
+            CustomRegion state
 
 -- | Reduce duplicates in a list with a custom equality function
 -- & a function to merge duplicate items.
