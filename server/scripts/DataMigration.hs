@@ -21,7 +21,9 @@ import Data.Time
     , getCurrentTimeZone, midnight
     )
 import Database.MySQL.Base
-    ( MySQLConn, Query(..), query_, close, MySQLValue(..), prepareStmt, queryStmt )
+    ( MySQLConn, Query(..), query_, close, MySQLValue(..), prepareStmt
+    , queryStmt, closeStmt
+    )
 import Database.Persist
     ( (<-.), (+=.), (=.), (==.), Entity(..), Filter, getBy, insert, insertMany_
     , upsert, deleteWhere, selectKeysList, insert_, selectList, update, upsertBy
@@ -308,6 +310,7 @@ makeProducts mysql = do
                 <> "FROM products_description WHERE products_id=?"
             (_, descriptionStream) <- queryStmt mysql queryString [MySQLInt32 prodId]
             [_, MySQLText dbName, MySQLText description] <- head <$> Streams.toList descriptionStream
+            closeStmt mysql queryString
             let name = if dbName == ""
                     then "Inactive Product - " <> T.pack (show prodId)
                     else dbName
@@ -424,8 +427,9 @@ makeCustomers mysql = do
                 <> "FROM customers WHERE COWOA_account=?"
             let cowoaVal = if checkoutWithoutAccount then 1 else 0
             (_, customerStream) <- queryStmt mysql queryString [MySQLInt8 cowoaVal]
-            Streams.toList customerStream
-        generateToken = UUID.toText <$> UUID4.nextRandom
+            cs <- Streams.toList customerStream
+            closeStmt mysql queryString
+            return cs
         customersToMap =
             M.fromListWith mergeCustomers . map (\c@(_, cust) -> (customerEmail cust, c))
         mergeCustomers (ids1, c1) (ids2, c2) =
