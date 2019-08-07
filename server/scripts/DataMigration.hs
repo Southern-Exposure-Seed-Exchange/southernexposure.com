@@ -163,6 +163,7 @@ main = do
         insertCharges
         liftPutStrLn "Inserting Carts"
         insertCustomerCarts variantMap customerMap carts
+        deleteInactiveCartItems
         liftPutStrLn "Inserting Coupons"
         insertCoupons coupons
     close mysqlConn
@@ -944,6 +945,16 @@ insertCustomerCarts variantMap customerMap =
                                 , cartItemQuantity = quantity
                                 }
                             [ CartItemQuantity +=. quantity ]
+
+deleteInactiveCartItems :: SqlWriteT IO ()
+deleteInactiveCartItems = do
+    inactiveVariants <- do
+        inactiveProducts <- selectKeysList [ProductIsActive ==. False] []
+        (<>)
+            <$> selectKeysList [ProductVariantProductId <-. inactiveProducts] []
+            <*> selectKeysList [ProductVariantIsActive ==. False] []
+    deleteWhere [CartItemProductVariantId <-. inactiveVariants]
+
 
 
 insertCoupons :: [Coupon] -> SqlWriteT IO ()
