@@ -62,7 +62,7 @@ view ({ route, pageData, navigationData, zone } as model) =
                         pageData.productDetails
 
                 CategoryDetails _ pagination ->
-                    if Paginate.isLoading pageData.categoryDetails then
+                    if Paginate.getResponseData pageData.categoryDetails == Nothing then
                         [ text "Loading..." ]
 
                     else if Paginate.getError pageData.categoryDetails /= Nothing then
