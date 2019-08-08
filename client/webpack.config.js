@@ -1,6 +1,6 @@
 var path = require('path');
 var webpack = require('webpack');
-var CleanWebpackPlugin = require('clean-webpack-plugin');
+var { CleanWebpackPlugin } = require('clean-webpack-plugin');
 var HtmlWebpackPlugin = require('html-webpack-plugin');
 var CopyWebpackPlugin = require('copy-webpack-plugin');
 var SriWebpackPlugin = require('webpack-subresource-integrity');
@@ -56,7 +56,7 @@ module.exports = {
           loader: 'babel-loader',
           options: {
             presets: [
-              ["env", {
+              ["@babel/preset-env", {
                 "targets": {
                   "browsers": [">= 1%",]
                 },
@@ -100,7 +100,7 @@ module.exports = {
   },
 
   plugins: [
-    new CleanWebpackPlugin(['dist']),
+    new CleanWebpackPlugin(),
     new HtmlWebpackPlugin({
       inject: false,
       template: require('html-webpack-template'),
