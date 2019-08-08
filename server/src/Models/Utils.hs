@@ -2,6 +2,7 @@
 module Models.Utils
     ( slugify
     , truncateDescription
+    , truncateHtml
     , getChildCategoryIds
     , getParentCategories
     , getTaxRate
@@ -20,7 +21,7 @@ import Database.Persist
     ( (==.), (=.), (+=.), Entity(..), Key(..), get, getBy, update, upsert
     , delete, deleteWhere, selectList, selectKeysList, insertEntity
     )
-import Text.HTML.TagSoup (parseTags, innerText)
+import Text.HTML.TagSoup (Tag(..), parseTags, innerText, renderTags)
 
 import Models.DB
 import Models.Fields
@@ -49,17 +50,84 @@ slugify =
 truncateDescription :: Entity Product -> Entity Product
 truncateDescription (Entity pId p) =
     let
-        strippedDescription =
-            innerText . parseTags $ productLongDescription p
-        truncatedDescription =
-            T.unwords . take 40 $ T.words strippedDescription
+        (description, wasTruncated) =
+            truncateHtml 40 $ productLongDescription p
         newDescription =
-            if truncatedDescription /= strippedDescription then
-                truncatedDescription <> "..."
+            if wasTruncated then
+                description <> "..."
             else
-                truncatedDescription
+                description
     in
         Entity pId $ p { productLongDescription = newDescription }
+
+-- | Trim text containing HTML to the specified number of words, preserving
+-- any tags. Tags that are unclosed when the word count is reached will be
+-- closed in order.
+--
+-- The resulting HTML is returned, along with whether or not the HTML
+-- required trimming.
+truncateHtml :: Int -> T.Text -> (T.Text, Bool)
+truncateHtml targetWordCount =
+    run [] 0 [] . parseTags
+  where
+    run processed counted tagStack remaining =
+        if counted == targetWordCount then
+            case tagStack of
+                [] ->
+                    (renderTags $ reverse processed, innerText remaining /= "")
+                closeTag : newStack ->
+                    run (closeTag : processed) counted newStack remaining
+        else
+            case (remaining, tagStack) of
+                ([], []) ->
+                    (renderTags $ reverse processed, False)
+                ([], closeTag : newStack) ->
+                    run (closeTag : processed) counted newStack remaining
+                (t@(TagOpen node _) : rest, _) ->
+                    run (t : processed) counted (TagClose node : tagStack) rest
+                (t@(TagClose _) : rest, []) ->
+                    run (t : processed) counted tagStack rest
+                (t@(TagClose _) : rest, topOfStack : restOfStack) ->
+                    if t == topOfStack then
+                        run (t : processed) counted restOfStack rest
+                    else
+                        run (t : processed) counted tagStack rest
+                (TagText content : rest, _) ->
+                    let wordsInContent = T.split (== ' ') content
+                        wordCount = length $ filter (not . T.null) wordsInContent
+                        wordsToTake = min wordCount $ targetWordCount - counted
+                        newWords = takeWordsIgnoringSpacing wordsToTake wordsInContent
+                        newNode = TagText $ T.unwords newWords
+                    in
+                        if wordCount > wordsToTake then
+                            run (newNode : processed) (counted + wordsToTake) tagStack
+                                $ TagText (T.unwords $ drop (length newWords) wordsInContent)
+                                    : rest
+                        else
+                            run (newNode : processed) (counted + wordsToTake) tagStack rest
+                (TagComment _ : rest, _) ->
+                    run processed counted tagStack rest
+                (TagWarning _ : rest, _) ->
+                    run processed counted tagStack rest
+                (TagPosition _ _ : rest, _) ->
+                    run processed counted tagStack rest
+    takeWordsIgnoringSpacing count text =
+        if count <= 0 then case text of
+            "":_ ->
+                [""]
+            _ ->
+                []
+        else case text of
+            [] ->
+                []
+            "" : rest ->
+                "" : takeWordsIgnoringSpacing count rest
+            w : rest ->
+                w : takeWordsIgnoringSpacing (count - 1) rest
+
+
+
+
 
 
 -- | Return the ID's of a Category's Child Categories, including the passed

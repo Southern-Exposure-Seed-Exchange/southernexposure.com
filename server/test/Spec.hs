@@ -22,7 +22,60 @@ main =
 
 tests :: TestTree
 tests =
-    testGroup "Tests" [commonData]
+    testGroup "Tests"
+         [ modelsUtils
+         , commonData
+         ]
+
+
+modelsUtils :: TestTree
+modelsUtils =
+    testGroup "Models.Utils Module"
+        [ truncateHtmlTests
+        ]
+
+
+truncateHtmlTests :: TestTree
+truncateHtmlTests = testGroup "truncateHtml"
+    [ testProperty "Empty Input Returns Empty Output" emptyInput
+    , testCase "Input with Less Words than Count" shortInput
+    , testCase "Input Exceeding Count" longInput
+    , testCase "Inputs Exceeding Count Have Open Tags Closed" longInputClosesTags
+    , testCase "Multiple Open Tags are Properly Closed" closesMultipleOpenTags
+    , testCase "Inline Comments are Removed" inlineCommentsRemoved
+    , testCase "Comments Don't Count Towards Truncation Status" commentsDontCountTowardsTruncation
+    ]
+  where
+    emptyInput :: Property
+    emptyInput = property $ do
+        count <- forAll $ Gen.int $ Range.linear (-9999) 9999
+        truncateHtml count "" === ("", False)
+    shortInput :: Assertion
+    shortInput =
+        ("<p>a short description</p>", False) @=?
+            truncateHtml 10 "<p>a short description</p>"
+    longInput :: Assertion
+    longInput =
+        ("a long description", True) @=?
+            truncateHtml 3 "a long description will be truncated"
+    longInputClosesTags :: Assertion
+    longInputClosesTags =
+        ("<p>a long description</p>", True) @=?
+            truncateHtml 3 "<p>a long description will have any open tags closed</p>"
+    closesMultipleOpenTags :: Assertion
+    closesMultipleOpenTags =
+        ("<p>a long <b>description</b></p>", True) @=?
+            truncateHtml 3 "<p>a long <b>description will have</b> any open tags closed</p>"
+    inlineCommentsRemoved :: Assertion
+    inlineCommentsRemoved =
+        ("<p>an inline comment is removed</p>", True) @=?
+            truncateHtml 5 "<p>an inline comment<!-- me! --> is removed from the text</p>"
+    commentsDontCountTowardsTruncation :: Assertion
+    commentsDontCountTowardsTruncation =
+        ("a short description", False) @=?
+            truncateHtml 3 "a short description<!-- Comment is Removed -->"
+
+
 
 commonData :: TestTree
 commonData =
