@@ -128,8 +128,6 @@ truncateHtml targetWordCount =
 
 
 
-
-
 -- | Return the ID's of a Category's Child Categories, including the passed
 -- CategoryId.
 getChildCategoryIds  :: Key Category -> AppSQL [Key Category]
