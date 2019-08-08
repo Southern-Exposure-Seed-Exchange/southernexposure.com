@@ -13,7 +13,6 @@ import Checkout
 import Html exposing (..)
 import Html.Attributes exposing (class, src)
 import Http
-import Markdown
 import Messages exposing (Msg(..))
 import Model exposing (CartForms, Model)
 import OrderDetails
@@ -33,6 +32,7 @@ import SiteUI.Navigation as SiteNavigation
 import SiteUI.Sidebar as SiteSidebar
 import StaticPage exposing (StaticPage)
 import Views.Category as CategoryViews
+import Views.Utils exposing (rawHtml)
 
 
 view : Model -> Document Msg
@@ -297,7 +297,7 @@ staticPageView { name, slug, content } =
                 h1 [] [ text name ]
     in
     [ header
-    , Markdown.toHtml [] content
+    , rawHtml content
     ]
 
 

@@ -3,7 +3,6 @@ module Views.Category exposing (details)
 import Category
 import Html exposing (..)
 import Html.Attributes exposing (class, src)
-import Markdown
 import Messages exposing (Msg)
 import Model exposing (CartForms)
 import PageData exposing (ProductData)
@@ -13,7 +12,7 @@ import Products.Sorting as Sorting
 import Products.Views as ProductViews
 import Routing exposing (Route(..))
 import Views.Images as Images
-import Views.Utils exposing (routeLinkAttributes)
+import Views.Utils exposing (rawHtml, routeLinkAttributes)
 
 
 details :
@@ -62,7 +61,7 @@ details pagination addToCartForms products =
         , h1 [ class "mb-0 pl-2" ] [ text category.name ]
         ]
     , hr [ class "mt-2" ] []
-    , Markdown.toHtml [] category.description
+    , rawHtml category.description
     , subCategoryCards
     ]
         ++ ProductViews.list (CategoryDetails category.slug) pagination addToCartForms products

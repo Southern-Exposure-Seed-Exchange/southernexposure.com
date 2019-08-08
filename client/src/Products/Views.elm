@@ -6,7 +6,6 @@ import Html.Attributes as A exposing (attribute, class, for, id, selected, src, 
 import Html.Events exposing (on, onInput, onSubmit, targetValue)
 import Html.Keyed as Keyed
 import Json.Decode as Decode
-import Markdown
 import Messages exposing (Msg(..))
 import Model exposing (CartForms)
 import Models.Fields exposing (Cents(..), Milligrams(..), milligramsToString)
@@ -19,7 +18,7 @@ import Routing exposing (Route(..))
 import SeedAttribute
 import Views.Format as Format
 import Views.Images as Images
-import Views.Utils exposing (htmlOrBlank, onIntInput, routeLinkAttributes)
+import Views.Utils exposing (htmlOrBlank, onIntInput, rawHtml, routeLinkAttributes)
 
 
 details : CartForms -> PageData.ProductDetails -> List (Html Msg)
@@ -34,12 +33,12 @@ details addToCartForms { product, variants, maybeSeedAttribute, categories } =
                                 [ a (routeLinkAttributes <| CategoryDetails category.slug Pagination.default)
                                     [ text category.name ]
                                 ]
-                            , Markdown.toHtml [] category.description
+                            , rawHtml category.description
                             ]
                     )
     in
     [ h1 [ class "product-details-title" ]
-        [ Markdown.toHtml [] product.name
+        [ rawHtml product.name
         , htmlOrBlank SeedAttribute.icons maybeSeedAttribute
         ]
     , hr [] []
@@ -58,7 +57,7 @@ details addToCartForms { product, variants, maybeSeedAttribute, categories } =
                         ]
                     ]
                 ]
-            , Markdown.toHtml [] product.longDescription
+            , rawHtml product.longDescription
             , div [] categoryBlocks
             ]
         ]
@@ -243,10 +242,10 @@ list routeConstructor pagination addToCartForms products =
                 , td [ class "row-product-description" ]
                     [ h3 [ class "mb-0 d-flex justify-content-between" ]
                         [ a (routeLinkAttributes <| ProductDetails product.slug)
-                            [ Markdown.toHtml [] product.name ]
+                            [ rawHtml product.name ]
                         , htmlOrBlank SeedAttribute.icons maybeSeedAttribute
                         ]
-                    , Markdown.toHtml [] product.longDescription
+                    , rawHtml product.longDescription
                     ]
                 , td [ class "text-center align-middle" ]
                     [ cartForm addToCartForms product variants ]

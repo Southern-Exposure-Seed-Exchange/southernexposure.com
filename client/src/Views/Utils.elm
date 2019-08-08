@@ -2,6 +2,7 @@ module Views.Utils exposing
     ( htmlOrBlank
     , icon
     , onIntInput
+    , rawHtml
     , routeLinkAttributes
     )
 
@@ -10,6 +11,7 @@ import Html.Attributes exposing (class, href)
 import Html.Events exposing (on)
 import Html.Events.Extra exposing (targetValueInt)
 import Json.Decode as Decode
+import Markdown exposing (defaultOptions)
 import Routing exposing (Route, reverse)
 
 
@@ -33,3 +35,11 @@ htmlOrBlank renderFunction =
 icon : String -> Html msg
 icon faClass =
     i [ class <| "fa fa-" ++ faClass ] []
+
+
+{-| Convert a string containing markdown & HTML into an Html node.
+-}
+rawHtml : String -> Html msg
+rawHtml =
+    Markdown.toHtmlWith { defaultOptions | sanitize = False, smartypants = True }
+        []
