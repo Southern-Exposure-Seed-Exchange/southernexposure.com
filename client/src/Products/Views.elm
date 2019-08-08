@@ -296,8 +296,11 @@ cartForm addToCartForms product variants =
                     Nothing ->
                         text <| Format.cents variant.price
 
-        hasMultipleVariants =
-            Dict.size variants > 1
+        showVariantSelect =
+            Dict.size variants > 1 && not isOutOfStock
+
+        isOutOfStock =
+            Product.isOutOfStock variantList
 
         variantSelect _ =
             select
@@ -305,9 +308,9 @@ cartForm addToCartForms product variants =
                 , class "variant-select form-control mb-1 mx-auto"
                 , onSelectInt <| ChangeCartFormVariantId product.id
                 ]
-                (List.map variantOption <| List.sortBy .skuSuffix <| Dict.values variants)
+                (List.map variantOption <| List.sortBy .skuSuffix variantList)
 
-        addToCartInput =
+        addToCartInput _ =
             div [ class "input-group mx-auto justify-content-center add-to-cart-group mb-2" ]
                 [ input
                     [ type_ "number"
@@ -332,6 +335,16 @@ cartForm addToCartForms product variants =
                 Just v ->
                     product.baseSKU ++ v.skuSuffix
 
+        availabilityBadge =
+            if isOutOfStock then
+                span [ class "badge badge-danger" ] [ text "Out of Stock" ]
+
+            else if Product.isLimitedAvailablity variantList then
+                span [ class "badge badge-warning" ] [ text "Limited Availability" ]
+
+            else
+                text ""
+
         maybeSelectedVariant =
             maybeSelectedVariantId
                 |> Maybe.andThen (\id -> Dict.get (fromVariantId id) variants)
@@ -350,10 +363,14 @@ cartForm addToCartForms product variants =
                     valIfNothing
 
         maybeFirstVariantId =
-            Dict.values variants
+            variantList
+                |> List.filter (\v -> v.quantity > 0)
                 |> List.sortBy .skuSuffix
                 |> List.head
                 |> Maybe.map .id
+
+        variantList =
+            Dict.values variants
 
         onSelectInt msg =
             targetValue
@@ -386,6 +403,7 @@ cartForm addToCartForms product variants =
                 |> option
                     [ value <| String.fromInt <| fromVariantId variant.id
                     , selected (Just variant == maybeSelectedVariant)
+                    , A.disabled <| variant.quantity <= 0
                     ]
 
         htmlWhen test renderer =
@@ -403,8 +421,9 @@ cartForm addToCartForms product variants =
     in
     form formAttributes
         [ selectedPrice
-        , htmlWhen hasMultipleVariants variantSelect
-        , addToCartInput
+        , htmlWhen showVariantSelect variantSelect
+        , htmlWhen (not isOutOfStock) addToCartInput
+        , availabilityBadge
         , small [ class "text-muted d-block" ]
             [ text <| "Item #" ++ selectedItemNumber ]
         ]

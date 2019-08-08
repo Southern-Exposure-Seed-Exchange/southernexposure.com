@@ -4,6 +4,8 @@ module Product exposing
     , ProductVariant
     , ProductVariantId(..)
     , decoder
+    , isLimitedAvailablity
+    , isOutOfStock
     , variantDecoder
     , variantPrice
     )
@@ -43,7 +45,7 @@ type ProductVariantId
     = ProductVariantId Int
 
 
-{-| TODO: quantity & isActive are unused
+{-| TODO: isActive is unused, quantity only used for in-stock status
 -}
 type alias ProductVariant =
     { id : ProductVariantId
@@ -73,3 +75,13 @@ variantDecoder =
         (Decode.field "quantity" Decode.int)
         (Decode.field "weight" <| Decode.map Milligrams Decode.int)
         (Decode.field "isActive" Decode.bool)
+
+
+isOutOfStock : List ProductVariant -> Bool
+isOutOfStock =
+    List.all (\v -> v.quantity <= 0)
+
+
+isLimitedAvailablity : List ProductVariant -> Bool
+isLimitedAvailablity =
+    List.any (\v -> v.quantity <= 0)
