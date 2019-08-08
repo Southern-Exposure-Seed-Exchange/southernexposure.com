@@ -48,18 +48,18 @@ slugify =
 -- | Trim a Product's Description.
 truncateDescription :: Entity Product -> Entity Product
 truncateDescription (Entity pId p) =
-            let
-                strippedDescription =
-                    innerText . parseTags $ productLongDescription p
-                truncatedDescription =
-                    T.unwords . take 40 $ T.words strippedDescription
-                newDescription =
-                    if truncatedDescription /= strippedDescription then
-                        truncatedDescription <> "..."
-                    else
-                        truncatedDescription
-            in
-                Entity pId $ p { productLongDescription = newDescription }
+    let
+        strippedDescription =
+            innerText . parseTags $ productLongDescription p
+        truncatedDescription =
+            T.unwords . take 40 $ T.words strippedDescription
+        newDescription =
+            if truncatedDescription /= strippedDescription then
+                truncatedDescription <> "..."
+            else
+                truncatedDescription
+    in
+        Entity pId $ p { productLongDescription = newDescription }
 
 
 -- | Return the ID's of a Category's Child Categories, including the passed
