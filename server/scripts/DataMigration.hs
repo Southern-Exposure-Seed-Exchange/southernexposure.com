@@ -183,8 +183,9 @@ main = do
     mergeProducts = nubByWith
         (\(_, p1) (_, p2) -> productBaseSku p1 == productBaseSku p2)
         (\(cat, prod) (_, nextProd) ->
+            let base = if productIsActive prod then prod else nextProd in
             ( cat
-            , prod
+            , base
                 { productIsActive =
                     productIsActive prod || productIsActive nextProd
                 }
