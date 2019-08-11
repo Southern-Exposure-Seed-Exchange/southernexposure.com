@@ -6,6 +6,7 @@ module Routes.Utils
     , hashPassword
     ) where
 
+import Control.Monad (void)
 import Control.Monad.Trans (liftIO)
 import Data.Int (Int64)
 import Data.Maybe (fromMaybe, listToMaybe)
@@ -55,8 +56,11 @@ paginatedSelect maybeSorting maybePage maybePerPage productFilters =
           productsSelect ordering = do
             products <- E.select $ E.from $ \(p `E.LeftOuterJoin` sa) -> do
                 E.on (E.just (p E.^. ProductId) E.==. sa E.?. SeedAttributeProductId)
-                E.where_ $ productFilters p sa E.&&. p E.^. ProductIsActive E.==. E.val True
-                _ <- ordering p
+                E.where_ $
+                    productFilters p sa
+                    E.&&. p E.^. ProductIsActive E.==. E.val True
+                    E.&&. activeVariantExists p
+                void $ ordering p
                 E.limit perPage
                 E.offset offset
                 return p
@@ -68,12 +72,13 @@ variantSorted :: (E.SqlExpr (E.Value (Maybe Cents)) -> [E.SqlExpr E.OrderBy])
               -> (E.SqlExpr (Entity Product) -> E.SqlExpr (Maybe (Entity SeedAttribute)) -> E.SqlExpr (E.Value Bool))
               -> AppSQL ([Entity Product], Int)
 variantSorted ordering offset perPage filters = do
-    productsAndPrice <- E.select $ E.from $ \(p `E.InnerJoin` v `E.LeftOuterJoin` sa) -> do
+    productsAndPrice <- E.select $ E.from $ \(p `E.InnerJoin` v `E.LeftOuterJoin` sa) ->
+        let minPrice = E.min_ $ v E.^. ProductVariantPrice in
+        E.distinctOnOrderBy (ordering minPrice ++ [E.asc $ p E.^. ProductName]) $ do
         E.on (E.just (p E.^. ProductId) E.==. sa E.?. SeedAttributeProductId)
-        E.on (p E.^. ProductId E.==. v E.^. ProductVariantProductId)
-        let minPrice = E.min_ $ v E.^. ProductVariantPrice
+        E.on (p E.^. ProductId E.==. v E.^. ProductVariantProductId
+                E.&&. v E.^. ProductVariantIsActive E.==. E.val True)
         E.groupBy $ p E.^. ProductId
-        E.orderBy $ ordering minPrice
         E.where_ $ filters p sa E.&&. p E.^. ProductIsActive E.==. E.val True
         E.limit perPage
         E.offset offset
@@ -90,10 +95,17 @@ countProducts filters =
     rowsToCount . E.select $ E.from $ \(p `E.LeftOuterJoin` sa) -> do
         E.on (E.just (p E.^. ProductId) E.==. sa E.?. SeedAttributeProductId)
         E.where_ $ filters p sa E.&&. p E.^. ProductIsActive E.==. E.val True
+            E.&&. activeVariantExists p
         return (E.countRows :: E.SqlExpr (E.Value Int))
   where
     rowsToCount :: AppSQL [E.Value Int] -> AppSQL Int
     rowsToCount = fmap $ maybe 0 E.unValue . listToMaybe
+
+-- | Determine if the Product has an active ProductVariant.
+activeVariantExists :: E.SqlExpr (Entity Product) -> E.SqlExpr (E.Value Bool)
+activeVariantExists p =  E.exists $ E.from $ \v -> E.where_ $
+    p E.^. ProductId E.==. v E.^. ProductVariantProductId E.&&.
+    v E.^. ProductVariantIsActive E.==. E.val True
 
 
 -- CUSTOMERS

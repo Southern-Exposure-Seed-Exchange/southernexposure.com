@@ -103,7 +103,10 @@ getVariantPrice VariantData { vdPrice, vdSalePrice } =
 
 getProductData :: Entity Product -> AppSQL ProductData
 getProductData e@(Entity productId _) = do
-    variants <- selectList [ProductVariantProductId ==. productId] []
+    variants <- selectList
+        [ ProductVariantProductId ==. productId
+        , ProductVariantIsActive ==. True
+        ] []
         >>= applySalesToVariants e
     maybeAttribute <- getBy $ UniqueAttribute productId
     return $ ProductData e variants maybeAttribute
