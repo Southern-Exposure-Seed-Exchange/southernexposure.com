@@ -6,7 +6,7 @@ module Routes.Products
     , productRoutes
     ) where
 
-import Control.Monad (unless)
+import Control.Monad (unless, when)
 import Data.Aeson ((.=), (.:), (.:?), ToJSON(..), FromJSON(..), object, withObject)
 import Data.Char (isAlpha)
 import Data.Maybe (listToMaybe)
@@ -71,11 +71,15 @@ productDetailsRoute slug = do
                 unless (productIsActive prod) $ throwError err404
                 (variants, maybeAttribute, categories) <-
                     (,,)
-                        <$> (selectList [ProductVariantProductId ==. productId] []
+                        <$> (selectList
+                                [ ProductVariantProductId ==. productId
+                                , ProductVariantIsActive ==. True
+                                ] []
                                 >>= applySalesToVariants e
                             )
                         <*> getBy (UniqueAttribute productId)
                         <*> selectList [CategoryId <-. productCategoryIds prod] []
+                when (null variants) $ throwError err404
                 predecessors <- concat <$> mapM getParentCategories (productCategoryIds prod)
                 return . ProductDetailsData e variants maybeAttribute categories
                     $ map categoryToPredecessor predecessors
