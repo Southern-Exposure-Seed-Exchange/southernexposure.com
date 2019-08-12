@@ -1392,9 +1392,8 @@ insertIntoIdMap intMap key value =
 
 
 dayToUTC :: Day -> IO UTCTime
-dayToUTC day = do
-    timezone <- getCurrentTimeZone
-    return . localTimeToUTC timezone $ LocalTime day midnight
+dayToUTC day =
+    convertLocalTimeToUTC $ LocalTime day midnight
 
 fromNullableText :: T.Text -> MySQLValue -> T.Text
 fromNullableText def val =
