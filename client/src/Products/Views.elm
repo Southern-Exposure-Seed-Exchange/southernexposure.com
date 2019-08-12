@@ -296,7 +296,7 @@ cartForm addToCartForms product variants =
                         text <| Format.cents variant.price
 
         showVariantSelect =
-            Dict.size variants > 1 && not isOutOfStock
+            Dict.size variants > 1
 
         isOutOfStock =
             Product.isOutOfStock variantList
@@ -361,9 +361,18 @@ cartForm addToCartForms product variants =
                 Nothing ->
                     valIfNothing
 
+        -- Grab the ID of the first variant, filtering out any out-of-stock
+        -- variants unless the entire product is sold out.
         maybeFirstVariantId =
             variantList
-                |> List.filter (\v -> v.quantity > 0)
+                |> List.filter
+                    (\v ->
+                        if isOutOfStock then
+                            True
+
+                        else
+                            v.quantity > 0
+                    )
                 |> List.sortBy .skuSuffix
                 |> List.head
                 |> Maybe.map .id
@@ -392,6 +401,15 @@ cartForm addToCartForms product variants =
 
                     else
                         s :: [ Format.cents <| variantPrice variant ]
+
+                -- Disable the option unless the entire product is
+                -- out-of-stock.
+                disabledAttr =
+                    if isOutOfStock then
+                        []
+
+                    else
+                        [ A.disabled <| variant.quantity <= 0 ]
             in
             milligramsToString variant.weight
                 ++ "g"
@@ -400,10 +418,11 @@ cartForm addToCartForms product variants =
                 |> text
                 |> List.singleton
                 |> option
-                    [ value <| String.fromInt <| fromVariantId variant.id
-                    , selected (Just variant == maybeSelectedVariant)
-                    , A.disabled <| variant.quantity <= 0
-                    ]
+                    ([ value <| String.fromInt <| fromVariantId variant.id
+                     , selected (Just variant == maybeSelectedVariant)
+                     ]
+                        ++ disabledAttr
+                    )
 
         htmlWhen test renderer =
             if test then
