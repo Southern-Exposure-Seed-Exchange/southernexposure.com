@@ -4,6 +4,7 @@ var { CleanWebpackPlugin } = require('clean-webpack-plugin');
 var HtmlWebpackPlugin = require('html-webpack-plugin');
 var CopyWebpackPlugin = require('copy-webpack-plugin');
 var SriWebpackPlugin = require('webpack-subresource-integrity');
+var FaviconsWebpackPlugin = require('favicons-webpack-plugin');
 
 var isProduction = process.env.NODE_ENV === 'production';
 
@@ -126,6 +127,14 @@ module.exports = {
     new SriWebpackPlugin({
       hashFuncNames: ['sha512'],
       enabled: isProduction,
+    }),
+    new FaviconsWebpackPlugin({
+      logo: './src/favicon.png',
+      prefix: 'static/favicon-[hash]/',
+      persistentCache: false,
+      inject: true,
+      background: '#fff',
+      title: 'Southern Exposure Seed Exchange',
     }),
   ],
 
