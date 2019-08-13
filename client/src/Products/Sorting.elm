@@ -23,11 +23,20 @@ type Option
     | PriceAsc
     | PriceDesc
     | ItemNumberAsc
+    | CreatedAsc
+    | CreatedDesc
 
 
 all : List Option
 all =
-    [ ProductNameAsc, ProductNameDesc, PriceAsc, PriceDesc, ItemNumberAsc ]
+    [ ProductNameAsc
+    , ProductNameDesc
+    , PriceAsc
+    , PriceDesc
+    , ItemNumberAsc
+    , CreatedDesc
+    , CreatedAsc
+    ]
 
 
 default : Option
@@ -80,6 +89,12 @@ toQueryValue data =
         ItemNumberAsc ->
             "number-asc"
 
+        CreatedAsc ->
+            "created-asc"
+
+        CreatedDesc ->
+            "created-desc"
+
 
 fromQueryValue : String -> Option
 fromQueryValue data =
@@ -98,6 +113,12 @@ fromQueryValue data =
 
         "number-asc" ->
             ItemNumberAsc
+
+        "created-asc" ->
+            CreatedAsc
+
+        "created-desc" ->
+            CreatedDesc
 
         _ ->
             default
@@ -120,3 +141,9 @@ toDescription data =
 
         ItemNumberAsc ->
             "Item Number"
+
+        CreatedAsc ->
+            "Date Added - Old to New"
+
+        CreatedDesc ->
+            "Date Added - New to Old"
