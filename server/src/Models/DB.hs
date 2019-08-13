@@ -37,6 +37,7 @@ Product json
     longDescription T.Text
     imageUrl T.Text
     isActive Bool
+    createdAt UTCTime
     UniqueProductSlug slug
     UniqueBaseSku baseSku
     deriving Show

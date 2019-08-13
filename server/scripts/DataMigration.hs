@@ -23,7 +23,7 @@ import Data.Pool (destroyAllResources)
 import Data.Ratio ((%))
 import Data.Scientific (Scientific)
 import Data.Time
-    ( LocalTime(..), Day, UTCTime, hoursToTimeZone, localTimeToUTC
+    ( LocalTime(..), Day(..), UTCTime(..), hoursToTimeZone, localTimeToUTC
     , getCurrentTimeZone, midnight
     )
 import Database.MySQL.Base
@@ -74,6 +74,7 @@ recreatedProducts =
 -- and added to the variant map.
 deletedProducts :: [(Int, Product, ProductVariant)]
 deletedProducts =
+    let createdAt = UTCTime (ModifiedJulianDay 0) 0 in
     [ ( 1639
       , Product
             { productName = "Free 2013 Catalog & Garden Guide"
@@ -84,6 +85,7 @@ deletedProducts =
             , productLongDescription = ""
             , productImageUrl = ""
             , productIsActive = False
+            , productCreatedAt = createdAt
             }
       , ProductVariant
             { productVariantProductId = toSqlKey 0
@@ -104,6 +106,7 @@ deletedProducts =
             , productLongDescription = ""
             , productImageUrl = ""
             , productIsActive = False
+            , productCreatedAt = createdAt
             }
       , ProductVariant
             { productVariantProductId = toSqlKey 0
@@ -295,14 +298,15 @@ makeProducts mysql = do
     products <- mysqlQuery mysql $
         "SELECT products_id, master_categories_id, products_price,"
         <> "    products_quantity, products_weight, products_model,"
-        <> "    products_image, products_status "
+        <> "    products_image, products_status, products_date_added "
         <> "FROM products"
     mapM makeProduct products
     where
         makeProduct
          [ MySQLInt32 prodId, MySQLInt32 catId, MySQLDecimal prodPrice
          , MySQLFloat prodQty, MySQLFloat prodWeight, MySQLText prodSKU
-         , MySQLText prodImg, MySQLInt8 prodStatus] = do
+         , MySQLText prodImg, MySQLInt8 prodStatus, MySQLDateTime created
+         ] = do
              -- TODO: Just use join query?
             queryString <- prepareStmt mysql . Query $
                 "SELECT products_id, products_name, products_description "
@@ -315,6 +319,10 @@ makeProducts mysql = do
                     else dbName
             let (baseSku, skuSuffix) = splitSku prodSKU
                 isActive = prodStatus == 1
+            let blankDate = UTCTime (ModifiedJulianDay 0) 0
+            createdAt <- if show created == "0001-01-01 00:00:00"
+                then return blankDate
+                else convertLocalTimeToUTC created
             return ( prodId, fromIntegral catId, skuSuffix
                    , prodPrice, prodQty, prodWeight, isActive
                    , Product
@@ -326,6 +334,7 @@ makeProducts mysql = do
                         , productLongDescription = description
                         , productImageUrl = T.pack . takeFileName $ T.unpack prodImg
                         , productIsActive = isActive
+                        , productCreatedAt = createdAt
                         }
                    )
         makeProduct _ = error "Invalid arguments to makeProduct."

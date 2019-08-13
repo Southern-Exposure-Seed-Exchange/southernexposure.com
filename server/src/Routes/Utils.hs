@@ -45,6 +45,10 @@ paginatedSelect maybeSorting maybePage maybePerPage productFilters =
             variantSorted (\f -> [E.asc f]) offset perPage productFilters
         "price-desc" ->
             variantSorted (\f -> [E.desc f]) offset perPage productFilters
+        "created-asc" ->
+            productsSelect (\p -> E.orderBy [E.asc $ p E.^. ProductCreatedAt])
+        "created-desc" ->
+            productsSelect (\p -> E.orderBy [E.desc $ p E.^. ProductCreatedAt])
         _ ->
             productsSelect (\p -> E.orderBy [E.asc $ p E.^. ProductName])
     where perPage =
