@@ -56,7 +56,7 @@ SeedAttribute json
     productId ProductId
     isOrganic Bool
     isHeirloom Bool
-    isEcological Bool
+    isSmallGrower Bool
     isRegional Bool
     UniqueAttribute productId
     deriving Show

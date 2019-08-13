@@ -357,18 +357,23 @@ makeVariants =
 makeSeedAttributes :: MySQLConn -> IO [(T.Text, SeedAttribute)]
 makeSeedAttributes mysql = do
     attributes <- mysqlQuery mysql $
-        "SELECT p.products_id, products_model, is_eco,"
+        "SELECT p.products_id, products_model, is_eco AS small_grower,"
         <> "    is_organic, is_heirloom, is_southern "
         <> "FROM sese_products_icons as i "
         <> "RIGHT JOIN products AS p "
         <> "ON p.products_id=i.products_id"
     nubBy (\a1 a2 -> fst a1 == fst a2) <$> mapM toData attributes
-    where toData [ MySQLInt32 _, MySQLText prodSku, MySQLInt8 isEco
+    where toData [ MySQLInt32 _, MySQLText prodSku, MySQLInt8 isSmallGrower
                  , MySQLInt8 isOrg, MySQLInt8 isHeir, MySQLInt8 isRegion
                  ] =
             return . (fst $ splitSku prodSku,) $
-                SeedAttribute (toSqlKey 0) (toBool isOrg) (toBool isHeir)
-                    (toBool isEco) (toBool isRegion)
+                SeedAttribute
+                    { seedAttributeProductId = toSqlKey 0
+                    , seedAttributeIsOrganic = toBool isOrg
+                    , seedAttributeIsHeirloom = toBool isHeir
+                    , seedAttributeIsSmallGrower = toBool isSmallGrower
+                    , seedAttributeIsRegional = toBool isRegion
+                    }
           toData r = print r >> error "seed attribute lambda did not match"
           toBool = (==) 1
 

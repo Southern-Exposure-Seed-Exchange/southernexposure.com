@@ -173,8 +173,8 @@ view ({ route, pageData, navigationData, zone } as model) =
                                 AttributeSearch SeedAttribute.Regional ->
                                     "South-Eastern Products"
 
-                                AttributeSearch SeedAttribute.Ecological ->
-                                    "Ecologically Grown Products"
+                                AttributeSearch SeedAttribute.SmallGrower ->
+                                    "Products from Small Farms in our Grower Network"
 
                 PageDetails _ ->
                     getFromPageData .pageDetails .name
@@ -326,8 +326,8 @@ searchResultsView ({ query } as data) pagination addToCartForms products =
                         AttributeSearch SeedAttribute.Regional ->
                             "South-Eastern Products"
 
-                        AttributeSearch SeedAttribute.Ecological ->
-                            "Ecologically Grown Products"
+                        AttributeSearch SeedAttribute.SmallGrower ->
+                            "Products from Small Farms in our Grower Network"
 
         searchDescription =
             if uniqueSearch == Nothing then
@@ -392,7 +392,7 @@ searchResultsView ({ query } as data) pagination addToCartForms products =
             [ ( .isOrganic, "Organic" )
             , ( .isHeirloom, "Heirloom" )
             , ( .isRegional, "Suitable for the South-East" )
-            , ( .isEcological, "Ecologically Grown" )
+            , ( .isSmallGrower, "From Small Farms" )
             ]
                 |> List.filter (\( selector, _ ) -> selector data)
                 |> List.map (\( _, name ) -> b [] [ text name ])

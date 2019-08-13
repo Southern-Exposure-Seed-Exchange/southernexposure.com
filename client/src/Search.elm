@@ -23,7 +23,7 @@ type alias Data =
     , isOrganic : Bool
     , isHeirloom : Bool
     , isRegional : Bool
-    , isEcological : Bool
+    , isSmallGrower : Bool
     , category : Maybe CategoryId
     }
 
@@ -40,7 +40,7 @@ initial =
     , isOrganic = False
     , isHeirloom = False
     , isRegional = False
-    , isEcological = False
+    , isSmallGrower = False
     , category = Nothing
     }
 
@@ -58,7 +58,7 @@ encode data =
         , ( "filterOrganic", Encode.bool data.isOrganic )
         , ( "filterHeirloom", Encode.bool data.isHeirloom )
         , ( "filterRegional", Encode.bool data.isRegional )
-        , ( "filterEcological", Encode.bool data.isEcological )
+        , ( "filterSmallGrower", Encode.bool data.isSmallGrower )
         , ( "category"
           , Maybe.map (\(CategoryId i) -> Encode.int i) data.category
                 |> Maybe.withDefault Encode.null
@@ -90,9 +90,9 @@ regionalFlagName =
     "regional"
 
 
-ecologicalFlagName : String
-ecologicalFlagName =
-    "ecological"
+smallGrowerFlagName : String
+smallGrowerFlagName =
+    "small-grower"
 
 
 categoryFlagName : String
@@ -111,7 +111,7 @@ toQueryString data =
     , queryFlag organicFlagName data.isOrganic
     , queryFlag heirloomFlagName data.isHeirloom
     , queryFlag regionalFlagName data.isRegional
-    , queryFlag ecologicalFlagName data.isEcological
+    , queryFlag smallGrowerFlagName data.isSmallGrower
     , queryFlag titlesOnlyFlagName (data.searchIn == Titles)
     , Maybe.map (\(CategoryId i) -> queryParameter ( categoryFlagName, String.fromInt i ))
         data.category
@@ -141,7 +141,7 @@ fromQueryString pathParser =
         <?> Routing.parseFlag organicFlagName
         <?> Routing.parseFlag heirloomFlagName
         <?> Routing.parseFlag regionalFlagName
-        <?> Routing.parseFlag ecologicalFlagName
+        <?> Routing.parseFlag smallGrowerFlagName
         <?> Routing.fromIntParam categoryFlagName CategoryId
         |> Url.map
             (\constructor q descr org heir reg eco cat ->
@@ -159,26 +159,26 @@ type UniqueSearch
 
 
 uniqueSearch : Data -> Maybe UniqueSearch
-uniqueSearch { query, searchIn, category, isOrganic, isHeirloom, isRegional, isEcological } =
+uniqueSearch { query, searchIn, category, isOrganic, isHeirloom, isRegional, isSmallGrower } =
     case ( query, searchIn, category ) of
         ( "", TitlesAndDescriptions, Nothing ) ->
             let
                 none =
                     List.all ((==) False)
             in
-            if isOrganic && none [ isHeirloom, isRegional, isEcological ] then
+            if isOrganic && none [ isHeirloom, isRegional, isSmallGrower ] then
                 Just <| AttributeSearch SeedAttribute.Organic
 
-            else if isHeirloom && none [ isOrganic, isRegional, isEcological ] then
+            else if isHeirloom && none [ isOrganic, isRegional, isSmallGrower ] then
                 Just <| AttributeSearch SeedAttribute.Heirloom
 
-            else if isRegional && none [ isOrganic, isHeirloom, isEcological ] then
+            else if isRegional && none [ isOrganic, isHeirloom, isSmallGrower ] then
                 Just <| AttributeSearch SeedAttribute.Regional
 
-            else if isEcological && none [ isOrganic, isHeirloom, isRegional ] then
-                Just <| AttributeSearch SeedAttribute.Ecological
+            else if isSmallGrower && none [ isOrganic, isHeirloom, isRegional ] then
+                Just <| AttributeSearch SeedAttribute.SmallGrower
 
-            else if none [ isOrganic, isHeirloom, isRegional, isEcological ] then
+            else if none [ isOrganic, isHeirloom, isRegional, isSmallGrower ] then
                 Just AllProducts
 
             else

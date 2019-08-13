@@ -19,7 +19,7 @@ type Msg
     | IsOrganic Bool
     | IsHeirloom Bool
     | IsRegional Bool
-    | IsEcological Bool
+    | IsSmallGrower Bool
     | CategorySelect (Maybe CategoryId)
 
 
@@ -44,8 +44,8 @@ update msg data =
         IsRegional value ->
             { data | isRegional = value }
 
-        IsEcological value ->
-            { data | isEcological = value }
+        IsSmallGrower value ->
+            { data | isSmallGrower = value }
 
         CategorySelect value ->
             { data | category = value }
@@ -102,10 +102,10 @@ view routingMsg formMsg data categories =
                   , selector = .isRegional
                   , content = "South-East"
                   }
-                , { msg = IsEcological
-                  , attribute = SeedAttribute.Ecological
-                  , selector = .isEcological
-                  , content = "Ecologically Grown"
+                , { msg = IsSmallGrower
+                  , attribute = SeedAttribute.SmallGrower
+                  , selector = .isSmallGrower
+                  , content = "From Small Farms"
                   }
                 ]
 

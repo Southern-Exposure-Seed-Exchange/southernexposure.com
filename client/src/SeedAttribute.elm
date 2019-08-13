@@ -24,7 +24,7 @@ type alias SeedAttribute =
     , product : ProductId
     , isOrganic : Bool
     , isHeirloom : Bool
-    , isEcological : Bool
+    , isSmallGrower : Bool
     , isRegional : Bool
     }
 
@@ -36,7 +36,7 @@ decoder =
         (Decode.field "productId" <| Decode.map ProductId Decode.int)
         (Decode.field "isOrganic" Decode.bool)
         (Decode.field "isHeirloom" Decode.bool)
-        (Decode.field "isEcological" Decode.bool)
+        (Decode.field "isSmallGrower" Decode.bool)
         (Decode.field "isRegional" Decode.bool)
 
 
@@ -44,12 +44,12 @@ type Attribute
     = Organic
     | Heirloom
     | Regional
-    | Ecological
+    | SmallGrower
 
 
 all : List Attribute
 all =
-    [ Organic, Heirloom, Regional, Ecological ]
+    [ Organic, Heirloom, Regional, SmallGrower ]
 
 
 iconUrl : Attribute -> String
@@ -66,8 +66,8 @@ iconUrl attribute =
                 Regional ->
                     "southeast.png"
 
-                Ecological ->
-                    "ecologically-grown.png"
+                SmallGrower ->
+                    "small-growers.png"
     in
     Images.static <| "icons/" ++ url
 
@@ -84,8 +84,8 @@ toString attribute =
         Regional ->
             "Especially well-suited to the Southeast"
 
-        Ecological ->
-            "Ecologically Grown"
+        SmallGrower ->
+            "From Small Farms"
 
 
 toDescription : Attribute -> String
@@ -100,8 +100,8 @@ toDescription attribute =
         Regional ->
             "Varieties well-suited to the Mid-Atlantic & further South"
 
-        Ecological ->
-            "Grown by small ecological farmers"
+        SmallGrower ->
+            "Seed from small farms in our Seed Grower Network"
 
 
 legend : Html msg
@@ -127,11 +127,11 @@ legend =
 
 
 icons : SeedAttribute -> Html msg
-icons { isOrganic, isHeirloom, isRegional, isEcological } =
+icons { isOrganic, isHeirloom, isRegional, isSmallGrower } =
     [ ( isOrganic, Organic )
     , ( isHeirloom, Heirloom )
     , ( isRegional, Regional )
-    , ( isEcological, Ecological )
+    , ( isSmallGrower, SmallGrower )
     ]
         |> List.filter Tuple.first
         |> List.map

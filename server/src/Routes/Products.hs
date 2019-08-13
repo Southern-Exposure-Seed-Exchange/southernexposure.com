@@ -95,7 +95,7 @@ data ProductsSearchParameters =
         , pspFilterOrganic :: Bool
         , pspFilterHeirloom :: Bool
         , pspFilterRegional :: Bool
-        , pspFilterEcological :: Bool
+        , pspFilterSmallGrower :: Bool
         , pspCategoryId :: Maybe CategoryId
         } deriving (Show)
 
@@ -108,7 +108,7 @@ instance FromJSON ProductsSearchParameters where
                 <*> v .: "filterOrganic"
                 <*> v .: "filterHeirloom"
                 <*> v .: "filterRegional"
-                <*> v .: "filterEcological"
+                <*> v .: "filterSmallGrower"
                 <*> v .:? "category"
 
 data ProductsSearchData =
@@ -147,8 +147,8 @@ productsSearchRoute maybeSort maybePage maybePerPage parameters = runDB $ do
             attributeFilter pspFilterHeirloom SeedAttributeIsHeirloom
         regionalFilter =
             attributeFilter pspFilterRegional SeedAttributeIsRegional
-        ecologicalFilter =
-            attributeFilter pspFilterEcological SeedAttributeIsEcological
+        growerFilter =
+            attributeFilter pspFilterSmallGrower SeedAttributeIsSmallGrower
     (categoryFilter, catName) <- case pspCategoryId parameters of
         Nothing ->
             return (const $ E.val True, Nothing)
@@ -159,7 +159,7 @@ productsSearchRoute maybeSort maybePage maybePerPage parameters = runDB $ do
     (products, productsCount) <- paginatedSelect
         maybeSort maybePage maybePerPage
         (\p sa -> queryFilters p E.&&. organicFilter sa E.&&. heirloomFilter sa E.&&.
-                  regionalFilter sa E.&&. ecologicalFilter sa E.&&.
+                  regionalFilter sa E.&&. growerFilter sa E.&&.
                   categoryFilter p)
     searchData <- mapM (getProductData . truncateDescription) products
     return $ ProductsSearchData searchData productsCount catName

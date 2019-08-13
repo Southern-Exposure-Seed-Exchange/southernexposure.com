@@ -47,7 +47,7 @@ parseRoute =
             , ( "organic", \s -> { s | isOrganic = True } )
             , ( "heirloom", \s -> { s | isHeirloom = True } )
             , ( "south-east", \s -> { s | isRegional = True } )
-            , ( "ecological", \s -> { s | isEcological = True } )
+            , ( "small-grower", \s -> { s | isSmallGrower = True } )
             ]
                 |> List.map
                     (\( slug, modifier ) ->
@@ -140,8 +140,8 @@ reverse route =
                         AttributeSearch SeedAttribute.Regional ->
                             specialSearchUrl "south-east"
 
-                        AttributeSearch SeedAttribute.Ecological ->
-                            specialSearchUrl "ecological"
+                        AttributeSearch SeedAttribute.SmallGrower ->
+                            specialSearchUrl "small-grower"
 
         PageDetails slug ->
             if slug == "home" then

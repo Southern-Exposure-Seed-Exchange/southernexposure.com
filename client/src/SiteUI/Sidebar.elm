@@ -77,9 +77,9 @@ view route =
                     , attributeLink SeedAttribute.Regional
                         "Especially well-suited to the South-East"
                         (\s -> { s | isRegional = True })
-                    , attributeLink SeedAttribute.Ecological
-                        "Ecologically Grown"
-                        (\s -> { s | isEcological = True })
+                    , attributeLink SeedAttribute.SmallGrower
+                        "From Small Farms"
+                        (\s -> { s | isSmallGrower = True })
                     ]
                 ]
 
