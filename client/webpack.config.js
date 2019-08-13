@@ -5,6 +5,7 @@ var HtmlWebpackPlugin = require('html-webpack-plugin');
 var CopyWebpackPlugin = require('copy-webpack-plugin');
 var SriWebpackPlugin = require('webpack-subresource-integrity');
 var FaviconsWebpackPlugin = require('favicons-webpack-plugin');
+var ImageminWebpackPlugin = require('imagemin-webpack-plugin').default;
 
 var isProduction = process.env.NODE_ENV === 'production';
 
@@ -135,6 +136,10 @@ module.exports = {
       inject: true,
       background: '#fff',
       title: 'Southern Exposure Seed Exchange',
+    }),
+    new ImageminWebpackPlugin({
+      test: /^.*favicon.*\.png$/,
+      disable: !isProduction,
     }),
   ],
 

@@ -41,6 +41,7 @@
     "font-awesome-sass-loader": "^2.0.1",
     "html-webpack-plugin": "^3.2.0",
     "html-webpack-template": "^6.2.0",
+    "imagemin-webpack-plugin": "^2.4.2",
     "jquery": "^3.4.1",
     "node-sass": "^4.12.0",
     "popper.js": "^1.15.0",
