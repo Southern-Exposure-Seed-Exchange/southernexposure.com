@@ -51,6 +51,7 @@ main =
                 , Ports.newCartSessionToken OtherTabNewCartToken
                 , Ports.cartItemCountChanged OtherTabCartItemCountChanged
                 , Sub.map CheckoutMsg Checkout.subscriptions
+                , Time.every (60 * 60 * 1000) (always <| UpdateZone)
                 ]
                 |> always
         , view = view
@@ -456,6 +457,9 @@ update msg ({ pageData, key } as model) =
 
         NewZone zone ->
             ( { model | zone = zone }, Cmd.none )
+
+        UpdateZone ->
+            ( model, Task.perform NewZone Time.here )
 
         LogOut ->
             let

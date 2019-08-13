@@ -29,6 +29,7 @@ type Msg
     | NavigateTo Route
     | LinkClick UrlRequest
     | NewZone Time.Zone
+    | UpdateZone
     | LogOut
       -- Other Tabs (via localStorage ports)
     | OtherTabLoggedIn { userId : Int, token : String }
