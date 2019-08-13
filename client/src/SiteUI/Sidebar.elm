@@ -1,14 +1,14 @@
 module SiteUI.Sidebar exposing (view)
 
 import Html exposing (..)
-import Html.Attributes exposing (class, href, id, src, target)
+import Html.Attributes as A exposing (class, href, id, name, src, target, type_, value)
 import Messages exposing (Msg)
 import Products.Pagination as Pagination
 import Routing exposing (Route(..))
 import Search
 import SeedAttribute
 import Views.Images as Images
-import Views.Utils exposing (routeLinkAttributes)
+import Views.Utils exposing (icon, routeLinkAttributes)
 
 
 view : Route -> Html Msg
@@ -83,6 +83,41 @@ view route =
                     ]
                 ]
 
+        newsletterCard =
+            div [ class "newsletter card mb-2" ]
+                [ h5 [ class "card-header text-center" ] [ b [] [ text "Newsletter" ] ]
+                , div [ class "card-body" ]
+                    [ p [] [ text "Subscribe to receive our latest Garden Guides and event updates." ]
+                    , form
+                        [ A.action "https://sendy.southernexposure.com/subscribe"
+                        , A.method "POST"
+                        , A.acceptCharset "utf-8"
+                        , target "_blank"
+                        ]
+                        [ input [ type_ "hidden", name "list", value "EXGP5iaxXvU4tH7fWWopIQ" ] []
+                        , div [ class "form-group" ]
+                            [ input
+                                [ class "form-control form-control-sm"
+                                , type_ "email"
+                                , name "email"
+                                , A.placeholder "Enter your email"
+                                ]
+                                []
+                            ]
+                        , div [ class "form-group" ]
+                            [ button
+                                [ class "form-control btn btn-primary"
+                                , type_ "submit"
+                                , name "submit"
+                                ]
+                                [ icon "envelope"
+                                , text " Subscribe"
+                                ]
+                            ]
+                        ]
+                    ]
+                ]
+
         logoCard =
             div [ class "card mb-3" ]
                 [ div [ class "card-body text-center" ]
@@ -101,5 +136,6 @@ view route =
     div [ id "sidebar", class "col-12 col-md-3 col-lg-3 col-xl-2 order-md-1" ]
         [ pageLinks
         , attributesCard
+        , newsletterCard
         , logoCard
         ]
