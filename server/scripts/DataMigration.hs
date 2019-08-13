@@ -601,7 +601,7 @@ makeCoupons mysql = do
                     fromIntegral usesPerCoupon
                 , couponUsesPerCustomer =
                     fromIntegral usesPerCustomer
-                , couponCreatedDate =
+                , couponCreatedAt =
                     toUTC createdDate
                 }
     makeCoupon _ = error "Invalid arguments to makeCoupon."

@@ -141,7 +141,7 @@ Coupon
     expirationDate UTCTime
     totalUses Natural
     usesPerCustomer Natural
-    createdDate UTCTime
+    createdAt UTCTime
     UniqueCoupon code
     deriving Show
 
