@@ -4,7 +4,7 @@ var { CleanWebpackPlugin } = require('clean-webpack-plugin');
 var HtmlWebpackPlugin = require('html-webpack-plugin');
 var CopyWebpackPlugin = require('copy-webpack-plugin');
 var SriWebpackPlugin = require('webpack-subresource-integrity');
-var FaviconsWebpackPlugin = require('favicons-webpack-plugin');
+var WebappWebpackPlugin = require('webapp-webpack-plugin');
 var ImageminWebpackPlugin = require('imagemin-webpack-plugin').default;
 
 var isProduction = process.env.NODE_ENV === 'production';
@@ -129,13 +129,21 @@ module.exports = {
       hashFuncNames: ['sha512'],
       enabled: isProduction,
     }),
-    new FaviconsWebpackPlugin({
+    new WebappWebpackPlugin({
       logo: './src/favicon.png',
       prefix: 'static/favicon-[hash]/',
-      persistentCache: false,
-      inject: true,
-      background: '#fff',
-      title: 'Southern Exposure Seed Exchange',
+      cache: true,
+      inject: 'force',
+      favicons: {
+        appName: "Southern Exposure Seed Exchange",
+        appShortName: "SESE Store",
+        appDescription: "Southern Exposure's Retail Store",
+        developerName: "Pavan Rikhi",
+        developerURL: "https://github.com/Southern-Exposure-Seed-Exchange/southernexposure.com/",
+        background: "#ffffff",
+        theme_color: "#158312",
+        version: "v0.6.0",
+      },
     }),
     new ImageminWebpackPlugin({
       test: /^.*favicon.*\.png$/,
