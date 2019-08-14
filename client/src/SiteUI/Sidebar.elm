@@ -49,6 +49,7 @@ view route =
                 , staticPageLink "links" "Links"
                 , a [ href "/blog/", target "_blank" ] [ text "Blog" ]
                 , staticPageLink "contact-us" "Contact Us"
+                , staticPageLink "seeds-for-schools-fundraisers" "Fundraisers"
                 , specialSearchLink identity "All Products"
                 ]
 
