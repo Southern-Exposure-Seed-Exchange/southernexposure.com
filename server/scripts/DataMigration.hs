@@ -37,7 +37,7 @@ import Database.Persist
     )
 import Database.Persist.Postgresql
     ( ConnectionPool, SqlWriteT, createPostgresqlPool, toSqlKey, fromSqlKey
-    , runSqlPool
+    , runSqlPool, runMigration
     )
 import Numeric.Natural (Natural)
 import System.FilePath (takeFileName)
@@ -150,6 +150,7 @@ main = do
     putStrLn "Making Orders"
     orders <- makeOrders mysqlConn
     flip runSqlPool psqlConn $ do
+        runMigration migrateAll
         liftPutStrLn "Clearing Database"
         dropNewDatabaseRows
         liftPutStrLn "Inserting Categories"
