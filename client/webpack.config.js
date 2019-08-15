@@ -118,7 +118,10 @@ module.exports = {
       baseHref: '/',
     }),
     new CopyWebpackPlugin([
-      { from: 'src/static', to: 'static' }
+      { from: 'src/static',
+        to: 'static',
+        ignore: ['PoorRichard.ttf'],
+      },
     ]),
     new webpack.ProvidePlugin({
       $: 'jquery',
