@@ -11,6 +11,7 @@ import Html.Events exposing (onInput, onSubmit)
 import Products.Pagination as Pagination
 import Routing exposing (Route(..), reverse)
 import Search
+import Views.Utils exposing (inputMode)
 
 
 type alias Data =
@@ -49,6 +50,7 @@ form tagger buttonColor { query } =
                 , value query
                 , type_ "text"
                 , onInput <| tagger << Update
+                , inputMode "search"
                 ]
                 []
             , div [ class "input-group-append" ]

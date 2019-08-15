@@ -17,7 +17,7 @@ import RemoteData exposing (WebData)
 import Routing exposing (Route(..), reverse)
 import Update.Utils exposing (nothingAndNoCommand)
 import User exposing (AuthStatus, UserId(..))
-import Views.Utils exposing (routeLinkAttributes)
+import Views.Utils exposing (emailInput, routeLinkAttributes)
 
 
 
@@ -205,6 +205,7 @@ view tagger model =
                     , value model.email
                     , required True
                     , autofocus True
+                    , emailInput
                     ]
                     []
                 ]

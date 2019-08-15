@@ -18,6 +18,7 @@ import Json.Encode as Encode exposing (Value)
 import Ports
 import RemoteData exposing (WebData)
 import User exposing (AuthStatus, User)
+import Views.Utils exposing (numericInput)
 
 
 
@@ -301,6 +302,7 @@ renderForm errors index model =
             , onIntInput <| Quantity index
             , value <| String.fromInt model.quantity
             , required <| not <| String.isEmpty model.sku
+            , numericInput
             ]
             []
         ]

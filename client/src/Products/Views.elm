@@ -18,7 +18,7 @@ import Routing exposing (Route(..))
 import SeedAttribute
 import Views.Format as Format
 import Views.Images as Images
-import Views.Utils exposing (htmlOrBlank, onIntInput, rawHtml, routeLinkAttributes)
+import Views.Utils exposing (htmlOrBlank, numericInput, onIntInput, rawHtml, routeLinkAttributes)
 
 
 details : CartForms -> PageData.ProductDetails -> List (Html Msg)
@@ -318,6 +318,7 @@ cartForm addToCartForms product variants =
                     , A.step "1"
                     , value <| String.fromInt quantity
                     , onIntInput <| ChangeCartFormQuantity product.id
+                    , numericInput
                     ]
                     []
                 , div [ class "input-group-append" ]

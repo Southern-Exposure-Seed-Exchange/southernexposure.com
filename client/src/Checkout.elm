@@ -32,6 +32,7 @@ import Update.Utils exposing (nothingAndNoCommand)
 import User exposing (AuthStatus)
 import Views.Format as Format
 import Views.Images as Images
+import Views.Utils exposing (decimalInput, emailInput)
 
 
 
@@ -831,6 +832,7 @@ view model authStatus locations checkoutDetails =
                                 , A.max <| Format.centsNumber maximumStoreCredit
                                 , value model.storeCredit
                                 , onInput StoreCredit
+                                , decimalInput
                                 ]
                                 []
                             ]
@@ -1030,7 +1032,7 @@ registrationForm model =
             else
                 class "form-control"
 
-        emailInput =
+        emailField =
             input
                 [ id "emailInput"
                 , inputClass emailErrors
@@ -1040,6 +1042,7 @@ registrationForm model =
                 , onInput Email
                 , value model.email
                 , autocomplete "email"
+                , emailInput
                 ]
                 []
 
@@ -1100,7 +1103,7 @@ registrationForm model =
         [ div [ class "col-md-4" ]
             [ wrapper
                 [ fieldLabel "emailInput" "Email"
-                , emailInput
+                , emailField
                 , errorHtml emailErrors
                 ]
             ]

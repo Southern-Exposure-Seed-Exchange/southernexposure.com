@@ -18,6 +18,7 @@ import RemoteData exposing (WebData)
 import Routing exposing (Route(..))
 import Update.Utils exposing (nothingAndNoCommand)
 import User exposing (AuthStatus)
+import Views.Utils exposing (emailInput)
 
 
 
@@ -194,6 +195,7 @@ requestView tagger model =
                 , value model.email
                 , required True
                 , autofocus True
+                , emailInput
                 ]
                 []
             ]

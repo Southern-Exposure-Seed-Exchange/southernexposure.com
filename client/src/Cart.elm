@@ -22,7 +22,7 @@ import Routing exposing (Route(..))
 import User exposing (AuthStatus, User)
 import Views.Format as Format
 import Views.Images as Images
-import Views.Utils exposing (htmlOrBlank, icon, onIntInput, routeLinkAttributes)
+import Views.Utils exposing (htmlOrBlank, icon, numericInput, onIntInput, routeLinkAttributes)
 
 
 
@@ -209,6 +209,7 @@ view { quantities } ({ items, charges } as cartDetails) =
                         , onIntInput <| Quantity id
                         , A.min "1"
                         , A.step "1"
+                        , numericInput
                         ]
                         []
                     ]

@@ -1,13 +1,17 @@
 module Views.Utils exposing
-    ( htmlOrBlank
+    ( decimalInput
+    , emailInput
+    , htmlOrBlank
     , icon
+    , inputMode
+    , numericInput
     , onIntInput
     , rawHtml
     , routeLinkAttributes
     )
 
 import Html exposing (Attribute, Html, i, text)
-import Html.Attributes exposing (class, href)
+import Html.Attributes exposing (attribute, class, href)
 import Html.Events exposing (on)
 import Html.Events.Extra exposing (targetValueInt)
 import Json.Decode as Decode
@@ -43,3 +47,31 @@ rawHtml : String -> Html msg
 rawHtml =
     Markdown.toHtmlWith { defaultOptions | sanitize = False, smartypants = True }
         []
+
+
+{-| Set the `inputmode` attribute
+-}
+inputMode : String -> Attribute msg
+inputMode =
+    attribute "inputmode"
+
+
+{-| Show a numeric virtual keyboard
+-}
+numericInput : Attribute msg
+numericInput =
+    inputMode "numeric"
+
+
+{-| Show a virtual keyboard for email addresses
+-}
+emailInput : Attribute msg
+emailInput =
+    inputMode "email"
+
+
+{-| Show a decimal virtual keyboard
+-}
+decimalInput : Attribute msg
+decimalInput =
+    inputMode "decimal"
