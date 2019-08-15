@@ -162,9 +162,9 @@ view tagger model =
     , form [ onSubmit <| tagger SubmitForm ]
         [ fieldset []
             [ legend [] [ text "Login Information" ]
-            , requiredField .email Email "Email" "email" "email"
-            , requiredField .password Password "Password" "password" "password"
-            , requiredField .passwordConfirm PasswordConfirm "Confirm Password" "passwordConfirm" "password"
+            , requiredField .email Email "Email" "email" "email" "email"
+            , requiredField .password Password "Password" "password" "password" "new-password"
+            , requiredField .passwordConfirm PasswordConfirm "Confirm Password" "passwordConfirm" "password" "new-password"
             ]
         , Form.submitButton "Register"
         ]

@@ -1,5 +1,6 @@
 module Views.Utils exposing
-    ( decimalInput
+    ( autocomplete
+    , decimalInput
     , emailInput
     , htmlOrBlank
     , icon
@@ -75,3 +76,8 @@ emailInput =
 decimalInput : Attribute msg
 decimalInput =
     inputMode "decimal"
+
+
+autocomplete : String -> Attribute msg
+autocomplete =
+    attribute "autocomplete"

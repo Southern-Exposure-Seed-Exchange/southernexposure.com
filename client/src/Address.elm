@@ -18,12 +18,13 @@ module Address exposing
 import Api
 import Dict
 import Html exposing (..)
-import Html.Attributes exposing (attribute, class, classList, for, id, name, required, selected, type_, value)
+import Html.Attributes exposing (class, classList, for, id, name, required, selected, type_, value)
 import Html.Events exposing (on, onInput, targetValue)
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode exposing (Value)
 import Locations exposing (AddressLocations, Location, Region(..), regionDecoder, regionEncoder)
 import Views.HorizontalForm as Form
+import Views.Utils exposing (autocomplete)
 
 
 
@@ -348,7 +349,7 @@ form { model, errors } inputPrefix locations =
         , field .firstName FirstName "First Name" "firstName" "given-name" True
         , field .lastName LastName "Last Name" "lastName" "family-name" True
         , field .companyName CompanyName "Company Name" "companyName" "organization" False
-        , field .street Street "Street Address" "addressOne" "street-address" True
+        , field .street Street "Street Address" "addressOne" "address-line1" True
         , field .addressTwo AddressTwo "Address Line 2" "addressTwo" "address-line2" False
         , field .city City "City" "city" "address-level2" True
         , regionField
@@ -389,7 +390,7 @@ horizontalForm { model, errors } locations =
                     regionSelect "Province" locations.provinces
 
                 _ ->
-                    requiredField stateCode State "State / Province" "state" "state"
+                    requiredField stateCode State "State / Province" "state" "state" "address-level1"
 
         regionSelect labelText =
             List.map (locationToOption stateCode) >> selectRow State labelText True
@@ -397,13 +398,13 @@ horizontalForm { model, errors } locations =
         stateCode =
             .state >> Locations.fromRegion
     in
-    [ requiredField .firstName FirstName "First Name" "firstName" "text"
-    , requiredField .lastName LastName "Last Name" "lastName" "text"
-    , requiredField .street Street "Street Address" "addressOne" "text"
-    , optionalField .addressTwo AddressTwo "Address Line 2" "addressTwo" "text"
-    , requiredField .city City "City" "city" "text"
+    [ requiredField .firstName FirstName "First Name" "firstName" "text" "given-name"
+    , requiredField .lastName LastName "Last Name" "lastName" "text" "family-name"
+    , requiredField .street Street "Street Address" "addressOne" "text" "address-line1"
+    , optionalField .addressTwo AddressTwo "Address Line 2" "addressTwo" "text" "address-line2"
+    , requiredField .city City "City" "city" "text" "address-level2"
     , regionField
-    , requiredField .zipCode ZipCode "Zip Code" "zipCode" "text"
+    , requiredField .zipCode ZipCode "Zip Code" "zipCode" "text" "postal-code"
     , countrySelect
     ]
 
@@ -426,8 +427,8 @@ inputField errors prefix inputValue inputMsg labelText inputName autocompleteTyp
                     text ""
                 ]
 
-        autocomplete str =
-            attribute "autocomplete" <| prefix ++ " " ++ str
+        addressAutocomplete str =
+            autocomplete <| prefix ++ " " ++ str
 
         errorHtml =
             if hasErrors then
@@ -462,7 +463,7 @@ inputField errors prefix inputValue inputMsg labelText inputName autocompleteTyp
             , required isRequired
             , onInput inputMsg
             , value inputValue
-            , autocomplete autocompleteType
+            , addressAutocomplete autocompleteType
             ]
             []
         , errorHtml

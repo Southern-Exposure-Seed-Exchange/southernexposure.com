@@ -157,9 +157,9 @@ view tagger model authStatus =
 
         inputs =
             [ Form.genericErrorText (not <| Dict.isEmpty model.errors)
-            , inputRow (always email) Email False "Email" "email" "email"
-            , inputRow (.password >> Maybe.withDefault "") Password False "Password" "password" "password"
-            , inputRow (.passwordConfirm >> Maybe.withDefault "") PasswordConfirm False "Confirm Password" "passwordConfirm" "password"
+            , inputRow (always email) Email False "Email" "email" "email" "email"
+            , inputRow (.password >> Maybe.withDefault "") Password False "Password" "password" "password" "new-password"
+            , inputRow (.passwordConfirm >> Maybe.withDefault "") PasswordConfirm False "Confirm Password" "passwordConfirm" "password" "new-password"
             , Form.submitButton "Update"
             ]
     in

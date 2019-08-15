@@ -18,7 +18,7 @@ import RemoteData exposing (WebData)
 import Routing exposing (Route(..))
 import Update.Utils exposing (nothingAndNoCommand)
 import User exposing (AuthStatus)
-import Views.Utils exposing (emailInput)
+import Views.Utils exposing (autocomplete, emailInput)
 
 
 
@@ -196,6 +196,7 @@ requestView tagger model =
                 , required True
                 , autofocus True
                 , emailInput
+                , autocomplete "email"
                 ]
                 []
             ]
@@ -210,8 +211,8 @@ requestView tagger model =
     ]
 
 
-inputRow : Api.FormErrors -> (String -> msg) -> String -> String -> String -> String -> String -> Bool -> Bool -> Html msg
-inputRow errors msg inputValue inputId labelText errorField inputType isRequired isAutofocus =
+inputRow : Api.FormErrors -> (String -> msg) -> String -> String -> String -> String -> String -> String -> Bool -> Bool -> Html msg
+inputRow errors msg inputValue inputId labelText errorField inputType completionType isRequired isAutofocus =
     let
         fieldErrors =
             Dict.get errorField errors |> Maybe.withDefault []
@@ -248,6 +249,7 @@ inputRow errors msg inputValue inputId labelText errorField inputType isRequired
             , value inputValue
             , required isRequired
             , autofocus isAutofocus
+            , autocomplete completionType
             ]
             []
         , errorHtml
@@ -278,6 +280,7 @@ changeView tagger model code =
             "Password"
             "password"
             "password"
+            "new-password"
             True
             True
         , inputRow model.changeErrors
@@ -287,6 +290,7 @@ changeView tagger model code =
             "Confirm Password"
             "password"
             "password"
+            "new-password"
             True
             False
         , div [ class "form-group clearfix" ]

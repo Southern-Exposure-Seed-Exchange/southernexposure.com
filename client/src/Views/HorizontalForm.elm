@@ -40,8 +40,8 @@ submitButton content =
 arguments, then pass these functions to a config function that returns a
 version of this function that just takes a Field type?
 -}
-inputRow : Api.FormErrors -> String -> (String -> msg) -> Bool -> String -> String -> String -> Html msg
-inputRow errors inputValue inputMsg isRequired labelText errorField inputType =
+inputRow : Api.FormErrors -> String -> (String -> msg) -> Bool -> String -> String -> String -> String -> Html msg
+inputRow errors inputValue inputMsg isRequired labelText errorField inputType autocompleteType =
     let
         inputId =
             String.filter (\c -> c /= ' ') labelText

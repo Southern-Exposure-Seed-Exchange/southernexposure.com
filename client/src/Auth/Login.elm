@@ -17,7 +17,7 @@ import RemoteData exposing (WebData)
 import Routing exposing (Route(..), reverse)
 import Update.Utils exposing (nothingAndNoCommand)
 import User exposing (AuthStatus, UserId(..))
-import Views.Utils exposing (emailInput, routeLinkAttributes)
+import Views.Utils exposing (autocomplete, emailInput, routeLinkAttributes)
 
 
 
@@ -206,6 +206,7 @@ view tagger model =
                     , required True
                     , autofocus True
                     , emailInput
+                    , autocomplete "email"
                     ]
                     []
                 ]
@@ -219,6 +220,7 @@ view tagger model =
                     , onInput <| tagger << Password
                     , value model.password
                     , required True
+                    , autocomplete "current-password"
                     ]
                     []
                 ]
