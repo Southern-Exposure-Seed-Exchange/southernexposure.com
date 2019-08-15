@@ -37,7 +37,7 @@ details addToCartForms { product, variants, maybeSeedAttribute, categories } =
                             ]
                     )
     in
-    [ h1 [ class "product-details-title" ]
+    [ h1 [ class "product-details-title d-flex justify-content-between" ]
         [ rawHtml product.name
         , htmlOrBlank SeedAttribute.icons maybeSeedAttribute
         ]
