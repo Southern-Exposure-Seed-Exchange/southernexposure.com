@@ -1,18 +1,33 @@
-name:           sese-website
-version:        0.6.0.0
-synopsis:       The API Server for Southern Exposure's Retail Website
-category:       Application
-github:         Southern-Exposure-Seed-Exchange/southernexposure.com
-license:        GPL-3.0
-license-file:   ../LICENSE
-author:         "Pavan Rikhi"
-maintainer:     "pavan.rikhi@gmail.com"
-copyright:      2017-2018 Pavan Rikhi
-bug-reports:    http://bugs.sleepanarchy.com/projects/sese-website/issues/new
+---
 
-description:    This is JSON API server for Southern Exposure Seed Exchange's
-                Retail E-Commerce Website. It uses Persistent for DB management
-                & Servant for routing. It is paired with an Elm frontend.
+name:
+    sese-website
+version:
+    0.6.0.0
+synopsis:
+    The API Server for Southern Exposure's Retail Website
+category:
+    Application
+github:
+    Southern-Exposure-Seed-Exchange/southernexposure.com
+license:
+    GPL-3.0
+license-file:
+    ../LICENSE
+author:
+    "Pavan Rikhi"
+maintainer:
+    "pavan.rikhi@gmail.com"
+copyright:
+    2017-2019 Pavan Rikhi
+bug-reports:
+    http://bugs.sleepanarchy.com/projects/sese-website/issues/new
+
+description: >
+    This is JSON API server for Southern Exposure Seed Exchange's Retail
+    E-Commerce Website. It uses Persistent for DB management & Servant for
+    routing. It is paired with an Elm frontend available in the same
+    repository.
 
 extra-source-files:
     - ../README.rst
@@ -69,8 +84,10 @@ library:
 
 tests:
     sese-website-test:
-        main:           Spec.hs
-        source-dirs:    test
+        main:
+            Spec.hs
+        source-dirs:
+            test
         ghc-options:
             - -threaded
             - -rtsopts
@@ -83,10 +100,21 @@ tests:
             - hedgehog
             - HUnit
 
+_script-def: &script-defaults
+    source-dirs: scripts
+    other-modules:
+        - Utils
+    ghc-options:
+        - -threaded
+        - -rtsopts
+        - -with-rtsopts=-N
+
 executables:
     sese-website-exe:
-        main:           Main.hs
-        source-dirs:    app
+        main:
+            Main.hs
+        source-dirs:
+            app
         ghc-options:
             - -threaded
             - -rtsopts
@@ -102,13 +130,8 @@ executables:
             - warp
 
     data-migration:
-        main:           DataMigration.hs
-        source-dirs:    scripts
-        other-modules:  Utils
-        ghc-options:
-            - -threaded
-            - -rtsopts
-            - -with-rtsopts=-N
+        main: DataMigration.hs
+        <<: *script-defaults
         dependencies:
             - sese-website
             - bytestring
@@ -128,13 +151,8 @@ executables:
             - uuid
 
     image-migration:
-        main:           ImageMigration.hs
-        source-dirs:    scripts
-        other-modules:  Utils
-        ghc-options:
-            - -threaded
-            - -rtsopts
-            - -with-rtsopts=-N
+        main: ImageMigration.hs
+        <<: *script-defaults
         dependencies:
             - sese-website
             - bytestring
@@ -145,13 +163,9 @@ executables:
             - text
 
     clean-database:
-        main:           CleanDatabase.hs
-        source-dirs:    scripts
-        other-modules:  []
-        ghc-options:
-            - -threaded
-            - -rtsopts
-            - -with-rtsopts=-N
+        main: CleanDatabase.hs
+        <<: *script-defaults
+        other-modules: []
         dependencies:
             - sese-website
             - bytestring
