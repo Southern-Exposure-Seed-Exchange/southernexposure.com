@@ -10,7 +10,6 @@ import Products.Pagination as Pagination
 import Routing exposing (Route(..))
 import Search
 import SeedAttribute
-import Views.Utils exposing (inputMode)
 
 
 type Msg
@@ -136,10 +135,9 @@ view routingMsg formMsg data categories =
             , input
                 [ id "keywords"
                 , class "form-control"
-                , type_ "text"
+                , type_ "search"
                 , value data.query
                 , onInput <| formMsg << KeywordInput
-                , inputMode "search"
                 ]
                 []
             ]
