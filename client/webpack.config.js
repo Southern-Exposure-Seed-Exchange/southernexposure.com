@@ -143,7 +143,7 @@ module.exports = {
         appDescription: "Southern Exposure's Retail Store",
         developerName: "Pavan Rikhi",
         developerURL: "https://github.com/Southern-Exposure-Seed-Exchange/southernexposure.com/",
-        background: "#ffffff",
+        background: "#ffffff00",
         theme_color: "#158312",
         version: "v0.6.0",
       },
