@@ -10,14 +10,13 @@ module Auth.CreateAccount exposing
 -- TODO: Refactor module as a composition of the EditLogin & EditContact module forms.
 
 import Api
-import Dict exposing (Dict)
+import Dict
 import Html exposing (..)
-import Html.Attributes exposing (class, for, id, required, selected, type_, value)
-import Html.Events exposing (on, onInput, onSubmit, targetValue)
+import Html.Events exposing (onSubmit)
 import Json.Encode as Encode exposing (Value)
 import Ports
 import RemoteData exposing (WebData)
-import Routing exposing (Route(..), reverse)
+import Routing exposing (Route(..))
 import Update.Utils exposing (nothingAndNoCommand)
 import User exposing (AuthStatus)
 import Views.HorizontalForm as Form

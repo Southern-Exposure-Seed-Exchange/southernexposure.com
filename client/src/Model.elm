@@ -47,7 +47,10 @@ type alias Model =
 
 
 type alias CartForms =
-    Dict Int { variant : Maybe ProductVariantId, quantity : Int }
+    Dict Int
+        { variant : Maybe ProductVariantId
+        , quantity : Int
+        }
 
 
 initial : Routing.Key -> Route -> Model

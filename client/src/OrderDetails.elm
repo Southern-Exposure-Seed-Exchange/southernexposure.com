@@ -8,7 +8,7 @@ import Address
 import Html exposing (..)
 import Html.Attributes exposing (class, colspan)
 import Locations exposing (AddressLocations)
-import Models.Fields exposing (Cents(..), centsMap, centsMap2, milligramsToString)
+import Models.Fields exposing (Cents(..), centsMap, milligramsToString)
 import PageData
 import Time
 import Views.Format as Format
@@ -129,9 +129,6 @@ orderTable ({ order, lineItems, products } as details) =
 
         total =
             orderTotals.total
-
-        maybeAddCents maybeCents =
-            centsMap2 (+) (Maybe.map .amount maybeCents |> Maybe.withDefault (Cents 0))
 
         taxRow =
             if orderTotals.tax == Cents 0 then

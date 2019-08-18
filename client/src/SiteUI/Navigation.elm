@@ -55,8 +55,8 @@ view navigationData activeCategories searchData =
                 Nothing ->
                     li [ class <| "nav-item" ++ activeClass category ]
                         [ a
-                            ([ class "nav-link" ]
-                                ++ (routeLinkAttributes <|
+                            (class "nav-link"
+                                :: (routeLinkAttributes <|
                                         CategoryDetails category.slug Pagination.default
                                    )
                             )
@@ -81,10 +81,8 @@ view navigationData activeCategories searchData =
 
         childCategory category =
             a
-                ([ class <| "dropdown-item" ++ activeClass category ]
-                    ++ (routeLinkAttributes <|
-                            CategoryDetails category.slug Pagination.default
-                       )
+                (class ("dropdown-item" ++ activeClass category)
+                    :: routeLinkAttributes (CategoryDetails category.slug Pagination.default)
                 )
                 [ text category.name ]
 

@@ -6,7 +6,7 @@ import Html.Attributes exposing (class)
 import Html.Events exposing (onClick)
 import Locations exposing (AddressLocations)
 import Messages exposing (Msg(..))
-import Models.Fields exposing (Cents(..), centsMap)
+import Models.Fields exposing (Cents(..))
 import PageData exposing (MyAccount)
 import Routing exposing (Route(..))
 import Time

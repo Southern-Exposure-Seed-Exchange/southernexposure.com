@@ -10,7 +10,7 @@ import Api
 import Dict
 import Html exposing (..)
 import Html.Attributes exposing (id)
-import Html.Events exposing (onInput, onSubmit)
+import Html.Events exposing (onSubmit)
 import Json.Decode as Decode
 import Json.Encode as Encode exposing (Value)
 import Ports

@@ -16,12 +16,12 @@ import Address exposing (AddressId(..))
 import Api
 import Dict
 import Html exposing (..)
-import Html.Attributes as A exposing (attribute, checked, class, colspan, for, href, id, minlength, name, required, rows, selected, src, step, target, type_, value)
-import Html.Events exposing (on, onCheck, onClick, onInput, onSubmit, targetValue)
-import Json.Decode as Decode exposing (Decoder)
+import Html.Attributes as A exposing (attribute, checked, class, colspan, for, href, id, minlength, name, required, rows, src, step, target, type_, value)
+import Html.Events exposing (onCheck, onClick, onInput, onSubmit)
+import Json.Decode as Decode
 import Json.Encode as Encode exposing (Value)
 import Locations exposing (AddressLocations, Region)
-import Models.Fields exposing (Cents(..), centsFromString, centsMap, centsMap2, milligramsToString)
+import Models.Fields exposing (Cents(..), centsFromString, centsMap, centsMap2)
 import OrderDetails
 import PageData
 import Ports
@@ -553,13 +553,6 @@ getCustomerDetails msg token maybeCountry maybeRegion maybeAddressId maybeMember
                             Nothing
                     )
                 |> encodeMaybe Encode.string
-
-        encodedCouponCode =
-            if String.isEmpty couponCode then
-                Encode.null
-
-            else
-                Encode.string couponCode
     in
     Api.post Api.CheckoutDetailsCustomer
         |> Api.withJsonBody data
@@ -1157,19 +1150,17 @@ addressForm config =
             else
                 text ""
 
-        ( newAddress, addressId, addressHtml ) =
+        ( addressId, addressHtml ) =
             case config.model of
                 NewAddress addr ->
-                    ( True
-                    , Nothing
+                    ( Nothing
                     , Address.form addr config.prefix config.locations
                         |> Html.map config.msg
                         |> withDefaultCheckbox addr.model
                     )
 
                 ExistingAddress id ->
-                    ( False
-                    , Just id
+                    ( Just id
                     , findBy (\a -> a.id == Just id) config.selectAddresses
                         |> Maybe.map (\a -> Address.card a config.locations |> withDefaultCheckbox a)
                         |> Maybe.withDefault (text "")

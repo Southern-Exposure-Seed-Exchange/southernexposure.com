@@ -11,7 +11,8 @@ import Dict
 import Html exposing (..)
 import Html.Attributes exposing (class, for, id, name, required, type_, value)
 import Html.Events exposing (on, onInput, targetValue)
-import Json.Decode as Decode exposing (Decoder)
+import Json.Decode as Decode
+import Views.Utils exposing (autocomplete)
 
 
 genericErrorText : Bool -> Html msg
@@ -78,6 +79,7 @@ inputRow errors inputValue inputMsg isRequired labelText errorField inputType au
         , value inputValue
         , required isRequired
         , onInput inputMsg
+        , autocomplete autocompleteType
         ]
         []
         |> (\i -> [ i, errorHtml ])

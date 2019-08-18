@@ -5,11 +5,11 @@ module SiteUI.Search exposing
     , update
     )
 
-import Html exposing (Html, button, div, input, span, text)
+import Html exposing (Html, button, div, input, text)
 import Html.Attributes exposing (class, type_, value)
 import Html.Events exposing (onInput, onSubmit)
 import Products.Pagination as Pagination
-import Routing exposing (Route(..), reverse)
+import Routing exposing (Route(..))
 import Search
 
 

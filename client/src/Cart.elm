@@ -10,7 +10,7 @@ module Cart exposing
 import Api
 import Dict exposing (Dict)
 import Html exposing (..)
-import Html.Attributes as A exposing (class, colspan, disabled, href, src, step, type_, value)
+import Html.Attributes as A exposing (class, colspan, disabled, src, step, type_, value)
 import Html.Events exposing (onClick, onSubmit)
 import Html.Keyed as Keyed
 import Json.Encode as Encode
@@ -80,7 +80,7 @@ update msg authStatus maybeCartToken model details =
             )
 
         Remove itemId ->
-            ( model, Nothing, removeItem authStatus maybeCartToken model itemId )
+            ( model, Nothing, removeItem authStatus maybeCartToken itemId )
 
         Submit ->
             ( model, Nothing, updateCart authStatus maybeCartToken model details )
@@ -117,8 +117,8 @@ updateCart authStatus maybeCartToken { quantities } { items } =
                 customerUpdateRequest user encodedQuantities
 
 
-removeItem : AuthStatus -> Maybe String -> Form -> CartItemId -> Cmd Msg
-removeItem authStatus maybeCartToken model itemId =
+removeItem : AuthStatus -> Maybe String -> CartItemId -> Cmd Msg
+removeItem authStatus maybeCartToken itemId =
     let
         encodedDelete =
             Encode.object <|

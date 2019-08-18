@@ -11,13 +11,13 @@ import Browser exposing (Document)
 import Cart
 import Checkout
 import Html exposing (..)
-import Html.Attributes exposing (class, src)
+import Html.Attributes exposing (class)
 import Http
 import Messages exposing (Msg(..))
 import Model exposing (CartForms, Model)
 import OrderDetails
 import PageData
-import Paginate exposing (Paginated)
+import Paginate
 import Products.Pagination as Pagination
 import Products.Views as ProductViews
 import QuickOrder

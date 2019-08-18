@@ -17,7 +17,7 @@ import Json.Decode as Decode
 import Json.Encode as Encode exposing (Value)
 import Ports
 import RemoteData exposing (WebData)
-import User exposing (AuthStatus, User)
+import User exposing (AuthStatus)
 import Views.Utils exposing (numericInput)
 
 
@@ -45,7 +45,7 @@ type alias Form =
 
 
 initialForm : Int -> Form
-initialForm index =
+initialForm _ =
     { sku = ""
     , quantity = 1
     }
@@ -278,9 +278,6 @@ renderForm errors index model =
 
             else
                 "form-control is-invalid"
-
-        hasErrors =
-            not <| List.isEmpty itemNumberErrors
 
         itemNumberErrors =
             Dict.get (String.fromInt index) errors

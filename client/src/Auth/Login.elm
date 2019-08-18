@@ -61,8 +61,6 @@ type Msg
     = Email String
     | Password String
     | Remember Bool
-    | CreateAccountPage
-    | ResetPasswordPage
     | SubmitForm
     | SubmitResponse (WebData (Result Api.FormErrors AuthStatus))
 
@@ -81,24 +79,6 @@ update key msg model maybeSessionToken =
         Remember remember ->
             { model | remember = remember }
                 |> nothingAndNoCommand
-
-        CreateAccountPage ->
-            ( model
-            , Nothing
-            , Cmd.batch
-                [ Routing.newUrl key CreateAccount
-                , Ports.scrollToTop
-                ]
-            )
-
-        ResetPasswordPage ->
-            ( model
-            , Nothing
-            , Cmd.batch
-                [ Routing.newUrl key <| ResetPassword <| Just ""
-                , Ports.scrollToTop
-                ]
-            )
 
         SubmitForm ->
             ( { model | errors = Api.initialErrors }
@@ -138,7 +118,7 @@ rememberAuth remember authStatus =
 {-| TODO: This no longer works since we use the --optimize flag. Show an error instead.
 -}
 debugResponse : c -> a -> ( a, Maybe b, Cmd msg )
-debugResponse response model =
+debugResponse _ model =
     --let
     --    _ =
     --        Debug.log "Bad Response" response

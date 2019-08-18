@@ -3,7 +3,7 @@ module Products.Views exposing (details, list)
 import Dict exposing (Dict)
 import Html exposing (..)
 import Html.Attributes as A exposing (attribute, class, for, id, selected, src, tabindex, type_, value)
-import Html.Events exposing (on, onInput, onSubmit, targetValue)
+import Html.Events exposing (on, onSubmit, targetValue)
 import Html.Keyed as Keyed
 import Json.Decode as Decode
 import Messages exposing (Msg(..))
@@ -356,7 +356,7 @@ cartForm addToCartForms product variants =
 
         ifNothing valIfNothing maybe =
             case maybe of
-                Just x ->
+                Just _ ->
                     maybe
 
                 Nothing ->
@@ -401,7 +401,7 @@ cartForm addToCartForms product variants =
                         [ s ]
 
                     else
-                        s :: [ Format.cents <| variantPrice variant ]
+                        [ s, Format.cents <| variantPrice variant ]
 
                 -- Disable the option unless the entire product is
                 -- out-of-stock.

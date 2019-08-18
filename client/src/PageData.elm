@@ -40,7 +40,7 @@ import Category exposing (Category, CategoryId(..))
 import Dict exposing (Dict)
 import Iso8601
 import Json.Decode as Decode exposing (Decoder)
-import Locations exposing (AddressLocations, Region, regionDecoder, regionEncoder)
+import Locations exposing (AddressLocations)
 import Models.Fields exposing (Cents(..), Milligrams(..), centsDecoder, centsMap, centsMap2)
 import Paginate exposing (Paginated)
 import Product exposing (Product, ProductVariant, ProductVariantId(..), variantPrice)
@@ -424,11 +424,6 @@ orderTotals { lineItems, products } =
                 ( Cents 0, Cents 0 )
                 lineItems
 
-        extraCharges =
-            List.foldl (\charge -> centsMap2 (+) charge.amount)
-                (Cents 0)
-                lineItems
-
         total =
             subTotal
                 |> centsMap2 (+) debits
@@ -743,17 +738,3 @@ priorityFeeDecoder =
     Decode.map2 PriorityFee
         (Decode.field "flat" centsDecoder)
         (Decode.field "percent" Decode.int)
-
-
-
--- Utils
-
-
-resultToDecoder : Result String a -> Decoder a
-resultToDecoder r =
-    case r of
-        Ok x ->
-            Decode.succeed x
-
-        Err e ->
-            Decode.fail e

@@ -19,23 +19,22 @@ import Json.Encode as Encode
 import Locations
 import Messages exposing (Msg(..))
 import Model exposing (Model)
-import PageData exposing (CartItemId(..), PageData, ProductData)
+import PageData exposing (CartItemId(..), PageData)
 import Paginate exposing (Paginated)
 import Ports
 import Product exposing (ProductId(..), ProductVariantId(..))
 import QuickOrder
 import RemoteData exposing (WebData)
-import Routing exposing (Route(..), parseRoute, reverse)
+import Routing exposing (Route(..), parseRoute)
 import Search exposing (UniqueSearch(..))
-import SeedAttribute exposing (SeedAttribute)
 import SiteUI
 import SiteUI.Search as SiteSearch
-import StaticPage exposing (StaticPage)
+import StaticPage
 import Task
 import Time
-import Update.Utils exposing (batchCommand, discardCommand, extraCommand, maybeCommand, noCommand, updateAndCommand, withCommand)
+import Update.Utils exposing (batchCommand, discardCommand, extraCommand, noCommand, updateAndCommand, withCommand)
 import Url exposing (Url)
-import User exposing (AuthStatus, User)
+import User exposing (AuthStatus)
 import View exposing (view)
 
 

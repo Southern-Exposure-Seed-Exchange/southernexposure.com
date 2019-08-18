@@ -7,7 +7,6 @@ module Routing exposing
     , reverse
     )
 
-import Browser
 import Browser.Navigation
 import Products.Pagination as Pagination
 import Routing.Utils exposing (joinPath, parseFlag, queryFlag, withQueryStrings)

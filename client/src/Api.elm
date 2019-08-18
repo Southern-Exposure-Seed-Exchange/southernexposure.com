@@ -28,7 +28,6 @@ import Json.Encode exposing (Value)
 import Products.Pagination as Pagination
 import RemoteData exposing (WebData)
 import Routing.Utils exposing (joinPath, queryParameter, withQueryStrings)
-import Time
 
 
 
@@ -326,7 +325,7 @@ errorHandler bodyFunction =
                     else
                         Err <| Http.BadStatus metadata.statusCode
 
-                Http.GoodStatus_ metadata body ->
+                Http.GoodStatus_ _ body ->
                     Result.map Ok <| bodyFunction body
 
 
