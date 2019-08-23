@@ -48,10 +48,12 @@ dependencies:
     - bcrypt
     - blaze-html
     - blaze-markup
+    - bytestring
     - ca-province-codes
     - containers
+    - directory
     - esqueleto
-    - safe-exceptions
+    - filepath
     - HaskellNet
     - HaskellNet-SSL
     - iso3166-country-codes
@@ -60,7 +62,9 @@ dependencies:
     - pandoc
     - persistent
     - persistent-template
+    - pureMD5
     - resource-pool
+    - safe-exceptions
     - servant-server
     - state-codes
     - stripe-core
@@ -68,6 +72,7 @@ dependencies:
     - tagsoup
     - text
     - time
+    - typed-process
     - unordered-containers
     - uuid
     - wai
@@ -78,6 +83,7 @@ library:
     exposed-modules:
         - Api
         - Config
+        - Images
         - Models
         - Models.Fields
         - Routes.CommonData
@@ -121,8 +127,6 @@ executables:
             - -with-rtsopts=-N
         dependencies:
             - sese-website
-            - bytestring
-            - directory
             - monad-logger
             - persistent-postgresql
             - stripe-core
