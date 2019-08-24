@@ -206,7 +206,7 @@ type OldIdMap a = IntMap.IntMap a
 
 connectToPostgres :: IO ConnectionPool
 connectToPostgres =
-    runNoLoggingT $ createPostgresqlPool "dbname=sese-website" 1
+    runNoLoggingT $ createPostgresqlPool "dbname=sese-website" 4
 
 
 dropNewDatabaseRows :: SqlWriteT IO ()

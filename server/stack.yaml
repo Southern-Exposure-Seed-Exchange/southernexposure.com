@@ -4,6 +4,7 @@ resolver: lts-10.9
 
 packages:
     - .
+
 extra-deps:
     - ca-province-codes-1.0.0.0
 
