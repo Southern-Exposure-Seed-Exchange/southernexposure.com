@@ -25,12 +25,12 @@ type App =
     ReaderT Config Handler
 
 type AppSQL =
-    SqlPersistT Handler
+    SqlPersistT App
 
 -- | Run & return a database query.
 runDB :: AppSQL a -> App a
 runDB query =
-    asks getPool >>= lift . runSqlPool query
+    asks getPool >>= runSqlPool query
 
 
 -- | Perform a request to the Stripe API.
