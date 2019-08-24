@@ -41,6 +41,7 @@ ghc-options:
     - -Wincomplete-uni-patterns
     - -Wredundant-constraints
 
+# TODO: Split up between lib/exe sections unless used throughout
 dependencies:
     - base >= 4.7 && < 5
     - aeson
@@ -157,13 +158,14 @@ executables:
     image-migration:
         main: ImageMigration.hs
         <<: *script-defaults
+        other-modules: []
         dependencies:
             - sese-website
             - bytestring
             - directory
             - filepath
-            - io-streams
-            - mysql-haskell
+            - monad-logger
+            - persistent-postgresql
             - text
 
     clean-database:
