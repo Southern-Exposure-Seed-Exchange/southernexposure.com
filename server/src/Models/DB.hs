@@ -28,7 +28,7 @@ Category json
     UniqueCategorySlug slug
     deriving Show
 
-Product json
+Product
     name T.Text
     slug T.Text
     categoryIds [CategoryId]

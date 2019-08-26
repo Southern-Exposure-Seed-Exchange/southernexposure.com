@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -5,6 +6,8 @@
 module Routes.CommonData
     ( ProductData
     , getProductData
+    , BaseProductData
+    , makeBaseProductData
     , VariantData(vdId, vdProductId)
     , makeVariantData
     , getVariantPrice
@@ -30,7 +33,8 @@ module Routes.CommonData
 
 import Prelude hiding (product)
 
-import Control.Monad.IO.Class (liftIO)
+import Control.Monad.IO.Class (MonadIO, liftIO)
+import Control.Monad.Reader (MonadReader, lift)
 import Data.Aeson ((.=), (.:), (.:?), ToJSON(..), FromJSON(..), object, withObject)
 import Data.Int (Int64)
 import Data.List (intersect)
@@ -41,6 +45,8 @@ import Data.Time (getCurrentTime)
 import Database.Persist ((==.), (>=.), (<=.), Entity(..), SelectOpt(Asc), selectList, getBy)
 import Numeric.Natural (Natural)
 
+import Config
+import Images
 import Models
 import Models.Fields
 import Server
@@ -59,7 +65,7 @@ import qualified Validation as V
 
 data ProductData =
     ProductData
-        { pdProduct :: Entity Product
+        { pdProduct :: BaseProductData
         , pdVariants :: [VariantData]
         , pdSeedAttribute :: Maybe (Entity SeedAttribute)
         } deriving (Show)
@@ -70,6 +76,42 @@ instance ToJSON ProductData where
                , "variants" .= toJSON pdVariants
                , "seedAttribute" .= toJSON pdSeedAttribute
                ]
+
+data BaseProductData =
+    BaseProductData
+        { bpdId :: ProductId
+        , bpdName :: T.Text
+        , bpdSlug :: T.Text
+        , bpdBaseSku :: T.Text
+        , bpdLongDescription :: T.Text
+        , bpdImage :: ImageSourceSet
+        , bpdCategories :: [CategoryId]
+        } deriving (Show)
+
+instance ToJSON BaseProductData where
+    toJSON BaseProductData {..} =
+        object
+            [ "id" .= bpdId
+            , "name" .= bpdName
+            , "slug" .= bpdSlug
+            , "baseSku" .= bpdBaseSku
+            , "longDescription" .= bpdLongDescription
+            , "image" .= bpdImage
+            ]
+
+makeBaseProductData :: (MonadReader Config m, MonadIO m) => Entity Product -> m BaseProductData
+makeBaseProductData (Entity pId Product {..}) = do
+    image <- makeSourceSet "products" $ T.unpack productImageUrl
+    return BaseProductData
+        { bpdId = pId
+        , bpdName = productName
+        , bpdSlug = productSlug
+        , bpdBaseSku = productBaseSku
+        , bpdLongDescription = productLongDescription
+        , bpdImage = image
+        , bpdCategories = productCategoryIds
+        }
+
 
 data VariantData =
     VariantData
@@ -103,13 +145,14 @@ getVariantPrice VariantData { vdPrice, vdSalePrice } =
 
 getProductData :: Entity Product -> AppSQL ProductData
 getProductData e@(Entity productId _) = do
+    prod <- lift $ makeBaseProductData e
     variants <- selectList
         [ ProductVariantProductId ==. productId
         , ProductVariantIsActive ==. True
         ] []
         >>= applySalesToVariants e
     maybeAttribute <- getBy $ UniqueAttribute productId
-    return $ ProductData e variants maybeAttribute
+    return $ ProductData prod variants maybeAttribute
 
 -- | Apply any CategorySales & ProductSales to the ProductVariants while
 -- morphing them into VariantData values.
@@ -259,7 +302,7 @@ toAuthorizationData (Entity customerId customer) =
 data CartItemData =
     CartItemData
         { cidItemId :: CartItemId
-        , cidProduct :: Entity Product
+        , cidProduct :: BaseProductData
         , cidVariant :: VariantData
         , cidQuantity :: Natural
         , cidTax :: Cents
@@ -356,11 +399,12 @@ getCartItems maybeTaxRate whereQuery = do
                             applyTaxRate (productTotal vd) (entityKey p) taxRate
             in do
                 maybeCategorySale <- listToMaybe <$> getCategorySales (entityVal p)
+                productData <- lift $ makeBaseProductData p
                 variantData <- applyVariantSales v >>= \vd ->
                     return $ maybe vd (`applyCategorySale` vd) maybeCategorySale
                 return CartItemData
                     { cidItemId = E.unValue i
-                    , cidProduct = p
+                    , cidProduct = productData
                     , cidVariant = variantData
                     , cidQuantity = quantity
                     , cidTax = tax variantData
@@ -482,7 +526,7 @@ getSurcharges items =
     where buildQuantityMap initialMap item =
             foldl (\acc cId -> M.insertWith (+) cId (cidQuantity item) acc)
                 initialMap
-                ((\(Entity _ p) -> productCategoryIds p) $ cidProduct item)
+                (bpdCategories $ cidProduct item)
           getSurcharge categories (Entity _ surcharge) =
             let
                 quantity =
@@ -514,8 +558,8 @@ getShippingMethods maybeCountry items subTotal =
                 validProducts =
                     null (shippingMethodCategoryIds method)
                         || all isValidProduct (map cidProduct items)
-                isValidProduct (Entity _ prod) =
-                     not . null $ productCategoryIds prod `intersect` shippingMethodCategoryIds method
+                isValidProduct prod =
+                     not . null $ bpdCategories prod `intersect` shippingMethodCategoryIds method
                 thresholdAmount rates =
                     case rates of
                         [] ->
@@ -547,8 +591,8 @@ getShippingMethods maybeCountry items subTotal =
                             $ Just $ shippingMethodPriorityRate method
                 priorityExcluded =
                     any productExcludesPriority (map cidProduct items)
-                productExcludesPriority (Entity _ prod) =
-                    not . null $ productCategoryIds prod `intersect`
+                productExcludesPriority prod =
+                    not . null $ bpdCategories prod `intersect`
                         shippingMethodExcludedPriorityCategoryIds method
             in
                 if validCountry && validProducts then

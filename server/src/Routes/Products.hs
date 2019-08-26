@@ -7,6 +7,7 @@ module Routes.Products
     ) where
 
 import Control.Monad (unless, when)
+import Control.Monad.Trans (lift)
 import Data.Aeson ((.=), (.:), (.:?), ToJSON(..), FromJSON(..), object, withObject)
 import Data.Char (isAlpha)
 import Data.Maybe (listToMaybe)
@@ -41,7 +42,7 @@ productRoutes =
 
 data ProductDetailsData =
     ProductDetailsData
-        { pddProduct :: Entity Product
+        { pddProduct :: BaseProductData
         , pddVariants :: [VariantData]
         , pddSeedAttribute :: Maybe (Entity SeedAttribute)
         , pddCategories :: [Entity Category]
@@ -69,6 +70,7 @@ productDetailsRoute slug = do
                 throwError err404
             Just e@(Entity productId prod) -> runDB $ do
                 unless (productIsActive prod) $ throwError err404
+                baseData <- lift $ makeBaseProductData e
                 (variants, maybeAttribute, categories) <-
                     (,,)
                         <$> (selectList
@@ -81,7 +83,7 @@ productDetailsRoute slug = do
                         <*> selectList [CategoryId <-. productCategoryIds prod] []
                 when (null variants) $ throwError err404
                 predecessors <- concat <$> mapM getParentCategories (productCategoryIds prod)
-                return . ProductDetailsData e variants maybeAttribute categories
+                return . ProductDetailsData baseData variants maybeAttribute categories
                     $ map categoryToPredecessor predecessors
 
 
