@@ -18,7 +18,7 @@ import qualified Data.Text as T
 
 
 share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistLowerCase|
-Category json
+Category
     name T.Text
     slug T.Text
     parentId CategoryId Maybe

@@ -16,6 +16,8 @@ module Routes.CommonData
     , applyCategorySaleDiscount
     , PredecessorCategory
     , categoryToPredecessor
+    , CategoryData(cdDescription)
+    , makeCategoryData
     , AuthorizationData
     , toAuthorizationData
     , CartItemData(..)
@@ -268,6 +270,44 @@ instance ToJSON PredecessorCategory where
 categoryToPredecessor :: Entity Category -> PredecessorCategory
 categoryToPredecessor (Entity categoryId category) =
     PredecessorCategory categoryId (categoryName category) (categorySlug category)
+
+
+data CategoryData =
+    CategoryData
+        { cdCategoryId :: CategoryId
+        , cdName :: T.Text
+        , cdSlug :: T.Text
+        , cdParentId :: Maybe CategoryId
+        , cdDescription :: T.Text
+        , cdImage :: ImageSourceSet
+        , cdOrder :: Int
+        } deriving (Show)
+
+instance ToJSON CategoryData where
+    toJSON CategoryData {..} =
+        object
+            [ "id" .= cdCategoryId
+            , "name" .= cdName
+            , "slug" .= cdSlug
+            , "parentId" .= cdParentId
+            , "description" .= cdDescription
+            , "image" .= cdImage
+            , "order" .= cdOrder
+            ]
+
+makeCategoryData :: (MonadReader Config m, MonadIO m) => Entity Category -> m CategoryData
+makeCategoryData (Entity cId Category {..}) = do
+    image <- makeSourceSet "categories" $ T.unpack categoryImageUrl
+    return CategoryData
+        { cdCategoryId = cId
+        , cdName = categoryName
+        , cdSlug = categorySlug
+        , cdParentId = categoryParentId
+        , cdDescription = categoryDescription
+        , cdImage = image
+        , cdOrder = categoryOrder
+        }
+
 
 
 -- Customers

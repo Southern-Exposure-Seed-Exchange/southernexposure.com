@@ -45,7 +45,7 @@ data ProductDetailsData =
         { pddProduct :: BaseProductData
         , pddVariants :: [VariantData]
         , pddSeedAttribute :: Maybe (Entity SeedAttribute)
-        , pddCategories :: [Entity Category]
+        , pddCategories :: [CategoryData]
         , pddPredecessors :: [PredecessorCategory]
         } deriving (Show)
 
@@ -83,7 +83,8 @@ productDetailsRoute slug = do
                         <*> selectList [CategoryId <-. productCategoryIds prod] []
                 when (null variants) $ throwError err404
                 predecessors <- concat <$> mapM getParentCategories (productCategoryIds prod)
-                return . ProductDetailsData baseData variants maybeAttribute categories
+                categoryData <- lift $ mapM makeCategoryData categories
+                return . ProductDetailsData baseData variants maybeAttribute categoryData
                     $ map categoryToPredecessor predecessors
 
 

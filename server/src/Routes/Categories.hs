@@ -7,7 +7,9 @@ module Routes.Categories
     , categoryRoutes
     ) where
 
+import Control.Monad.Trans (lift)
 import Data.Aeson ((.=), ToJSON(..), object)
+import Data.Foldable (foldlM)
 import Data.Int (Int64)
 import Database.Persist ((==.), (<-.), Entity(..), SelectOpt(..), selectList, getBy)
 import Database.Persist.Sql (fromSqlKey)
@@ -45,8 +47,8 @@ categoryRoutes =
 
 data CategoryNavbarData =
     CategoryNavbarData
-        { cndRoots :: [Entity Category]
-        , cndChildren :: Map.Map Int64 [Entity Category]
+        { cndRoots :: [CategoryData]
+        , cndChildren :: Map.Map Int64 [CategoryData]
         } deriving (Show)
 
 
@@ -64,16 +66,20 @@ categoryNavbarRoute = do
     roots <- runDB $ selectList [CategoryParentId ==. Nothing] [Asc CategoryOrder]
     let rootIds = map (\(Entity i _) -> Just i) roots
     children <- runDB $ selectList [CategoryParentId <-. rootIds] [Desc CategoryOrder]
-    let childrenMap = foldl mergeChild Map.empty children
-    return $ CategoryNavbarData roots childrenMap
-    where mergeChild childMap (Entity childId child) =
-            case categoryParentId child of
-                Nothing ->
+    childrenMap <- foldlM mergeChild Map.empty children
+    rootData <- mapM makeCategoryData roots
+    return $ CategoryNavbarData rootData childrenMap
+  where
+    mergeChild :: Map.Map Int64 [CategoryData] -> Entity Category -> App (Map.Map Int64 [CategoryData])
+    mergeChild childMap e@(Entity _ child) =
+        case categoryParentId child of
+            Nothing ->
+                return childMap
+            Just parentId -> do
+                catData <- makeCategoryData e
+                return $ Map.insertWith (++) (fromSqlKey parentId)
+                    [(catData { cdDescription = "" })]
                     childMap
-                Just parentId ->
-                    Map.insertWith (++) (fromSqlKey parentId)
-                        [Entity childId (child { categoryDescription = "" })]
-                        childMap
 
 
 -- DETAILS
@@ -81,8 +87,8 @@ categoryNavbarRoute = do
 
 data CategoryDetailsData =
     CategoryDetailsData
-        { cddCategory :: Entity Category
-        , cddSubCategories :: [Entity Category]
+        { cddCategory :: CategoryData
+        , cddSubCategories :: [CategoryData]
         , cddProducts :: [ProductData]
         , cddTotalProducts :: Int
         , cddPredecessors :: [PredecessorCategory]
@@ -112,14 +118,16 @@ categoryDetailsRoute slug maybeSort maybePage maybePerPage = do
         Nothing ->
             throwError err404
         Just e@(Entity categoryId _) -> runDB $ do
+            categoryData <- lift $ makeCategoryData e
             subCategories <- selectList [CategoryParentId ==. Just categoryId] [Asc CategoryName]
+                >>= lift . mapM makeCategoryData
             descendants <- getChildCategoryIds categoryId
             (products, productsCount) <- paginatedSelect
                 maybeSort maybePage maybePerPage
                     (\p _ -> (p E.^. ProductCategoryIds) `E.in_` E.valList (map (: []) descendants))
             productData <- mapM (getProductData . truncateDescription) products
             predecessors <- getParentCategories categoryId
-            return . CategoryDetailsData e subCategories productData productsCount
+            return . CategoryDetailsData categoryData subCategories productData productsCount
                    $ map categoryToPredecessor predecessors
 
 
