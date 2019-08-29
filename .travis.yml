@@ -3,7 +3,7 @@
 sudo: false
 
 # Have Travis Setup Node, We Will Provide the Server Build Tools
-language: node_js
+language: elm
 node_js:
     - "11"
 
@@ -13,23 +13,32 @@ cache:
         - $TRAVIS_BUILD_DIR/sysconfcpus
         # Server Dependencies
         - $HOME/.stack
+        - $HOME/.local/bin
 
-before_install:
-    # Install sysconfcpus to Fix Client Build Times
-    - if [ ! -d $TRAVIS_BUILD_DIR/sysconfcpus/bin ];
-      then
-        git clone https://github.com/obmarg/libsysconfcpus.git;
-        cd libsysconfcpus;
-        ./configure --prefix=$TRAVIS_BUILD_DIR/sysconfcpus;
-        make && make install;
-        cd ..;
-      fi
-    # Download Stack Binary from GitHub
-    - mkdir -p ~/.local/bin
-    - export PATH=$HOME/.local/.bin:$PATH
-    - travis_retry curl -L https://www.stackage.org/stack/linux-x86_64 |
-      tar xz --wildcards --strip-components=1 -C ~/.local/bin '*/stack'
-
-script:
-    - $TRAVIS_BUILD_DIR/sysconfcpus/bin/sysconfcpus -n 2 ./manage.hs build
-    - cd client; npx elm-format --validate src
+jobs:
+    include:
+        - stage: Install Helpers
+          script:
+              # Install sysconfcpus to Fix Client Build Times
+              - if [ ! -d $TRAVIS_BUILD_DIR/sysconfcpus/bin ];
+                then
+                  git clone https://github.com/obmarg/libsysconfcpus.git;
+                  cd libsysconfcpus;
+                  ./configure --prefix=$TRAVIS_BUILD_DIR/sysconfcpus;
+                  make && make install;
+                  cd ..;
+                fi
+              # Download Stack Binary from GitHub
+              - mkdir -p ~/.local/bin
+              - export PATH=$HOME/.local/.bin:$PATH
+              - travis_retry curl -L https://www.stackage.org/stack/linux-x86_64 |
+                tar xz --wildcards --strip-components=1 -C ~/.local/bin '*/stack'
+        - stage: Install Dependencies
+          script:
+              - cd client && npm install && cd ..
+              - cd server && stack install --only-dependencies && cd ..
+        - stage: Build & Test
+          script:
+              - $TRAVIS_BUILD_DIR/sysconfcpus/bin/sysconfcpus -n 2
+                ./manage.hs build
+              - cd client; npx elm-format --validate src

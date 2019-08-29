@@ -8,6 +8,7 @@
     --ghc-options -Wredundant-constraints
     --resolver lts-10.9
     --package ansi-terminal
+    --package async
     --package directory
     --package fsnotify
     --package monad-loops
@@ -24,12 +25,13 @@
 -- TODO: Run elm linters(xref, analyse, etc.):
 --       https://dev.to/zwilias/elm-tools-571a
 import Control.Concurrent (threadDelay, forkIO)
+import Control.Concurrent.Async (withAsync)
 import Control.Monad ((>=>), forever, void, when)
 import Control.Monad.Loops (whileM_)
 import Control.Monad.Reader (ReaderT, runReaderT, asks, MonadIO, liftIO)
 import Data.IORef (IORef, newIORef, readIORef, writeIORef)
 import Data.List (intercalate, isInfixOf, isSuffixOf)
-import Data.Maybe (fromMaybe)
+import Data.Maybe (fromMaybe, isJust)
 import Data.Time (UTCTime, getCurrentTime)
 import GHC.IO.Handle
     ( Handle, BufferMode(LineBuffering), hSetBuffering, hIsEOF, hGetLine
@@ -43,7 +45,7 @@ import System.Directory
     ( makeAbsolute, removeDirectoryRecursive, doesFileExist, doesDirectoryExist
     , getHomeDirectory
     )
-import System.Environment (getArgs)
+import System.Environment (getArgs, lookupEnv)
 import System.Exit (ExitCode(..), exitWith)
 import System.FSNotify
     ( WatchConfig(..), Debounce(..), eventPath, watchTree
@@ -61,7 +63,14 @@ main = do
     hSetBuffering stdout LineBuffering
     hSetBuffering stderr LineBuffering
     args <- getArgs
-    getConfig >>= runReaderT (runCommand args)
+    onTravis <- isJust <$> lookupEnv "TRAVIS"
+    let runner = if onTravis then withTravisPing else id
+    runner $ getConfig >>= runReaderT (runCommand args)
+  where
+    withTravisPing :: IO a -> IO a
+    withTravisPing m =
+        let ping = printInfo "Travis Ping" >> threadDelay (5 * 60 * 1000000)
+        in  withAsync (forever ping) $ const m
 
 
 runCommand :: [String] -> Script
