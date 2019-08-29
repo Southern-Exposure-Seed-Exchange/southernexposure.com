@@ -11,7 +11,7 @@ module Product exposing
     )
 
 import Json.Decode as Decode exposing (Decoder)
-import Models.Fields exposing (Cents(..), Milligrams(..))
+import Models.Fields exposing (Cents(..), ImageData, Milligrams(..), imageDecoder)
 
 
 type ProductId
@@ -23,22 +23,20 @@ type alias Product =
     , name : String
     , slug : String
     , baseSKU : String
-    , shortDescription : String
     , longDescription : String
-    , imageURL : String
+    , image : ImageData
     }
 
 
 decoder : Decoder Product
 decoder =
-    Decode.map7 Product
+    Decode.map6 Product
         (Decode.field "id" <| Decode.map ProductId Decode.int)
         (Decode.field "name" Decode.string)
         (Decode.field "slug" Decode.string)
         (Decode.field "baseSku" Decode.string)
-        (Decode.field "shortDescription" Decode.string)
         (Decode.field "longDescription" Decode.string)
-        (Decode.field "imageUrl" Decode.string)
+        (Decode.field "image" imageDecoder)
 
 
 type ProductVariantId

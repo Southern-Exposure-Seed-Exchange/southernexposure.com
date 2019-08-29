@@ -21,7 +21,7 @@ import Html.Events exposing (onCheck, onClick, onInput, onSubmit)
 import Json.Decode as Decode
 import Json.Encode as Encode exposing (Value)
 import Locations exposing (AddressLocations, Region)
-import Models.Fields exposing (Cents(..), centsFromString, centsMap, centsMap2)
+import Models.Fields exposing (Cents(..), centsFromString, centsMap, centsMap2, imageToSrcSet, imgSrcFallback)
 import OrderDetails
 import PageData
 import Ports
@@ -1261,7 +1261,13 @@ summaryTable ({ items, charges } as checkoutDetails) creditString couponCode cou
         productRow { product, variant, quantity } =
             tr []
                 [ td [ class "align-middle text-center" ]
-                    [ img [ src << Images.media <| "products/" ++ product.imageURL ] []
+                    [ img
+                        -- TODO: update sizes attr during mobile reflow
+                        [ src <| imgSrcFallback product.image
+                        , imageToSrcSet product.image
+                        , A.attribute "sizes" "100px"
+                        ]
+                        []
                     ]
                 , td []
                     [ div [ class "font-weight-bold" ] [ text product.name ]

@@ -14,7 +14,7 @@ import Html.Attributes as A exposing (class, colspan, disabled, src, step, type_
 import Html.Events exposing (onClick, onSubmit)
 import Html.Keyed as Keyed
 import Json.Encode as Encode
-import Models.Fields exposing (Cents(..), centsMap)
+import Models.Fields exposing (Cents(..), centsMap, imageToSrcSet, imgSrcFallback)
 import PageData exposing (CartDetails, CartItemId(..))
 import Product exposing (variantPrice)
 import RemoteData
@@ -216,7 +216,10 @@ view { quantities } ({ items, charges } as cartDetails) =
                 , td [ class "align-middle" ]
                     [ a (routeLinkAttributes <| ProductDetails product.slug)
                         [ img
-                            [ src << Images.media <| "products/" ++ product.imageURL
+                            -- TODO: update sizes attr during mobile reflow
+                            [ src <| imgSrcFallback product.image
+                            , imageToSrcSet product.image
+                            , A.attribute "sizes" "100px"
                             , class "cart-product-image"
                             ]
                             []

@@ -8,7 +8,7 @@ import Html.Keyed as Keyed
 import Json.Decode as Decode
 import Messages exposing (Msg(..))
 import Model exposing (CartForms)
-import Models.Fields exposing (Cents(..), Milligrams(..), milligramsToString)
+import Models.Fields exposing (Cents(..), Milligrams(..), imageToSrcSet, imgSrcFallback, milligramsToString)
 import PageData exposing (ProductData)
 import Paginate exposing (Paginated)
 import Product exposing (Product, ProductId(..), ProductVariant, ProductVariantId(..), variantPrice)
@@ -49,8 +49,16 @@ details addToCartForms { product, variants, maybeSeedAttribute, categories } =
                     [ class "card" ]
                     [ div [ class "card-body text-center p-1" ]
                         [ img
-                            [ src << Images.media <| "products/" ++ product.imageURL
+                            -- TODO: update sizes attr during mobile reflow
+                            [ src <| imgSrcFallback product.image
+                            , imageToSrcSet product.image
                             , class "img-fluid mb-2"
+                            , attribute "sizes" <|
+                                String.join ", "
+                                    [ "(max-width: 767px) 128px"
+                                    , "(max-width: 1199px) 175px"
+                                    , "300px"
+                                    ]
                             ]
                             []
                         , cartForm addToCartForms product variants
@@ -234,7 +242,11 @@ list routeConstructor pagination addToCartForms products =
                         (routeLinkAttributes <| ProductDetails product.slug)
                         [ ( "product-img-" ++ (String.fromInt <| (\(ProductId i) -> i) product.id)
                           , img
-                                [ src << Images.media <| "products/" ++ product.imageURL ]
+                                -- TODO: update sizes attr during mobile reflow
+                                [ src <| imgSrcFallback product.image
+                                , imageToSrcSet product.image
+                                , attribute "sizes" "100px"
+                                ]
                                 []
                           )
                         ]
