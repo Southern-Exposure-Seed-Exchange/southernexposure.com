@@ -6,6 +6,7 @@ module Category exposing
     )
 
 import Json.Decode as Decode exposing (Decoder)
+import Models.Fields exposing (ImageData, blankImage, imageDecoder)
 
 
 type CategoryId
@@ -18,14 +19,14 @@ type alias Category =
     , slug : String
     , parentId : Maybe CategoryId
     , description : String
-    , imageURL : String
+    , image : ImageData
     , order : Int
     }
 
 
 initial : Category
 initial =
-    Category (CategoryId 0) "" "" Nothing "" "" 0
+    Category (CategoryId 0) "" "" Nothing "" blankImage 0
 
 
 decoder : Decoder Category
@@ -36,5 +37,5 @@ decoder =
         (Decode.field "slug" Decode.string)
         (Decode.field "parentId" << Decode.nullable <| Decode.map CategoryId Decode.int)
         (Decode.field "description" Decode.string)
-        (Decode.field "imageUrl" Decode.string)
+        (Decode.field "image" imageDecoder)
         (Decode.field "order" Decode.int)

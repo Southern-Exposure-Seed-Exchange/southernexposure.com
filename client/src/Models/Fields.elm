@@ -2,6 +2,7 @@ module Models.Fields exposing
     ( Cents(..)
     , ImageData
     , Milligrams(..)
+    , blankImage
     , centsDecoder
     , centsFromDecimal
     , centsFromString
@@ -75,6 +76,11 @@ type alias ImageData =
     , lg : Maybe ScaledImage
     , xl : Maybe ScaledImage
     }
+
+
+blankImage : ImageData
+blankImage =
+    ImageData "" Nothing Nothing Nothing Nothing Nothing
 
 
 imageDecoder : Decoder ImageData

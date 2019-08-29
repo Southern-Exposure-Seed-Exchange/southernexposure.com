@@ -2,9 +2,10 @@ module Views.Category exposing (details)
 
 import Category
 import Html exposing (..)
-import Html.Attributes exposing (class, src)
+import Html.Attributes exposing (attribute, class, src)
 import Messages exposing (Msg)
 import Model exposing (CartForms)
+import Models.Fields exposing (imageToSrcSet, imgSrcFallback)
 import PageData exposing (ProductData)
 import Paginate exposing (Paginated)
 import Products.Pagination as Pagination
@@ -44,7 +45,16 @@ details pagination addToCartForms products =
                     [ div [ class "h-100 text-center" ]
                         [ img
                             [ class "img-fluid mx-auto"
-                            , src <| Images.media <| "categories/" ++ subCategory.imageURL
+                            , src <| imgSrcFallback subCategory.image
+                            , imageToSrcSet subCategory.image
+                            , attribute "sizes" <|
+                                String.join ", "
+                                    [ "(max-width: 575px) 257px"
+                                    , "(max-width: 767px) 160px"
+                                    , "(max-width: 991px) 115px"
+                                    , "(max-width: 1199px) 160px"
+                                    , "225px"
+                                    ]
                             ]
                             []
                         , div [ class "my-auto" ] [ text subCategory.name ]
@@ -55,7 +65,9 @@ details pagination addToCartForms products =
     [ div [ class "d-flex align-items-center" ]
         [ img
             [ class "img-fluid"
-            , src <| Images.media <| "categories/" ++ category.imageURL
+            , src <| imgSrcFallback category.image
+            , imageToSrcSet category.image
+            , attribute "sizes" "100px"
             ]
             []
         , h1 [ class "mb-0 pl-2" ] [ text category.name ]
