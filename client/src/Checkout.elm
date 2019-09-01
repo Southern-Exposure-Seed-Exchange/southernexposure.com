@@ -1270,7 +1270,7 @@ summaryTable ({ items, charges } as checkoutDetails) creditString couponCode cou
                         []
                     ]
                 , td []
-                    [ div [ class "font-weight-bold" ] [ text product.name ]
+                    [ div [ class "font-weight-bold" ] [ text <| Product.nameWithLotSize product variant ]
                     , small [ class "text-muted" ]
                         [ text <| "Item #" ++ product.baseSKU ++ variant.skuSuffix ]
                     ]

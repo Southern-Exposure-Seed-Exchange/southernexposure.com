@@ -228,7 +228,7 @@ view { quantities } ({ items, charges } as cartDetails) =
                 , td [ class "align-middle" ]
                     [ div [ class "font-weight-bold" ]
                         [ a (routeLinkAttributes <| ProductDetails product.slug)
-                            [ text product.name ]
+                            [ text <| Product.nameWithLotSize product variant ]
                         ]
                     , small
                         [ class "text-muted" ]

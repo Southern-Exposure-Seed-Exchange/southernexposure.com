@@ -6,12 +6,13 @@ module Product exposing
     , decoder
     , isLimitedAvailablity
     , isOutOfStock
+    , nameWithLotSize
     , variantDecoder
     , variantPrice
     )
 
 import Json.Decode as Decode exposing (Decoder)
-import Models.Fields exposing (Cents(..), ImageData, LotSize, imageDecoder, lotSizeDecoder)
+import Models.Fields exposing (Cents(..), ImageData, LotSize, imageDecoder, lotSizeDecoder, lotSizeToString)
 
 
 type ProductId
@@ -26,6 +27,18 @@ type alias Product =
     , longDescription : String
     , image : ImageData
     }
+
+
+{-| Build a nicer name for a Product & Variant by including it's LotSize if
+available.
+-}
+nameWithLotSize : { p | name : String } -> { v | lotSize : Maybe LotSize } -> String
+nameWithLotSize { name } { lotSize } =
+    String.join ", " <|
+        List.filterMap identity
+            [ Just name
+            , Maybe.map lotSizeToString lotSize
+            ]
 
 
 decoder : Decoder Product
