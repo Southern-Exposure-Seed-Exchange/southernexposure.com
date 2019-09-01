@@ -11,7 +11,7 @@ module Product exposing
     )
 
 import Json.Decode as Decode exposing (Decoder)
-import Models.Fields exposing (Cents(..), ImageData, Milligrams(..), imageDecoder)
+import Models.Fields exposing (Cents(..), ImageData, LotSize, imageDecoder, lotSizeDecoder)
 
 
 type ProductId
@@ -52,7 +52,7 @@ type alias ProductVariant =
     , price : Cents
     , salePrice : Maybe Cents
     , quantity : Int
-    , weight : Milligrams
+    , lotSize : Maybe LotSize
     , isActive : Bool
     }
 
@@ -71,7 +71,7 @@ variantDecoder =
         (Decode.field "price" <| Decode.map Cents Decode.int)
         (Decode.field "salePrice" <| Decode.nullable <| Decode.map Cents Decode.int)
         (Decode.field "quantity" Decode.int)
-        (Decode.field "weight" <| Decode.map Milligrams Decode.int)
+        (Decode.field "lotSize" <| Decode.nullable lotSizeDecoder)
         (Decode.field "isActive" Decode.bool)
 
 

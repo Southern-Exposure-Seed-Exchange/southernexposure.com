@@ -8,7 +8,7 @@ import Html.Keyed as Keyed
 import Json.Decode as Decode
 import Messages exposing (Msg(..))
 import Model exposing (CartForms)
-import Models.Fields exposing (Cents(..), Milligrams(..), imageToSrcSet, imgSrcFallback, milligramsToString)
+import Models.Fields exposing (Cents(..), imageToSrcSet, imgSrcFallback, lotSizeToString)
 import PageData exposing (ProductData)
 import Paginate exposing (Paginated)
 import Product exposing (Product, ProductId(..), ProductVariant, ProductVariantId(..), variantPrice)
@@ -424,8 +424,8 @@ cartForm addToCartForms product variants =
                     else
                         [ A.disabled <| variant.quantity <= 0 ]
             in
-            milligramsToString variant.weight
-                ++ "g"
+            Maybe.map lotSizeToString variant.lotSize
+                |> Maybe.withDefault (product.baseSKU ++ variant.skuSuffix)
                 |> appendPrice
                 |> String.join " - "
                 |> text

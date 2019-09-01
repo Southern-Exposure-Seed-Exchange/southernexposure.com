@@ -8,7 +8,7 @@ import Address
 import Html exposing (..)
 import Html.Attributes exposing (class, colspan)
 import Locations exposing (AddressLocations)
-import Models.Fields exposing (Cents(..), centsMap, milligramsToString)
+import Models.Fields exposing (Cents(..), centsMap, lotSizeToString)
 import PageData
 import Time
 import Views.Format as Format
@@ -57,7 +57,14 @@ orderTable ({ order, lineItems, products } as details) =
     let
         productRow product =
             tr []
-                [ td [] [ text <| product.name ++ " " ++ milligramsToString product.weight ++ "g" ]
+                [ td []
+                    [ text <|
+                        String.join " - " <|
+                            List.filterMap identity
+                                [ Just product.name
+                                , Maybe.map lotSizeToString product.lotSize
+                                ]
+                    ]
                 , td [ class "text-right" ] [ text <| String.fromInt product.quantity ]
                 , td [ class "text-right" ] [ text <| Format.cents product.price ]
                 , td [ class "text-right" ] [ text <| Format.cents (productTotal product) ]

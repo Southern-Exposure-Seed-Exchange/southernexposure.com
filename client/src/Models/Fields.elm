@@ -1,6 +1,7 @@
 module Models.Fields exposing
     ( Cents(..)
     , ImageData
+    , LotSize(..)
     , Milligrams(..)
     , blankImage
     , centsDecoder
@@ -11,6 +12,8 @@ module Models.Fields exposing
     , imageDecoder
     , imageToSrcSet
     , imgSrcFallback
+    , lotSizeDecoder
+    , lotSizeToString
     , milligramsToString
     )
 
@@ -58,6 +61,11 @@ type Milligrams
     = Milligrams Int
 
 
+milligramsDecoder : Decoder Milligrams
+milligramsDecoder =
+    Decode.map Milligrams Decode.int
+
+
 {-| TODO: Remove trailing zeros, special cases for ounces/pounds
 -}
 milligramsToString : Milligrams -> String
@@ -66,6 +74,66 @@ milligramsToString (Milligrams i) =
         |> Decimal.mul (Decimal.fromIntWithExponent 1 -3)
         |> Decimal.round -2
         |> Decimal.toString
+        |> (\s -> s ++ "g")
+
+
+type LotSize
+    = Mass Milligrams
+    | Bulbs Int
+    | Slips Int
+    | Plugs Int
+    | CustomLotSize String
+
+
+lotSizeDecoder : Decoder LotSize
+lotSizeDecoder =
+    let
+        decodeSize type_ =
+            case type_ of
+                "mass" ->
+                    Decode.map Mass
+                        (Decode.field "size" milligramsDecoder)
+
+                "bulbs" ->
+                    Decode.map Bulbs
+                        (Decode.field "size" Decode.int)
+
+                "slips" ->
+                    Decode.map Slips
+                        (Decode.field "size" Decode.int)
+
+                "plugs" ->
+                    Decode.map Plugs
+                        (Decode.field "size" Decode.int)
+
+                "custom" ->
+                    Decode.map CustomLotSize
+                        (Decode.field "size" Decode.string)
+
+                _ ->
+                    Decode.fail <| "Unexpected LotSize Type: " ++ type_
+    in
+    Decode.field "type" Decode.string
+        |> Decode.andThen decodeSize
+
+
+lotSizeToString : LotSize -> String
+lotSizeToString l =
+    case l of
+        Mass mg ->
+            milligramsToString mg
+
+        Bulbs i ->
+            String.fromInt i ++ " Bulbs"
+
+        Slips i ->
+            String.fromInt i ++ " Slips"
+
+        Plugs i ->
+            String.fromInt i ++ " Plugs"
+
+        CustomLotSize t ->
+            t
 
 
 type alias ImageData =

@@ -41,7 +41,7 @@ import Dict exposing (Dict)
 import Iso8601
 import Json.Decode as Decode exposing (Decoder)
 import Locations exposing (AddressLocations)
-import Models.Fields exposing (Cents(..), Milligrams(..), centsDecoder, centsMap, centsMap2)
+import Models.Fields exposing (Cents(..), LotSize, centsDecoder, centsMap, centsMap2, lotSizeDecoder)
 import Paginate exposing (Paginated)
 import Product exposing (Product, ProductVariant, ProductVariantId(..), variantPrice)
 import Products.Pagination as Pagination
@@ -569,7 +569,7 @@ decodeStringWith f =
 
 type alias OrderProduct =
     { name : String
-    , weight : Milligrams
+    , lotSize : Maybe LotSize
     , quantity : Int
     , price : Cents
     , tax : Cents
@@ -580,7 +580,7 @@ orderProductDecoder : Decoder OrderProduct
 orderProductDecoder =
     Decode.map5 OrderProduct
         (Decode.field "name" Decode.string)
-        (Decode.field "weight" <| Decode.map Milligrams Decode.int)
+        (Decode.field "lotSize" <| Decode.nullable lotSizeDecoder)
         (Decode.field "quantity" Decode.int)
         (Decode.field "price" centsDecoder)
         (Decode.field "tax" centsDecoder)
