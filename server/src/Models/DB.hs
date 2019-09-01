@@ -47,7 +47,7 @@ ProductVariant json
     skuSuffix T.Text
     price Cents
     quantity Int64
-    weight Milligrams
+    lotSize LotSize Maybe
     isActive Bool
     UniqueSku productId skuSuffix
     deriving Show

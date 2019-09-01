@@ -1,5 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleContexts #-}
+import Data.Aeson (Result(Success), fromJSON, toJSON)
 import Data.Ratio ((%))
 import Data.Text (Text)
 import Data.Time (UTCTime(..), Day(..), DiffTime, secondsToDiffTime, getCurrentTime)
@@ -23,10 +24,21 @@ main =
 tests :: TestTree
 tests =
     testGroup "Tests"
-         [ modelsUtils
+         [ modelsFields
+         , modelsUtils
          , commonData
          ]
 
+
+modelsFields :: TestTree
+modelsFields =
+    testGroup "Models.Fields Module"
+        [ testProperty "LotSize Aeson Instances" $ testJSON genLotSize
+        ]
+  where
+      testJSON gen = property $ do
+          val <- forAll gen
+          Success val === fromJSON (toJSON val)
 
 modelsUtils :: TestTree
 modelsUtils =
@@ -237,7 +249,7 @@ categorySaleTests = testGroup "Category Sale Calculations"
     makeVariant :: Cents -> Entity ProductVariant
     makeVariant price =
         Entity (toSqlKey 1)
-            $ ProductVariant (toSqlKey 1) "" price 1 (Milligrams 1) True
+            $ ProductVariant (toSqlKey 1) "" price 1 (Just . Mass $ Milligrams 1) True
     makeVariantWithPrice :: Range Natural -> Gen (Entity ProductVariant, Cents)
     makeVariantWithPrice priceRange = do
         entity <- genProductVariant
@@ -315,7 +327,7 @@ genProductVariant =
         <*> genText
         <*> genCentRange (Range.linear 1 999999)
         <*> Gen.integral (Range.linear 1 1000)
-        <*> fmap Milligrams (Gen.integral (Range.linear 1 1000))
+        <*> Gen.maybe genLotSize
         <*> Gen.bool
 
 genCategorySale :: SaleType -> Gen CategorySale
@@ -344,6 +356,21 @@ genCentRange r =
 
 genCents :: Gen Cents
 genCents = genCentRange $ Range.linear 0 999999
+
+genLotSize :: Gen LotSize
+genLotSize =
+    Gen.choice
+        [ Mass <$> genMilligrams
+        , Bulbs <$> genInt
+        , Slips <$> genInt
+        , Plugs <$> genInt
+        , CustomLotSize <$> genText
+        ]
+  where
+    genInt =
+        Gen.integral $ Range.linear 1 1000
+    genMilligrams =
+        Milligrams <$> Gen.integral (Range.linear 1 454000)
 
 genWholePercentage :: Gen Percent
 genWholePercentage = Gen.integral $ Range.linear 1 100

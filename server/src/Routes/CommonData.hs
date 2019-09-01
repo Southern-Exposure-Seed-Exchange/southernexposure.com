@@ -123,7 +123,7 @@ data VariantData =
         , vdPrice :: Cents
         , vdSalePrice :: Maybe Cents
         , vdQuantity :: Int64
-        , vdWeight :: Milligrams
+        , vdLotSize :: Maybe LotSize
         , vdIsActive :: Bool
         } deriving (Show)
 
@@ -136,7 +136,7 @@ instance ToJSON VariantData where
             , "price" .= vdPrice
             , "salePrice" .= vdSalePrice
             , "quantity" .= vdQuantity
-            , "weight" .= vdWeight
+            , "lotSize" .= vdLotSize
             , "isActive" .= vdIsActive
             ]
 
@@ -190,7 +190,7 @@ makeVariantData (Entity variantId ProductVariant {..}) maybeSalePrice =
         , vdPrice = productVariantPrice
         , vdSalePrice = salePrice
         , vdQuantity = productVariantQuantity
-        , vdWeight = productVariantWeight
+        , vdLotSize = productVariantLotSize
         , vdIsActive = productVariantIsActive
         }
 

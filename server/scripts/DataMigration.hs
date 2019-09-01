@@ -92,7 +92,7 @@ deletedProducts =
             , productVariantSkuSuffix = ""
             , productVariantPrice = 0
             , productVariantQuantity = 0
-            , productVariantWeight = Milligrams 0
+            , productVariantLotSize = Nothing
             , productVariantIsActive = False
             }
       )
@@ -113,7 +113,7 @@ deletedProducts =
             , productVariantSkuSuffix = ""
             , productVariantPrice = 1195
             , productVariantQuantity = 0
-            , productVariantWeight = Milligrams 226
+            , productVariantLotSize = Just . Mass $ Milligrams 226
             , productVariantIsActive = False
             }
       )
@@ -344,15 +344,23 @@ makeProducts mysql = do
 makeVariants :: [(Int32, Int, T.Text, Scientific, Float, Float, Bool, Product)] -> [(Int, T.Text, ProductVariant)]
 makeVariants =
     map makeVariant
-    where makeVariant (productId, _, suffix, price, qty, weight, isActive, prod) =
+    where
+        makeVariant (productId, _, suffix, price, qty, weight, isActive, prod) =
             (fromIntegral productId, productBaseSku prod,) $
                 ProductVariant
                     (toSqlKey 0)
                     (T.toUpper suffix)
                     (dollarsToCents price)
                     (floor qty)
-                    (Milligrams . round $ 1000 * weight)
+                    (makeLotSize weight)
                     isActive
+        makeLotSize :: Float -> Maybe LotSize
+        makeLotSize weight =
+            if weight == 0 then
+                Nothing
+            else
+                Just . Mass . Milligrams . round $ 1000 * weight
+
 
 
 makeSeedAttributes :: MySQLConn -> IO [(T.Text, SeedAttribute)]

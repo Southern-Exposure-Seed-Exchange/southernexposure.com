@@ -2,6 +2,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
 module Models.Fields where
 
@@ -67,7 +68,66 @@ toStripeAmount = Stripe.Amount . fromIntegral . fromCents
 -- represented as arbitrary-percision numbers.
 newtype Milligrams =
     Milligrams { fromMilligrams :: Natural }
-    deriving (Show, Read, Eq, Ord, ToJSON, FromJSON, PersistField, PersistFieldSql)
+    deriving (Eq, Ord, ToJSON, FromJSON, PersistField, PersistFieldSql)
+
+-- | Fallback to the 'Natural' instance.
+instance Show Milligrams where
+    show = show . fromMilligrams
+
+-- | Fallback to the 'Natural' instance.
+instance Read Milligrams where
+    readPrec = Milligrams <$> readPrec
+
+
+-- LOT SIZES
+
+-- | The lot size indicates how much of a ProductVariant a customer
+-- receives when they order one of an item. E.g., 28.5 grams, 3 slips, etc.
+-- Discrete types are available for the most common classifications, but
+-- custom types are possible via the 'CustomLotSize' value.
+data LotSize
+    = Mass Milligrams
+    | Bulbs Integer
+    | Slips Integer
+    | Plugs Integer
+    | CustomLotSize T.Text
+    deriving (Show, Read, Eq)
+
+derivePersistField "LotSize"
+
+-- | Encode the type & amount into an object. E.g., @{ "type": "mass",
+-- "size": 28500 }@.
+instance ToJSON LotSize where
+    toJSON ls =
+        let (type_, size) = case ls of
+                Mass s ->
+                    ("mass" :: T.Text, toJSON s)
+                Bulbs s ->
+                    ("bulbs", toJSON s)
+                Slips s ->
+                    ("slips", toJSON s)
+                Plugs s ->
+                    ("plugs", toJSON s)
+                CustomLotSize s ->
+                    ("custom", toJSON s)
+        in  object ["type" .= type_, "size" .= size]
+
+-- | Invert the ToJSON instance.
+instance FromJSON LotSize where
+    parseJSON = withObject "LotSize" $ \v ->
+        v .: "type" >>= \case
+            "mass" ->
+                Mass <$> v .: "size"
+            "bulbs" ->
+                Bulbs <$> v .: "size"
+            "slips" ->
+                Slips <$> v .: "size"
+            "plugs" ->
+                Plugs <$> v .: "size"
+            "custom" ->
+                CustomLotSize <$> v .: "size"
+            unexpected ->
+                fail $ "Unexpected LotSize type: " ++ T.unpack unexpected
 
 
 -- LOCATIONS
