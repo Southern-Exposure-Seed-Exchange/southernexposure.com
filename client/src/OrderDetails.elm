@@ -58,7 +58,7 @@ orderTable ({ order, lineItems, products } as details) =
     let
         productRow product =
             tr []
-                [ td [] [ text <| Product.nameWithLotSize product product ]
+                [ td [] [ Product.nameWithLotSize product product ]
                 , td [ class "text-right" ] [ text <| String.fromInt product.quantity ]
                 , td [ class "text-right" ] [ text <| Format.cents product.price ]
                 , td [ class "text-right" ] [ text <| Format.cents (productTotal product) ]

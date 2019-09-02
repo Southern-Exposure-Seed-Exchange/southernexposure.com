@@ -11,7 +11,9 @@ module Product exposing
     , variantPrice
     )
 
+import Html exposing (Html, span, text)
 import Json.Decode as Decode exposing (Decoder)
+import Markdown exposing (defaultOptions)
 import Models.Fields exposing (Cents(..), ImageData, LotSize, imageDecoder, lotSizeDecoder, lotSizeToString)
 
 
@@ -30,14 +32,15 @@ type alias Product =
 
 
 {-| Build a nicer name for a Product & Variant by including it's LotSize if
-available.
+available. This renders the Product name as markdown to allow for HTML entities
+& markup in titles.
 -}
-nameWithLotSize : { p | name : String } -> { v | lotSize : Maybe LotSize } -> String
+nameWithLotSize : { p | name : String } -> { v | lotSize : Maybe LotSize } -> Html msg
 nameWithLotSize { name } { lotSize } =
-    String.join ", " <|
+    span [] <|
         List.filterMap identity
-            [ Just name
-            , Maybe.map lotSizeToString lotSize
+            [ Just <| Markdown.toHtmlWith { defaultOptions | sanitize = False, smartypants = True } [] name
+            , Maybe.map (\s -> text <| ", " ++ lotSizeToString s) lotSize
             ]
 
 
