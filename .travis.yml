@@ -14,6 +14,8 @@ cache:
         # Server Dependencies
         - $HOME/.stack
         - $HOME/.local/bin
+        # Client Dependencies
+        - $HOME/.npm
 
 jobs:
     include:
@@ -35,7 +37,7 @@ jobs:
                 tar xz --wildcards --strip-components=1 -C ~/.local/bin '*/stack'
         - stage: Install Dependencies
           script:
-              - cd client && npm install && cd ..
+              - cd client && npm ci && cd ..
               - cd server && stack install --only-dependencies && cd ..
         - stage: Build & Test
           script:

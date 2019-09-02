@@ -8,7 +8,7 @@
     --ghc-options -Wredundant-constraints
     --resolver lts-10.9
     --package ansi-terminal
-    --package async
+    --package lifted-async
     --package directory
     --package fsnotify
     --package monad-loops
@@ -25,7 +25,7 @@
 -- TODO: Run elm linters(xref, analyse, etc.):
 --       https://dev.to/zwilias/elm-tools-571a
 import Control.Concurrent (threadDelay, forkIO)
-import Control.Concurrent.Async (withAsync)
+import Control.Concurrent.Async.Lifted.Safe (withAsync)
 import Control.Monad ((>=>), forever, void, when)
 import Control.Monad.Loops (whileM_)
 import Control.Monad.Reader (ReaderT, runReaderT, asks, MonadIO, liftIO)
@@ -63,14 +63,17 @@ main = do
     hSetBuffering stdout LineBuffering
     hSetBuffering stderr LineBuffering
     args <- getArgs
-    onTravis <- isJust <$> lookupEnv "TRAVIS"
-    let runner = if onTravis then withTravisPing else id
-    runner $ getConfig >>= runReaderT (runCommand args)
+    getConfig >>= runReaderT (withTravisPing $ runCommand args)
   where
-    withTravisPing :: IO a -> IO a
-    withTravisPing m =
-        let ping = printInfo "Travis Ping" >> threadDelay (5 * 60 * 1000000)
-        in  withAsync (forever ping) $ const m
+    withTravisPing :: Script -> Script
+    withTravisPing m = do
+        onTravis <- asks isOnTravis
+        if onTravis then
+            flip withAsync (const m) . forever $ do
+                printInfo "Travis Ping"
+                liftIO $ threadDelay (5 * 60 * 1000000)
+        else
+            m
 
 
 runCommand :: [String] -> Script
@@ -138,6 +141,7 @@ data Config =
         , cServerDirectory :: FilePath
         , serverProcess :: IORef (Maybe ProcessHandle)
         , serverBuildProcess :: IORef (Maybe ProcessData)
+        , isOnTravis :: Bool
         , coreCount :: Integer
         }
 
@@ -148,6 +152,7 @@ getConfig =
         <*> makeAbsolute "./server/"
         <*> newIORef Nothing
         <*> newIORef Nothing
+        <*> (isJust <$> lookupEnv "TRAVIS")
         <*> determineCoreCount
     where determineCoreCount = do
             (_, Just outHandle, _, _) <- createProcess $
@@ -180,6 +185,11 @@ initializeServer = do
 initializeClient :: Script
 initializeClient = do
     clientDirectory <- getClientDirectory
+    installCommand <- asks isOnTravis >>= \onTravis ->
+        if onTravis then
+            return "ci"
+        else
+            return "install"
     liftIO $ do
         hasNvm <- (++ "/.nvm/nvm.sh") <$> getHomeDirectory >>= doesFileExist
         when hasNvm $ do
@@ -193,7 +203,7 @@ initializeClient = do
             printClientOutput nvmOut >> printClientOutput nvmErr
             waitForProcess nvmHandle >>=
                 printExitMessage "Node Installed" "Node Installation Failed"
-        installDependency "npm" ["install"] clientDirectory printClientOutput
+        installDependency "npm" [installCommand] clientDirectory printClientOutput
             "Node Dependencies"
 
 
