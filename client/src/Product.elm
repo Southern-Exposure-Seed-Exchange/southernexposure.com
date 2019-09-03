@@ -7,10 +7,12 @@ module Product exposing
     , isLimitedAvailablity
     , isOutOfStock
     , nameWithLotSize
+    , singleVariantName
     , variantDecoder
     , variantPrice
     )
 
+import Dict exposing (Dict)
 import Html exposing (Html, span, text)
 import Html.Attributes exposing (class)
 import Json.Decode as Decode exposing (Decoder)
@@ -47,6 +49,20 @@ nameWithLotSize { name } { lotSize } =
                     name
             , Maybe.map (\s -> text <| ", " ++ lotSizeToString s) lotSize
             ]
+
+
+{-| Build the name for a Product, appending the LotSize if only one Variant is
+present.
+-}
+singleVariantName : Product -> Dict Int ProductVariant -> Html msg
+singleVariantName product variants =
+    nameWithLotSize product <|
+        case Dict.toList variants of
+            [ ( _, variant ) ] ->
+                { lotSize = variant.lotSize }
+
+            _ ->
+                { lotSize = Nothing }
 
 
 decoder : Decoder Product

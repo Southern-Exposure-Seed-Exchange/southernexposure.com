@@ -247,14 +247,15 @@ h1.product-details-title > div
   a
     &, &:hover, &:active
       color: $body-color
+      text-decoration: none
   /* Reduce height of attribute icons */
   h3 img
     height: 1.25rem
   /* Restrict width of product image column */
   .row-product-image img
     max-width: 100px
-  /* Fix spacing & display of markdown titles */
-  .row-product-description h3 a > div
+  /* Fix spacing of markdown titles */
+  .row-product-description h3 a > span > div
     &, & > p
       margin-bottom: 0
       display: inline-block

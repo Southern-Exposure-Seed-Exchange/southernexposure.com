@@ -38,7 +38,7 @@ details addToCartForms { product, variants, maybeSeedAttribute, categories } =
                     )
     in
     [ h1 [ class "product-details-title d-flex justify-content-between" ]
-        [ rawHtml product.name
+        [ Product.singleVariantName product variants
         , htmlOrBlank SeedAttribute.icons maybeSeedAttribute
         ]
     , hr [] []
@@ -254,7 +254,7 @@ list routeConstructor pagination addToCartForms products =
                 , td [ class "row-product-description" ]
                     [ h3 [ class "mb-0 d-flex justify-content-between" ]
                         [ a (routeLinkAttributes <| ProductDetails product.slug)
-                            [ rawHtml product.name ]
+                            [ Product.singleVariantName product variants ]
                         , htmlOrBlank SeedAttribute.icons maybeSeedAttribute
                         ]
                     , rawHtml product.longDescription
