@@ -12,6 +12,7 @@ module Product exposing
     )
 
 import Html exposing (Html, span, text)
+import Html.Attributes exposing (class)
 import Json.Decode as Decode exposing (Decoder)
 import Markdown exposing (defaultOptions)
 import Models.Fields exposing (Cents(..), ImageData, LotSize, imageDecoder, lotSizeDecoder, lotSizeToString)
@@ -37,9 +38,13 @@ available. This renders the Product name as markdown to allow for HTML entities
 -}
 nameWithLotSize : { p | name : String } -> { v | lotSize : Maybe LotSize } -> Html msg
 nameWithLotSize { name } { lotSize } =
-    span [] <|
+    span [ class "product-name-lotsize" ] <|
         List.filterMap identity
-            [ Just <| Markdown.toHtmlWith { defaultOptions | sanitize = False, smartypants = True } [] name
+            [ Just <|
+                Markdown.toHtmlWith
+                    { defaultOptions | sanitize = False, smartypants = True }
+                    []
+                    name
             , Maybe.map (\s -> text <| ", " ++ lotSizeToString s) lotSize
             ]
 
