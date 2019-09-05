@@ -94,8 +94,8 @@ view ({ route, pageData, navigationData, zone } as model) =
                 CreateAccountSuccess ->
                     CreateAccount.successView
 
-                Login ->
-                    Login.view LoginMsg model.loginForm
+                Login redirectTo ->
+                    Login.view LoginMsg model.loginForm redirectTo
 
                 ResetPassword maybeCode ->
                     ResetPassword.view ResetPasswordMsg model.resetPasswordForm maybeCode
@@ -185,7 +185,7 @@ view ({ route, pageData, navigationData, zone } as model) =
                 CreateAccountSuccess ->
                     "Account Creation Successful"
 
-                Login ->
+                Login _ ->
                     "Customer Login"
 
                 ResetPassword Nothing ->

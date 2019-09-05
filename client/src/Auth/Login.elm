@@ -7,6 +7,7 @@ module Auth.Login exposing
     )
 
 import Api
+import Browser.Navigation
 import Dict
 import Html exposing (..)
 import Html.Attributes exposing (autofocus, checked, class, for, href, id, required, type_, value)
@@ -29,6 +30,7 @@ type alias Form =
     , password : String
     , remember : Bool
     , errors : Api.FormErrors
+    , redirectTo : Maybe String
     }
 
 
@@ -38,6 +40,7 @@ initial =
     , password = ""
     , remember = True
     , errors = Api.initialErrors
+    , redirectTo = Nothing
     }
 
 
@@ -61,7 +64,7 @@ type Msg
     = Email String
     | Password String
     | Remember Bool
-    | SubmitForm
+    | SubmitForm (Maybe String)
     | SubmitResponse (WebData (Result Api.FormErrors AuthStatus))
 
 
@@ -80,8 +83,8 @@ update key msg model maybeSessionToken =
             { model | remember = remember }
                 |> nothingAndNoCommand
 
-        SubmitForm ->
-            ( { model | errors = Api.initialErrors }
+        SubmitForm redirectTo ->
+            ( { model | errors = Api.initialErrors, redirectTo = redirectTo }
             , Nothing
             , login model maybeSessionToken
             )
@@ -90,10 +93,22 @@ update key msg model maybeSessionToken =
         SubmitResponse response ->
             case response of
                 RemoteData.Success (Ok authStatus) ->
+                    let
+                        redirectCmd =
+                            case model.redirectTo of
+                                Nothing ->
+                                    Routing.newUrl key <| PageDetails "home"
+
+                                Just "" ->
+                                    Routing.newUrl key <| PageDetails "home"
+
+                                Just url ->
+                                    Browser.Navigation.pushUrl key url
+                    in
                     ( initial
                     , Just authStatus
                     , Cmd.batch
-                        [ Routing.newUrl key <| PageDetails "home"
+                        [ redirectCmd
                         , rememberAuth model.remember authStatus
                         , Ports.removeCartSessionToken ()
                         ]
@@ -138,11 +153,11 @@ login form maybeSessionToken =
 -- VIEW
 
 
-view : (Msg -> msg) -> Form -> List (Html msg)
-view tagger model =
+view : (Msg -> msg) -> Form -> Maybe String -> List (Html msg)
+view tagger model redirectTo =
     let
         loginForm =
-            form [ onSubmit <| tagger SubmitForm ]
+            form [ onSubmit <| tagger <| SubmitForm redirectTo ]
                 [ fieldset []
                     [ legend [] [ text "Returning Customers" ]
                     , errorHtml

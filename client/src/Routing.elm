@@ -9,7 +9,7 @@ module Routing exposing
 
 import Browser.Navigation
 import Products.Pagination as Pagination
-import Routing.Utils exposing (joinPath, parseFlag, queryFlag, withQueryStrings)
+import Routing.Utils exposing (joinPath, parseFlag, queryFlag, queryParameter, withQueryStrings)
 import Search exposing (UniqueSearch(..))
 import SeedAttribute
 import Url exposing (Url)
@@ -25,7 +25,7 @@ type Route
     | PageDetails String
     | CreateAccount
     | CreateAccountSuccess
-    | Login
+    | Login (Maybe String)
     | ResetPassword (Maybe String)
     | MyAccount
     | EditLogin
@@ -63,7 +63,7 @@ parseRoute =
 
         accountParser =
             Url.oneOf
-                [ Url.map Login (Url.s "login")
+                [ Url.map Login (Url.s "login" <?> Query.string "redirect")
                 , Url.map CreateAccount (Url.s "create")
                 , Url.map CreateAccountSuccess (Url.s "create" </> Url.s "success")
                 , Url.map ResetPassword (Url.s "reset-password" <?> Query.string "code")
@@ -155,8 +155,17 @@ reverse route =
         CreateAccountSuccess ->
             joinPath [ "account", "create", "success" ]
 
-        Login ->
-            joinPath [ "account", "login" ]
+        Login redirectTo ->
+            let
+                queryParams =
+                    case redirectTo of
+                        Nothing ->
+                            ""
+
+                        Just url ->
+                            withQueryStrings [ queryParameter ( "redirect", url ) ]
+            in
+            joinPath [ "account", "login" ] ++ queryParams
 
         ResetPassword _ ->
             joinPath [ "account", "reset-password" ]
@@ -214,7 +223,7 @@ authRequired route =
         CreateAccountSuccess ->
             True
 
-        Login ->
+        Login _ ->
             False
 
         ResetPassword _ ->

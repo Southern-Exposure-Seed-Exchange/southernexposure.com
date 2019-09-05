@@ -107,7 +107,12 @@ update key msg model authStatus =
                         )
 
                     _ ->
-                        ( initial, Routing.newUrl key Login )
+                        ( initial
+                        , Routing.reverse EditLogin
+                            |> Just
+                            |> Login
+                            |> Routing.newUrl key
+                        )
 
         SubmitResponse response ->
             case response of

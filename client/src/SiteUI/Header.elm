@@ -58,7 +58,7 @@ linksAndSearch searchTagger searchData authStatus cartItemCount =
                 Anonymous ->
                     [ routeLink "Register" CreateAccount
                     , cartLink
-                    , routeLink "Log In" Login
+                    , routeLink "Log In" <| Login Nothing
                     ]
 
                 Authorized _ ->

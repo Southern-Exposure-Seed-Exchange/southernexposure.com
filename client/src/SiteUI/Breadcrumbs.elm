@@ -62,16 +62,16 @@ view route pageData =
                     , activeItem "Success"
                     ]
 
-                Login ->
+                Login _ ->
                     singleItem "Login"
 
                 ResetPassword Nothing ->
-                    [ inactiveItem "Login" Login
+                    [ inactiveItem "Login" <| Login Nothing
                     , activeItem "Reset Password"
                     ]
 
                 ResetPassword (Just _) ->
-                    [ inactiveItem "Login" Login
+                    [ inactiveItem "Login" <| Login Nothing
                     , activeItem "Change Password"
                     ]
 

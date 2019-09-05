@@ -162,7 +162,7 @@ fetchDataForRoute ({ route, pageData, key } as model) =
                 CreateAccountSuccess ->
                     doNothing
 
-                Login ->
+                Login _ ->
                     doNothing
 
                 ResetPassword _ ->
@@ -993,7 +993,7 @@ updateSessionTokenAndCartItemCount model quantity sessionToken =
 redirectIfAuthRequired : Routing.Key -> Route -> Cmd msg
 redirectIfAuthRequired key route =
     if Routing.authRequired route then
-        Routing.newUrl key <| PageDetails "home"
+        Routing.newUrl key <| Login <| Just <| Routing.reverse route
 
     else
         Cmd.none
