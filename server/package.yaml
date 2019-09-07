@@ -155,6 +155,16 @@ executables:
             - transformers
             - uuid
 
+    export-odd-weights:
+        main: ExportOddWeights.hs
+        <<: *script-defaults
+        other-modules: []
+        dependencies:
+            - sese-website
+            - monad-logger
+            - persistent-postgresql
+            - text
+
     image-migration:
         main: ImageMigration.hs
         <<: *script-defaults
