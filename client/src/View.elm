@@ -265,24 +265,107 @@ withIntermediateText subView data =
         RemoteData.Success d ->
             subView d
 
-        RemoteData.Failure (Http.BadStatus code) ->
-            if code == 404 then
-                notFoundView
-
-            else
-                [ text <| "Bad Status: " ++ String.fromInt code ]
+        RemoteData.Failure httpError ->
+            remoteFailureView httpError
 
         RemoteData.NotAsked ->
             [ text "BUG! Reached NotAsked!" ]
 
-        _ ->
-            [ text "BUG! Unhandled HTTP Error!" ]
+
+remoteFailureView : Http.Error -> List (Html msg)
+remoteFailureView error =
+    case error of
+        Http.BadStatus code ->
+            if code == 404 then
+                notFoundView
+
+            else if code == 403 then
+                accessDeniedView
+
+            else if code >= 500 && code < 600 then
+                serverErrorView code
+
+            else
+                unexpectedStatusCodeView code
+
+        Http.NetworkError ->
+            [ h1 [] [ text "Network Error" ]
+            , p []
+                [ text <|
+                    "We are unable to connect to our server. "
+                        ++ "Please verify your internet connection and try refreshing the page. "
+                        ++ "If the problem continues, please contact us."
+                ]
+            ]
+
+        Http.Timeout ->
+            [ h1 [] [ text "Network Timeout" ]
+            , p []
+                [ text <|
+                    "Our server took too long to respond. "
+                        ++ "This may be due to temporary heavy-load, or a slow internet connection. "
+                        ++ "Please refresh the page and try again."
+                ]
+            ]
+
+        Http.BadUrl url ->
+            [ h1 [] [ text "Invalid URL" ]
+            , p []
+                [ text <|
+                    "We've used an invalid URL while talking to our server. "
+                        ++ "If this problem continues, please contact us & include the following URL:"
+                , pre [] [ text url ]
+                ]
+            ]
+
+        Http.BadBody errorMsg ->
+            [ h1 [] [ text "Unexpected Response" ]
+            , p []
+                [ text <|
+                    "Our server responded with data that we were not expecting. "
+                        ++ "If this problem continues, please contact us with the following information:"
+                , pre [] [ text errorMsg ]
+                ]
+            ]
 
 
 notFoundView : List (Html msg)
 notFoundView =
     [ h1 [] [ text "Page Not Found" ]
-    , p [] [ text "Sorry, we couldn't find the page your were looking for." ]
+    , p []
+        [ text <|
+            "Sorry, we couldn't find the page your were looking for. "
+                ++ "If you got to this page from our site, please contact us so we can fix our links."
+        ]
+    ]
+
+
+accessDeniedView : List (Html msg)
+accessDeniedView =
+    [ h1 [] [ text "Access Denied" ]
+    , p [] [ text "Sorry, you do not have permission to view this page. If you think this is an error, please contact us." ]
+    ]
+
+
+serverErrorView : Int -> List (Html msg)
+serverErrorView code =
+    [ h1 [] [ text <| "Server Error - " ++ String.fromInt code ]
+    , p []
+        [ text <|
+            "The server encountered an error while processing your request. "
+                ++ "Please try refreshing the page or contact us with the error code if the error continues."
+        ]
+    ]
+
+
+unexpectedStatusCodeView : Int -> List (Html msg)
+unexpectedStatusCodeView code =
+    [ h1 [] [ text <| "Unexpected Response Code - " ++ String.fromInt code ]
+    , p []
+        [ text <|
+            "Our server responded with an unexpected status code."
+                ++ " Please contact us if the error continues."
+        ]
     ]
 
 

@@ -146,6 +146,12 @@ update msg ({ forms } as model) authStatus maybeSessionToken =
                 RemoteData.Success (Err errors) ->
                     ( { model | errors = errors }, Nothing, Ports.scrollToID "quick-order-form" )
 
+                RemoteData.Failure error ->
+                    ( { model | errors = Api.apiFailureToError error }
+                    , Nothing
+                    , Ports.scrollToID "quick-order-form"
+                    )
+
                 _ ->
                     ( model, Nothing, Cmd.none )
 

@@ -121,6 +121,15 @@ update key msg model authStatus details =
                     }
                         |> noCommand
 
+                RemoteData.Failure error ->
+                    { model
+                        | forms =
+                            Dict.update addressId
+                                (Maybe.map <| \form -> { form | errors = Api.apiFailureToError error })
+                                model.forms
+                    }
+                        |> noCommand
+
                 _ ->
                     ( model, Cmd.none )
 

@@ -89,7 +89,6 @@ update key msg model maybeSessionToken =
             , login model maybeSessionToken
             )
 
-        -- TODO: Better error case handling/feedback
         SubmitResponse response ->
             case response of
                 RemoteData.Success (Ok authStatus) ->
@@ -117,8 +116,14 @@ update key msg model maybeSessionToken =
                 RemoteData.Success (Err errors) ->
                     ( { model | errors = errors }, Nothing, Ports.scrollToTop )
 
+                RemoteData.Failure error ->
+                    ( { model | errors = Api.apiFailureToError error }
+                    , Nothing
+                    , Ports.scrollToTop
+                    )
+
                 _ ->
-                    debugResponse response model
+                    nothingAndNoCommand model
 
 
 rememberAuth : Bool -> AuthStatus -> Cmd msg
@@ -128,17 +133,6 @@ rememberAuth remember authStatus =
 
     else
         Cmd.none
-
-
-{-| TODO: This no longer works since we use the --optimize flag. Show an error instead.
--}
-debugResponse : c -> a -> ( a, Maybe b, Cmd msg )
-debugResponse _ model =
-    --let
-    --    _ =
-    --        Debug.log "Bad Response" response
-    --in
-    model |> nothingAndNoCommand
 
 
 login : Form -> Maybe String -> Cmd Msg

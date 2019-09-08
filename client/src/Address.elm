@@ -398,7 +398,8 @@ horizontalForm { model, errors } locations =
         stateCode =
             .state >> Locations.fromRegion
     in
-    [ requiredField .firstName FirstName "First Name" "firstName" "text" "given-name"
+    [ Api.getErrorHtml "" errors
+    , requiredField .firstName FirstName "First Name" "firstName" "text" "given-name"
     , requiredField .lastName LastName "Last Name" "lastName" "text" "family-name"
     , requiredField .street Street "Street Address" "addressOne" "text" "address-line1"
     , optionalField .addressTwo AddressTwo "Address Line 2" "addressTwo" "text" "address-line2"

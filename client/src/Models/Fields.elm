@@ -66,8 +66,6 @@ milligramsDecoder =
     Decode.map Milligrams Decode.int
 
 
-{-| TODO: Remove trailing zeros, special cases for ounces/pounds
--}
 milligramsToString : Milligrams -> String
 milligramsToString (Milligrams i) =
     let

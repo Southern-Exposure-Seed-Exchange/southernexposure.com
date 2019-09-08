@@ -125,6 +125,12 @@ update key msg form maybeSessionToken =
                     , Ports.scrollToID "form-errors-text"
                     )
 
+                RemoteData.Failure error ->
+                    ( { form | errors = Api.apiFailureToError error }
+                    , Nothing
+                    , Ports.scrollToID "form-errors-text"
+                    )
+
                 _ ->
                     form |> nothingAndNoCommand
 
@@ -158,6 +164,7 @@ view tagger model =
     [ h1 [] [ text "Create an Account" ]
     , hr [] []
     , Form.genericErrorText (not <| Dict.isEmpty model.errors)
+    , Api.getErrorHtml "" model.errors
     , form [ onSubmit <| tagger SubmitForm ]
         [ fieldset []
             [ legend [] [ text "Login Information" ]

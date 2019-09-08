@@ -350,6 +350,12 @@ update msg model authStatus maybeSessionToken checkoutDetails =
             , Ports.scrollToTop
             )
 
+        SubmitResponse (RemoteData.Failure error) ->
+            ( { model | errors = Api.apiFailureToError error }
+            , Nothing
+            , Ports.scrollToTop
+            )
+
         SubmitResponse _ ->
             model |> nothingAndNoCommand
 

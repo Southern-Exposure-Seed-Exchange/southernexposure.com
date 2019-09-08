@@ -14,6 +14,7 @@ import Browser.Navigation
 import Cart
 import Checkout
 import Dict
+import Http
 import Json.Decode as Decode
 import Json.Encode as Encode
 import Locations
@@ -771,14 +772,16 @@ update msg ({ pageData, key } as model) =
                 updatedPageData =
                     { pageData | myAccount = response }
             in
-            ( { model | pageData = updatedPageData }, Cmd.none )
+            { model | pageData = updatedPageData }
+                |> withCommand (redirect403IfAnonymous key response)
 
         GetAddressDetails response ->
             let
                 updatedPageData =
                     { pageData | addressDetails = response }
             in
-            ( { model | pageData = updatedPageData }, Cmd.none )
+            { model | pageData = updatedPageData }
+                |> withCommand (redirect403IfAnonymous key response)
 
         GetCartDetails response ->
             let
@@ -788,6 +791,7 @@ update msg ({ pageData, key } as model) =
             { model | pageData = updatedPageData }
                 |> resetEditCartForm response
                 |> updateCartItemCountFromDetails (RemoteData.toMaybe response)
+                |> extraCommand (redirect403IfAnonymous key response)
 
         GetCartItemCount response ->
             { model | cartItemCount = response |> RemoteData.toMaybe |> Maybe.withDefault 0 }
@@ -815,29 +819,31 @@ update msg ({ pageData, key } as model) =
                         _ ->
                             Cmd.none
             in
-            (\a -> Tuple.pair a cmd) <|
-                case ( pageData.checkoutDetails, response ) of
-                    ( RemoteData.Success _, RemoteData.Success (Ok _) ) ->
-                        { model | pageData = updatedPageData }
+            extraCommand (redirect403IfAnonymous key response) <|
+                (\a -> Tuple.pair a cmd) <|
+                    case ( pageData.checkoutDetails, response ) of
+                        ( RemoteData.Success _, RemoteData.Success (Ok _) ) ->
+                            { model | pageData = updatedPageData }
 
-                    ( _, RemoteData.Success (Ok details) ) ->
-                        { model
-                            | pageData = updatedPageData
-                            , checkoutForm =
-                                Checkout.initialWithDefaults
-                                    details.shippingAddresses
-                                    details.billingAddresses
-                        }
+                        ( _, RemoteData.Success (Ok details) ) ->
+                            { model
+                                | pageData = updatedPageData
+                                , checkoutForm =
+                                    Checkout.initialWithDefaults
+                                        details.shippingAddresses
+                                        details.billingAddresses
+                            }
 
-                    _ ->
-                        { model | pageData = updatedPageData }
+                        _ ->
+                            { model | pageData = updatedPageData }
 
         GetCheckoutSuccessDetails response ->
             let
                 updatedPageData =
                     { pageData | orderDetails = response }
             in
-            { model | pageData = updatedPageData } |> noCommand
+            { model | pageData = updatedPageData }
+                |> withCommand (redirect403IfAnonymous key response)
 
         CategoryPaginationMsg subMsg ->
             pageData.categoryDetails
@@ -997,3 +1003,13 @@ redirectIfAuthRequired key route =
 
     else
         Cmd.none
+
+
+redirect403IfAnonymous : Routing.Key -> RemoteData.WebData a -> { m | currentUser : AuthStatus, route : Route } -> Cmd Msg
+redirect403IfAnonymous key response { currentUser, route } =
+    case ( response, currentUser ) of
+        ( RemoteData.Failure (Http.BadStatus 403), User.Anonymous ) ->
+            Routing.newUrl key <| Login <| Just <| Routing.reverse route
+
+        _ ->
+            Cmd.none

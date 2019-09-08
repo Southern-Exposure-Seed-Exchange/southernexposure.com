@@ -124,6 +124,11 @@ update key msg model authStatus =
                 RemoteData.Success (Ok _) ->
                     ( initial, Cmd.batch [ Routing.newUrl key MyAccount, Ports.scrollToTop ] )
 
+                RemoteData.Failure error ->
+                    ( { model | errors = Api.apiFailureToError error }
+                    , Ports.scrollToID "edit-form"
+                    )
+
                 _ ->
                     model |> noCommand
 
@@ -162,6 +167,7 @@ view tagger model authStatus =
 
         inputs =
             [ Form.genericErrorText (not <| Dict.isEmpty model.errors)
+            , Api.getErrorHtml "" model.errors
             , inputRow (always email) Email False "Email" "email" "email" "email"
             , inputRow (.password >> Maybe.withDefault "") Password False "Password" "password" "password" "new-password"
             , inputRow (.passwordConfirm >> Maybe.withDefault "") PasswordConfirm False "Confirm Password" "passwordConfirm" "password" "new-password"

@@ -2,6 +2,7 @@ module Api exposing
     ( Endpoint(..)
     , FormErrors
     , addError
+    , apiFailureToError
     , delete
     , errorHtml
     , formErrorsDecoder
@@ -393,3 +394,38 @@ errorHtml =
     List.map Html.text
         >> List.intersperse (Html.br [] [])
         >> Html.div [ class "text-danger" ]
+
+
+{-| Transform an HTTP Error into a FormError.
+-}
+apiFailureToError : Http.Error -> FormErrors
+apiFailureToError error =
+    let
+        errorMessage =
+            case error of
+                Http.BadStatus code ->
+                    if code == 404 then
+                        "The form submission URL is incorrect. Please contact us if this error continues."
+
+                    else if code == 403 then
+                        "You do not have permission to submit this form. Please contact us if you think this is an error."
+
+                    else if code >= 500 && code < 600 then
+                        "The server encountered an error while processing your request. Please try again or contact us if it continues."
+
+                    else
+                        "We encountered an unexpected response code(" ++ String.fromInt code ++ ") while processing the server response. Please try again or contact us if it continues."
+
+                Http.BadBody message ->
+                    "We encountered an error while processing the request from the server: " ++ message
+
+                Http.BadUrl url ->
+                    "We tried submitting the form to an invalid URL: " ++ url
+
+                Http.Timeout ->
+                    "The server took too long to send us a reply. Please try again or contact us for help."
+
+                Http.NetworkError ->
+                    "We were unable to establish a connection to our server. Please verify your internet connection and try again."
+    in
+    initialErrors |> addError "" errorMessage
