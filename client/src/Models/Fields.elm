@@ -70,11 +70,55 @@ milligramsDecoder =
 -}
 milligramsToString : Milligrams -> String
 milligramsToString (Milligrams i) =
-    Decimal.fromInt i
-        |> Decimal.mul (Decimal.fromIntWithExponent 1 -3)
-        |> Decimal.round -2
-        |> Decimal.toString
-        |> (\s -> s ++ "g")
+    let
+        stripZeroes str =
+            if String.right 1 str == "0" then
+                stripZeroes <| String.dropRight 1 str
+
+            else if String.right 1 str == "." then
+                String.dropRight 1 str
+
+            else
+                str
+    in
+    case i of
+        114000 ->
+            "¼ lb"
+
+        228000 ->
+            "½ lb"
+
+        342000 ->
+            "¾ lb"
+
+        454000 ->
+            "1 lb"
+
+        568000 ->
+            "1¼ lbs"
+
+        680000 ->
+            "1½ lbs"
+
+        908000 ->
+            "2 lbs"
+
+        1135000 ->
+            "2½ lbs"
+
+        1816000 ->
+            "4 lbs"
+
+        2270000 ->
+            "5 lbs"
+
+        _ ->
+            Decimal.fromInt i
+                |> Decimal.mul (Decimal.fromIntWithExponent 1 -3)
+                |> Decimal.round -2
+                |> Decimal.toString
+                |> stripZeroes
+                |> (\s -> s ++ " g")
 
 
 type LotSize
