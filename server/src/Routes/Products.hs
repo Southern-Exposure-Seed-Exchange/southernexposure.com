@@ -82,7 +82,8 @@ productDetailsRoute slug = do
                         <*> getBy (UniqueAttribute productId)
                         <*> selectList [CategoryId <-. productCategoryIds prod] []
                 when (null variants) $ throwError err404
-                predecessors <- concat <$> mapM getParentCategories (productCategoryIds prod)
+                predecessors <- lift $ concat
+                    <$> mapM getParentCategories (productCategoryIds prod)
                 categoryData <- lift $ mapM makeCategoryData categories
                 return . ProductDetailsData baseData variants maybeAttribute categoryData
                     $ map categoryToPredecessor predecessors

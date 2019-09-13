@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Main where
 
+import Control.Concurrent.STM.TVar (newTVarIO)
 import Control.Monad.Logger (runStderrLoggingT)
 import Data.Maybe (fromMaybe)
 import Database.Persist.Postgresql
@@ -10,6 +11,7 @@ import System.Environment (lookupEnv)
 import Web.Stripe.Client (StripeConfig(..), StripeKey(..))
 
 import Api
+import Cache (initializeCaches)
 import Config
 import Models
 
@@ -29,9 +31,11 @@ main = do
     emailPool <- smtpPool smtpServer (poolSize env)
     stripeToken <- fromMaybe "" <$> lookupEnv "STRIPE_TOKEN"
     dbPool <- makePool env
+    cache <- runSqlPool initializeCaches dbPool >>= newTVarIO
     let cfg = defaultConfig
             { getPool = dbPool
             , getEnv = env
+            , getCaches = cache
             , getMediaDirectory = mediaDir
             , getSmtpPool = emailPool
             , getSmtpUser = smtpUser

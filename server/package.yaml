@@ -68,6 +68,7 @@ dependencies:
     - safe-exceptions
     - servant-server
     - state-codes
+    - stm
     - stripe-core
     - stripe-haskell
     - tagsoup
@@ -83,6 +84,7 @@ library:
     source-dirs: src
     exposed-modules:
         - Api
+        - Cache
         - Config
         - Images
         - Models

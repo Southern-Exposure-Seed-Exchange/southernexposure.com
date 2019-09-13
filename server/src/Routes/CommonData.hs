@@ -237,7 +237,7 @@ applyCategorySaleDiscount sale variant =
 getCategorySales :: Product -> AppSQL [CategorySale]
 getCategorySales product = do
     currentTime <- liftIO getCurrentTime
-    categories <- map entityKey . concat <$>
+    categories <- lift $ map entityKey . concat <$>
         mapM getParentCategories (productCategoryIds product)
     activeSales <- map entityVal <$> selectList
         [ CategorySaleStartDate <=. currentTime

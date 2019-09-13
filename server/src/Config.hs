@@ -5,10 +5,13 @@ module Config
     , smtpPool
     ) where
 
+import Control.Concurrent.STM (TVar)
 import Data.Pool (Pool, createPool)
 import Database.Persist.Sql (ConnectionPool)
 import Network.HaskellNet.SMTP.SSL (SMTPConnection, connectSMTPSTARTTLS, closeSMTP)
 import Web.Stripe.Client (StripeConfig)
+
+import Cache (Caches)
 
 
 data Environment
@@ -20,6 +23,7 @@ data Config
     = Config
     { getPool :: ConnectionPool
     , getEnv :: Environment
+    , getCaches :: TVar Caches
     , getMediaDirectory :: FilePath
     , getSmtpPool :: Pool SMTPConnection
     , getSmtpUser :: String
@@ -32,6 +36,7 @@ defaultConfig =
     Config
         { getPool = undefined
         , getEnv = Development
+        , getCaches = undefined
         , getMediaDirectory = undefined
         , getSmtpPool = undefined
         , getSmtpUser = undefined

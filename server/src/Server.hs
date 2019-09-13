@@ -6,16 +6,21 @@ module Server
     , runDB
     , stripeRequest
     , serverError
+    , readCache
+    , writeCache
     ) where
 
-import Control.Monad.Reader (ReaderT, asks, lift, liftIO)
+import Control.Concurrent.STM (atomically, readTVarIO, modifyTVar)
+import Control.Monad.IO.Class (liftIO)
+import Control.Monad.Reader (ReaderT, asks, lift)
 import Control.Monad.Except (MonadError)
 import Data.Aeson (FromJSON)
 import Database.Persist.Sql (SqlPersistT, runSqlPool)
 import Servant (Handler, throwError)
 import Web.Stripe
 
-import Config
+import Cache (Caches)
+import Config (Config(getPool, getCaches, getStripeConfig))
 
 
 -- | `App` is the monad stack used in the Servant Handlers. It wraps
@@ -42,6 +47,18 @@ stripeRequest req = do
     liftIO $ stripe stripeConfig req
 
 
+-- | Throw an HTTP error.
 serverError :: MonadError e Handler => e -> App a
 serverError =
     lift . throwError
+
+
+-- | Read a value from the available caches.
+readCache :: (Caches -> a) -> App a
+readCache selector =
+    asks getCaches >>= fmap selector . liftIO . readTVarIO
+
+-- | Apply some updater function to the caches.
+writeCache :: (Caches -> Caches) -> App ()
+writeCache updater =
+    asks getCaches >>= liftIO . atomically . flip modifyTVar updater

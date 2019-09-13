@@ -18,11 +18,12 @@ import Data.Char (isAlphaNum)
 import Data.Maybe (listToMaybe)
 import Data.Monoid ((<>))
 import Database.Persist
-    ( (==.), (=.), (+=.), Entity(..), Key(..), get, getBy, update, upsert
+    ( (==.), (=.), (+=.), Entity(..), Key(..), getBy, update, upsert
     , delete, deleteWhere, selectList, selectKeysList, insertEntity
     )
 import Text.HTML.TagSoup (Tag(..), parseTags, innerText, renderTags)
 
+import Cache
 import Models.DB
 import Models.Fields
 import Server
@@ -136,15 +137,10 @@ getChildCategoryIds categoryId = do
     subKeys <- concat <$> mapM getChildCategoryIds childrenKeys
     return $ categoryId : subKeys
 
-getParentCategories :: Key Category -> AppSQL [Entity Category]
-getParentCategories categoryId = do
-    maybeCategory <- get categoryId
-    flip (maybe $ return []) maybeCategory $ \category ->
-        case categoryParentId category of
-            Nothing ->
-                return [Entity categoryId category]
-            Just parentId ->
-                (Entity categoryId category :) <$> getParentCategories parentId
+getParentCategories :: Key Category -> App [Entity Category]
+getParentCategories categoryId =
+    queryCategoryPredecessorCache categoryId
+        <$> readCache getCategoryPredecessorCache
 
 
 -- | Return a TaxRate for a potential Country & Region. On failure, it will
