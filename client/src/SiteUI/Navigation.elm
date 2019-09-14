@@ -138,8 +138,11 @@ view route authStatus navigationData activeCategories searchData =
     div [ id "navigation", class "container" ]
         [ node "nav"
             [ class "navbar navbar-expand-md navbar-light bg-success" ]
-            [ button
-                [ class "navbar-toggler ml-auto"
+            [ a
+                (class "ml-auto navbar-toggler" :: routeLinkAttributes Cart)
+                [ icon "shopping-cart p-1" ]
+            , button
+                [ class "navbar-toggler ml-2"
                 , type_ "button"
                 , attribute "data-toggle" "collapse"
                 , attribute "data-target" "#search-navbar"
