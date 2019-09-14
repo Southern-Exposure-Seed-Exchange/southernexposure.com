@@ -127,7 +127,7 @@ withLabel labelText isRequired input =
     in
     div [ class "form-group form-row align-items-center" ]
         [ label
-            [ class "col-sm-3 col-form-label text-right font-weight-bold"
+            [ class "col-sm-3 col-form-label text-sm-right font-weight-bold"
             , for <| "input" ++ inputId
             ]
             [ text <| labelText ++ ":", optionalHtml ]

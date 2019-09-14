@@ -229,8 +229,8 @@ view model =
                 [ tr []
                     [ th [] [ text "Item Number" ]
                     , th [] [ text "Quantity" ]
-                    , th [] [ text "Item Number" ]
-                    , th [] [ text "Quantity" ]
+                    , th [ class "d-none d-sm-table-cell" ] [ text "Item Number" ]
+                    , th [ class "d-none d-sm-table-cell" ] [ text "Quantity" ]
                     ]
                 ]
             , indexedFoldl buildTableRows ( [], [] ) model.forms
@@ -291,9 +291,19 @@ renderForm errors index model =
 
         onIntInput msg =
             targetValueInt |> Decode.map msg |> on "input"
+
+        hiddenInMobile =
+            modBy 2 index == 1
+
+        withMobileClass class_ =
+            if hiddenInMobile then
+                class <| class_ ++ " d-none d-sm-table-cell"
+
+            else
+                class class_
     in
-    [ td [ class "item-number" ] [ itemNumberInput, errorHtml ]
-    , td [ class "quantity" ]
+    [ td [ withMobileClass "item-number" ] [ itemNumberInput, errorHtml ]
+    , td [ withMobileClass "quantity" ]
         [ input
             [ id <| "quantity-" ++ String.fromInt index
             , class "form-control"

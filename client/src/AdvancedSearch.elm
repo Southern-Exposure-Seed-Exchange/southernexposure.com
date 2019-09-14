@@ -55,7 +55,7 @@ view : (Route -> msg) -> (Msg -> msg) -> Search.Data -> PageData.AdvancedSearch 
 view routingMsg formMsg data categories =
     let
         radioInput msg selector value content =
-            div [ class "form-check form-check-inline" ]
+            div [ class "form-check form-check-inline d-block d-sm-inline-flex" ]
                 [ label [ class "form-check-label" ]
                     [ input
                         [ class "form-check-input"
@@ -69,7 +69,7 @@ view routingMsg formMsg data categories =
                 ]
 
         filterInput { msg, attribute, selector, content } =
-            div [ class "form-check form-check-inline" ]
+            div [ class "form-check form-check-inline d-block d-sm-inline-flex" ]
                 [ label [ class "form-check-label" ]
                     [ input
                         [ class "form-check-input"
@@ -151,8 +151,8 @@ view routingMsg formMsg data categories =
             ]
         , legend [ class "font-weight-bold" ] [ text "Filters:" ]
         , div [ class "row align-items-center" ]
-            [ div [ class "col-auto filters" ] filterCheckboxes
-            , div [ class "col" ] [ categorySelect ]
+            [ div [ class "col filters mb-3" ] filterCheckboxes
+            , div [ class "col-auto mb-3" ] [ categorySelect ]
             ]
         , button [ class "mb-3 btn btn-primary", type_ "submit" ] [ text "Submit" ]
         ]

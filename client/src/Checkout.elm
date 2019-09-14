@@ -849,7 +849,7 @@ view model authStatus locations checkoutDetails =
                 |> Cents
 
         memberNumberForm =
-            div [ class "col-6" ]
+            div [ class "col-sm-6" ]
                 [ h5 [] [ text "Member Number" ]
                 , p []
                     [ text <|
@@ -872,7 +872,7 @@ view model authStatus locations checkoutDetails =
                 ]
 
         priorityShippingForm =
-            div [ class "col-6" ]
+            div [ class "col-sm-6" ]
                 [ h5 [] [ text "Priority Shipping & Handling" ]
                 , p []
                     [ b [] [ text "Rush my order!" ]
@@ -1225,10 +1225,10 @@ addressCard contents fullWidth =
     let
         divClass =
             if fullWidth then
-                "col-md-12"
+                "col-md-12 mb-2"
 
             else
-                "col-md-6"
+                "col-md-6 mb-2"
     in
     div [ class divClass ]
         [ div [ class "card" ] [ div [ class "card-body pt-3" ] contents ] ]

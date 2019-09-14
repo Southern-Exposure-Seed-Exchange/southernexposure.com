@@ -217,7 +217,7 @@ view tagger model redirectTo =
                 |> div []
 
         rememberCheckbox =
-            div [ class "form-check" ]
+            div [ class "form-check mb-2" ]
                 [ label [ class "form-check-label" ]
                     [ input
                         [ class "form-check-input"
@@ -250,7 +250,7 @@ view tagger model redirectTo =
     [ h1 [] [ text "Please Sign In" ]
     , hr [] []
     , div [ class "row" ]
-        [ div [ class "col-sm-6" ] [ loginForm ]
+        [ div [ class "col-sm-6 mb-3" ] [ loginForm ]
         , div [ class "col-sm-6" ] [ createAccountSection ]
         ]
     ]
