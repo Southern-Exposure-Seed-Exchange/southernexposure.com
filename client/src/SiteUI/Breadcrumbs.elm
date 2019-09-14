@@ -109,13 +109,7 @@ view route pageData =
                     singleItem "Page Not Found"
 
         categoryDetailsToBreadcrumbs { category, predecessors } =
-            List.map predecessorCategoryToInactiveItem
-                (predecessors
-                    |> List.reverse
-                    |> List.tail
-                    |> Maybe.withDefault []
-                    |> List.reverse
-                )
+            List.map predecessorCategoryToInactiveItem predecessors
                 ++ [ activeItem category.name ]
 
         productDetailsToBreadcrumbs { product, predecessors } =

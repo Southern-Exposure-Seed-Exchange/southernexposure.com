@@ -232,16 +232,19 @@ view ({ route, pageData, navigationData, zone } as model) =
                 |> Maybe.map f
                 |> Maybe.withDefault ""
 
-        activeCategories =
+        activeCategoryIds =
             case route of
                 CategoryDetails _ _ ->
                     Paginate.getResponseData pageData.categoryDetails
-                        |> Maybe.map .predecessors
+                        |> Maybe.map
+                            (\cd ->
+                                cd.category.id :: List.map .id cd.predecessors
+                            )
                         |> Maybe.withDefault []
 
                 ProductDetails _ ->
                     RemoteData.toMaybe pageData.productDetails
-                        |> Maybe.map .predecessors
+                        |> Maybe.map (.predecessors >> List.map .id)
                         |> Maybe.withDefault []
 
                 _ ->
@@ -249,7 +252,7 @@ view ({ route, pageData, navigationData, zone } as model) =
     in
     Document pageTitle
         [ SiteHeader.view SearchMsg model.searchData model.currentUser model.cartItemCount
-        , SiteNavigation.view route model.currentUser navigationData activeCategories model.searchData
+        , SiteNavigation.view route model.currentUser navigationData activeCategoryIds model.searchData
         , SiteBreadcrumbs.view route pageData
         , middleContent
         , SiteFooter.view

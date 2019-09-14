@@ -17,8 +17,8 @@ import User exposing (AuthStatus(..))
 import Views.Utils exposing (icon, routeLinkAttributes)
 
 
-view : Route -> AuthStatus -> WebData NavigationData -> List PageData.PredecessorCategory -> Search.Data -> Html Msg
-view route authStatus navigationData activeCategories searchData =
+view : Route -> AuthStatus -> WebData NavigationData -> List CategoryId -> Search.Data -> Html Msg
+view route authStatus navigationData activeCategoryIds searchData =
     let
         categoryNavigation =
             RemoteData.toMaybe navigationData
@@ -131,9 +131,6 @@ view route authStatus navigationData activeCategories searchData =
 
             else
                 ""
-
-        activeCategoryIds =
-            List.map .id activeCategories
     in
     div [ id "navigation", class "container" ]
         [ node "nav"
