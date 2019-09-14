@@ -52,24 +52,21 @@ view =
                 , abbr [ title "Fax" ] [ text "F:" ]
                 , text " (540) 266-1021"
                 ]
+
+        footerBlock title class_ content =
+            div [ class class_ ]
+                [ h4 [ class "mt-3" ] [ text title ]
+                , content
+                ]
     in
     div [ id "footer", class "container" ]
         [ node "footer"
             []
-            [ div [ class "row" ]
-                [ div [ class "col-sm-4" ]
-                    [ h4 [ class "mt-3" ] [ text "Information" ]
-                    , informationLinks
-                    ]
-                , div [ class "col-sm-4" ]
-                    [ h4 [ class "mt-3" ] [ text "Important Links" ]
-                    , importantLinks
-                    ]
-                , div [ class "col-sm-4" ]
-                    [ h4 [ class "mt-3" ] [ text "Contact Us" ]
-                    , contactAddress
-                    ]
-                , div [ class "col-sm-12 text-center" ]
+            [ div [ class "row justify-content-around" ]
+                [ footerBlock "Information" "col-auto" informationLinks
+                , footerBlock "Important Links" "col-auto" importantLinks
+                , footerBlock "Contact Us" "col-10 col-md-5 col-lg-auto" contactAddress
+                , div [ class "col-12 text-center" ]
                     [ text "Copyright © 2019 Southern Exposure Seed Exchange" ]
                 ]
             ]

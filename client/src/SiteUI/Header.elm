@@ -15,7 +15,7 @@ view : (SiteSearch.Msg -> Msg) -> SiteSearch.Data -> AuthStatus -> Int -> Html M
 view searchTagger searchData authStatus cartItemCount =
     div [ class "container" ]
         [ div [ id "site-header", class "row clearfix" ]
-            [ div [ class "col-sm-7 col-lg-6" ] [ logoAndName ]
+            [ div [ class "col" ] [ logoAndName ]
             , div [ class "col-auto ml-auto d-none d-md-block text-right" ] <|
                 linksAndSearch searchTagger searchData authStatus cartItemCount
             ]
