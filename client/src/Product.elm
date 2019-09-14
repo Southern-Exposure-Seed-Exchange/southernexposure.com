@@ -40,15 +40,16 @@ available. This renders the Product name as markdown to allow for HTML entities
 -}
 nameWithLotSize : { p | name : String } -> { v | lotSize : Maybe LotSize } -> Html msg
 nameWithLotSize { name } { lotSize } =
-    span [ class "product-name-lotsize" ] <|
-        List.filterMap identity
-            [ Just <|
-                Markdown.toHtmlWith
-                    { defaultOptions | sanitize = False, smartypants = True }
-                    []
-                    name
-            , Maybe.map (\s -> text <| ", " ++ lotSizeToString s) lotSize
-            ]
+    let
+        lotSizeString =
+            lotSize |> Maybe.map (\s -> ", " ++ lotSizeToString s) |> Maybe.withDefault ""
+    in
+    span [ class "product-name-lotsize" ]
+        [ Markdown.toHtmlWith
+            { defaultOptions | sanitize = False, smartypants = True }
+            []
+            (name ++ lotSizeString)
+        ]
 
 
 {-| Build the name for a Product, appending the LotSize if only one Variant is
