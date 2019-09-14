@@ -149,10 +149,11 @@ body > div.container
 
   /* Properly space multi-column Nav dropdown menus */
   .multi-column-dropdown
-    min-width: 650px
     .dropdown-item
       padding: 0.25rem 1.5rem
       width: auto
+    +media-breakpoint-up(md)
+      min-width: 650px
   /* Hide search menu on non-mobile screens */
   #search-navbar
     +media-breakpoint-up(md)

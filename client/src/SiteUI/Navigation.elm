@@ -49,7 +49,7 @@ view route authStatus navigationData activeCategoryIds searchData =
 
                     else
                         [ div [ class "row no-gutters multi-column-dropdown" ] <|
-                            List.map (div [ class "col" ])
+                            List.map (div [ class "col-12 col-md" ])
                                 (splitItems childItems)
                         ]
             in
