@@ -157,6 +157,12 @@ body > div.container
   #search-navbar
     +media-breakpoint-up(md)
       display: none !important
+  /* Make the mobile navbar take the entire content width */
+  +media-breakpoint-down(sm)
+    padding-left: 0
+    padding-right: 0
+    nav
+      border-radius: 0
 
 #sidebar
   .nav-pills
