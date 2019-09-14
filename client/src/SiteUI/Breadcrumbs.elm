@@ -1,7 +1,7 @@
 module SiteUI.Breadcrumbs exposing (view)
 
 import Html exposing (..)
-import Html.Attributes exposing (class)
+import Html.Attributes exposing (class, id)
 import Messages exposing (Msg(..))
 import PageData exposing (PageData)
 import Paginate
@@ -125,4 +125,5 @@ view route pageData =
         maybeToList f =
             Maybe.map f >> Maybe.withDefault []
     in
-    div [ class "container pb-3" ] [ ol [ class "breadcrumb mb-0" ] items ]
+    div [ id "breadcrumbs", class "container" ]
+        [ ol [ class "breadcrumb mb-0" ] items ]
