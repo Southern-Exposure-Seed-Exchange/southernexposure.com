@@ -33,6 +33,7 @@ view =
                 , staticPageLink "our-nongmo-policy" "Our Non-GMO Policy"
                 , staticPageLink "quality-promise" "Quality Promise"
                 , staticPageLink "growing-guides" "Growing Guides"
+                , staticPageLink "seeds-for-schools-fundraisers" "Seeds for Schools (Fundraisers)"
                 ]
 
         contactAddress =
