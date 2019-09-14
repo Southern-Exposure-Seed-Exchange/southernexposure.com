@@ -28,17 +28,20 @@ logoAndName =
         logoImage =
             img
                 [ id "site-logo"
-                , class "float-left mx-3"
+                , class "float-left mr-2 mx-lg-3"
                 , src <| Images.static "logos/sese.png"
                 ]
                 []
 
         titleLink =
-            a (routeLinkAttributes <| PageDetails "home")
-                [ text "Southern Exposure", br [] [], text "Seed Exchange" ]
+            a (class "d-block" :: routeLinkAttributes (PageDetails "home"))
+                [ text "Southern Exposure"
+                , br [ class "d-none d-md-block" ] []
+                , text " Seed Exchange"
+                ]
     in
-    div [ class "media" ]
-        [ a (routeLinkAttributes <| PageDetails "home") [ logoImage ]
+    div [ class "media justify-content-center" ]
+        [ a (class "my-auto" :: routeLinkAttributes (PageDetails "home")) [ logoImage ]
         , div [ id "site-title", class "media-body my-auto" ]
             [ h1 [ class "media-heading m-0" ] [ titleLink ]
             ]

@@ -89,11 +89,22 @@ body > div.container
     height: $logo-height - 10px
     margin-top: 5px
     margin-bottom: 5px
+    +media-breakpoint-only(xs)
+      height: calc(#{$logo-height / 3} - 10px)
+    +media-breakpoint-only(sm)
+      height: calc(#{$logo-height / 2} - 10px)
 
   /* Don't color or decorate the site title link */
-  #site-title a, #site-title a:hover
-    color: $body-color
-    text-decoration: none
+  #site-title
+    a, a:hover
+      color: $body-color
+      text-decoration: none
+      +media-breakpoint-only(xs)
+        font-size: 1.5rem
+      +media-breakpoint-between(sm, md)
+        font-size: 2rem
+    +media-breakpoint-down(sm)
+      flex: initial
 
   /* Style the Quick Links */
   #quick-links
