@@ -63,8 +63,8 @@ view =
         [ node "footer"
             []
             [ div [ class "row justify-content-around" ]
-                [ footerBlock "Information" "col-auto" informationLinks
-                , footerBlock "Important Links" "col-auto" importantLinks
+                [ footerBlock "Information" "col-10 col-sm-auto" informationLinks
+                , footerBlock "Important Links" "col-10 col-sm-auto" importantLinks
                 , footerBlock "Contact Us" "col-10 col-md-5 col-lg-auto" contactAddress
                 , div [ class "col-12 text-center" ]
                     [ text "Copyright © 2019 Southern Exposure Seed Exchange" ]
