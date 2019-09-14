@@ -4,6 +4,7 @@ import Category exposing (CategoryId(..))
 import Dict
 import Html exposing (Html, a, button, div, form, li, node, span, text, ul)
 import Html.Attributes exposing (attribute, class, href, id, target, type_)
+import Html.Events.Extra exposing (onClickPreventDefault)
 import Messages exposing (Msg(..))
 import PageData
 import Products.Pagination as Pagination
@@ -12,11 +13,12 @@ import Routing exposing (Route(..), reverse)
 import Search
 import SiteUI exposing (NavigationData)
 import SiteUI.Search as SiteSearch
+import User exposing (AuthStatus(..))
 import Views.Utils exposing (icon, routeLinkAttributes)
 
 
-view : WebData NavigationData -> List PageData.PredecessorCategory -> Search.Data -> Html Msg
-view navigationData activeCategories searchData =
+view : Route -> AuthStatus -> WebData NavigationData -> List PageData.PredecessorCategory -> Search.Data -> Html Msg
+view route authStatus navigationData activeCategories searchData =
     let
         categoryNavigation =
             RemoteData.toMaybe navigationData
@@ -86,6 +88,43 @@ view navigationData activeCategories searchData =
                 )
                 [ text category.name ]
 
+        mobileOnlyItems =
+            [ topLink (PageDetails "about-us") "About Us"
+            , topLink (PageDetails "growing-guides") "Growing Guides"
+            , topLink (PageDetails "retail-stores") "Retail Stores"
+            , topLink QuickOrder "Quick Order"
+            ]
+                ++ authLinks
+
+        authLinks =
+            if authStatus == Anonymous then
+                [ topLink (Login Nothing) "Log In"
+                , topLink CreateAccount "Register"
+                ]
+
+            else
+                [ topLink MyAccount "My Account"
+                , li [ class "nav-item" ]
+                    [ a [ href "/account/logout", onClickPreventDefault LogOut ]
+                        [ text "Log Out" ]
+                    ]
+                ]
+
+        topLink destination name =
+            let
+                class_ =
+                    if route == destination then
+                        "nav-item active"
+
+                    else
+                        "nav-item"
+            in
+            li
+                [ class class_ ]
+                [ a (class "nav-link" :: routeLinkAttributes destination)
+                    [ text name ]
+                ]
+
         activeClass category =
             if List.member category.id activeCategoryIds then
                 " active "
@@ -129,8 +168,9 @@ view navigationData activeCategories searchData =
                     ]
                 ]
             , div [ id "category-navbar", class "collapse navbar-collapse" ]
-                [ ul [ class "navbar-nav mx-auto d-flex text-left" ]
+                [ ul [ class "navbar-nav mx-auto d-flex text-left" ] <|
                     categoryNavigation
+                        ++ mobileOnlyItems
                 ]
             ]
         ]

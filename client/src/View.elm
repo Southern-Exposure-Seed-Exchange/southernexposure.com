@@ -249,7 +249,7 @@ view ({ route, pageData, navigationData, zone } as model) =
     in
     Document pageTitle
         [ SiteHeader.view SearchMsg model.searchData model.currentUser model.cartItemCount
-        , SiteNavigation.view navigationData activeCategories model.searchData
+        , SiteNavigation.view route model.currentUser navigationData activeCategories model.searchData
         , SiteBreadcrumbs.view route pageData
         , middleContent
         , SiteFooter.view
