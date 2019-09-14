@@ -89,35 +89,35 @@ view route authStatus navigationData activeCategories searchData =
                 [ text category.name ]
 
         mobileOnlyItems =
-            [ topLink (PageDetails "about-us") "About Us"
-            , topLink (PageDetails "growing-guides") "Growing Guides"
-            , topLink (PageDetails "retail-stores") "Retail Stores"
-            , topLink QuickOrder "Quick Order"
+            [ mobileLink (PageDetails "about-us") "About Us"
+            , mobileLink (PageDetails "growing-guides") "Growing Guides"
+            , mobileLink (PageDetails "retail-stores") "Retail Stores"
+            , mobileLink QuickOrder "Quick Order"
             ]
                 ++ authLinks
 
         authLinks =
             if authStatus == Anonymous then
-                [ topLink (Login Nothing) "Log In"
-                , topLink CreateAccount "Register"
+                [ mobileLink (Login Nothing) "Log In"
+                , mobileLink CreateAccount "Register"
                 ]
 
             else
-                [ topLink MyAccount "My Account"
+                [ mobileLink MyAccount "My Account"
                 , li [ class "nav-item" ]
                     [ a [ href "/account/logout", onClickPreventDefault LogOut ]
                         [ text "Log Out" ]
                     ]
                 ]
 
-        topLink destination name =
+        mobileLink destination name =
             let
                 class_ =
                     if route == destination then
-                        "nav-item active"
+                        "nav-item active d-md-none"
 
                     else
-                        "nav-item"
+                        "nav-item d-md-none"
             in
             li
                 [ class class_ ]
