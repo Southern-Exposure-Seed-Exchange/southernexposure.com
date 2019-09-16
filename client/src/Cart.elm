@@ -390,7 +390,7 @@ mobileCartTable { quantities } { items, charges } totals =
 
                   else
                     []
-                , Maybe.map chargeTotal charges.shippingMethod
+                , Maybe.map (.charge >> chargeTotal) charges.shippingMethod
                     |> Maybe.withDefault []
                 , List.concatMap chargeTotal charges.surcharges
                 , if charges.tax.amount /= Cents 0 then
