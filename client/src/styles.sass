@@ -308,6 +308,18 @@ h1.product-details-title > div
     +hover-focus
       color: darken($danger, 10%) !important
 
+.cart-mobile-products
+  .cart-mobile-product
+    border-bottom: 1px solid $gray-300
+
+/* Expand Buttons on Mobile Screens */
+.cart-buttons .btn
+  +media-breakpoint-down(sm)
+    display: block
+    width: 100%
+    margin-bottom: 1rem
+
+
 
 /** Quick Order **/
 

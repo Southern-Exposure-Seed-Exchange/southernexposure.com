@@ -14,15 +14,14 @@ import Html.Attributes as A exposing (class, colspan, disabled, src, step, type_
 import Html.Events exposing (onClick, onSubmit)
 import Html.Keyed as Keyed
 import Json.Encode as Encode
-import Models.Fields exposing (Cents(..), centsMap, imageToSrcSet, imgSrcFallback)
+import Models.Fields exposing (Cents(..), centsMap, imageToSrcSet, imgSrcFallback, lotSizeToString)
 import PageData exposing (CartDetails, CartItemId(..))
 import Product exposing (variantPrice)
 import RemoteData
 import Routing exposing (Route(..))
 import User exposing (AuthStatus, User)
 import Views.Format as Format
-import Views.Images as Images
-import Views.Utils exposing (htmlOrBlank, icon, numericInput, onIntInput, routeLinkAttributes)
+import Views.Utils exposing (htmlOrBlank, icon, numericInput, onIntInput, rawHtml, routeLinkAttributes)
 
 
 
@@ -159,14 +158,14 @@ customerUpdateRequest user body =
 
 
 view : Form -> CartDetails -> List (Html Msg)
-view { quantities } ({ items, charges } as cartDetails) =
+view ({ quantities } as form_) ({ items, charges } as cartDetails) =
     let
         itemCount =
             List.foldl (.quantity >> (+)) 0 items
 
         -- TODO: Add commas to format
         cartTable =
-            table [ class "table table-striped table-sm cart-table" ]
+            table [ class "d-none d-md-table table table-striped table-sm cart-table" ]
                 [ tableHeader
                 , Keyed.node "tbody" [] <|
                     List.map
@@ -180,10 +179,14 @@ view { quantities } ({ items, charges } as cartDetails) =
                 ]
 
         buttons =
-            div [ class "form-group text-right" ]
-                [ button [ class "btn btn-success", type_ "submit", disabled formIsUnchanged ]
+            div [ class "form-group text-right cart-buttons" ]
+                [ button
+                    [ class "btn btn-success d-none d-sm-inline-block"
+                    , type_ "submit"
+                    , disabled formIsUnchanged
+                    ]
                     [ icon "refresh", text " Update" ]
-                , a (class "btn btn-primary ml-2" :: routeLinkAttributes Checkout)
+                , a (class "btn btn-primary ml-md-2" :: routeLinkAttributes Checkout)
                     [ icon "shopping-cart", text " Checkout" ]
                 ]
 
@@ -216,10 +219,9 @@ view { quantities } ({ items, charges } as cartDetails) =
                 , td [ class "align-middle" ]
                     [ a (routeLinkAttributes <| ProductDetails product.slug)
                         [ img
-                            -- TODO: update sizes attr during mobile reflow
                             [ src <| imgSrcFallback product.image
                             , imageToSrcSet product.image
-                            , A.attribute "sizes" "100px"
+                            , productImageSizes
                             , class "cart-product-image"
                             ]
                             []
@@ -288,8 +290,7 @@ view { quantities } ({ items, charges } as cartDetails) =
                 text ""
 
         formIsUnchanged =
-            changedQuantities quantities items
-                |> List.isEmpty
+            isFormUnchanged quantities items
     in
     if not (List.isEmpty items) then
         [ h1 [] [ text "Shopping Cart" ]
@@ -297,8 +298,9 @@ view { quantities } ({ items, charges } as cartDetails) =
         , p [ class "text-center font-weight-bold" ]
             [ text <| "Total Items: " ++ String.fromInt itemCount ++ " Amount: " ++ Format.cents totals.total
             ]
-        , form [ onSubmit Submit ]
+        , form [ class "mb-4", onSubmit Submit ]
             [ cartTable
+            , mobileCartTable form_ cartDetails totals
             , buttons
             ]
         ]
@@ -308,6 +310,126 @@ view { quantities } ({ items, charges } as cartDetails) =
         , hr [] []
         , p [] [ text "You haven't added anything to your Shopping Cart yet!" ]
         ]
+
+
+mobileCartTable : Form -> CartDetails -> { subTotal : Cents, total : Cents } -> Html Msg
+mobileCartTable { quantities } { items, charges } totals =
+    let
+        cartRow { id, product, variant } =
+            div [ class "cart-mobile-product row py-4" ]
+                [ div [ class "col-4 mb-3" ]
+                    [ a (routeLinkAttributes <| ProductDetails product.slug)
+                        [ img
+                            [ class "img-fluid"
+                            , src <| imgSrcFallback product.image
+                            , imageToSrcSet product.image
+                            , productImageSizes
+                            ]
+                            []
+                        ]
+                    ]
+                , div [ class "col-8 pl-0 mb-2" ]
+                    [ a (routeLinkAttributes <| ProductDetails product.slug)
+                        [ h5 [ class "text-body mb-0 product-name-lotsize" ]
+                            [ rawHtml product.name ]
+                        ]
+                    , div [ class "small text-muted" ]
+                        [ text <|
+                            "Item #"
+                                ++ product.baseSKU
+                                ++ variant.skuSuffix
+                                ++ (Maybe.map (\ls -> " - " ++ lotSizeToString ls) variant.lotSize
+                                        |> Maybe.withDefault ""
+                                   )
+                        ]
+                    , div [ class "text-danger" ]
+                        [ text <| Format.cents <| variantPrice variant ]
+                    , productInputs "d-none d-sm-flex d-md-none mt-2" id
+                    ]
+                , div [ class "col-12 d-sm-none" ]
+                    [ productInputs "" id
+                    ]
+                ]
+
+        productInputs class_ id =
+            div [ class <| "row " ++ class_ ]
+                [ div [ class "col-3 pr-0" ]
+                    [ input
+                        [ class "cart-quantity form-control"
+                        , type_ "number"
+                        , value <| String.fromInt <| Maybe.withDefault 1 <| Dict.get (fromCartItemId id) quantities
+                        , onIntInput <| Quantity id
+                        , A.min "1"
+                        , A.step "1"
+                        , numericInput
+                        , A.size 5
+                        ]
+                        []
+                    ]
+                , div [ class "col-5" ]
+                    [ button
+                        [ class "btn btn-block btn-secondary"
+                        , type_ "submit"
+                        , disabled formIsUnchanged
+                        ]
+                        [ text "Update" ]
+                    ]
+                , div [ class "col-4 pl-0" ]
+                    [ button
+                        [ class "btn btn-block btn-danger"
+                        , onClick <| Remove id
+                        ]
+                        [ text "Remove" ]
+                    ]
+                ]
+
+        totalRows =
+            List.concat
+                [ if totals.subTotal /= totals.total then
+                    total "Sub-Total" totals.subTotal
+
+                  else
+                    []
+                , Maybe.map chargeTotal charges.shippingMethod
+                    |> Maybe.withDefault []
+                , List.concatMap chargeTotal charges.surcharges
+                , if charges.tax.amount /= Cents 0 then
+                    chargeTotal charges.tax
+
+                  else
+                    []
+                , Maybe.map chargeTotal charges.memberDiscount |> Maybe.withDefault []
+                , total "Total" totals.total
+                ]
+
+        total name amount =
+            [ div [ class "col-8 font-weight-bold" ]
+                [ text <| name ++ ":" ]
+            , div [ class "col-4 text-right" ]
+                [ text <| Format.cents amount ]
+            ]
+
+        chargeTotal { description, amount } =
+            total description amount
+
+        formIsUnchanged =
+            isFormUnchanged quantities items
+    in
+    div [ class "d-md-none" ]
+        [ Keyed.node "div" [ class "cart-mobile-products mb-4" ] <|
+            List.map (\i -> ( String.fromInt <| fromCartItemId i.id, cartRow i )) items
+        , div [ class "row mb-4 " ] totalRows
+        ]
+
+
+productImageSizes : Html.Attribute msg
+productImageSizes =
+    A.attribute "sizes" <|
+        String.join ", "
+            [ "(max-width: 390px) 100px"
+            , "(max-width: 767px) 165px"
+            , "100px"
+            ]
 
 
 
@@ -336,6 +458,12 @@ changedQuantities quantities =
                         acc
         )
         []
+
+
+isFormUnchanged : Dict Int Int -> List PageData.CartItem -> Bool
+isFormUnchanged quantities items =
+    changedQuantities quantities items
+        |> List.isEmpty
 
 
 encodedCartToken : Maybe String -> List ( String, Encode.Value )

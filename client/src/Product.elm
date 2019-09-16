@@ -13,7 +13,7 @@ module Product exposing
     )
 
 import Dict exposing (Dict)
-import Html exposing (Html, span, text)
+import Html exposing (Html, span)
 import Html.Attributes exposing (class)
 import Json.Decode as Decode exposing (Decoder)
 import Markdown exposing (defaultOptions)
