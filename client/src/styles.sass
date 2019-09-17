@@ -248,13 +248,49 @@ body > div.container
 
 /** Product Details **/
 
-/* Fix spacing & display of markdown titles */
-h1.product-details-title > div
-  &, & > p
-    margin-bottom: 0
-    display: inline-block
+h1.product-details-title
+  /* Fix spacing & display of markdown titles */
+  > div
+    &, & > p
+      margin-bottom: 0
+      display: inline-block
+  /* Reduce size on mobile devices */
+  +media-breakpoint-down(sm)
+    font-size: 2rem
 
 .product-details
+  .product-image
+    /* Float on large screens */
+    +media-breakpoint-up(md)
+      float: left
+    /* Shrink to partial column width */
+    +media-breakpoint-only(md)
+      width: 25%
+    +media-breakpoint-up(lg)
+      width: 33%
+  .add-to-cart-form
+    +media-breakpoint-down(sm)
+      /* Increase price size */
+      h4
+        font-size: 1.75rem
+      input
+        max-width: 4rem
+    +media-breakpoint-only(xs)
+      /* Decrease quantity size, Increase button size */
+      .add-to-cart-group
+        width: calc(100vw - 30%)
+      /* Increase size of Variant Select */
+      .variant-select
+        width: calc(100vw - 30%)
+        max-width: 12rem
+    +media-breakpoint-only(sm)
+      /* Put Variant Select, Quantity Input, & Button side-by-side */
+      .add-to-cart-group
+        display: inline-flex
+        width: 14rem
+      .variant-select
+        display: inline-block
+        margin-right: 1rem
   /* Don't color the Category links */
   .product-category h3 a
     &, &:hover, &:active

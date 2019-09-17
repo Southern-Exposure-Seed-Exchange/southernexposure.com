@@ -17,7 +17,6 @@ import Products.Sorting as Sorting
 import Routing exposing (Route(..))
 import SeedAttribute
 import Views.Format as Format
-import Views.Images as Images
 import Views.Utils exposing (htmlOrBlank, numericInput, onIntInput, rawHtml, routeLinkAttributes)
 
 
@@ -39,25 +38,28 @@ details addToCartForms { product, variants, maybeSeedAttribute, categories } =
     in
     [ h1 [ class "product-details-title d-flex justify-content-between" ]
         [ Product.singleVariantName product variants
-        , htmlOrBlank SeedAttribute.icons maybeSeedAttribute
+        , div [ class "d-none d-md-inline-flex" ]
+            [ htmlOrBlank SeedAttribute.icons maybeSeedAttribute ]
         ]
+    , div [ class "d-md-none" ]
+        [ htmlOrBlank SeedAttribute.icons maybeSeedAttribute ]
     , hr [] []
     , div [ class "product-details" ]
         [ div [ class "clearfix" ]
-            [ div [ class "float-left w-25 mr-3 mb-2" ]
+            [ div [ class "product-image mr-md-3 mb-2" ]
                 [ div
                     [ class "card" ]
                     [ div [ class "card-body text-center p-1" ]
                         [ img
-                            -- TODO: update sizes attr during mobile reflow
                             [ src <| imgSrcFallback product.image
                             , imageToSrcSet product.image
                             , class "img-fluid mb-2"
                             , attribute "sizes" <|
                                 String.join ", "
-                                    [ "(max-width: 767px) 128px"
-                                    , "(max-width: 1199px) 175px"
-                                    , "300px"
+                                    [ "(max-width: 767px) 100vw"
+                                    , "(max-width: 991px) 125px"
+                                    , "(max-width: 1199px) 230px"
+                                    , "315px"
                                     ]
                             ]
                             []
@@ -316,7 +318,7 @@ cartForm addToCartForms product variants =
         variantSelect _ =
             select
                 [ id <| "inputVariant-" ++ String.fromInt (fromProductId product.id)
-                , class "variant-select form-control mb-1 mx-auto"
+                , class "variant-select form-control mb-1 mx-auto mr-sm-3 mx-md-auto"
                 , onSelectInt <| ChangeCartFormVariantId product.id
                 ]
                 (List.map variantOption <| List.sortBy .skuSuffix variantList)
@@ -335,7 +337,9 @@ cartForm addToCartForms product variants =
                     []
                 , div [ class "input-group-append" ]
                     [ button [ class "btn btn-primary", type_ "submit" ]
-                        [ text "Add" ]
+                        [ text "Add"
+                        , span [ class "d-md-none" ] [ text " to Cart" ]
+                        ]
                     ]
                 ]
 
