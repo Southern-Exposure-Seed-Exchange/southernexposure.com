@@ -1,6 +1,6 @@
 module SiteUI.Footer exposing (view)
 
-import Html exposing (..)
+import Html exposing (Html, a, abbr, address, br, div, h4, li, node, strong, text, ul)
 import Html.Attributes exposing (class, href, id, target, title)
 import Messages exposing (Msg)
 import Routing exposing (Route(..))
