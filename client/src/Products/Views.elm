@@ -102,7 +102,7 @@ list routeConstructor pagination addToCartForms products =
                 , text " "
                 , select
                     [ id "product-sort-select"
-                    , class "form-control form-control-sm ml-2"
+                    , class "form-control form-control-sm ml-md-2"
                     , onProductsSortSelect (NavigateTo << routeConstructor)
                     ]
                   <|
