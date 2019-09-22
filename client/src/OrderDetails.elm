@@ -30,9 +30,9 @@ view zone orderId locations orderDetails =
                 ]
 
             Just billingAddress ->
-                [ div [ class "col-6" ]
+                [ div [ class "col-sm-6 mb-2" ]
                     [ addressCard locations "Shipping Details" orderDetails.shippingAddress ]
-                , div [ class "col-6" ]
+                , div [ class "col-sm-6" ]
                     [ addressCard locations "Billing Details" billingAddress ]
                 ]
     , orderTable orderDetails
@@ -62,6 +62,21 @@ orderTable ({ order, lineItems, products } as details) =
                 , td [ class "text-right" ] [ text <| String.fromInt product.quantity ]
                 , td [ class "text-right" ] [ text <| Format.cents product.price ]
                 , td [ class "text-right" ] [ text <| Format.cents (productTotal product) ]
+                ]
+
+        productBlock product =
+            div []
+                [ h5 [] [ Product.nameWithLotSize product product ]
+                , div [ class "d-flex" ]
+                    [ span []
+                        [ text <| Format.cents product.price
+                        , text " x "
+                        , text <| String.fromInt product.quantity
+                        ]
+                    , span [ class "ml-auto font-weight-bold item-total" ]
+                        [ text <| Format.cents <| productTotal product
+                        ]
+                    ]
                 ]
 
         productTotal product =
@@ -128,6 +143,20 @@ orderTable ({ order, lineItems, products } as details) =
                 (Tuple6 Nothing Nothing Nothing Nothing Nothing [])
                 lineItems
 
+        tableFooter =
+            tfoot [] <|
+                [ footerRow "font-weight-bold" "Sub-Total" subTotal
+                , htmlOrBlank chargeRow maybeShippingCharge
+                , htmlOrBlank chargeRow maybePriorityShipping
+                ]
+                    ++ List.map chargeRow surcharges
+                    ++ [ taxRow
+                       , htmlOrBlank chargeRow maybeStoreCredit
+                       , htmlOrBlank chargeRow maybeMemberDiscount
+                       , htmlOrBlank chargeRow maybeCouponDiscount
+                       , footerRow "font-weight-bold" "Total" total
+                       ]
+
         total =
             orderTotals.total
 
@@ -155,26 +184,20 @@ orderTable ({ order, lineItems, products } as details) =
                 Just a ->
                     f a
     in
-    table [ class "table table-striped table-sm" ]
-        [ thead []
-            [ tr [ class "font-weight-bold" ]
-                [ th [] [ text "Product" ]
-                , th [ class "text-right" ] [ text "Quantity" ]
-                , th [ class "text-right" ] [ text "Price" ]
-                , th [ class "text-right" ] [ text "Total" ]
+    div []
+        [ table [ class "d-none d-sm-table table table-striped table-sm" ]
+            [ thead []
+                [ tr [ class "font-weight-bold" ]
+                    [ th [] [ text "Product" ]
+                    , th [ class "text-right" ] [ text "Quantity" ]
+                    , th [ class "text-right" ] [ text "Price" ]
+                    , th [ class "text-right" ] [ text "Total" ]
+                    ]
                 ]
+            , tbody [] <| List.map productRow products
+            , tableFooter
             ]
-        , tbody [] <| List.map productRow products
-        , tfoot [] <|
-            [ footerRow "font-weight-bold" "Sub-Total" subTotal
-            , htmlOrBlank chargeRow maybeShippingCharge
-            , htmlOrBlank chargeRow maybePriorityShipping
-            ]
-                ++ List.map chargeRow surcharges
-                ++ [ taxRow
-                   , htmlOrBlank chargeRow maybeStoreCredit
-                   , htmlOrBlank chargeRow maybeMemberDiscount
-                   , htmlOrBlank chargeRow maybeCouponDiscount
-                   , footerRow "font-weight-bold" "Total" total
-                   ]
+        , div [ class "order-details-blocks d-sm-none" ] <|
+            List.map productBlock products
+                ++ [ table [ class "table table-striped table-sm" ] [ tableFooter ] ]
         ]

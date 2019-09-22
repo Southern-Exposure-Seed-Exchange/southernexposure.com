@@ -942,6 +942,32 @@ view model authStatus locations checkoutDetails =
             checkoutDetails.charges.shippingMethod
                 |> Maybe.andThen .priorityFee
 
+        mobileCouponCodeForm =
+            div [ class "col-12 d-sm-none" ]
+                [ h5 [] [ text "Coupon Code" ]
+                , div [ class "input-group" ]
+                    [ input
+                        [ class "form-control"
+                        , type_ "text"
+                        , onInput CouponCode
+                        , value model.couponCode
+                        ]
+                        []
+                    , div
+                        [ class "input-group-append" ]
+                        [ button
+                            [ class "btn btn btn-secondary"
+                            , type_ "button"
+                            , onClick ApplyCoupon
+                            ]
+                            [ text "Apply" ]
+                        ]
+                    ]
+                , Dict.get "coupon" model.errors
+                    |> Maybe.map (\errs -> small [] [ Api.errorHtml errs ])
+                    |> Maybe.withDefault (text "")
+                ]
+
         (Cents finalTotal) =
             getFinalTotal checkoutDetails model.storeCredit
 
@@ -977,7 +1003,7 @@ view model authStatus locations checkoutDetails =
                 billingCard
             ]
         , div [ class "row mb-3" ]
-            [ storeCreditForm, memberNumberForm, priorityShippingForm ]
+            [ storeCreditForm, memberNumberForm, priorityShippingForm, mobileCouponCodeForm ]
         , div [ class "mb-3" ]
             [ h4 [] [ text "Order Summary" ]
             , summaryTable checkoutDetails
@@ -1268,10 +1294,9 @@ summaryTable ({ items, charges } as checkoutDetails) creditString couponCode cou
             tr []
                 [ td [ class "align-middle text-center" ]
                     [ img
-                        -- TODO: update sizes attr during mobile reflow
                         [ src <| imgSrcFallback product.image
                         , imageToSrcSet product.image
-                        , A.attribute "sizes" "100px"
+                        , imageSizes
                         ]
                         []
                     ]
@@ -1285,6 +1310,39 @@ summaryTable ({ items, charges } as checkoutDetails) creditString couponCode cou
                 , td [ class "text-right" ]
                     [ text <| Format.cents <| centsMap ((*) quantity) <| variantPrice variant ]
                 ]
+
+        mobileRow { product, variant, quantity } =
+            div [ class "row" ]
+                [ div [ class "col-auto pr-0" ]
+                    [ img
+                        [ src <| imgSrcFallback product.image
+                        , imageToSrcSet product.image
+                        , imageSizes
+                        ]
+                        []
+                    ]
+                , div [ class "col" ]
+                    [ div [ class "font-weight-bold" ] [ Product.nameWithLotSize product variant ]
+                    , small [ class "text-muted" ]
+                        [ text <| "Item #" ++ product.baseSKU ++ variant.skuSuffix ]
+                    ]
+                , div [ class "col-12 mt-1 d-flex justify-content-between" ]
+                    [ div []
+                        [ text <| Format.cents <| variantPrice variant
+                        , text " x "
+                        , text <| String.fromInt quantity
+                        ]
+                    , div [ class "font-weight-bold item-total" ]
+                        [ text <| Format.cents <| centsMap ((*) quantity) <| variantPrice variant ]
+                    ]
+                ]
+
+        imageSizes =
+            A.attribute "sizes" <|
+                String.join ", "
+                    [ "(max-width: 375px) 80px"
+                    , "100px"
+                    ]
 
         tableFooter =
             tfoot [] <|
@@ -1422,10 +1480,17 @@ summaryTable ({ items, charges } as checkoutDetails) creditString couponCode cou
                     credit
                         |> centsMap2 (\total c -> total - c) totals.total
     in
-    table [ class "table table-striped table-sm checkout-products-table" ]
-        [ tableHeader
-        , tbody [] <| List.map productRow items
-        , tableFooter
+    div []
+        [ table [ class "d-none d-sm-table table table-striped table-sm checkout-products-table" ]
+            [ tableHeader
+            , tbody [] <| List.map productRow items
+            , tableFooter
+            ]
+        , div [ class "checkout-product-blocks d-sm-none" ]
+            [ div [] <| List.map mobileRow items
+            , table [ class "table table-striped table-sm checkout-products-table" ]
+                [ tableFooter ]
+            ]
         ]
 
 

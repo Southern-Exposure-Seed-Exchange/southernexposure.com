@@ -415,6 +415,17 @@ nav.products-pagination
   img
     width: 3.25rem
 
+.checkout-product-blocks
+  > div > div
+    padding-top: 0.5rem
+    padding-bottom: 1rem
+    border-bottom: 1px solid $gray-300
+    &:last-of-type
+      padding-bottom: 0.75rem
+      border-bottom: none
+  div.item-total
+    padding-right: 0.3rem
+
 tr.total-row-coupon-input
   .form-group
     margin-bottom: 0
@@ -422,7 +433,38 @@ tr.total-row-coupon-input
       max-width: 10rem
   td
     vertical-align: middle
+  +media-breakpoint-only(xs)
+    td:first-of-type > div
+      display: none
 
 tr.checkout-coupon-line
   td
     vertical-align: middle
+
+
+/** My Account **/
+
+.account-order-blocks
+  > div
+    padding-top: 1rem
+    padding-bottom: 1rem
+    border-bottom: 1px solid $gray-300
+    &:first-of-type
+      border-top: 1px solid $gray-300
+
+
+/** Order Details **/
+
+.order-details-blocks
+  > div
+    padding-top: 1rem
+    padding-bottom: 1rem
+    border-bottom: 1px solid $gray-300
+    &:first-of-type
+      border-top: 1px solid $gray-300
+    &:last-of-type
+      border-bottom: none
+    .item-total
+      padding-right: 0.3rem
+  table
+    margin-top: 0.5rem

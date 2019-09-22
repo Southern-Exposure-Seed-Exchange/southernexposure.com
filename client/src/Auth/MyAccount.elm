@@ -95,6 +95,22 @@ orderTable zone locations orderSummaries =
                     ]
                 ]
 
+        orderBlock { id, shippingAddress, status, total, created } =
+            div []
+                [ h4 [ class "d-flex" ]
+                    [ text <| "Order #" ++ String.fromInt id
+                    , small [ class "ml-auto" ] [ text <| Format.date zone created ]
+                    ]
+                , h5 [ class "mb-1" ] [ text "Ship To:" ]
+                , addressInfo shippingAddress
+                , div [ class "d-flex font-weight-bold mb-1" ]
+                    [ div [] [ text <| PageData.statusText status ]
+                    , div [ class "ml-auto" ] [ text <| Format.cents total ]
+                    ]
+                , a (class "mb-1 btn btn-light btn-block" :: routeLinkAttributes (OrderDetails id))
+                    [ text "View Order Details" ]
+                ]
+
         showAllButton =
             div [ class "form-group text-right" ]
                 [ button [ class "btn btn-light", onClick ShowAllOrders ]
@@ -115,7 +131,7 @@ orderTable zone locations orderSummaries =
                 ]
     in
     div []
-        [ table [ class "table table-sm table-striped" ]
+        [ table [ class "d-none d-md-table table table-sm table-striped" ]
             [ thead []
                 [ tr []
                     [ th [ class "text-center" ] [ text "Date" ]
@@ -128,5 +144,6 @@ orderTable zone locations orderSummaries =
                 ]
             , tbody [] <| List.map orderRow orderSummaries
             ]
+        , div [ class "account-order-blocks mb-3" ] <| List.map orderBlock orderSummaries
         , showAllButton
         ]
