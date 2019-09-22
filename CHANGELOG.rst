@@ -5,6 +5,14 @@ CHANGELOG
 v0.7.0
 ======
 
+* Improve the mobile responsiveness of all pages, especially the Product &
+  Category pages and all tables that caused the page width to overflow on
+  the old site.
+* Automatically thumbnail Product & Category images in a variety of sizes.
+  Provide image size hints so browsers can pull the smallest image sizes
+  necessary.
+* Support storing & rendering various types of Lot Sizes besides weights.
+  E.g., mushroom plug counts, slip counts, or custom labels.
 * Add support for browser autocompletion in Login, Registration, & Checkout
   form fields.
 
