@@ -321,6 +321,46 @@ h1.product-details-title
       margin-bottom: 0
       display: inline-block
 
+.mobile-products-list
+  margin-bottom: 1rem
+  .product-block
+    padding-top: 1rem
+    padding-bottom: 1.5rem
+    border-bottom: 1px solid $gray-300
+    &:first-of-type
+      margin-top: 1rem
+      border-top: 1px solid $gray-300
+    .price-and-attributes
+      @extend .h4
+      small
+        font-size: 65%
+      .d-inline-flex
+        float: right
+        img
+          height: 1rem
+      .sale-price
+        del
+          margin-right: 0.5rem
+        div
+          display: inline-block
+    .badge
+      font-size: 1rem
+
+/* Full width sorting dropdowns on mobile */
+.products-sorting
+  +media-breakpoint-down(sm)
+    width: 100%
+
+nav.products-pagination
+  /* Center pagination links on mobile */
+  margin-left: auto
+  margin-right: auto
+  /* Add spacing & increase size on mobile */
+  +media-breakpoint-down(sm)
+    margin-bottom: 1rem
+    a.page-link
+      font-size: 1.1rem
+
 
 /** Advanced Search **/
 

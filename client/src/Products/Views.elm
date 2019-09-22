@@ -4,6 +4,7 @@ import Dict exposing (Dict)
 import Html exposing (..)
 import Html.Attributes as A exposing (attribute, class, for, id, selected, src, tabindex, type_, value)
 import Html.Events exposing (on, onSubmit, targetValue)
+import Html.Extra exposing (viewIfLazy)
 import Html.Keyed as Keyed
 import Json.Decode as Decode
 import Messages exposing (Msg(..))
@@ -15,7 +16,7 @@ import Product exposing (Product, ProductId(..), ProductVariant, ProductVariantI
 import Products.Pagination as Pagination
 import Products.Sorting as Sorting
 import Routing exposing (Route(..))
-import SeedAttribute
+import SeedAttribute exposing (SeedAttribute)
 import Views.Format as Format
 import Views.Utils exposing (htmlOrBlank, numericInput, onIntInput, rawHtml, routeLinkAttributes)
 
@@ -63,7 +64,7 @@ details addToCartForms { product, variants, maybeSeedAttribute, categories } =
                                     ]
                             ]
                             []
-                        , cartForm addToCartForms product variants
+                        , cartForm (cartFormData addToCartForms ( product, variants )) product
                         ]
                     ]
                 ]
@@ -92,8 +93,11 @@ list routeConstructor pagination addToCartForms products =
 
         sortingInput : Html Msg
         sortingInput =
-            div [ class "form-inline" ]
-                [ label [ class "col-form-label font-weight-bold", for "product-sort-select" ]
+            div [ class "form-inline products-sorting" ]
+                [ label
+                    [ class "col-form-label font-weight-bold d-none d-md-inline-block"
+                    , for "product-sort-select"
+                    ]
                     [ text "Sort by:" ]
                 , text " "
                 , select
@@ -139,11 +143,17 @@ list routeConstructor pagination addToCartForms products =
                 |> (\ps ->
                         span [ class "font-weight-bold" ] [ text "Products per page: " ]
                             :: ps
-                            |> span []
+                            |> span [ class "d-none d-md-block" ]
                    )
 
-        paginationHtml =
-            div [ class "d-flex mb-2 justify-content-between align-items-center" ] [ pagingText, pager ]
+        paginationHtml content =
+            div [ class "d-flex mb-2 justify-content-between align-items-center" ] content
+
+        paginationTop =
+            paginationHtml [ pagingText, div [ class "d-none d-md-block" ] [ pager ] ]
+
+        paginationBottom =
+            paginationHtml [ div [ class "d-none d-md-block" ] [ pagingText ], pager ]
 
         pagingText =
             if productsCount == 0 then
@@ -186,7 +196,7 @@ list routeConstructor pagination addToCartForms products =
 
             else
                 node "nav"
-                    [ attribute "aria-label" "Category Product Pages" ]
+                    [ attribute "aria-label" "Category Product Pages", class "products-pagination" ]
                     [ ul [ class "pagination pagination-sm mb-0" ] <|
                         previousLink ()
                             :: renderSections ()
@@ -234,20 +244,30 @@ list routeConstructor pagination addToCartForms products =
                     [ text content ]
                 ]
 
-        productRows =
-            List.map renderProduct (Paginate.getCurrent products)
+        ( productRows, productBlocks ) =
+            List.map
+                (\(( p, v, _ ) as productData) ->
+                    let
+                        cartData =
+                            cartFormData addToCartForms ( p, v )
+                    in
+                    ( renderProduct cartData productData
+                    , renderMobileProductBlock cartData productData
+                    )
+                )
+                (Paginate.getCurrent products)
+                |> List.foldr (\( r, b ) ( rs, bs ) -> ( r :: rs, b :: bs )) ( [], [] )
 
-        renderProduct ( product, variants, maybeSeedAttribute ) =
+        renderProduct cartData ( product, variants, maybeSeedAttribute ) =
             tr []
                 [ td [ class "row-product-image text-center align-middle" ]
                     [ Keyed.node "a"
                         (routeLinkAttributes <| ProductDetails product.slug)
                         [ ( "product-img-" ++ (String.fromInt <| (\(ProductId i) -> i) product.id)
                           , img
-                                -- TODO: update sizes attr during mobile reflow
                                 [ src <| imgSrcFallback product.image
                                 , imageToSrcSet product.image
-                                , attribute "sizes" "100px"
+                                , listImageSizes
                                 ]
                                 []
                           )
@@ -262,15 +282,19 @@ list routeConstructor pagination addToCartForms products =
                     , rawHtml product.longDescription
                     ]
                 , td [ class "text-center align-middle" ]
-                    [ cartForm addToCartForms product variants ]
+                    [ cartForm cartData product ]
                 ]
+
+        mobileProductBlocks =
+            div [ class "mobile-products-list d-md-none" ] productBlocks
     in
     if productsCount /= 0 then
         [ sortHtml
-        , paginationHtml
-        , table [ class "products-table table table-striped table-sm mb-2" ]
+        , paginationTop
+        , table [ class "products-table table table-striped table-sm mb-2 d-none d-md-table" ]
             [ tbody [] <| productRows ]
-        , paginationHtml
+        , mobileProductBlocks
+        , paginationBottom
         , SeedAttribute.legend
         ]
 
@@ -278,8 +302,124 @@ list routeConstructor pagination addToCartForms products =
         []
 
 
-cartForm : CartForms -> Product -> Dict Int ProductVariant -> Html Msg
-cartForm addToCartForms product variants =
+renderMobileProductBlock : CartFormData -> ( Product, Dict Int ProductVariant, Maybe SeedAttribute ) -> Html Msg
+renderMobileProductBlock { maybeSelectedVariantId, maybeSelectedVariant, variantSelect, selectedItemNumber, quantity, isOutOfStock, isLimitedAvailablity } ( product, variants, maybeSeedAttribute ) =
+    let
+        formAttributes =
+            (::) (class "row product-block") <|
+                case maybeSelectedVariantId of
+                    Just variantId ->
+                        [ onSubmit <| SubmitAddToCart product.id variantId ]
+
+                    Nothing ->
+                        []
+
+        inputAndButtonColumns =
+            if isOutOfStock then
+                []
+
+            else
+                [ div [ class "col-4 pr-0" ]
+                    [ input
+                        [ type_ "number"
+                        , class "form-control"
+                        , A.min "1"
+                        , A.step "1"
+                        , value <| String.fromInt quantity
+                        , onIntInput <| ChangeCartFormQuantity product.id
+                        , numericInput
+                        ]
+                        []
+                    ]
+                , div [ class "col-8" ]
+                    [ button [ class "btn btn-primary btn-block", type_ "submit" ]
+                        [ text "Add to Cart" ]
+                    ]
+                ]
+
+        availabilityBadge =
+            if isOutOfStock then
+                outOfStockBadge
+
+            else if isLimitedAvailablity then
+                limitedAvailabilityBadge
+
+            else
+                text ""
+    in
+    form formAttributes <|
+        [ div [ class "col-12 col-sm-4 pr-sm-0 mb-sm-2" ]
+            [ Keyed.node "a"
+                (routeLinkAttributes <| ProductDetails product.slug)
+                [ ( "product-img-" ++ (String.fromInt <| (\(ProductId i) -> i) product.id)
+                  , img
+                        [ src <| imgSrcFallback product.image
+                        , imageToSrcSet product.image
+                        , class "img-fluid"
+                        , listImageSizes
+                        ]
+                        []
+                  )
+                ]
+            ]
+        , div [ class "col" ]
+            [ h5 [ class "text-center text-sm-left" ]
+                [ a (routeLinkAttributes <| ProductDetails product.slug)
+                    [ Product.singleVariantName product variants ]
+                ]
+            , div [ class "price-and-attributes clearfix" ]
+                [ htmlOrBlank renderPrice maybeSelectedVariant
+                , small [ class "text-muted ml-2 d-inline-block" ]
+                    [ text <| "Item #" ++ selectedItemNumber ]
+                , htmlOrBlank SeedAttribute.icons maybeSeedAttribute
+                ]
+            , div [ class "d-none d-sm-block" ] [ variantSelect ]
+            ]
+        , div [ class "col-12 d-sm-none" ] [ variantSelect ]
+        , div [ class "col-12 text-center" ] [ availabilityBadge ]
+        ]
+            ++ inputAndButtonColumns
+
+
+listImageSizes : Html.Attribute msg
+listImageSizes =
+    attribute "sizes" <|
+        String.join ", "
+            [ "(max-width: 575px) 100vw"
+            , "(max-width: 767px) 175px"
+            , "100px"
+            ]
+
+
+renderPrice : ProductVariant -> Html msg
+renderPrice variant =
+    if variantPrice variant == Cents 0 then
+        text "Free!"
+
+    else
+        case variant.salePrice of
+            Just salePrice ->
+                div [ class "sale-price" ]
+                    [ Html.del [] [ text <| Format.cents variant.price ]
+                    , div [ class "text-danger" ] [ text <| Format.cents salePrice ]
+                    ]
+
+            Nothing ->
+                text <| Format.cents variant.price
+
+
+outOfStockBadge : Html msg
+outOfStockBadge =
+    span [ class "badge badge-danger" ] [ text "Out of Stock" ]
+
+
+limitedAvailabilityBadge : Html msg
+limitedAvailabilityBadge =
+    span [ class "badge badge-warning" ] [ text "Limited Availability" ]
+
+
+cartForm : CartFormData -> Product -> Html Msg
+cartForm { maybeSelectedVariant, maybeSelectedVariantId, quantity, isOutOfStock, isLimitedAvailablity, variantSelect, selectedItemNumber } product =
     let
         formAttributes =
             (::) (class "add-to-cart-form") <|
@@ -293,35 +433,6 @@ cartForm addToCartForms product variants =
         selectedPrice =
             maybeSelectedVariant
                 |> htmlOrBlank (\v -> h4 [] [ renderPrice v ])
-
-        renderPrice variant =
-            if variantPrice variant == Cents 0 then
-                text "Free!"
-
-            else
-                case variant.salePrice of
-                    Just salePrice ->
-                        div []
-                            [ Html.del [] [ text <| Format.cents variant.price ]
-                            , div [ class "text-danger" ] [ text <| Format.cents salePrice ]
-                            ]
-
-                    Nothing ->
-                        text <| Format.cents variant.price
-
-        showVariantSelect =
-            Dict.size variants > 1
-
-        isOutOfStock =
-            Product.isOutOfStock variantList
-
-        variantSelect _ =
-            select
-                [ id <| "inputVariant-" ++ String.fromInt (fromProductId product.id)
-                , class "variant-select form-control mb-1 mx-auto mr-sm-3 mx-md-auto"
-                , onSelectInt <| ChangeCartFormVariantId product.id
-                ]
-                (List.map variantOption <| List.sortBy .skuSuffix variantList)
 
         addToCartInput _ =
             div [ class "input-group mx-auto justify-content-center add-to-cart-group mb-2" ]
@@ -343,43 +454,49 @@ cartForm addToCartForms product variants =
                     ]
                 ]
 
-        selectedItemNumber =
-            case maybeSelectedVariant of
-                Nothing ->
-                    product.baseSKU
-
-                Just v ->
-                    product.baseSKU ++ v.skuSuffix
-
         availabilityBadge =
             if isOutOfStock then
-                span [ class "badge badge-danger" ] [ text "Out of Stock" ]
+                outOfStockBadge
 
-            else if Product.isLimitedAvailablity variantList then
-                span [ class "badge badge-warning" ] [ text "Limited Availability" ]
+            else if isLimitedAvailablity then
+                limitedAvailabilityBadge
 
             else
                 text ""
+    in
+    form formAttributes
+        [ selectedPrice
+        , variantSelect
+        , viewIfLazy (not isOutOfStock) addToCartInput
+        , availabilityBadge
+        , small [ class "text-muted d-block" ]
+            [ text <| "Item #" ++ selectedItemNumber ]
+        ]
 
-        maybeSelectedVariant =
-            maybeSelectedVariantId
-                |> Maybe.andThen (\id -> Dict.get (fromVariantId id) variants)
 
+type alias CartFormData =
+    { maybeSelectedVariant : Maybe ProductVariant
+    , maybeSelectedVariantId : Maybe ProductVariantId
+    , quantity : Int
+    , isOutOfStock : Bool
+    , isLimitedAvailablity : Bool
+    , variantSelect : Html Msg
+    , selectedItemNumber : String
+    }
+
+
+cartFormData : CartForms -> ( Product, Dict Int ProductVariant ) -> CartFormData
+cartFormData addToCartForms ( product, variants ) =
+    let
         ( maybeSelectedVariantId, quantity ) =
             Dict.get (fromProductId product.id) addToCartForms
                 |> Maybe.withDefault { variant = Nothing, quantity = 1 }
                 |> (\v -> ( v.variant |> ifNothing maybeFirstVariantId, v.quantity ))
 
-        ifNothing valIfNothing maybe =
-            case maybe of
-                Just _ ->
-                    maybe
+        maybeSelectedVariant =
+            maybeSelectedVariantId
+                |> Maybe.andThen (\id -> Dict.get (fromVariantId id) variants)
 
-                Nothing ->
-                    valIfNothing
-
-        -- Grab the ID of the first variant, filtering out any out-of-stock
-        -- variants unless the entire product is sold out.
         maybeFirstVariantId =
             variantList
                 |> List.filter
@@ -394,8 +511,27 @@ cartForm addToCartForms product variants =
                 |> List.head
                 |> Maybe.map .id
 
-        variantList =
-            Dict.values variants
+        isOutOfStock =
+            Product.isOutOfStock variantList
+
+        selectedItemNumber =
+            case maybeSelectedVariant of
+                Nothing ->
+                    product.baseSKU
+
+                Just v ->
+                    product.baseSKU ++ v.skuSuffix
+
+        showVariantSelect =
+            Dict.size variants > 1
+
+        variantSelect _ =
+            select
+                [ id <| "inputVariant-" ++ String.fromInt (fromProductId product.id)
+                , class "variant-select form-control mb-1 mx-auto mr-sm-3 mx-md-auto"
+                , onSelectInt <| ChangeCartFormVariantId product.id
+                ]
+                (List.map variantOption <| List.sortBy .skuSuffix variantList)
 
         onSelectInt msg =
             targetValue
@@ -441,24 +577,28 @@ cartForm addToCartForms product variants =
                         ++ disabledAttr
                     )
 
-        htmlWhen test renderer =
-            if test then
-                renderer ()
-
-            else
-                text ""
+        variantList =
+            Dict.values variants
 
         fromVariantId (ProductVariantId i) =
             i
 
         fromProductId (ProductId i) =
             i
+
+        ifNothing valIfNothing maybe =
+            case maybe of
+                Just _ ->
+                    maybe
+
+                Nothing ->
+                    valIfNothing
     in
-    form formAttributes
-        [ selectedPrice
-        , htmlWhen showVariantSelect variantSelect
-        , htmlWhen (not isOutOfStock) addToCartInput
-        , availabilityBadge
-        , small [ class "text-muted d-block" ]
-            [ text <| "Item #" ++ selectedItemNumber ]
-        ]
+    { maybeSelectedVariant = maybeSelectedVariant
+    , maybeSelectedVariantId = maybeSelectedVariantId
+    , quantity = quantity
+    , isOutOfStock = Product.isOutOfStock variantList
+    , isLimitedAvailablity = Product.isLimitedAvailablity variantList
+    , variantSelect = viewIfLazy showVariantSelect variantSelect
+    , selectedItemNumber = selectedItemNumber
+    }
