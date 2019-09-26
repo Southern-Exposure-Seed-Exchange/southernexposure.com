@@ -1,9 +1,14 @@
-{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TypeApplications #-}
+-- TODO: Split into ModuleNameSpec.hs files & Gen.hs file.
 import Data.Aeson (Result(Success), fromJSON, toJSON)
+import qualified Data.ByteString as BS
+import qualified Data.ByteString.Lazy as LBS
+import Data.Monoid ((<>))
 import Data.Ratio ((%))
 import Data.Text (Text)
-import Data.Time (UTCTime(..), Day(..), DiffTime, secondsToDiffTime, getCurrentTime)
+import Data.Time (UTCTime(..), Day(..), DiffTime, secondsToDiffTime, getCurrentTime, fromGregorian)
 import Database.Persist.Sql (Entity(..), ToBackendKey, SqlBackend, toSqlKey)
 import Hedgehog
 import qualified Hedgehog.Gen as Gen
@@ -12,10 +17,15 @@ import Numeric.Natural (Natural)
 import Test.Tasty
 import Test.Tasty.Hedgehog
 import Test.Tasty.HUnit hiding (assert)
+import Text.XML.Generator (Xml, Elem, doc, defaultDocInfo, xrender)
+import Web.FormUrlEncoded (FromForm(..), urlDecodeForm, fromEntriesByKey)
 
 import Models
 import Models.Fields
 import Routes.CommonData
+import StoneEdge
+
+import qualified StoneEdgeFixtures as SEF
 
 main :: IO ()
 main =
@@ -27,6 +37,7 @@ tests =
          [ modelsFields
          , modelsUtils
          , commonData
+         , stoneEdge
          ]
 
 
@@ -278,6 +289,244 @@ productSaleTests = testGroup "Product Sale Calculations"
         getVariantPrice (makeVariantData variant $ Just salePrice)
             === Cents normalPrice
 
+
+-- STONE EDGE
+stoneEdge :: TestTree
+stoneEdge = testGroup "StoneEdge Module"
+    [ errorTests
+    , sendVersionTests
+    , orderCountTests
+    , downloadOrdersTests
+    ]
+  where
+    errorTests :: TestTree
+    errorTests = testGroup "SETI Errors"
+        [ testCase "Simple Error Rendering" simpleErrorRendering
+        , testCase "XML Erro Rendering" xmlErrorRendering
+        ]
+    simpleErrorRendering :: Assertion
+    simpleErrorRendering =
+        renderSimpleSETIError "test error message"
+            @?= "SETIError: test error message"
+    xmlErrorRendering :: Assertion
+    xmlErrorRendering =
+        renderXmlSETIError Orders "test error message"
+            @?= expectedXmlError
+    expectedXmlError :: BS.ByteString
+    expectedXmlError =
+        "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n\
+        \<SETIOrders\n>\
+          \<Response\n>\
+            \<ResponseCode\n>3</ResponseCode\n>\
+            \<ResponseDescription\n>test error message</ResponseDescription\n>\
+          \</Response\n>\
+        \</SETIOrders\n>"
+    sendVersionTests :: TestTree
+    sendVersionTests = testGroup "SendVersion SETI Function"
+        [ testCase "Form Parsing" sendVersionParsing
+        , testCase "Response Rendering" sendVersionResponse
+        ]
+    sendVersionParsing :: Assertion
+    sendVersionParsing =
+        testFormParsing "setifunction=sendversion&omversion=6.000"
+            $ SendVersionRequest "6.000"
+    sendVersionResponse :: Assertion
+    sendVersionResponse =
+        renderSendVersionResponse (SendVersionResponse "5.900")
+            @?= "SETIResponse: version=5.900"
+    orderCountTests :: TestTree
+    orderCountTests = testGroup "OrderCount SETI Function"
+        [ testCase "Form Parsing" orderCountParsing
+        , testCase "Response Rendering" orderCountResponse
+        ]
+    orderCountParsing :: Assertion
+    orderCountParsing =
+        testFormParsing "setifunction=ordercount&setiuser=auser&password=pwd&code=mystore&lastorder=1001&lastdate=10-Jun-2003&omversion=5.000"
+            $ OrderCountRequest "auser" "pwd" "mystore" (LastOrderNumber 1001)
+                (LastDate $ fromGregorian 2003 6 10)
+                "5.000"
+    orderCountResponse :: Assertion
+    orderCountResponse =
+        renderOrderCountResponse (OrderCountResponse 42)
+            @?= "SETIResponse: ordercount=42"
+    -- TODO: Test render of each unique part of DownloadOrdersResponse
+    -- - Totals
+    -- Test render of entire DownloadOrdersResponse
+    downloadOrdersTests :: TestTree
+    downloadOrdersTests = testGroup "DownloadOrders SETI Function"
+        [ testCase "Form Parsing" downloadOrdersParsing
+        , testCase "Form Parsing - No Decryption Key" downloadOrdersParsingNoKey
+        , testCase "Response Rendering - No Orders" noOrdersResponse
+        , testCase "Response Rendering - With Order" downloadOrdersResponse
+        , testCase "Response Rendering - Billing XML" orderBillingResponse
+        , testCase "Response Rendering - Shipping XML" orderShippingResponse
+        , testCase "Response Rendering - CreditCard XML" paymentCreditCardResponse
+        , testCase "Response Rendering - StoreCredit XML" paymentStoreCreditResponse
+        , testCase "Response Rendering - Totals XML" orderTotalsResponse
+        , testCase "Response Rendering - Coupon XML" orderCouponResponse
+        , testCase "Response Rendering - OtherData XML" otherDataResponse
+        ]
+    downloadOrdersParsing :: Assertion
+    downloadOrdersParsing =
+        testFormParsing "setifunction=downloadorders&setiuser=auser&password=pwd&code=mystore&lastorder=1001&lastdate=10-Jun-2003&startnum=1&batchsize=100&dkey=decryptionkey&omversion=5.000"
+            $ DownloadOrdersRequest "auser" "pwd" "mystore" (LastOrderNumber 1001)
+                (LastDate $ fromGregorian 2003 6 10) 1 100 (Just "decryptionkey")
+                "5.000"
+    downloadOrdersParsingNoKey :: Assertion
+    downloadOrdersParsingNoKey =
+        testFormParsing "setifunction=downloadorders&setiuser=auser&password=pwd&code=mystore&lastorder=1001&lastdate=10-Jun-2003&startnum=1&batchsize=100&omversion=5.000"
+            $ DownloadOrdersRequest "auser" "pwd" "mystore" (LastOrderNumber 1001)
+                (LastDate $ fromGregorian 2003 6 10) 1 100 Nothing
+                "5.000"
+    noOrdersResponse :: Assertion
+    noOrdersResponse =
+        renderDownloadOrdersResponse NoOrdersToDownload @?=
+            SEF.noOrdersXml
+    downloadOrdersResponse =
+        SEF.downloadOrdersXml @=?
+            renderDownloadOrdersResponse (DownloadOrdersResponse
+                [ StoneEdgeOrder
+                    9001
+                    (UTCTime (fromGregorian 2003 6 10) $ secondsToDiffTime 0)
+                    (Just "Payment Received")
+                    orderBilling
+                    orderShipping
+                    [orderCreditCard, orderStoreCredit]
+                    orderTotals
+                    [orderCoupon]
+                    orderOtherData
+                ]
+            )
+    orderBillingResponse :: Assertion
+    orderBillingResponse =
+        testXmlPart SEF.orderBillingXml
+            $ renderStoneEdgeOrderBilling orderBilling
+    orderBilling =
+        StoneEdgeOrderBilling
+            "Kevin Smith"
+            (Just "Stone Edge Technologies  Inc.")
+            (Just "215-641-1837")
+            (Just "kevin@stoneedge.com")
+            (StoneEdgeOrderAddress
+                "One Valley Square"
+                (Just "Suite 130")
+                "Blue Bell"
+                "PA"
+                "19422"
+                (Just "US")
+            )
+
+    orderShippingResponse :: Assertion
+    orderShippingResponse =
+        testXmlPart SEF.orderShippingXml
+            $ renderStoneEdgeOrderShipping orderShipping
+    orderShipping =
+        StoneEdgeOrderShipping
+            "Kevin Smith"
+            (Just "Stone Edge Technologies  Inc.")
+            (Just "215-641-1837")
+            (Just "kevin@stoneedge.com")
+            (StoneEdgeOrderAddress
+                "One Valley Square"
+                (Just "Suite 130")
+                "Blue Bell"
+                "PA"
+                "19422"
+                (Just "US")
+            )
+            [ StoneEdgeOrderProduct
+                "SHRT"
+                "MyShirt"
+                1
+                (StoneEdgeCents 500)
+                (Just TangibleProduct)
+                (Just True)
+                (Just 125487)
+                (Just $ StoneEdgeCents 500)
+
+            ]
+    paymentCreditCardResponse :: Assertion
+    paymentCreditCardResponse =
+        testXmlPart SEF.paymentCreditCardXml
+            $ renderStoneEdgeOrderPayment orderCreditCard
+    orderCreditCard =
+        StoneEdgeOrderCreditCard $ StoneEdgePaymentCreditCard
+            "Visa"
+            (Just "4729238728739452876")
+            (Just $ StoneEdgeCents 9001)
+    paymentStoreCreditResponse :: Assertion
+    paymentStoreCreditResponse =
+        testXmlPart SEF.paymentStoreCreditXml
+            $ renderStoneEdgeOrderPayment orderStoreCredit
+    orderStoreCredit = StoneEdgeOrderStoreCredit
+            $ StoneEdgePaymentStoreCredit
+                (StoneEdgeCents 9001)
+                (Just "Store Credit Description!")
+    orderTotalsResponse :: Assertion
+    orderTotalsResponse =
+        testXmlPart SEF.orderTotalsXml
+            $ renderStoneEdgeTotals orderTotals
+    orderTotals =
+        StoneEdgeTotals
+            (StoneEdgeCents 2500)
+            [ StoneEdgeDiscount
+                (Just SEFlatDiscount)
+                (Just "5 Dollars Off")
+                Nothing
+                (StoneEdgeCents 500)
+                (Just True)
+            ]
+            (StoneEdgeCents 2000)
+            (Just $ StoneEdgeTax
+                (StoneEdgeCents 268)
+                (Just 0.05)
+                (Just False)
+                Nothing
+                Nothing
+            )
+            (StoneEdgeCents 6443)
+            [ StoneEdgeSurcharge
+                (StoneEdgeCents 400)
+                (Just "Fall Item Surcharge")
+            ]
+            (Just $ StoneEdgeShippingTotal
+                (StoneEdgeCents 825)
+                (Just "Ground")
+            )
+    orderCouponResponse :: Assertion
+    orderCouponResponse =
+        testXmlPart SEF.orderCouponXml
+            $ renderStoneEdgeCoupon orderCoupon
+    orderCoupon =
+        StoneEdgeCoupon
+            "ABCCOUPON123"
+            (Just "5% Off to HHF Customers")
+            (StoneEdgeCents 420)
+            (Just True)
+    otherDataResponse :: Assertion
+    otherDataResponse =
+        testXmlPart SEF.orderOtherDataXml
+            $ renderStoneEdgeOtherData orderOtherData
+    orderOtherData =
+        StoneEdgeOtherData
+            (Just "Priority Shipping")
+            (Just "Long, Multiline\nCustomer Comments")
+            (Just 9001)
+    -- | Render an XML element & ensure it matches the expected output.
+    testXmlPart :: BS.ByteString -> Xml Elem -> Assertion
+    testXmlPart expected element =
+        "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n" <> expected
+            @=?  xrender (doc defaultDocInfo element)
+
+
+
+-- UTILITIES
+
+
+-- | Assert parsing of a FormUrlEncoded value decodes to the proper value.
+testFormParsing :: (FromForm a, Eq a, Show a) => LBS.ByteString -> a -> Assertion
+testFormParsing urlData expected =
+    (urlDecodeForm urlData >>= fromForm) @?= Right expected
 
 
 

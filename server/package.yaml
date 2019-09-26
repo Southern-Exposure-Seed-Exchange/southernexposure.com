@@ -57,6 +57,7 @@ dependencies:
     - filepath
     - HaskellNet
     - HaskellNet-SSL
+    - http-api-data
     - iso3166-country-codes
     - markdown
     - mtl
@@ -66,6 +67,7 @@ dependencies:
     - pureMD5
     - resource-pool
     - safe-exceptions
+    - scientific
     - servant-server
     - state-codes
     - stm
@@ -78,6 +80,7 @@ dependencies:
     - unordered-containers
     - uuid
     - wai
+    - xmlgen
 
 
 library:
@@ -90,6 +93,7 @@ library:
         - Models
         - Models.Fields
         - Routes.CommonData
+        - StoneEdge
 
 tests:
     sese-website-test:
@@ -108,6 +112,7 @@ tests:
             - tasty-hunit
             - hedgehog
             - HUnit
+            - raw-strings-qq
 
 _script-def: &script-defaults
     source-dirs: scripts
@@ -151,7 +156,6 @@ executables:
             - persistent
             - persistent-postgresql
             - resource-pool
-            - scientific
             - state-codes
             - text
             - transformers
