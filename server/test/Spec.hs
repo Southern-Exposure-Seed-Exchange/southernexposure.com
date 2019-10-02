@@ -94,9 +94,11 @@ truncateHtmlTests = testGroup "truncateHtml"
         ("<p>an inline comment is removed</p>", True) @=?
             truncateHtml 5 "<p>an inline comment<!-- me! --> is removed from the text</p>"
     commentsDontCountTowardsTruncation :: Assertion
-    commentsDontCountTowardsTruncation =
+    commentsDontCountTowardsTruncation = do
         ("a short description", False) @=?
             truncateHtml 3 "a short description<!-- Comment is Removed -->"
+        ("a short description here", True) @=?
+            truncateHtml 4 "a short description<!-- Comment is Removed --> here but not this."
 
 
 
