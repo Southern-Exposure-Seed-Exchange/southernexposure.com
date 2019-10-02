@@ -302,7 +302,7 @@ stoneEdge = testGroup "StoneEdge Module"
     errorTests :: TestTree
     errorTests = testGroup "SETI Errors"
         [ testCase "Simple Error Rendering" simpleErrorRendering
-        , testCase "XML Erro Rendering" xmlErrorRendering
+        , testCase "XML Error Rendering" xmlErrorRendering
         ]
     simpleErrorRendering :: Assertion
     simpleErrorRendering =
@@ -311,16 +311,7 @@ stoneEdge = testGroup "StoneEdge Module"
     xmlErrorRendering :: Assertion
     xmlErrorRendering =
         renderXmlSETIError Orders "test error message"
-            @?= expectedXmlError
-    expectedXmlError :: BS.ByteString
-    expectedXmlError =
-        "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n\
-        \<SETIOrders\n>\
-          \<Response\n>\
-            \<ResponseCode\n>3</ResponseCode\n>\
-            \<ResponseDescription\n>test error message</ResponseDescription\n>\
-          \</Response\n>\
-        \</SETIOrders\n>"
+            @?= SEF.ordersErrorXml
     sendVersionTests :: TestTree
     sendVersionTests = testGroup "SendVersion SETI Function"
         [ testCase "Form Parsing" sendVersionParsing
@@ -349,9 +340,6 @@ stoneEdge = testGroup "StoneEdge Module"
     orderCountResponse =
         renderOrderCountResponse (OrderCountResponse 42)
             @?= "SETIResponse: ordercount=42"
-    -- TODO: Test render of each unique part of DownloadOrdersResponse
-    -- - Totals
-    -- Test render of entire DownloadOrdersResponse
     downloadOrdersTests :: TestTree
     downloadOrdersTests = testGroup "DownloadOrders SETI Function"
         [ testCase "Form Parsing" downloadOrdersParsing
@@ -382,6 +370,7 @@ stoneEdge = testGroup "StoneEdge Module"
     noOrdersResponse =
         renderDownloadOrdersResponse NoOrdersToDownload @?=
             SEF.noOrdersXml
+    downloadOrdersResponse :: Assertion
     downloadOrdersResponse =
         SEF.downloadOrdersXml @=?
             renderDownloadOrdersResponse (DownloadOrdersResponse
@@ -401,6 +390,7 @@ stoneEdge = testGroup "StoneEdge Module"
     orderBillingResponse =
         testXmlPart SEF.orderBillingXml
             $ renderStoneEdgeOrderBilling orderBilling
+    orderBilling :: StoneEdgeOrderBilling
     orderBilling =
         StoneEdgeOrderBilling
             "Kevin Smith"
@@ -415,11 +405,11 @@ stoneEdge = testGroup "StoneEdge Module"
                 "19422"
                 (Just "US")
             )
-
     orderShippingResponse :: Assertion
     orderShippingResponse =
         testXmlPart SEF.orderShippingXml
             $ renderStoneEdgeOrderShipping orderShipping
+    orderShipping :: StoneEdgeOrderShipping
     orderShipping =
         StoneEdgeOrderShipping
             "Kevin Smith"
@@ -449,6 +439,7 @@ stoneEdge = testGroup "StoneEdge Module"
     paymentCreditCardResponse =
         testXmlPart SEF.paymentCreditCardXml
             $ renderStoneEdgeOrderPayment orderCreditCard
+    orderCreditCard :: StoneEdgeOrderPayment
     orderCreditCard =
         StoneEdgeOrderCreditCard $ StoneEdgePaymentCreditCard
             "Visa"
@@ -458,6 +449,7 @@ stoneEdge = testGroup "StoneEdge Module"
     paymentStoreCreditResponse =
         testXmlPart SEF.paymentStoreCreditXml
             $ renderStoneEdgeOrderPayment orderStoreCredit
+    orderStoreCredit :: StoneEdgeOrderPayment
     orderStoreCredit = StoneEdgeOrderStoreCredit
             $ StoneEdgePaymentStoreCredit
                 (StoneEdgeCents 9001)
@@ -466,6 +458,7 @@ stoneEdge = testGroup "StoneEdge Module"
     orderTotalsResponse =
         testXmlPart SEF.orderTotalsXml
             $ renderStoneEdgeTotals orderTotals
+    orderTotals :: StoneEdgeTotals
     orderTotals =
         StoneEdgeTotals
             (StoneEdgeCents 2500)
@@ -497,6 +490,7 @@ stoneEdge = testGroup "StoneEdge Module"
     orderCouponResponse =
         testXmlPart SEF.orderCouponXml
             $ renderStoneEdgeCoupon orderCoupon
+    orderCoupon :: StoneEdgeCoupon
     orderCoupon =
         StoneEdgeCoupon
             "ABCCOUPON123"
@@ -507,6 +501,7 @@ stoneEdge = testGroup "StoneEdge Module"
     otherDataResponse =
         testXmlPart SEF.orderOtherDataXml
             $ renderStoneEdgeOtherData orderOtherData
+    orderOtherData :: StoneEdgeOtherData
     orderOtherData =
         StoneEdgeOtherData
             (Just "Priority Shipping")

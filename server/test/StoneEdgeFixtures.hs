@@ -11,6 +11,19 @@ import Data.Monoid ((<>))
 import Text.RawString.QQ (r)
 
 
+ordersErrorXml :: BS.ByteString
+ordersErrorXml =
+    [r|<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<SETIOrders
+><Response
+><ResponseCode
+>3</ResponseCode
+><ResponseDescription
+>test error message</ResponseDescription
+></Response
+></SETIOrders
+>|]
+
 noOrdersXml :: BS.ByteString
 noOrdersXml =
     [r|<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
