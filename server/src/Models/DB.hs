@@ -160,6 +160,7 @@ Address
     customerId CustomerId
     isActive Bool
     isDefault Bool
+    deriving Show
 
 
 Order
@@ -171,7 +172,10 @@ Order
     customerComment T.Text
     couponId CouponId Maybe
     stripeChargeId StripeChargeId Maybe
+    stripeLastFour T.Text Maybe
+    stripeIssuer T.Text Maybe
     createdAt UTCTime
+    deriving Show
 
 OrderLineItem json
     orderId OrderId
@@ -195,6 +199,7 @@ ProductSale
     productVariantId ProductVariantId
     startDate UTCTime
     endDate UTCTime
+    deriving Show
 
 CategorySale
     name T.Text

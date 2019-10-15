@@ -713,6 +713,8 @@ makeOrders mysql = do
                     , orderCustomerComment = fromNullableText "" nullableCustomerComment
                     , orderCouponId = Nothing
                     , orderStripeChargeId = Nothing
+                    , orderStripeLastFour = Nothing
+                    , orderStripeIssuer = Nothing
                     , orderCreatedAt = createdAt
                     }
             (orderProducts, orderItems) <- adjustTotal orderId orderTotal lineItems

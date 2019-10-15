@@ -780,11 +780,18 @@ chargeCustomer stripeConfig stripeCustomerId orderId orderTotal = do
                 >> throwM (StripeError err)
         Right stripeCharge ->
             let
-                stripeChargeId = StripeChargeId $ Stripe.chargeId stripeCharge
+                stripeChargeId =
+                    StripeChargeId $ Stripe.chargeId stripeCharge
+                stripeLastFour =
+                    Stripe.cardLastFour <$> Stripe.chargeCreditCard stripeCharge
+                stripeIssuer =
+                    T.pack . show . Stripe.cardBrand <$> Stripe.chargeCreditCard stripeCharge
             in
                 update orderId
                     [ OrderStatus =. PaymentReceived
                     , OrderStripeChargeId =. Just stripeChargeId
+                    , OrderStripeLastFour =. stripeLastFour
+                    , OrderStripeIssuer =. stripeIssuer
                     ]
 
 
@@ -840,6 +847,8 @@ createOrder (Entity customerId customer) cartId shippingEntity billingId maybeSt
         , orderCustomerComment = comment
         , orderTaxDescription = maybe "" taxRateDescription maybeTaxRate
         , orderStripeChargeId = Nothing
+        , orderStripeLastFour = Nothing
+        , orderStripeIssuer = Nothing
         , orderCouponId = Nothing
         , orderCreatedAt = currentTime
         }
