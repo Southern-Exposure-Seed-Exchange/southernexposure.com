@@ -141,6 +141,8 @@ paymentCreditCardXml =
 ><CreditCard
 ><Issuer
 >Visa</Issuer
+><Number
+>9001</Number
 ><TransID
 >4729238728739452876</TransID
 ><Amount
