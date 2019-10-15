@@ -12,6 +12,7 @@ import Network.HaskellNet.SMTP.SSL (SMTPConnection, connectSMTPSTARTTLS, closeSM
 import Web.Stripe.Client (StripeConfig)
 
 import Cache (Caches)
+import StoneEdge (StoneEdgeCredentials)
 
 
 data Environment
@@ -29,6 +30,7 @@ data Config
     , getSmtpUser :: String
     , getSmtpPass :: String
     , getStripeConfig :: StripeConfig
+    , getStoneEdgeAuth :: StoneEdgeCredentials
     }
 
 defaultConfig :: Config
@@ -42,6 +44,7 @@ defaultConfig =
         , getSmtpUser = undefined
         , getSmtpPass = undefined
         , getStripeConfig = undefined
+        , getStoneEdgeAuth = undefined
         }
 
 

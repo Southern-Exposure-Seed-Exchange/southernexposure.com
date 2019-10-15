@@ -15,6 +15,10 @@ module StoneEdge
     , renderXmlSETIError
       -- * General Response Rendering
     , renderXmlSETIResponse
+      -- * Authentication
+    , StoneEdgeCredentials(..)
+    , getStoneEdgeRequestCredentials
+    , HasStoneEdgeCredentials(..)
       -- * Shared Types
     , StoneEdgeCents(..)
     , TypeOfDownload(..)
@@ -99,6 +103,38 @@ renderXmlSETIError downloadType message =
     renderXmlSETIResponse downloadType 3 message xempty
 
 
+-- Authentication
+
+-- | Credentials passed by StoneEdge to authenticate requests.
+data StoneEdgeCredentials
+    = StoneEdgeCredentials
+        { secUsername :: T.Text
+        , secPassword :: T.Text
+        , secStoreCode :: T.Text
+        } deriving (Eq, Show, Read)
+
+-- | Typeclass for pulling authentication credentials from Request types
+-- that contain them.
+class HasStoneEdgeCredentials a where
+    -- | Get the @setiuser@ parameter
+    userParam :: a -> T.Text
+    -- | Get the @password@ parameter
+    passwordParam :: a -> T.Text
+    -- | Get the @code@ parameter
+    storeCodeParam :: a -> T.Text
+
+-- | Build a 'StoneEdgeCredentials' from a Request.
+getStoneEdgeRequestCredentials
+    :: HasStoneEdgeCredentials a
+    => a -> StoneEdgeCredentials
+getStoneEdgeRequestCredentials request =
+    StoneEdgeCredentials
+        { secUsername = userParam request
+        , secPassword = passwordParam request
+        , secStoreCode = storeCodeParam request
+        }
+
+
 -- Send Version
 
 -- | Requests the version number of the integration script.
@@ -146,6 +182,11 @@ instance FromForm OrderCountRequest where
             <*> fromForm f
             <*> parseUnique "omversion" f
 
+instance HasStoneEdgeCredentials OrderCountRequest where
+    userParam = ocrUser
+    passwordParam = ocrPass
+    storeCodeParam = ocrStoreCode
+
 -- | Respond with a count of Orders that will be exported to StoneEdge.
 newtype OrderCountResponse
     = OrderCountResponse
@@ -185,6 +226,11 @@ instance FromForm DownloadOrdersRequest where
             <*> parseUnique "batchsize" f
             <*> parseMaybe "dkey" f
             <*> parseUnique "omversion" f
+
+instance HasStoneEdgeCredentials DownloadOrdersRequest where
+    userParam = dorUser
+    passwordParam = dorPass
+    storeCodeParam = dorStoreCode
 
 
 -- | Respond with either no Orders to export to StoneEdge or a list of

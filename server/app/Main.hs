@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards #-}
 module Main where
 
 import Control.Concurrent.STM.TVar (newTVarIO)
@@ -14,8 +15,10 @@ import Api
 import Cache (initializeCaches)
 import Config
 import Models
+import StoneEdge (StoneEdgeCredentials(..))
 
 import qualified Data.ByteString.Char8 as C
+import qualified Data.Text as T
 import qualified Network.Wai.Handler.Warp as Warp
 
 -- | Connect to the database, configure the application, & start the server.
@@ -30,6 +33,7 @@ main = do
     smtpPass <- fromMaybe "" <$> lookupEnv "SMTP_PASS"
     emailPool <- smtpPool smtpServer (poolSize env)
     stripeToken <- fromMaybe "" <$> lookupEnv "STRIPE_TOKEN"
+    stoneEdgeAuth <- makeStoneEdgeAuth
     dbPool <- makePool env
     cache <- runSqlPool initializeCaches dbPool >>= newTVarIO
     let cfg = defaultConfig
@@ -41,6 +45,7 @@ main = do
             , getSmtpUser = smtpUser
             , getSmtpPass = smtpPass
             , getStripeConfig = StripeConfig $ StripeKey $ C.pack stripeToken
+            , getStoneEdgeAuth = stoneEdgeAuth
             }
     Warp.runSettings (warpSettings port) . httpLogger env $ app cfg
     where lookupSetting env def =
@@ -66,3 +71,8 @@ main = do
                     logStdout
                 Development ->
                     logStdoutDev
+          makeStoneEdgeAuth = do
+            secUsername <- T.pack . fromMaybe "" <$> lookupEnv "STONE_EDGE_USER"
+            secPassword <- T.pack . fromMaybe "" <$> lookupEnv "STONE_EDGE_PASS"
+            secStoreCode <- T.pack . fromMaybe "" <$> lookupEnv "STONE_EDGE_CODE"
+            return StoneEdgeCredentials {..}
