@@ -49,6 +49,7 @@ type API =
     :<|> "customers" :> CustomerAPI
     :<|> "carts" :> CartAPI
     :<|> "checkout" :> CheckoutAPI
+    :<|> "stone-edge" :> StoneEdgeAPI
 
 -- | Return the Handler functions for the `API` type.
 server :: ServerT API App
@@ -59,3 +60,4 @@ server =
     :<|> customerRoutes
     :<|> cartRoutes
     :<|> checkoutRoutes
+    :<|> stoneEdgeRoutes

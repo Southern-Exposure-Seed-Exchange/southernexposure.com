@@ -8,6 +8,7 @@ import qualified Data.ByteString.Lazy as LBS
 import Data.Monoid ((<>))
 import Data.Ratio ((%))
 import Data.Text (Text)
+import Data.Text.Encoding (decodeUtf8)
 import Data.Time (UTCTime(..), Day(..), DiffTime, secondsToDiffTime, getCurrentTime, fromGregorian)
 import Database.Persist.Sql (Entity(..), ToBackendKey, SqlBackend, toSqlKey)
 import Hedgehog
@@ -23,6 +24,7 @@ import Web.FormUrlEncoded (FromForm(..), urlDecodeForm, fromEntriesByKey)
 import Models
 import Models.Fields
 import Routes.CommonData
+import Routes.StoneEdge
 import StoneEdge
 
 import qualified StoneEdgeFixtures as SEF
@@ -38,6 +40,7 @@ tests =
          , modelsUtils
          , commonData
          , stoneEdge
+         , routesStoneEdge
          ]
 
 
@@ -515,6 +518,100 @@ stoneEdge = testGroup "StoneEdge Module"
     testXmlPart expected element =
         "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n" <> expected
             @=?  xrender (doc defaultDocInfo element)
+
+
+routesStoneEdge :: TestTree
+routesStoneEdge = testGroup "Routes.StoneEdge Module"
+    [ testCase "Unsupported setifunction Parameter" unsupportedFunction
+    , testCase "Missing setifunction Parameter" noFunction
+    , testCase "Incomplete downloadorders Form" parseErrorXml
+    , orderTransformTests
+    ]
+  where
+    unsupportedFunction :: Assertion
+    unsupportedFunction =
+        let expectedForm = fromEntriesByKey @Text @Text
+                [("setifunction", ["nanjidesuka"]), ("setiuser", ["auser"])]
+        in  testFormParsing "setifunction=nanjidesuka&setiuser=auser"
+                $ UnexpectedFunction "nanjidesuka" expectedForm
+    noFunction :: Assertion
+    noFunction =
+        let expectedForm = fromEntriesByKey @Text @Text
+                [("setiuser", ["auser"]), ("password", ["pwd"])]
+        in  testFormParsing "setiuser=auser&password=pwd"
+                $ InvalidRequest expectedForm
+    parseErrorXml :: Assertion
+    parseErrorXml =
+        (urlDecodeForm "setifunction=downloadorders" >>= fromForm @StoneEdgeRequest)
+            @?= Left (decodeUtf8 SEF.ordersParseErrorXml)
+    orderTransformTests :: TestTree
+    orderTransformTests = testGroup "Order Transformation"
+        [ testCase "Coupon" couponTransform
+        , testCase "Coupon to Nothing" couponTransformNothing
+        , testCase "Store Credit" storeCreditTransform
+        , testCase "Store Credit to Nothing" storeCreditTransformNothing
+        , testCase "Tax" taxTransform
+        , testCase "Tax with Rate" taxTransformRate
+        , testCase "No Tax" taxTransformNothing
+        , testCase "Discount" discountTransform
+        , testCase "Surcharge" surchargeTransform
+        , testCase "Shipping Total" shippingTotalTransform
+        ]
+    couponTransform :: Assertion
+    couponTransform =
+        let c = Entity nullSqlKey $ Coupon "CC" "Coup" "" True (FlatDiscount 300) 0 fillerTime 0 0 fillerTime
+            li = Entity nullSqlKey $ OrderLineItem nullSqlKey CouponDiscountLine "Coup Discount" 300
+            sc = StoneEdgeCoupon  "Coup" Nothing (StoneEdgeCents 300) (Just True)
+        in Just sc @=? transformCoupon c li
+    storeCreditTransform :: Assertion
+    storeCreditTransform =
+        let li = Entity nullSqlKey $ OrderLineItem nullSqlKey StoreCreditLine "Store Credit" 500
+            sc = StoneEdgeOrderStoreCredit $ StoneEdgePaymentStoreCredit
+                    (StoneEdgeCents 500) (Just "Store Credit")
+        in Just sc @=? transformStoreCredit li
+    couponTransformNothing :: Assertion
+    couponTransformNothing =
+        let c = Entity nullSqlKey $ Coupon "CC" "Coup" "" True (FlatDiscount 300) 0 fillerTime 0 0 fillerTime
+            li = Entity nullSqlKey $ OrderLineItem nullSqlKey PriorityShippingLine "Not a coupon" 900
+        in Nothing @=? transformCoupon c li
+    storeCreditTransformNothing :: Assertion
+    storeCreditTransformNothing =
+        let li = Entity nullSqlKey $ OrderLineItem nullSqlKey PriorityShippingLine "Not store credit" 900
+        in Nothing @=? transformStoreCredit li
+    taxTransform :: Assertion
+    taxTransform =
+        let st = StoneEdgeTax (StoneEdgeCents 9001) Nothing (Just False) (Just False) Nothing
+        in Just st @=? transformTax "Tax Description" (Cents 9001)
+    taxTransformRate :: Assertion
+    taxTransformRate =
+        let st = StoneEdgeTax (StoneEdgeCents 9001) (Just 0.053) (Just False) (Just False) Nothing
+        in Just st @=? transformTax "VA Tax (5.3%)" (Cents 9001)
+    taxTransformNothing :: Assertion
+    taxTransformNothing =
+        Nothing @=? transformTax "No Tax Due" 0
+    discountTransform :: Assertion
+    discountTransform =
+        let dc = StoneEdgeDiscount (Just SEFlatDiscount) (Just "description")
+                    Nothing (StoneEdgeCents 9001) (Just True)
+            ol = Entity nullSqlKey $ OrderLineItem nullSqlKey MemberDiscountLine "description" (Cents 9001)
+        in dc @=? transformDiscount ol
+    surchargeTransform :: Assertion
+    surchargeTransform =
+        let ss = StoneEdgeSurcharge (StoneEdgeCents 200) (Just "Fee")
+            ol = Entity nullSqlKey $ OrderLineItem nullSqlKey SurchargeLine "Fee" (Cents 200)
+        in ss @=? transformSurcharge ol
+    shippingTotalTransform :: Assertion
+    shippingTotalTransform =
+        let st = StoneEdgeShippingTotal (StoneEdgeCents 200) (Just "Shipping")
+            ol = Entity nullSqlKey $ OrderLineItem nullSqlKey ShippingLine "Shipping" (Cents 200)
+        in st @=? transformShippingTotal ol
+    fillerTime :: UTCTime
+    fillerTime =
+        UTCTime
+            (ModifiedJulianDay 1000)
+            (secondsToDiffTime 0)
+    nullSqlKey :: ToBackendKey SqlBackend a => Key a
+    nullSqlKey = toSqlKey 0
 
 
 

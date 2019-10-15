@@ -24,6 +24,19 @@ ordersErrorXml =
 ></SETIOrders
 >|]
 
+ordersParseErrorXml :: BS.ByteString
+ordersParseErrorXml =
+    [r|<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<SETIOrders
+><Response
+><ResponseCode
+>3</ResponseCode
+><ResponseDescription
+>Could not find key &quot;setiuser&quot;</ResponseDescription
+></Response
+></SETIOrders
+>|]
+
 noOrdersXml :: BS.ByteString
 noOrdersXml =
     [r|<?xml version="1.0" encoding="UTF-8" standalone="yes"?>

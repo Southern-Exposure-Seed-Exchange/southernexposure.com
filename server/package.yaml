@@ -93,6 +93,7 @@ library:
         - Models
         - Models.Fields
         - Routes.CommonData
+        - Routes.StoneEdge
         - StoneEdge
 
 tests:

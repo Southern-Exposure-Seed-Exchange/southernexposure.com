@@ -5,6 +5,7 @@ module Routes
     , module Routes.Customers
     , module Routes.Products
     , module Routes.StaticPages
+    , module Routes.StoneEdge
     ) where
 
 import Routes.Carts
@@ -13,3 +14,4 @@ import Routes.Checkout
 import Routes.Customers
 import Routes.Products
 import Routes.StaticPages
+import Routes.StoneEdge
