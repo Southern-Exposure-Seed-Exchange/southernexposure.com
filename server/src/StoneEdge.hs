@@ -399,6 +399,8 @@ data StoneEdgePaymentCreditCard
     = StoneEdgePaymentCreditCard
         { sepccIssuer :: T.Text
         -- ^ Must match a "credit card" payment method name in StoneEdge
+        , sepccCardNumber :: Maybe T.Text
+        -- ^ Last 4 digits
         , sepccTransactionId :: Maybe T.Text
         -- ^ Required for payment to show up in Transactions table
         -- & Payment tab.
@@ -409,6 +411,7 @@ renderStoneEdgePaymentCreditCard :: StoneEdgePaymentCreditCard -> Xml Elem
 renderStoneEdgePaymentCreditCard StoneEdgePaymentCreditCard {..} =
     xelem "CreditCard" $ xelems
         [ xelemWithText "Issuer" sepccIssuer
+        , maybeXelemText "Number" sepccCardNumber
         , maybeXelemText "TransID" sepccTransactionId
         , maybeXelemTextWith "Amount" renderStoneEdgeCents sepccAmount
         ]

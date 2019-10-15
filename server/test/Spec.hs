@@ -445,6 +445,7 @@ stoneEdge = testGroup "StoneEdge Module"
     orderCreditCard =
         StoneEdgeOrderCreditCard $ StoneEdgePaymentCreditCard
             "Visa"
+            (Just "9001")
             (Just "4729238728739452876")
             (Just $ StoneEdgeCents 9001)
     paymentStoreCreditResponse :: Assertion
