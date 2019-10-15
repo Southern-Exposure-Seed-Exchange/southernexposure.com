@@ -10,6 +10,7 @@ import Control.Applicative ((<|>))
 import Control.Monad (fail)
 import Data.Aeson (ToJSON(..), FromJSON(..), (.=), (.:), object, withObject, withText)
 import Data.ISO3166_CountryCodes (CountryCode)
+import Data.Monoid ((<>))
 import Data.Ratio ((%), numerator, denominator)
 import Data.StateCodes (StateCode)
 import Database.Persist (PersistField(..))
@@ -78,6 +79,47 @@ instance Show Milligrams where
 instance Read Milligrams where
     readPrec = Milligrams <$> readPrec
 
+-- | Prettify the milligrams by turning some values into pounds.
+-- Note: When changing matches, update the client code in Models.Fields as
+-- well.
+renderMilligrams :: Milligrams -> T.Text
+renderMilligrams (Milligrams mg) =
+    case mg of
+        114000 ->
+            "¼ lb"
+        228000 ->
+            "½ lb"
+        342000 ->
+            "¾ lb"
+        454000 ->
+            "1 lb"
+        568000 ->
+            "1¼ lbs"
+        680000 ->
+            "1½ lbs"
+        908000 ->
+            "2 lbs"
+        1135000 ->
+            "2½ lbs"
+        1816000 ->
+            "4 lbs"
+        2270000 ->
+            "5 lbs"
+        _ ->
+            let
+                (wholePart, fractionalPart) = mg `divMod` 1000
+            in
+                (<> " g") . stripZeroes
+                    $ T.pack (show wholePart) <> "." <> T.pack (show fractionalPart)
+  where
+    stripZeroes :: T.Text -> T.Text
+    stripZeroes t =
+        if T.takeEnd 1 t `elem` ["0", "1"] then
+            stripZeroes $ T.dropEnd 1 t
+        else
+            t
+
+
 
 -- LOT SIZES
 
@@ -128,6 +170,20 @@ instance FromJSON LotSize where
                 CustomLotSize <$> v .: "size"
             unexpected ->
                 fail $ "Unexpected LotSize type: " ++ T.unpack unexpected
+
+-- | TODO: Should we just send the final string in the JSON?
+renderLotSize :: LotSize -> T.Text
+renderLotSize = \case
+    Mass mg ->
+        renderMilligrams mg
+    Bulbs i ->
+        T.pack (show i) <> " Bulbs"
+    Slips i ->
+        T.pack (show i) <> " Slips"
+    Plugs i ->
+        T.pack (show i) <> " Plugs"
+    CustomLotSize t ->
+        t
 
 
 -- LOCATIONS
