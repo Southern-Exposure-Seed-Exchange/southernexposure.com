@@ -208,8 +208,8 @@ data DownloadOrdersRequest
         , dorStoreCode :: T.Text
         , dorLastOrder :: LastOrder
         , dorLastDate :: LastDate
-        , dorStartNumber :: Integer
-        , dorBatchSize :: Integer
+        , dorStartNumber :: Maybe Integer
+        , dorBatchSize :: Maybe Integer
         , dorDecryptionKey :: Maybe T.Text
         , dorOMVersion :: T.Text
         } deriving (Eq, Show, Read)
@@ -222,8 +222,8 @@ instance FromForm DownloadOrdersRequest where
             <*> parseUnique "code" f
             <*> fromForm f
             <*> fromForm f
-            <*> parseUnique "startnum" f
-            <*> parseUnique "batchsize" f
+            <*> parseMaybe "startnum" f
+            <*> parseMaybe "batchsize" f
             <*> parseMaybe "dkey" f
             <*> parseUnique "omversion" f
 

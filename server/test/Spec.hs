@@ -360,13 +360,13 @@ stoneEdge = testGroup "StoneEdge Module"
     downloadOrdersParsing =
         testFormParsing "setifunction=downloadorders&setiuser=auser&password=pwd&code=mystore&lastorder=1001&lastdate=10-Jun-2003&startnum=1&batchsize=100&dkey=decryptionkey&omversion=5.000"
             $ DownloadOrdersRequest "auser" "pwd" "mystore" (LastOrderNumber 1001)
-                (LastDate $ fromGregorian 2003 6 10) 1 100 (Just "decryptionkey")
-                "5.000"
+                (LastDate $ fromGregorian 2003 6 10) (Just 1) (Just 100)
+                (Just "decryptionkey") "5.000"
     downloadOrdersParsingNoKey :: Assertion
     downloadOrdersParsingNoKey =
         testFormParsing "setifunction=downloadorders&setiuser=auser&password=pwd&code=mystore&lastorder=1001&lastdate=10-Jun-2003&startnum=1&batchsize=100&omversion=5.000"
             $ DownloadOrdersRequest "auser" "pwd" "mystore" (LastOrderNumber 1001)
-                (LastDate $ fromGregorian 2003 6 10) 1 100 Nothing
+                (LastDate $ fromGregorian 2003 6 10) (Just 1) (Just 100) Nothing
                 "5.000"
     noOrdersResponse :: Assertion
     noOrdersResponse =
