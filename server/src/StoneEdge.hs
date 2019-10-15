@@ -76,7 +76,7 @@ module StoneEdge
 
 import Data.Monoid ((<>))
 import Data.Scientific (Scientific, FPFormat(Fixed), formatScientific, scientific)
-import Data.Time (UTCTime, Day, parseTimeM, defaultTimeLocale, formatTime)
+import Data.Time (LocalTime, Day, parseTimeM, defaultTimeLocale, formatTime)
 import Text.Read (readMaybe)
 import Text.XML.Generator
     ( Xml, Elem, doc, defaultDocInfo, xelem, xelems, xelemWithText, xempty
@@ -251,7 +251,7 @@ renderDownloadOrdersResponse = \case
 data StoneEdgeOrder
     = StoneEdgeOrder
         { seoOrderNumber :: Integer
-        , seoOrderDate :: UTCTime
+        , seoOrderDate :: LocalTime
         , seoOrderStatus :: Maybe T.Text
         , seoBilling :: StoneEdgeOrderBilling
         , seoShipping :: StoneEdgeOrderShipping
@@ -393,8 +393,6 @@ renderStoneEdgeOrderPayment = xelem "Payment" . \case
     StoneEdgeOrderStoreCredit payment ->
         renderStoneEdgePaymentStoreCredit payment
 
--- TODO: Store more CC Info in DB? That would include Cardholder data though.
--- Like FullName & TransactionID?
 data StoneEdgePaymentCreditCard
     = StoneEdgePaymentCreditCard
         { sepccIssuer :: T.Text
@@ -707,5 +705,4 @@ matchFunction value parser form =
         if function == value then
             parser form
         else
-            -- TODO: Use proper error format for stonedge
             Left $ "Unsupported SETI function: " <> function

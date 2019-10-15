@@ -22,7 +22,7 @@ module Routes.StoneEdge
     ) where
 
 import Control.Monad ((<=<), when, forM)
-import Control.Monad.Reader (asks)
+import Control.Monad.Reader (asks, liftIO)
 import Control.Exception.Safe (MonadCatch, Exception, Typeable, throwM, handle)
 import Data.Bifunctor (first)
 import Data.Char (isDigit)
@@ -30,6 +30,7 @@ import Data.Maybe (fromMaybe, mapMaybe, listToMaybe, maybeToList)
 import Data.Monoid ((<>))
 import Data.Text (Text)
 import Data.Text.Encoding (decodeUtf8)
+import Data.Time (LocalTime, getTimeZone, utcToLocalTime)
 import Database.Persist.Sql
     ( (>.), (<-.), (==.), Entity(..), count, toSqlKey, fromSqlKey, selectList
     )
@@ -199,16 +200,20 @@ downloadOrdersRoute DownloadOrdersRequest { dorLastOrder, dorStartNumber, dorBat
             limitAndOffset
             return (o, c, sa, ba, cp)
         forM orders $ \(o, c, sa, ba, cp) -> do
+            let utcCreated = orderCreatedAt $ entityVal o
+            timeZone <- liftIO $ getTimeZone utcCreated
+            let createdAt = utcToLocalTime timeZone utcCreated
             lineItems <- selectList [OrderLineItemOrderId ==. entityKey o] []
             products <- E.select $ E.from $ \(op `E.InnerJoin` p `E.InnerJoin` v) -> do
                 E.on (op E.^. OrderProductProductVariantId E.==. v E.^. ProductVariantId)
                 E.on (v E.^. ProductVariantProductId E.==. p E.^. ProductId)
                 return (op, p, v)
-            return (o, c, sa, ba, cp, lineItems, products)
+            return (o, createdAt, c, sa, ba, cp, lineItems, products)
     return . DownloadOrdersResponse $ map transformOrder rawOrderData
 
 transformOrder
     :: ( Entity Order
+       , LocalTime
        , Entity Customer
        , Entity Address
        , Maybe (Entity Address)
@@ -217,10 +222,10 @@ transformOrder
        , [( Entity OrderProduct, Entity Product, Entity ProductVariant )]
        )
     -> StoneEdgeOrder
-transformOrder (order, customer, shipping, maybeBilling, maybeCoupon, items, products) =
+transformOrder (order, createdAt, customer, shipping, maybeBilling, maybeCoupon, items, products) =
     StoneEdgeOrder
         { seoOrderNumber = fromIntegral . fromSqlKey $ entityKey order
-        , seoOrderDate = orderCreatedAt $ entityVal order
+        , seoOrderDate = createdAt
         , seoOrderStatus = Just . T.pack . show . orderStatus $ entityVal order
         , seoBilling = transformBilling $ fromMaybe shipping maybeBilling
         , seoShipping = transformShipping

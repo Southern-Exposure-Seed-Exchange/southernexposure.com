@@ -9,7 +9,10 @@ import Data.Monoid ((<>))
 import Data.Ratio ((%))
 import Data.Text (Text)
 import Data.Text.Encoding (decodeUtf8)
-import Data.Time (UTCTime(..), Day(..), DiffTime, secondsToDiffTime, getCurrentTime, fromGregorian)
+import Data.Time
+    ( UTCTime(..), LocalTime(..), TimeOfDay(..), Day(..), DiffTime
+    , secondsToDiffTime, getCurrentTime, fromGregorian
+    )
 import Database.Persist.Sql (Entity(..), ToBackendKey, SqlBackend, toSqlKey)
 import Hedgehog
 import qualified Hedgehog.Gen as Gen
@@ -381,7 +384,7 @@ stoneEdge = testGroup "StoneEdge Module"
             renderDownloadOrdersResponse (DownloadOrdersResponse
                 [ StoneEdgeOrder
                     9001
-                    (UTCTime (fromGregorian 2003 6 10) $ secondsToDiffTime 0)
+                    (LocalTime (fromGregorian 2003 6 10) $ TimeOfDay 0 0 0)
                     (Just "Payment Received")
                     orderBilling
                     orderShipping
