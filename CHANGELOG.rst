@@ -2,6 +2,20 @@
 CHANGELOG
 =========
 
+
+v0.8.0
+======
+
+* Add server route for integration with the StoneEdge Order Manager. Only
+  endpoints/functions required for the Order Downloading functionality are
+  implemented. Instead of combining the database querying and export
+  generation, we split the export processing into two discrete steps - querying
+  the database and transforming the Order data into what StoneEdge requires,
+  and then generating the XML output for the transformed data.
+* Store the issuer & last 4 digits of credit cards for exporting Orders to
+  StoneEdge.
+
+
 v0.7.0
 ======
 

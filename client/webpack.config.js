@@ -145,7 +145,7 @@ module.exports = {
         developerURL: "https://github.com/Southern-Exposure-Seed-Exchange/southernexposure.com/",
         background: "#ffffff00",
         theme_color: "#158312",
-        version: "v0.7.0",
+        version: "v0.8.0",
       },
     }),
     new ImageminWebpackPlugin({
