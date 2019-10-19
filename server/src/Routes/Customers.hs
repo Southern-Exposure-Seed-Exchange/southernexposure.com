@@ -73,16 +73,16 @@ type CustomerAPI =
 
 type CustomerRoutes =
          App LocationData
-    :<|> (RegistrationParameters -> App AuthorizationData)
-    :<|> (LoginParameters -> App AuthorizationData)
-    :<|> (AuthorizeParameters -> App AuthorizationData)
+    :<|> (RegistrationParameters -> App (Cookied AuthorizationData))
+    :<|> (LoginParameters -> App (Cookied AuthorizationData))
+    :<|> (WrappedAuthToken -> AuthorizeParameters -> App (Cookied AuthorizationData))
     :<|> (ResetRequestParameters -> App ())
-    :<|> (ResetPasswordParameters -> App AuthorizationData)
-    :<|> (AuthToken -> Maybe Int64 -> App MyAccountDetails)
-    :<|> (AuthToken -> EditDetailsParameters -> App ())
-    :<|> (AuthToken -> App AddressDetails)
-    :<|> (AuthToken -> Int64 -> AddressData -> App ())
-    :<|> (AuthToken -> Int64 -> App ())
+    :<|> (ResetPasswordParameters -> App (Cookied AuthorizationData))
+    :<|> (WrappedAuthToken -> Maybe Int64 -> App (Cookied MyAccountDetails))
+    :<|> (WrappedAuthToken -> EditDetailsParameters -> App (Cookied ()))
+    :<|> (WrappedAuthToken -> App (Cookied AddressDetails))
+    :<|> (WrappedAuthToken -> Int64 -> AddressData -> App (Cookied ()))
+    :<|> (WrappedAuthToken -> Int64 -> App (Cookied ()))
 
 customerRoutes :: CustomerRoutes
 customerRoutes =
@@ -201,9 +201,9 @@ instance Validation RegistrationParameters where
 
 type RegisterRoute =
        ReqBody '[JSON] RegistrationParameters
-    :> Post '[JSON] AuthorizationData
+    :> Post '[JSON] (Cookied AuthorizationData)
 
-registrationRoute :: RegistrationParameters -> App AuthorizationData
+registrationRoute :: RegistrationParameters -> App (Cookied AuthorizationData)
 registrationRoute = validate >=> \parameters -> do
     encryptedPass <- hashPassword $ rpPassword parameters
     authToken <- generateUniqueToken UniqueToken
@@ -223,7 +223,8 @@ registrationRoute = validate >=> \parameters -> do
         Just customerId ->
             runDB (maybeMergeCarts customerId $ rpCartToken parameters) >>
             Emails.send (Emails.AccountCreated customer) >>
-            return (toAuthorizationData $ Entity customerId customer)
+            addSessionCookie temporarySession (AuthToken authToken)
+                (toAuthorizationData $ Entity customerId customer)
 
 
 -- LOGIN
@@ -246,9 +247,9 @@ instance FromJSON LoginParameters where
 
 type LoginRoute =
        ReqBody '[JSON] LoginParameters
-    :> Post '[JSON] AuthorizationData
+    :> Post '[JSON] (Cookied AuthorizationData)
 
-loginRoute :: LoginParameters -> App AuthorizationData
+loginRoute :: LoginParameters -> App (Cookied AuthorizationData)
 loginRoute LoginParameters { lpEmail, lpPassword, lpCartToken } =
     let
         authorizationError =
@@ -264,7 +265,8 @@ loginRoute LoginParameters { lpEmail, lpPassword, lpCartToken } =
                 when (customerEncryptedPassword customer == "") resetRequiredError
                 if isValid then
                     runDB (maybeMergeCarts customerId lpCartToken) >>
-                    return (toAuthorizationData e)
+                    addSessionCookie temporarySession (makeToken customer)
+                        (toAuthorizationData e)
                 else
                     authorizationError
             Nothing ->
@@ -302,31 +304,30 @@ loginRoute LoginParameters { lpEmail, lpPassword, lpCartToken } =
 -- AUTHORIZE
 
 
-data AuthorizeParameters =
+newtype AuthorizeParameters =
     AuthorizeParameters
         { apUserId :: Int64
-        , apToken :: T.Text
         }
 
 instance FromJSON AuthorizeParameters where
     parseJSON = withObject "AuthorizeParameters" $ \v ->
         AuthorizeParameters
             <$> v .: "userId"
-            <*> v .: "token"
 
 type AuthorizeRoute =
-       ReqBody '[JSON] AuthorizeParameters
-    :> Post '[JSON] AuthorizationData
+       AuthProtect "cookie-auth"
+    :> ReqBody '[JSON] AuthorizeParameters
+    :> Post '[JSON] (Cookied AuthorizationData)
 
-authorizeRoute :: AuthorizeParameters -> App AuthorizationData
-authorizeRoute AuthorizeParameters { apUserId, apToken } =
+authorizeRoute :: WrappedAuthToken -> AuthorizeParameters -> App (Cookied AuthorizationData)
+authorizeRoute token AuthorizeParameters { apUserId } =
     let
         userId = toSqlKey apUserId
-    in do
+    in withCookie token $ \authToken -> do
         maybeCustomer <- runDB $ get userId
         case maybeCustomer of
             Just customer ->
-                if apToken == customerAuthToken customer then
+                if fromAuthToken authToken == customerAuthToken customer then
                     return $ toAuthorizationData (Entity userId customer )
                 else
                     serverError err403
@@ -402,9 +403,9 @@ instance Validation ResetPasswordParameters where
 
 type ResetPasswordRoute =
        ReqBody '[JSON] ResetPasswordParameters
-    :> Post '[JSON] AuthorizationData
+    :> Post '[JSON] (Cookied AuthorizationData)
 
-resetPasswordRoute :: ResetPasswordParameters -> App AuthorizationData
+resetPasswordRoute :: ResetPasswordParameters -> App (Cookied AuthorizationData)
 resetPasswordRoute = validate >=> \parameters ->
     let
         invalidCodeError =
@@ -432,7 +433,7 @@ resetPasswordRoute = validate >=> \parameters ->
                     -- TODO: Something more relevant than invalidCodeError
                     flip (maybe invalidCodeError) maybeCustomer $ \customer -> do
                         void . Emails.send $ Emails.PasswordResetSuccess customer
-                        return . toAuthorizationData
+                        addSessionCookie temporarySession (AuthToken token) . toAuthorizationData
                             $ Entity customerId customer
                 else
                     runDB (delete resetId) >> invalidCodeError
@@ -474,13 +475,12 @@ instance ToJSON MyAccountOrderDetails where
             ]
 
 type MyAccountRoute =
-       AuthProtect "auth-token"
+       AuthProtect "cookie-auth"
     :> QueryParam "limit" Int64
-    :> Get '[JSON] MyAccountDetails
+    :> Get '[JSON] (Cookied MyAccountDetails)
 
-myAccountRoute :: AuthToken -> Maybe Int64 -> App MyAccountDetails
-myAccountRoute authToken maybeLimit = do
-    (Entity customerId customer) <- validateToken authToken
+myAccountRoute :: WrappedAuthToken -> Maybe Int64 -> App (Cookied MyAccountDetails)
+myAccountRoute token maybeLimit = withValidatedCookie token $ \(Entity customerId customer) -> do
     orderDetails <- getOrderDetails customerId
     return $ MyAccountDetails orderDetails (customerStoreCredit customer)
     where getOrderDetails customerId = runDB $ do
@@ -568,13 +568,12 @@ instance Validation (EditDetailsParameters, Customer) where
 
 
 type EditDetailsRoute =
-       AuthProtect "auth-token"
+       AuthProtect "cookie-auth"
     :> ReqBody '[JSON] EditDetailsParameters
-    :> Put '[JSON] ()
+    :> Put '[JSON] (Cookied ())
 
-editDetailsRoute :: AuthToken -> EditDetailsParameters -> App ()
-editDetailsRoute token p = do
-    (Entity customerId customer) <- validateToken token
+editDetailsRoute :: WrappedAuthToken -> EditDetailsParameters -> App (Cookied ())
+editDetailsRoute token p = withValidatedCookie token $ \(Entity customerId customer) -> do
     (parameters, _) <- validate (p, customer)
     maybeHash <- mapM hashPassword $ edpPassword parameters
     void . runDB . update customerId $ updateFields (edpEmail parameters) maybeHash
@@ -600,11 +599,11 @@ instance ToJSON AddressDetails where
             ]
 
 type AddressDetailsRoute =
-       AuthProtect "auth-token"
-    :> Get '[JSON] AddressDetails
+       AuthProtect "cookie-auth"
+    :> Get '[JSON] (Cookied AddressDetails)
 
-addressDetailsRoute :: AuthToken -> App AddressDetails
-addressDetailsRoute = validateToken >=> \(Entity customerId _) -> do
+addressDetailsRoute :: WrappedAuthToken -> App (Cookied AddressDetails)
+addressDetailsRoute token = withValidatedCookie token $ \(Entity customerId _) -> do
     addresses <- runDB $
         selectList [AddressCustomerId ==. customerId, AddressIsActive ==. True]
             [Asc AddressFirstName, Asc AddressLastName, Asc AddressAddressOne]
@@ -632,14 +631,13 @@ handleAddressError = \case
 
 
 type AddressEditRoute =
-       AuthProtect "auth-token"
+       AuthProtect "cookie-auth"
     :> Capture "id" Int64
     :> ReqBody '[JSON] AddressData
-    :> Post '[JSON] ()
+    :> Post '[JSON] (Cookied ())
 
-addressEditRoute :: AuthToken -> Int64 -> AddressData -> App ()
-addressEditRoute token aId addressData = do
-    (Entity customerId _) <- validateToken token
+addressEditRoute :: WrappedAuthToken -> Int64 -> AddressData -> App (Cookied ())
+addressEditRoute token aId addressData = withValidatedCookie token $ \(Entity customerId _) -> do
     void $ validate addressData
     either handleAddressError return <=< try . runDB $ do
         let addressId = toSqlKey aId
@@ -668,14 +666,13 @@ addressEditRoute token aId addressData = do
 
 
 type AddressDeleteRoute =
-       AuthProtect "auth-token"
+       AuthProtect "cookie-auth"
     :> Capture "id" Int64
-    :> Delete '[JSON] ()
+    :> Delete '[JSON] (Cookied ())
 
-addressDeleteRoute :: AuthToken -> Int64 -> App ()
-addressDeleteRoute token aId = do
+addressDeleteRoute :: WrappedAuthToken -> Int64 -> App (Cookied ())
+addressDeleteRoute token aId = withValidatedCookie token $ \(Entity customerId _) -> do
     let addressId = toSqlKey aId :: AddressId
-    customerId <- entityKey <$> validateToken token
     either handleAddressError return <=< try . runDB $ do
         address <- get addressId >>= maybe (throwM AddressNotFound) return
         if addressCustomerId address /= customerId then

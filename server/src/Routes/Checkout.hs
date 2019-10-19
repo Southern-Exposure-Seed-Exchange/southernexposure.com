@@ -63,11 +63,11 @@ type CheckoutAPI =
     :<|> "success" :> SuccessRoute
 
 type CheckoutRoutes =
-         (AuthToken -> CustomerDetailsParameters -> App CheckoutDetailsData)
-    :<|> (AuthToken -> CustomerPlaceOrderParameters -> App PlaceOrderData)
+         (WrappedAuthToken -> CustomerDetailsParameters -> App (Cookied CheckoutDetailsData))
+    :<|> (WrappedAuthToken -> CustomerPlaceOrderParameters -> App (Cookied PlaceOrderData))
     :<|> (AnonymousDetailsParameters -> App CheckoutDetailsData)
-    :<|> (AnonymousPlaceOrderParameters -> App AnonymousPlaceOrderData)
-    :<|> (AuthToken -> SuccessParameters -> App OrderDetails)
+    :<|> (AnonymousPlaceOrderParameters -> App (Cookied AnonymousPlaceOrderData))
+    :<|> (WrappedAuthToken -> SuccessParameters -> App (Cookied OrderDetails))
 
 checkoutRoutes :: CheckoutRoutes
 checkoutRoutes =
@@ -187,13 +187,12 @@ instance ToJSON CheckoutDetailsData where
             ]
 
 type CustomerDetailsRoute =
-       AuthProtect "auth-token"
+       AuthProtect "cookie-auth"
     :> ReqBody '[JSON] CustomerDetailsParameters
-    :> Post '[JSON] CheckoutDetailsData
+    :> Post '[JSON] (Cookied CheckoutDetailsData)
 
-customerDetailsRoute :: AuthToken -> CustomerDetailsParameters -> App CheckoutDetailsData
-customerDetailsRoute token parameters = do
-    (Entity customerId customer) <- validateToken token
+customerDetailsRoute :: WrappedAuthToken -> CustomerDetailsParameters -> App (Cookied CheckoutDetailsData)
+customerDetailsRoute token parameters = withValidatedCookie token $ \(Entity customerId customer) -> do
     let hasValidMemberNumber =
             (> 3) . T.length . fromMaybe (customerMemberNumber customer)
                 $ cdpMemberNumber parameters
@@ -509,9 +508,9 @@ instance ToJSON PlaceOrderData where
         object [ "orderId" .= podOrderId order ]
 
 type CustomerPlaceOrderRoute =
-       AuthProtect "auth-token"
+       AuthProtect "cookie-auth"
     :> ReqBody '[JSON] CustomerPlaceOrderParameters
-    :> Post '[JSON] PlaceOrderData
+    :> Post '[JSON] (Cookied PlaceOrderData)
 
 
 -- | Place an Order using a Customer's Cart.
@@ -519,9 +518,8 @@ type CustomerPlaceOrderRoute =
 -- If the Customer has a StripeId, add a new Card & set it as their
 -- Default. Otherwise create a new Stripe Customer for them. Then charge
 -- the Stripe Customer.
-customerPlaceOrderRoute :: AuthToken -> CustomerPlaceOrderParameters -> App PlaceOrderData
-customerPlaceOrderRoute token = validate >=> \parameters -> do
-    ce@(Entity customerId customer) <- validateToken token
+customerPlaceOrderRoute :: WrappedAuthToken -> CustomerPlaceOrderParameters -> App (Cookied PlaceOrderData)
+customerPlaceOrderRoute = validateCookieAndParameters $ \ce@(Entity customerId customer) parameters -> do
     let memberNumberParameter = cpopMemberNumber parameters
         shippingParameter = cpopShippingAddress parameters
         maybeStripeToken = cpopStripeToken parameters
@@ -688,12 +686,12 @@ instance ToJSON AnonymousPlaceOrderData where
 
 type AnonymousPlaceOrderRoute =
        ReqBody '[JSON] AnonymousPlaceOrderParameters
-    :> Post '[JSON] AnonymousPlaceOrderData
+    :> Post '[JSON] (Cookied AnonymousPlaceOrderData)
 
 -- | Place an Order using an Anonymous Cart.
 --
 -- A new Customer & Order is created & the Customer is charged.
-anonymousPlaceOrderRoute :: AnonymousPlaceOrderParameters -> App AnonymousPlaceOrderData
+anonymousPlaceOrderRoute :: AnonymousPlaceOrderParameters -> App (Cookied AnonymousPlaceOrderData)
 anonymousPlaceOrderRoute = validate >=> \parameters -> do
     encryptedPass <- hashPassword $ apopPassword parameters
     authToken <- generateUniqueToken UniqueToken
@@ -745,7 +743,7 @@ anonymousPlaceOrderRoute = validate >=> \parameters -> do
             )
     runDB (OrderPlaced.fetchData orderId)
         >>= maybe (return ()) (void . Emails.send . Emails.OrderPlaced)
-    return orderData
+    addSessionCookie temporarySession (AuthToken authToken) orderData
 
 
 -- | Create a Stripe Customer with an Email & Token.
@@ -1065,13 +1063,12 @@ instance FromJSON SuccessParameters where
             <$> v .: "orderId"
 
 type SuccessRoute =
-       AuthProtect "auth-token"
+       AuthProtect "cookie-auth"
     :> ReqBody '[JSON] SuccessParameters
-    :> Post '[JSON] OrderDetails
+    :> Post '[JSON] (Cookied OrderDetails)
 
-customerSuccessRoute :: AuthToken -> SuccessParameters -> App OrderDetails
-customerSuccessRoute token parameters = do
-    (Entity customerId _) <- validateToken token
+customerSuccessRoute :: WrappedAuthToken -> SuccessParameters -> App (Cookied OrderDetails)
+customerSuccessRoute token parameters = withValidatedCookie token $ \(Entity customerId _) -> do
     eitherM handleError <=< try . runDB $ do
         (Entity orderId order, shipping, billing) <-
             getOrderAndAddress customerId (E.toSqlKey $ cspOrderId parameters)

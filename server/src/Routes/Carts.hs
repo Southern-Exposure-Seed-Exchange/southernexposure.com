@@ -65,11 +65,11 @@ cartRoutes =
 
 
 type CustomerCartRoutes =
-         (AuthToken -> CustomerAddParameters -> App ())
-    :<|> (AuthToken -> App CartDetailsData)
-    :<|> (AuthToken -> CustomerUpdateParameters -> App CartDetailsData)
-    :<|> (AuthToken -> App ItemCountData)
-    :<|> (AuthToken -> CustomerQuickOrderParameters -> App ())
+         (WrappedAuthToken -> CustomerAddParameters -> App (Cookied ()))
+    :<|> (WrappedAuthToken -> App (Cookied CartDetailsData))
+    :<|> (WrappedAuthToken -> CustomerUpdateParameters -> App (Cookied CartDetailsData))
+    :<|> (WrappedAuthToken -> App (Cookied ItemCountData))
+    :<|> (WrappedAuthToken -> CustomerQuickOrderParameters -> App (Cookied ()))
 
 customerRoutes :: CustomerCartRoutes
 customerRoutes =
@@ -141,12 +141,12 @@ instance Validation CustomerAddParameters where
                ]
 
 type CustomerAddRoute =
-        AuthProtect "auth-token"
+        AuthProtect "cookie-auth"
      :> ReqBody '[JSON] CustomerAddParameters
-     :> Post '[JSON] ()
+     :> Post '[JSON] (Cookied ())
 
-customerAddRoute :: AuthToken -> CustomerAddParameters -> App ()
-customerAddRoute token = validate >=> \parameters ->
+customerAddRoute :: WrappedAuthToken -> CustomerAddParameters -> App (Cookied ())
+customerAddRoute = validateCookieAndParameters $ \(Entity customerId _) parameters ->
     let
         productVariant =
             capVariantId parameters
@@ -159,7 +159,6 @@ customerAddRoute token = validate >=> \parameters ->
                 , cartItemQuantity = quantity
                 }
     in do
-        (Entity customerId _) <- validateToken token
         (Entity cartId _) <- getOrCreateCustomerCart customerId
         void . runDB $ upsertBy (UniqueCartItem cartId productVariant)
             (item cartId) [CartItemQuantity +=. quantity]
@@ -222,20 +221,23 @@ anonymousAddRoute = validate >=> \parameters ->
 
 
 type CustomerDetailsRoute =
-       AuthProtect "auth-token"
-    :> Get '[JSON] CartDetailsData
+       AuthProtect "cookie-auth"
+    :> Get '[JSON] (Cookied CartDetailsData)
 
-customerDetailsRoute :: AuthToken -> App CartDetailsData
-customerDetailsRoute = validateToken >=> \(Entity customerId customer) ->
+customerDetailsRoute :: WrappedAuthToken -> App (Cookied CartDetailsData)
+customerDetailsRoute token = withValidatedCookie token getCustomerCartDetails
+
+getCustomerCartDetails :: Entity Customer -> App CartDetailsData
+getCustomerCartDetails (Entity customerId customer) =
     runDB $ do
-        (taxRate, shippingCountry) <- getTaxAndShippingCountry customerId
+        (taxRate, shippingCountry) <- getTaxAndShippingCountry
         items <- getCartItems taxRate $ \c ->
             c E.^. CartCustomerId E.==. E.just (E.val customerId)
         charges <- getCharges taxRate shippingCountry items
             (not . T.null $ customerMemberNumber customer)
             Nothing False
         return $ CartDetailsData items charges
-    where getTaxAndShippingCountry customerId = do
+    where getTaxAndShippingCountry = do
             maybeShippingAddress <-
                 listToMaybe . map P.entityVal
                     <$> P.selectList
@@ -293,20 +295,19 @@ instance Validation CustomerUpdateParameters where
         V.validateMap [V.zeroOrPositive] $ cupQuantities parameters
 
 type CustomerUpdateRoute =
-       AuthProtect "auth-token"
+       AuthProtect "cookie-auth"
     :> ReqBody '[JSON] CustomerUpdateParameters
-    :> Post '[JSON] CartDetailsData
+    :> Post '[JSON] (Cookied CartDetailsData)
 
-customerUpdateRoute :: AuthToken -> CustomerUpdateParameters -> App CartDetailsData
-customerUpdateRoute token = validate >=> \parameters -> do
-    (Entity customerId _) <- validateToken token
+customerUpdateRoute :: WrappedAuthToken -> CustomerUpdateParameters -> App (Cookied CartDetailsData)
+customerUpdateRoute = validateCookieAndParameters $ \customer@(Entity customerId _) parameters -> do
     maybeCart <- runDB . getBy . UniqueCustomerCart $ Just customerId
     case maybeCart of
         Nothing ->
             serverError err404
         Just (Entity cartId _) ->
             updateOrDeleteItems cartId $ cupQuantities parameters
-    customerDetailsRoute token
+    getCustomerCartDetails customer
 
 
 data AnonymousUpdateParameters =
@@ -370,11 +371,11 @@ instance ToJSON ItemCountData where
                ]
 
 type CustomerCountRoute =
-       AuthProtect "auth-token"
-    :> Get '[JSON] ItemCountData
+       AuthProtect "cookie-auth"
+    :> Get '[JSON] (Cookied ItemCountData)
 
-customerCountRoute :: AuthToken -> App ItemCountData
-customerCountRoute = validateToken >=> \(Entity customerId _) ->
+customerCountRoute :: WrappedAuthToken -> App (Cookied ItemCountData)
+customerCountRoute token = withValidatedCookie token $ \(Entity customerId _) ->
     fmap (ItemCountData . round . fromMaybe (0 :: Rational) . (E.unValue =<<) . listToMaybe) . runDB $ do
         maybeCart <- getBy . UniqueCustomerCart $ Just customerId
         case maybeCart of
@@ -418,16 +419,15 @@ instance FromJSON QuickOrderItem where
             <*> v .: "index"
 
 type CustomerQuickOrderRoute =
-       AuthProtect "auth-token"
+       AuthProtect "cookie-auth"
     :> ReqBody '[JSON] CustomerQuickOrderParameters
-    :> Post '[JSON] ()
+    :> Post '[JSON] (Cookied ())
 
-customerQuickOrderRoute :: AuthToken -> CustomerQuickOrderParameters -> App ()
-customerQuickOrderRoute token parameters = do
-    (Entity customerId _) <- validateToken token
-    _ <- validate parameters
-    (Entity cartId _) <- getOrCreateCustomerCart customerId
-    mapM_ (upsertQuickOrderItem cartId) $ cqopItems parameters
+customerQuickOrderRoute :: WrappedAuthToken -> CustomerQuickOrderParameters -> App (Cookied ())
+customerQuickOrderRoute =
+    validateCookieAndParameters $ \(Entity customerId _) parameters -> do
+        (Entity cartId _) <- getOrCreateCustomerCart customerId
+        mapM_ (upsertQuickOrderItem cartId) $ cqopItems parameters
 
 
 data AnonymousQuickOrderParameters =
