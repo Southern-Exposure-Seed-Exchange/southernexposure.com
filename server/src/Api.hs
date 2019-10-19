@@ -24,13 +24,14 @@ app cfg =
         readerToHandler :: App :~> Handler
         readerToHandler =
             NT $ \x -> runReaderT x cfg
-
+        context =
+            authServerContext $ getCookieSecret cfg
     in
         case getEnv cfg of
             Production ->
-                serveWithContext api authServerContext readerServer
+                serveWithContext api context readerServer
             Development ->
-                serveWithContext devApi authServerContext $
+                serveWithContext devApi context $
                          readerServer
                     :<|> serveDirectoryWebApp (getMediaDirectory cfg)
 

@@ -11,6 +11,13 @@ packages:
       sha256: 4dce2b244ad940998a42297d479491c55fbeb3e92d92baaed317af6199157b5a
   original:
     hackage: ca-province-codes-1.0.0.0
+- completed:
+    hackage: servant-auth-cookie-0.6.0.3@sha256:06151cc6205eb1d5696ff4e282eda4e28f332bc8d03059a155b6ba2c46bf70b2,7513
+    pantry-tree:
+      size: 707
+      sha256: 361532595d07dcbb13d2677dabeb6883afbe6fd119c431815546fe4fefc068f6
+  original:
+    hackage: servant-auth-cookie-0.6.0.3
 snapshots:
 - completed:
     size: 569315

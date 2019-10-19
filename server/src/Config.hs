@@ -9,6 +9,7 @@ import Control.Concurrent.STM (TVar)
 import Data.Pool (Pool, createPool)
 import Database.Persist.Sql (ConnectionPool)
 import Network.HaskellNet.SMTP.SSL (SMTPConnection, connectSMTPSTARTTLS, closeSMTP)
+import Servant.Server.Experimental.Auth.Cookie (PersistentServerKey, RandomSource)
 import Web.Stripe.Client (StripeConfig)
 
 import Cache (Caches)
@@ -31,6 +32,8 @@ data Config
     , getSmtpPass :: String
     , getStripeConfig :: StripeConfig
     , getStoneEdgeAuth :: StoneEdgeCredentials
+    , getCookieSecret :: PersistentServerKey
+    , getCookieEntropySource :: RandomSource
     }
 
 defaultConfig :: Config
@@ -45,6 +48,8 @@ defaultConfig =
         , getSmtpPass = undefined
         , getStripeConfig = undefined
         , getStoneEdgeAuth = undefined
+        , getCookieSecret = undefined
+        , getCookieEntropySource = undefined
         }
 
 

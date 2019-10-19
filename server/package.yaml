@@ -51,7 +51,11 @@ dependencies:
     - blaze-markup
     - bytestring
     - ca-province-codes
+    - cereal
+    - cereal-text
     - containers
+    - cryptonite
+    - data-default
     - directory
     - esqueleto
     - filepath
@@ -68,6 +72,7 @@ dependencies:
     - resource-pool
     - safe-exceptions
     - scientific
+    - servant-auth-cookie
     - servant-server
     - state-codes
     - stm
@@ -87,6 +92,7 @@ library:
     source-dirs: src
     exposed-modules:
         - Api
+        - Auth
         - Cache
         - Config
         - Images

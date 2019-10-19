@@ -7,6 +7,7 @@ packages:
 
 extra-deps:
     - ca-province-codes-1.0.0.0
+    - servant-auth-cookie-0.6.0.3
 
 flags: {}
 

@@ -12,6 +12,7 @@ import System.Environment (lookupEnv)
 import Web.Stripe.Client (StripeConfig(..), StripeKey(..))
 
 import Api
+import Auth (sessionEntropy, mkPersistentServerKey)
 import Cache (initializeCaches)
 import Config
 import Models
@@ -33,6 +34,9 @@ main = do
     smtpPass <- fromMaybe "" <$> lookupEnv "SMTP_PASS"
     emailPool <- smtpPool smtpServer (poolSize env)
     stripeToken <- fromMaybe "" <$> lookupEnv "STRIPE_TOKEN"
+    cookieSecret <- mkPersistentServerKey . C.pack . fromMaybe ""
+        <$> lookupEnv "COOKIE_SECRET"
+    entropySource <- sessionEntropy
     stoneEdgeAuth <- makeStoneEdgeAuth
     dbPool <- makePool env
     cache <- runSqlPool initializeCaches dbPool >>= newTVarIO
@@ -46,6 +50,8 @@ main = do
             , getSmtpPass = smtpPass
             , getStripeConfig = StripeConfig $ StripeKey $ C.pack stripeToken
             , getStoneEdgeAuth = stoneEdgeAuth
+            , getCookieSecret = cookieSecret
+            , getCookieEntropySource = entropySource
             }
     Warp.runSettings (warpSettings port) . httpLogger env $ app cfg
     where lookupSetting env def =
