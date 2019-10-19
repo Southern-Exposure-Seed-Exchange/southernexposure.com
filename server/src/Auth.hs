@@ -16,6 +16,8 @@ module Auth
     , Cookied
     , addSessionCookie
     , withCookie
+    , withValidatedCookie
+    , validateCookieAndParameters
     , temporarySession
     , permanentSession
       -- * Server Setup
@@ -24,6 +26,7 @@ module Auth
     , authServerContext
     ) where
 
+import Control.Monad ((>=>))
 import Control.Monad.Reader (MonadIO, MonadReader, ask, asks)
 import Crypto.Random (drgNew)
 import Data.Default (def)
@@ -45,6 +48,7 @@ import Servant.Server.Experimental.Auth.Cookie
 import Config (Config(getCookieSecret, getCookieEntropySource))
 import Models.DB (Unique(UniqueToken), Customer(customerAuthToken))
 import Server (App, runDB, serverError)
+import Validation (Validation(..))
 
 import qualified Data.Text as T
 
@@ -82,6 +86,7 @@ cookieSettings =
     def { acsMaxAge = fromInteger $ 10 * 365 * 24 * 60 * 60 -- 10 years
         }
 
+-- | Authorize the user by setting their session cookie.
 addSessionCookie :: AddHeader e EncryptedSession a b => SessionSettings -> AuthToken -> a -> App b
 addSessionCookie ss token val = do
     entropy <- asks getCookieEntropySource
@@ -91,10 +96,10 @@ addSessionCookie ss token val = do
 -- | Extract the AuthToken from the wrapper and pass it to a handler
 -- function.
 withCookie
-    :: ( CookiedWrapperClass f (ExtendedPayloadWrapper AuthToken -> m b) AuthToken
+    :: ( CookiedWrapperClass f (WrappedAuthToken -> m b) AuthToken
        , MonadReader Config m
        )
-    => ExtendedPayloadWrapper AuthToken
+    => WrappedAuthToken
     -> f
     -> m b
 withCookie token handler = ask >>= cookied_
@@ -102,6 +107,32 @@ withCookie token handler = ask >>= cookied_
     cookied_ cfg =
         cookied cookieSettings (getCookieEntropySource cfg) (getCookieSecret cfg)
             (Proxy @AuthToken) handler token
+
+-- | Extract and validate the AuthToken and pass the Custoemr to a handler
+-- function. Throws a 403 error if the AuthToken does not match a Customer.
+withValidatedCookie
+    :: CookiedWrapperClass (App c) (App b) AuthToken
+    => WrappedAuthToken
+    -> (Entity Customer -> App c)
+    -> App b
+withValidatedCookie token handler =
+    withCookie token $ validateToken >=> handler
+
+-- | Validate both the cookie & route parameters. Throws a 403 if the
+-- AuthToken is invalid and a 422 is the parameters are invalid.
+--
+-- The arguments are switched here to facilitate ETA reductions for routes
+-- where these are the only arguments.
+validateCookieAndParameters
+    :: (CookiedWrapperClass (App c) (App b) AuthToken, Validation p)
+    => (Entity Customer -> p -> App c)
+    -> WrappedAuthToken
+    -> p
+    -> App b
+validateCookieAndParameters handler token param =
+    withCookie token $ \authToken -> do
+        customer <- validateToken authToken
+        validate param >>= handler customer
 
 
 -- | Cookie session settings for logins that expire when the browser
@@ -142,5 +173,5 @@ sessionEntropy :: MonadIO m => m RandomSource
 sessionEntropy = mkRandomSource drgNew 5000
 
 -- | Contains the Cookie Authorization Contect for the Server.
-authServerContext :: PersistentServerKey -> Context (AuthHandler Request (ExtendedPayloadWrapper AuthToken) ': AuthHandler Request AuthToken ': '[])
+authServerContext :: PersistentServerKey -> Context (AuthHandler Request WrappedAuthToken ': AuthHandler Request AuthToken ': '[])
 authServerContext secret = defaultAuthHandler cookieSettings secret :. authHandler :. EmptyContext
