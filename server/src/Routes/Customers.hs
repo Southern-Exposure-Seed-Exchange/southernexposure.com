@@ -238,6 +238,7 @@ data LoginParameters =
         { lpEmail :: T.Text
         , lpPassword :: T.Text
         , lpCartToken :: Maybe T.Text
+        , lpRemember :: Bool
         }
 
 instance FromJSON LoginParameters where
@@ -247,13 +248,14 @@ instance FromJSON LoginParameters where
                 <$> v .: "email"
                 <*> v .: "password"
                 <*> v .:? "sessionToken"
+                <*> v .: "remember"
 
 type LoginRoute =
        ReqBody '[JSON] LoginParameters
     :> Post '[JSON] (Cookied AuthorizationData)
 
 loginRoute :: LoginParameters -> App (Cookied AuthorizationData)
-loginRoute LoginParameters { lpEmail, lpPassword, lpCartToken } =
+loginRoute LoginParameters { lpEmail, lpPassword, lpCartToken, lpRemember } =
     let
         authorizationError =
             V.singleError "Invalid Email or Password."
@@ -266,9 +268,10 @@ loginRoute LoginParameters { lpEmail, lpPassword, lpCartToken } =
             Just e@(Entity customerId customer) -> do
                 isValid <- validatePassword e
                 when (customerEncryptedPassword customer == "") resetRequiredError
+                let sessionSettings = if lpRemember then permanentSession else temporarySession
                 if isValid then
                     runDB (maybeMergeCarts customerId lpCartToken) >>
-                    addSessionCookie temporarySession (makeToken customer)
+                    addSessionCookie sessionSettings (makeToken customer)
                         (toAuthorizationData e)
                 else
                     authorizationError

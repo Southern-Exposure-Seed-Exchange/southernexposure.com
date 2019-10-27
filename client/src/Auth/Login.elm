@@ -45,7 +45,7 @@ initial =
 
 
 encode : Form -> Maybe String -> Value
-encode { email, password } maybeSessionToken =
+encode { email, password, remember } maybeSessionToken =
     Encode.object
         [ ( "email", Encode.string email )
         , ( "password", Encode.string password )
@@ -53,6 +53,7 @@ encode { email, password } maybeSessionToken =
           , Maybe.map Encode.string maybeSessionToken
                 |> Maybe.withDefault Encode.null
           )
+        , ( "remember", Encode.bool remember )
         ]
 
 
