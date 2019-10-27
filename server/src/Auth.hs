@@ -15,6 +15,7 @@ module Auth
     , WrappedAuthToken
     , Cookied
     , addSessionCookie
+    , removeSessionCookie
     , withCookie
     , withValidatedCookie
     , validateCookieAndParameters
@@ -32,17 +33,16 @@ import Crypto.Random (drgNew)
 import Data.Default (def)
 import Data.Serialize (Serialize)
 import Data.Serialize.Text ()
-import Data.Text.Encoding (decodeUtf8)
 import Database.Persist (Entity(..), getBy)
 import GHC.Generics (Generic)
-import Network.Wai (Request, requestHeaders)
+import Network.Wai (Request)
 import Servant
 import Servant.Server.Experimental.Auth
 import Servant.Server.Experimental.Auth.Cookie
     ( AuthCookieData, ExtendedPayloadWrapper, AuthCookieSettings(..)
     , PersistentServerKey, RandomSource, SessionSettings(..), EncryptedSession
     , CookiedWrapperClass, ExpirationType(..), Cookied, mkPersistentServerKey
-    , defaultAuthHandler, addSession, cookied, mkRandomSource
+    , defaultAuthHandler, addSession, removeSession, cookied, mkRandomSource
     )
 
 import Config (Config(getCookieSecret, getCookieEntropySource))
@@ -92,6 +92,10 @@ addSessionCookie ss token val = do
     entropy <- asks getCookieEntropySource
     secret <- asks getCookieSecret
     addSession cookieSettings entropy secret ss token val
+
+-- | De-authorize the user by invalidating their session cookie.
+removeSessionCookie :: AddHeader e EncryptedSession a b => a -> App b
+removeSessionCookie = removeSession cookieSettings
 
 -- | Extract the AuthToken from the wrapper and pass it to a handler
 -- function.
@@ -153,25 +157,10 @@ permanentSession =
         }
 
 
--- TODO: Remove once all routes switched over to cookie auth.
-type instance AuthServerData (AuthProtect "auth-token") = AuthToken
--- TODO: Remove once all routes switched over to cookie auth.
-authHandler :: AuthHandler Request AuthToken
-authHandler =
-    mkAuthHandler handler
-    where handler :: Request -> Handler AuthToken
-          handler req =
-            case lookup "Auth-Token" (requestHeaders req) of
-                Nothing ->
-                    throwError $ err401  { errBody = "Missing Auth-Token Header" }
-                Just authToken ->
-                    return . AuthToken $ decodeUtf8 authToken
-
-
 -- | Build an entropy source for session secrets.
 sessionEntropy :: MonadIO m => m RandomSource
 sessionEntropy = mkRandomSource drgNew 5000
 
 -- | Contains the Cookie Authorization Contect for the Server.
-authServerContext :: PersistentServerKey -> Context (AuthHandler Request WrappedAuthToken ': AuthHandler Request AuthToken ': '[])
-authServerContext secret = defaultAuthHandler cookieSettings secret :. authHandler :. EmptyContext
+authServerContext :: PersistentServerKey -> Context (AuthHandler Request WrappedAuthToken ': '[])
+authServerContext secret = defaultAuthHandler cookieSettings secret :. EmptyContext

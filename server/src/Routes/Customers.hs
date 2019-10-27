@@ -62,6 +62,7 @@ type CustomerAPI =
          "locations" :> LocationRoute
     :<|> "register" :> RegisterRoute
     :<|> "login" :> LoginRoute
+    :<|> "logout" :> LogoutRoute
     :<|> "authorize" :> AuthorizeRoute
     :<|> "reset-request" :> ResetRequestRoute
     :<|> "reset-password" :> ResetPasswordRoute
@@ -75,6 +76,7 @@ type CustomerRoutes =
          App LocationData
     :<|> (RegistrationParameters -> App (Cookied AuthorizationData))
     :<|> (LoginParameters -> App (Cookied AuthorizationData))
+    :<|> App (Cookied ())
     :<|> (WrappedAuthToken -> AuthorizeParameters -> App (Cookied AuthorizationData))
     :<|> (ResetRequestParameters -> App ())
     :<|> (ResetPasswordParameters -> App (Cookied AuthorizationData))
@@ -89,6 +91,7 @@ customerRoutes =
          locationRoute
     :<|> registrationRoute
     :<|> loginRoute
+    :<|> logoutRoute
     :<|> authorizeRoute
     :<|> resetRequestRoute
     :<|> resetPasswordRoute
@@ -299,6 +302,16 @@ loginRoute LoginParameters { lpEmail, lpPassword, lpCartToken } =
                     return True
                 else
                     return False
+
+
+-- LOGOUT
+
+
+type LogoutRoute =
+    Post '[JSON] (Cookied ())
+
+logoutRoute :: App (Cookied ())
+logoutRoute = removeSessionCookie ()
 
 
 -- AUTHORIZE
