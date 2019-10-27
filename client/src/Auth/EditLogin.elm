@@ -101,9 +101,9 @@ update key msg model authStatus =
 
             else
                 case authStatus of
-                    Authorized user ->
+                    Authorized _ ->
                         ( { model | errors = Dict.empty }
-                        , updateLoginDetails model user.authToken
+                        , updateLoginDetails model
                         )
 
                     _ ->
@@ -133,10 +133,9 @@ update key msg model authStatus =
                     model |> noCommand
 
 
-updateLoginDetails : Form -> String -> Cmd Msg
-updateLoginDetails model token =
+updateLoginDetails : Form -> Cmd Msg
+updateLoginDetails model =
     Api.put Api.CustomerEditLogin
-        |> Api.withToken token
         |> Api.withJsonBody (encoder model)
         |> Api.withErrorHandler (Decode.succeed ())
         |> Api.sendRequest SubmitResponse

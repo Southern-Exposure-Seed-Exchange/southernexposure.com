@@ -17,7 +17,6 @@ module Api exposing
     , withJsonResponse
     , withStringErrorHandler
     , withStringResponse
-    , withToken
     )
 
 import Dict exposing (Dict)
@@ -227,11 +226,6 @@ put =
 delete : Endpoint -> Request (Maybe String)
 delete =
     initialMethod "DELETE"
-
-
-withToken : String -> Request a -> Request a
-withToken token request =
-    { request | headers = Http.header "Auth-Token" token :: request.headers }
 
 
 withJsonBody : Value -> Request a -> Request a

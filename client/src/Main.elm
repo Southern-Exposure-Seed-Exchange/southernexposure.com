@@ -61,8 +61,7 @@ main =
 
 
 type alias Flags =
-    { authToken : Maybe String
-    , authUserId : Maybe Int
+    { authUserId : Maybe Int
     , cartSessionToken : Maybe String
     , cartItemCount : Maybe Int
     }
@@ -89,7 +88,7 @@ init flags url key =
                 |> fetchDataForRoute
                 |> Tuple.mapSecond
                     (\cmd_ ->
-                        if route == Checkout && flags.authToken /= Nothing then
+                        if route == Checkout && flags.authUserId /= Nothing then
                             Cmd.none
 
                         else
@@ -97,7 +96,7 @@ init flags url key =
                     )
 
         authorizationCmd =
-            Maybe.map2 reAuthorize flags.authUserId flags.authToken
+            Maybe.map reAuthorize flags.authUserId
                 |> Maybe.withDefault (redirectIfAuthRequired key route)
     in
     ( model
@@ -171,10 +170,10 @@ fetchDataForRoute ({ route, pageData, key } as model) =
 
                 MyAccount ->
                     case model.currentUser of
-                        User.Authorized user ->
+                        User.Authorized _ ->
                             { pageData | myAccount = RemoteData.Loading }
                                 |> fetchLocationsOnce
-                                |> batchCommand (MyAccount.getDetails user.authToken Nothing)
+                                |> batchCommand (MyAccount.getDetails Nothing)
 
                         User.Anonymous ->
                             doNothing
@@ -187,10 +186,10 @@ fetchDataForRoute ({ route, pageData, key } as model) =
 
                 OrderDetails orderId ->
                     case model.currentUser of
-                        User.Authorized user ->
+                        User.Authorized _ ->
                             { pageData | orderDetails = RemoteData.Loading }
                                 |> fetchLocationsOnce
-                                |> batchCommand (getCheckoutSuccessDetails user.authToken orderId)
+                                |> batchCommand (getCheckoutSuccessDetails orderId)
 
                         User.Anonymous ->
                             doNothing
@@ -204,12 +203,11 @@ fetchDataForRoute ({ route, pageData, key } as model) =
 
                 Checkout ->
                     case model.currentUser of
-                        User.Authorized user ->
+                        User.Authorized _ ->
                             { pageData | checkoutDetails = RemoteData.Loading }
                                 |> fetchLocationsOnce
                                 |> batchCommand
                                     (Checkout.getCustomerDetails GetCheckoutDetails
-                                        user.authToken
                                         Nothing
                                         Nothing
                                         Nothing
@@ -242,10 +240,10 @@ fetchDataForRoute ({ route, pageData, key } as model) =
 
                 CheckoutSuccess orderId _ ->
                     case model.currentUser of
-                        User.Authorized user ->
+                        User.Authorized _ ->
                             { pageData | orderDetails = RemoteData.Loading }
                                 |> fetchLocationsOnce
-                                |> batchCommand (getCheckoutSuccessDetails user.authToken orderId)
+                                |> batchCommand (getCheckoutSuccessDetails orderId)
 
                         User.Anonymous ->
                             ( pageData, redirectIfAuthRequired key model.route )
@@ -279,9 +277,9 @@ fetchCartDetails authStatus maybeSessionToken pageData =
             , getAnonymousCartDetails maybeSessionToken
             )
 
-        User.Authorized user ->
+        User.Authorized _ ->
             ( { pageData | cartDetails = RemoteData.Loading }
-            , getCartDetails user.authToken
+            , getCartDetails
             )
 
 
@@ -326,7 +324,7 @@ getAddressDetails authStatus pageData =
         User.Anonymous ->
             ( pageData, Cmd.none )
 
-        User.Authorized user ->
+        User.Authorized _ ->
             let
                 getDetails pd =
                     ( { pd | addressDetails = RemoteData.Loading }
@@ -336,17 +334,15 @@ getAddressDetails authStatus pageData =
                 detailsCmd =
                     Api.get Api.CustomerAddressDetails
                         |> Api.withJsonResponse PageData.addressDetailsDecoder
-                        |> Api.withToken user.authToken
                         |> Api.sendRequest GetAddressDetails
             in
             fetchLocationsOnce pageData
                 |> updateAndCommand getDetails
 
 
-getCartDetails : String -> Cmd Msg
-getCartDetails token =
+getCartDetails : Cmd Msg
+getCartDetails =
     Api.get Api.CartDetailsCustomer
-        |> Api.withToken token
         |> Api.withJsonResponse PageData.cartDetailsDecoder
         |> Api.sendRequest GetCartDetails
 
@@ -364,14 +360,11 @@ getAnonymousCartDetails maybeCartToken =
         |> Api.sendRequest GetCartDetails
 
 
-reAuthorize : Int -> String -> Cmd Msg
-reAuthorize userId token =
+reAuthorize : Int -> Cmd Msg
+reAuthorize userId =
     let
         authParameters =
-            Encode.object
-                [ ( "userId", Encode.int userId )
-                , ( "token", Encode.string token )
-                ]
+            Encode.object [ ( "userId", Encode.int userId ) ]
     in
     Api.post Api.CustomerAuthorize
         |> Api.withJsonBody authParameters
@@ -379,8 +372,8 @@ reAuthorize userId token =
         |> Api.sendRequest ReAuthorize
 
 
-addToCustomerCart : String -> Int -> ProductVariantId -> Cmd Msg
-addToCustomerCart token quantity (ProductVariantId variantId) =
+addToCustomerCart : Int -> ProductVariantId -> Cmd Msg
+addToCustomerCart quantity (ProductVariantId variantId) =
     let
         body =
             Encode.object
@@ -390,8 +383,7 @@ addToCustomerCart token quantity (ProductVariantId variantId) =
     in
     Api.post Api.CartAddCustomer
         |> Api.withJsonBody body
-        |> Api.withJsonResponse (Decode.succeed token)
-        |> Api.withToken token
+        |> Api.withJsonResponse (Decode.succeed "")
         |> Api.sendRequest (SubmitAddToCartResponse quantity)
 
 
@@ -414,20 +406,18 @@ addToAnonymousCart maybeSessionToken quantity (ProductVariantId variantId) =
         |> Api.sendRequest (SubmitAddToCartResponse quantity)
 
 
-getCustomerCartItemsCount : String -> Cmd Msg
-getCustomerCartItemsCount token =
+getCustomerCartItemsCount : Cmd Msg
+getCustomerCartItemsCount =
     Api.get Api.CartCountCustomer
         |> Api.withJsonResponse (Decode.field "itemCount" Decode.int)
-        |> Api.withToken token
         |> Api.sendRequest GetCartItemCount
 
 
-getCheckoutSuccessDetails : String -> Int -> Cmd Msg
-getCheckoutSuccessDetails token orderId =
+getCheckoutSuccessDetails : Int -> Cmd Msg
+getCheckoutSuccessDetails orderId =
     Api.post Api.CheckoutSuccess
         |> Api.withJsonBody (Encode.object [ ( "orderId", Encode.int orderId ) ])
         |> Api.withJsonResponse PageData.orderDetailsDecoder
-        |> Api.withToken token
         |> Api.sendRequest GetCheckoutSuccessDetails
 
 
@@ -476,8 +466,8 @@ update msg ({ pageData, key } as model) =
                 ]
             )
 
-        OtherTabLoggedIn authData ->
-            ( model, reAuthorize authData.userId authData.token )
+        OtherTabLoggedIn userId ->
+            ( model, reAuthorize userId )
 
         OtherTabNewCartToken cartSessionToken ->
             { model | maybeSessionToken = Just cartSessionToken }
@@ -520,8 +510,8 @@ update msg ({ pageData, key } as model) =
                         |> (\v -> ( v.variant |> Maybe.withDefault defaultVariant, v.quantity ))
             in
             case model.currentUser of
-                User.Authorized user ->
-                    performRequest (addToCustomerCart user.authToken)
+                User.Authorized _ ->
+                    performRequest addToCustomerCart
 
                 User.Anonymous ->
                     performRequest (addToAnonymousCart model.maybeSessionToken)
@@ -537,8 +527,8 @@ update msg ({ pageData, key } as model) =
 
         ShowAllOrders ->
             case model.currentUser of
-                User.Authorized user ->
-                    ( model, MyAccount.getDetails user.authToken (Just 0) )
+                User.Authorized _ ->
+                    ( model, MyAccount.getDetails (Just 0) )
 
                 User.Anonymous ->
                     ( model, Cmd.none )
@@ -574,8 +564,8 @@ update msg ({ pageData, key } as model) =
 
                 cartItemsCommand =
                     case maybeAuthStatus of
-                        Just (User.Authorized user) ->
-                            getCustomerCartItemsCount user.authToken
+                        Just (User.Authorized _) ->
+                            getCustomerCartItemsCount
 
                         _ ->
                             Cmd.none
@@ -591,8 +581,8 @@ update msg ({ pageData, key } as model) =
             let
                 cartItemsCommand maybeAuthStatus =
                     case maybeAuthStatus of
-                        Just (User.Authorized user) ->
-                            getCustomerCartItemsCount user.authToken
+                        Just (User.Authorized _) ->
+                            getCustomerCartItemsCount
 
                         _ ->
                             Cmd.none

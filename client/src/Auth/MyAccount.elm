@@ -14,10 +14,9 @@ import Views.Format as Format
 import Views.Utils exposing (routeLinkAttributes)
 
 
-getDetails : String -> Maybe Int -> Cmd Msg
-getDetails token maybeLimit =
+getDetails : Maybe Int -> Cmd Msg
+getDetails maybeLimit =
     Api.get (Api.CustomerMyAccount maybeLimit)
-        |> Api.withToken token
         |> Api.withJsonResponse PageData.myAccountDecoder
         |> Api.sendRequest GetMyAccountDetails
 

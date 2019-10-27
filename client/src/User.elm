@@ -23,7 +23,6 @@ type AuthStatus
 type alias User =
     { id : UserId
     , email : String
-    , authToken : String
     }
 
 
@@ -36,10 +35,9 @@ decoder : Decoder AuthStatus
 decoder =
     let
         authorizedUserDecoder =
-            Decode.map3 User
+            Decode.map2 User
                 (Decode.field "id" <| Decode.map UserId Decode.int)
                 (Decode.field "email" Decode.string)
-                (Decode.field "token" Decode.string)
                 |> Decode.map Authorized
     in
     Decode.oneOf
@@ -59,4 +57,4 @@ storeDetails authStatus =
                 (UserId id) =
                     user.id
             in
-            Ports.storeAuthDetails ( user.authToken, id )
+            Ports.storeAuthDetails id

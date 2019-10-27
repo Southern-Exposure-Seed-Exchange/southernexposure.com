@@ -42,13 +42,13 @@ scrollToID id =
 -- Auth
 
 
-port storeAuthDetails : ( String, Int ) -> Cmd msg
+port storeAuthDetails : Int -> Cmd msg
 
 
 port removeAuthDetails : () -> Cmd msg
 
 
-port loggedIn : ({ userId : Int, token : String } -> msg) -> Sub msg
+port loggedIn : (Int -> msg) -> Sub msg
 
 
 port loggedOut : (() -> msg) -> Sub msg

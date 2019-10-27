@@ -1,6 +1,5 @@
 const { Elm } = require('./Main.elm');
 
-const authTokenKey = 'authToken';
 const authUserIdKey = 'authUserId';
 const cartTokenKey = 'cartSessionToken';
 const cartItemCountKey = 'cartItemCount';
@@ -12,13 +11,12 @@ const stripeApiKey = 'pk_test_F6Mr5XLKEDMn4rUsmsv5aqvr';
 /** FLAGS **/
 var cartToken = localStorage.getItem(cartTokenKey);
 var cartItemCount = localStorage.getItem(cartItemCountKey);
-var [userId, token] = getAuthData();
+var userId = getAuthData();
 
 
 /** ELM **/
 var app = Elm.Main.init({
   flags: {
-      authToken: token,
       authUserId: userId,
       cartSessionToken: cartToken,
       cartItemCount: intOrNull(cartItemCount),
@@ -45,17 +43,14 @@ var stripeHandler = StripeCheckout.configure({
 
 /* Changes to Stored Auth Details */
 window.addEventListener('storage', function(e) {
-  if ((e.key === authTokenKey || e.key === null) && e.oldValue !== e.newValue) {
+  if ((e.key === authUserIdKey || e.key === null) && e.oldValue !== e.newValue) {
     if (e.newValue === null) {
-      /* Send a Logged Out Message When Another Tab Deletes the Auth Token */
+      /* Send a Logged Out Message When Another Tab Deletes the User ID */
       app.ports.loggedOut.send(null);
     } else {
-      /* Send a Logged In Message When Another Tab Sets the Auth Token */
-      var [userId, token] = getAuthData();
-      app.ports.loggedIn.send({
-        userId: userId,
-        token: token,
-      });
+      /* Send a Logged In Message When Another Tab Sets the User ID */
+      var userId = getAuthData();
+      app.ports.loggedIn.send(userId);
     }
   }
 });
@@ -104,17 +99,15 @@ app.ports.collapseMobileMenus.subscribe(function() {
 });
 
 
-/* Store the User ID & Token in Local Storage */
+/* Store the User ID in Local Storage */
 app.ports.storeAuthDetails.subscribe(function(authDetails) {
-  var [token, userId] = authDetails;
+  var userId = authDetails;
   localStorage.setItem(authUserIdKey, userId);
-  localStorage.setItem(authTokenKey, token);
 });
 
-/* Remove the Stored User ID & Token if they Exist in Local Storage */
+/* Remove the Stored User ID from Local Storage */
 app.ports.removeAuthDetails.subscribe(function() {
   localStorage.removeItem(authUserIdKey);
-  localStorage.removeItem(authTokenKey);
 });
 
 /* Store the Cart Session Token in Local Storage */
@@ -157,9 +150,8 @@ function intOrNull(intString) {
   return maybeInt;
 }
 
-/* Return a list containing the User ID & Auth Token */
+/* Return the User ID if stored, or `null` otherwise. */
 function getAuthData() {
-  var token = localStorage.getItem(authTokenKey);
   var userId = localStorage.getItem(authUserIdKey);
-  return [intOrNull(userId), token];
+  return intOrNull(userId);
 }

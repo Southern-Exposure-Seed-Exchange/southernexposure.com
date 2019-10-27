@@ -126,10 +126,10 @@ update msg ({ forms } as model) authStatus maybeSessionToken =
 
             else
                 case authStatus of
-                    User.Authorized { authToken } ->
+                    User.Authorized _ ->
                         ( model
                         , Nothing
-                        , addItemsToCustomerCart authToken encodedForms quantityToAdd
+                        , addItemsToCustomerCart encodedForms quantityToAdd
                         )
 
                     User.Anonymous ->
@@ -164,12 +164,11 @@ updateForm ({ forms } as model) formIndex updater =
         |> (\fs -> ( { model | forms = fs }, Nothing, Cmd.none ))
 
 
-addItemsToCustomerCart : String -> Value -> Int -> Cmd Msg
-addItemsToCustomerCart token encodedForms quantityToAdd =
+addItemsToCustomerCart : Value -> Int -> Cmd Msg
+addItemsToCustomerCart encodedForms quantityToAdd =
     Api.post Api.CartQuickOrderCustomer
-        |> Api.withToken token
         |> Api.withJsonBody encodedForms
-        |> Api.withErrorHandler (Decode.succeed token)
+        |> Api.withErrorHandler (Decode.succeed "")
         |> Api.sendRequest (SubmitResponse quantityToAdd)
 
 

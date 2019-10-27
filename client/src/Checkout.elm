@@ -400,11 +400,10 @@ refreshDetails authStatus maybeSessionToken forceUpdate oldModel newModel =
                 User.Anonymous ->
                     applyArguments anonymousCommand
 
-                User.Authorized user ->
+                User.Authorized _ ->
                     applyArguments
                         (\( maybeCountry, maybeRegion, maybeAddressId ) ->
                             getCustomerDetails RefreshDetails
-                                user.authToken
                                 maybeCountry
                                 maybeRegion
                                 maybeAddressId
@@ -528,7 +527,6 @@ limitStoreCredit checkoutDetails =
 
 getCustomerDetails :
     (WebData (Result Api.FormErrors PageData.CheckoutDetails) -> msg)
-    -> String
     -> Maybe String
     -> Maybe Region
     -> Maybe AddressId
@@ -536,7 +534,7 @@ getCustomerDetails :
     -> String
     -> Bool
     -> Cmd msg
-getCustomerDetails msg token maybeCountry maybeRegion maybeAddressId maybeMemberNumber couponCode priorityShipping =
+getCustomerDetails msg maybeCountry maybeRegion maybeAddressId maybeMemberNumber couponCode priorityShipping =
     let
         data =
             Encode.object
@@ -563,7 +561,6 @@ getCustomerDetails msg token maybeCountry maybeRegion maybeAddressId maybeMember
     Api.post Api.CheckoutDetailsCustomer
         |> Api.withJsonBody data
         |> Api.withErrorHandler PageData.checkoutDetailsDecoder
-        |> Api.withToken token
         |> Api.sendRequest msg
 
 
@@ -726,9 +723,8 @@ placeOrder model authStatus maybeSessionToken stripeTokenId checkoutDetails =
                 |> Api.withErrorHandler decoder
                 |> Api.sendRequest SubmitResponse
 
-        User.Authorized user ->
+        User.Authorized _ ->
             Api.post Api.CheckoutPlaceOrderCustomer
-                |> Api.withToken user.authToken
                 |> Api.withJsonBody customerData
                 |> Api.withErrorHandler decoder
                 |> Api.sendRequest SubmitResponse

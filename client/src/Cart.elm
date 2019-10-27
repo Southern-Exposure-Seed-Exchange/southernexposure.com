@@ -19,7 +19,7 @@ import PageData exposing (CartDetails, CartItemId(..))
 import Product exposing (variantPrice)
 import RemoteData
 import Routing exposing (Route(..))
-import User exposing (AuthStatus, User)
+import User exposing (AuthStatus)
 import Views.Format as Format
 import Views.Utils exposing (htmlOrBlank, icon, numericInput, onIntInput, rawHtml, routeLinkAttributes)
 
@@ -112,8 +112,8 @@ updateCart authStatus maybeCartToken { quantities } { items } =
             User.Anonymous ->
                 anonymousUpdateRequest encodedQuantities
 
-            User.Authorized user ->
-                customerUpdateRequest user encodedQuantities
+            User.Authorized _ ->
+                customerUpdateRequest encodedQuantities
 
 
 removeItem : AuthStatus -> Maybe String -> CartItemId -> Cmd Msg
@@ -132,8 +132,8 @@ removeItem authStatus maybeCartToken itemId =
         User.Anonymous ->
             anonymousUpdateRequest encodedDelete
 
-        User.Authorized user ->
-            customerUpdateRequest user encodedDelete
+        User.Authorized _ ->
+            customerUpdateRequest encodedDelete
 
 
 anonymousUpdateRequest : Encode.Value -> Cmd Msg
@@ -144,10 +144,9 @@ anonymousUpdateRequest body =
         |> Api.sendRequest UpdateResponse
 
 
-customerUpdateRequest : User -> Encode.Value -> Cmd Msg
-customerUpdateRequest user body =
+customerUpdateRequest : Encode.Value -> Cmd Msg
+customerUpdateRequest body =
     Api.post Api.CartUpdateCustomer
-        |> Api.withToken user.authToken
         |> Api.withJsonBody body
         |> Api.withJsonResponse PageData.cartDetailsDecoder
         |> Api.sendRequest UpdateResponse

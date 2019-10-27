@@ -32,7 +32,7 @@ type Msg
     | UpdateZone
     | LogOut
       -- Other Tabs (via localStorage ports)
-    | OtherTabLoggedIn { userId : Int, token : String }
+    | OtherTabLoggedIn Int
     | OtherTabNewCartToken String
     | OtherTabCartItemCountChanged Int
       -- Product List/Details Cart Forms

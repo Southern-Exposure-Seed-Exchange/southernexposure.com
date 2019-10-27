@@ -170,10 +170,9 @@ findAddress id addresses =
 deleteAddress : AuthStatus -> AddressId -> Cmd Msg
 deleteAddress authStatus (AddressId id) =
     case authStatus of
-        User.Authorized user ->
+        User.Authorized _ ->
             Api.delete (Api.CustomerDeleteAddress id)
                 |> Api.withJsonResponse (Decode.succeed ())
-                |> Api.withToken user.authToken
                 |> Api.sendRequest DeleteResponse
 
         User.Anonymous ->
@@ -194,9 +193,8 @@ updateAddress authStatus isDefault ({ model } as addressForm) =
                 addressForm
     in
     case ( authStatus, addressForm.model.id ) of
-        ( User.Authorized user, Just (AddressId addressId) ) ->
+        ( User.Authorized _, Just (AddressId addressId) ) ->
             Api.post (Api.CustomerEditAddress addressId)
-                |> Api.withToken user.authToken
                 |> Api.withJsonBody (Address.encode withNewDefault)
                 |> Api.withErrorHandler (Decode.succeed ())
                 |> Api.sendRequest (UpdateResponse <| AddressId addressId)
