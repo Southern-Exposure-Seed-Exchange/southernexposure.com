@@ -1,7 +1,7 @@
 module SiteUI.Header exposing (view)
 
 import Html exposing (Html, a, br, div, h1, img, li, small, text, ul)
-import Html.Attributes exposing (class, href, id, src)
+import Html.Attributes exposing (class, href, id, src, target)
 import Html.Events.Extra exposing (onClickPreventDefault)
 import Messages exposing (Msg(..))
 import Routing exposing (Route(..))
@@ -67,7 +67,7 @@ linksAndSearch searchTagger searchData authStatus cartItemCount =
                 Authorized _ ->
                     [ routeLink "My Account" MyAccount
                     , cartLink
-                    , linkItem [ href "/account/logout/", onClickPreventDefault LogOut ]
+                    , linkItem [ href "/account/logout/", onClickPreventDefault LogOut, target "" ]
                         "Log Out"
                     ]
 

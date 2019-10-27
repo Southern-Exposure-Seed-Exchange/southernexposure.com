@@ -421,6 +421,13 @@ getCheckoutSuccessDetails orderId =
         |> Api.sendRequest GetCheckoutSuccessDetails
 
 
+logOut : Cmd Msg
+logOut =
+    Api.post Api.CustomerLogout
+        |> Api.withJsonResponse (Decode.succeed ())
+        |> Api.sendRequest LogOutResponse
+
+
 
 -- UPDATE
 
@@ -443,7 +450,11 @@ update msg ({ pageData, key } as model) =
             ( model, Browser.Navigation.load url )
 
         LinkClick (Browser.Internal url) ->
-            ( model, Routing.newUrl key <| parseRoute url )
+            if url.path /= "/account/logout/" then
+                ( model, Routing.newUrl key <| parseRoute url )
+
+            else
+                ( model, Cmd.none )
 
         NewZone zone ->
             ( { model | zone = zone }, Cmd.none )
@@ -452,19 +463,7 @@ update msg ({ pageData, key } as model) =
             ( model, Task.perform NewZone Time.here )
 
         LogOut ->
-            let
-                ( updatedModel, fetchCmd ) =
-                    { model | currentUser = User.unauthorized, cartItemCount = 0 }
-                        |> fetchDataForRoute
-            in
-            ( updatedModel
-            , Cmd.batch
-                [ redirectIfAuthRequired key model.route
-                , Ports.removeAuthDetails ()
-                , Ports.setCartItemCount 0
-                , fetchCmd
-                ]
-            )
+            ( model, logOut )
 
         OtherTabLoggedIn userId ->
             ( model, reAuthorize userId )
@@ -719,6 +718,27 @@ update msg ({ pageData, key } as model) =
                     )
 
                 _ ->
+                    ( model, Cmd.none )
+
+        LogOutResponse response ->
+            case response of
+                RemoteData.Success _ ->
+                    let
+                        ( updatedModel, fetchCmd ) =
+                            { model | currentUser = User.unauthorized, cartItemCount = 0 }
+                                |> fetchDataForRoute
+                    in
+                    ( updatedModel
+                    , Cmd.batch
+                        [ redirectIfAuthRequired key model.route
+                        , Ports.removeAuthDetails ()
+                        , Ports.setCartItemCount 0
+                        , fetchCmd
+                        ]
+                    )
+
+                _ ->
+                    -- TODO: Couldn't log user out - show error toast/message
                     ( model, Cmd.none )
 
         GetProductDetailsData response ->

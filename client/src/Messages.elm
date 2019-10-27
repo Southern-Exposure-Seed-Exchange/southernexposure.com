@@ -55,6 +55,7 @@ type Msg
     | CheckoutMsg Checkout.Msg
       -- API Requests
     | ReAuthorize (WebData User.AuthStatus)
+    | LogOutResponse (WebData ())
     | GetProductDetailsData (WebData PageData.ProductDetails)
     | GetNavigationData (WebData NavigationData)
     | GetAdvancedSearchData (WebData PageData.AdvancedSearch)
