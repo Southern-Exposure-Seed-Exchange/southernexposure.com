@@ -706,8 +706,26 @@ update msg ({ pageData, key } as model) =
         ReAuthorize response ->
             case response of
                 RemoteData.Success authStatus ->
-                    { model | currentUser = authStatus, maybeSessionToken = Nothing }
-                        |> fetchDataForRoute
+                    let
+                        baseUpdate =
+                            { model | currentUser = authStatus, maybeSessionToken = Nothing }
+                                |> fetchDataForRoute
+                    in
+                    case model.route of
+                        Login (Just "") ->
+                            baseUpdate
+                                |> batchCommand (Routing.newUrl key <| PageDetails "home")
+
+                        Login (Just newUrl) ->
+                            baseUpdate
+                                |> batchCommand (Browser.Navigation.pushUrl key newUrl)
+
+                        Login Nothing ->
+                            baseUpdate
+                                |> batchCommand (Routing.newUrl key MyAccount)
+
+                        _ ->
+                            baseUpdate
 
                 RemoteData.Failure _ ->
                     ( { model | currentUser = User.Anonymous }
