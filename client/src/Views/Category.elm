@@ -12,7 +12,6 @@ import Products.Pagination as Pagination
 import Products.Sorting as Sorting
 import Products.Views as ProductViews
 import Routing exposing (Route(..))
-import Views.Images as Images
 import Views.Utils exposing (rawHtml, routeLinkAttributes)
 
 
