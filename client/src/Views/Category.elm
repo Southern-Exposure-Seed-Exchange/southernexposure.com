@@ -85,7 +85,7 @@ adminList : PageData.AdminCategoryListData -> List (Html Msg)
 adminList { roots } =
     let
         depthPadding depth =
-            style "margin-left" <| String.fromInt (depth * 20) ++ "px"
+            style "margin-left" <| String.fromInt (depth * 20 + 10) ++ "px"
 
         renderCategory depth (PageData.AdminListCategory c) =
             tr []
