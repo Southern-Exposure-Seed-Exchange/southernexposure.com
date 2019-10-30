@@ -1,5 +1,6 @@
 module Routes
-    ( module Routes.Carts
+    ( module Routes.Admin
+    , module Routes.Carts
     , module Routes.Categories
     , module Routes.Checkout
     , module Routes.Customers
@@ -8,6 +9,7 @@ module Routes
     , module Routes.StoneEdge
     ) where
 
+import Routes.Admin
 import Routes.Carts
 import Routes.Categories
 import Routes.Checkout

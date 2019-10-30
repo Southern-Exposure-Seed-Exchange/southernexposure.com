@@ -51,6 +51,7 @@ type API =
     :<|> "carts" :> CartAPI
     :<|> "checkout" :> CheckoutAPI
     :<|> "stone-edge" :> StoneEdgeAPI
+    :<|> "admin" :> AdminAPI
 
 -- | Return the Handler functions for the `API` type.
 server :: ServerT API App
@@ -62,3 +63,4 @@ server =
     :<|> cartRoutes
     :<|> checkoutRoutes
     :<|> stoneEdgeRoutes
+    :<|> adminRoutes

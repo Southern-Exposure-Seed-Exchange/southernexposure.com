@@ -18,6 +18,7 @@ module Auth
     , removeSessionCookie
     , withCookie
     , withValidatedCookie
+    , withAdminCookie
     , validateCookieAndParameters
     , temporarySession
     , permanentSession
@@ -46,7 +47,7 @@ import Servant.Server.Experimental.Auth.Cookie
     )
 
 import Config (Config(getCookieSecret, getCookieEntropySource))
-import Models.DB (Unique(UniqueToken), Customer(customerAuthToken))
+import Models.DB (Unique(UniqueToken), Customer(customerAuthToken, customerIsAdmin))
 import Server (App, runDB, serverError)
 import Validation (Validation(..))
 
@@ -112,7 +113,7 @@ withCookie token handler = ask >>= cookied_
         cookied cookieSettings (getCookieEntropySource cfg) (getCookieSecret cfg)
             (Proxy @AuthToken) handler token
 
--- | Extract and validate the AuthToken and pass the Custoemr to a handler
+-- | Extract and validate the AuthToken and pass the Customer to a handler
 -- function. Throws a 403 error if the AuthToken does not match a Customer.
 withValidatedCookie
     :: CookiedWrapperClass (App c) (App b) AuthToken
@@ -121,6 +122,21 @@ withValidatedCookie
     -> App b
 withValidatedCookie token handler =
     withCookie token $ validateToken >=> handler
+
+-- | Extract and validate the AuthToken, ensure the Customer is an Admin
+-- and then pass the Entity to a handler function. Throws a 403 error if
+-- any part fails.
+withAdminCookie
+    :: CookiedWrapperClass (App c) (App b) AuthToken
+    => WrappedAuthToken
+    -> (Entity Customer -> App c)
+    -> App b
+withAdminCookie token handler =
+    withCookie token $ validateToken >=> \e@(Entity _ customer) ->
+        if customerIsAdmin customer then
+            handler e
+        else
+            serverError err403
 
 -- | Validate both the cookie & route parameters. Throws a 403 if the
 -- AuthToken is invalid and a 422 is the parameters are invalid.
