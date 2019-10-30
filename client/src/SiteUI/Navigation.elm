@@ -6,7 +6,6 @@ import Html exposing (Html, a, button, div, form, li, node, span, text, ul)
 import Html.Attributes exposing (attribute, class, href, id, target, type_)
 import Html.Events.Extra exposing (onClickPreventDefault)
 import Messages exposing (Msg(..))
-import PageData
 import Products.Pagination as Pagination
 import RemoteData exposing (WebData)
 import Routing exposing (AdminRoute(..), Route(..), reverse)
