@@ -143,6 +143,7 @@ orderTable zone locations orderSummaries =
                 ]
             , tbody [] <| List.map orderRow orderSummaries
             ]
-        , div [ class "account-order-blocks mb-3" ] <| List.map orderBlock orderSummaries
+        , div [ class "account-order-blocks mb-3 d-md-none" ] <|
+            List.map orderBlock orderSummaries
         , showAllButton
         ]
