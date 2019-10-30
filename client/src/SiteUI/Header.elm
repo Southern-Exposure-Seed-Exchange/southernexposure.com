@@ -1,10 +1,10 @@
-module SiteUI.Header exposing (view)
+module SiteUI.Header exposing (adminView, view)
 
 import Html exposing (Html, a, br, div, h1, img, li, small, text, ul)
 import Html.Attributes exposing (class, href, id, src, target)
 import Html.Events.Extra exposing (onClickPreventDefault)
 import Messages exposing (Msg(..))
-import Routing exposing (Route(..))
+import Routing exposing (AdminRoute(..), Route(..))
 import SiteUI.Search as SiteSearch
 import User exposing (AuthStatus(..))
 import Views.Images as Images
@@ -15,15 +15,15 @@ view : (SiteSearch.Msg -> Msg) -> SiteSearch.Data -> AuthStatus -> Int -> Html M
 view searchTagger searchData authStatus cartItemCount =
     div [ class "container" ]
         [ div [ id "site-header", class "row clearfix" ]
-            [ div [ class "col" ] [ logoAndName ]
+            [ div [ class "col" ] [ logoAndName <| PageDetails "home" ]
             , div [ class "col-auto ml-auto d-none d-md-block text-right" ] <|
                 linksAndSearch searchTagger searchData authStatus cartItemCount
             ]
         ]
 
 
-logoAndName : Html Msg
-logoAndName =
+logoAndName : Route -> Html Msg
+logoAndName linkRoute =
     let
         logoImage =
             img
@@ -34,14 +34,14 @@ logoAndName =
                 []
 
         titleLink =
-            a (class "d-block" :: routeLinkAttributes (PageDetails "home"))
+            a (class "d-block" :: routeLinkAttributes linkRoute)
                 [ text "Southern Exposure"
                 , br [ class "d-none d-md-block" ] []
                 , text " Seed Exchange"
                 ]
     in
     div [ class "media justify-content-center" ]
-        [ a (class "my-auto" :: routeLinkAttributes (PageDetails "home")) [ logoImage ]
+        [ a (class "my-auto" :: routeLinkAttributes linkRoute) [ logoImage ]
         , div [ id "site-title", class "media-body my-auto" ]
             [ h1 [ class "media-heading m-0" ] [ titleLink ]
             ]
@@ -92,3 +92,25 @@ linksAndSearch searchTagger searchData authStatus cartItemCount =
             [ text "Advanced Search" ]
         ]
     ]
+
+
+adminView : Html Msg
+adminView =
+    let
+        rightLinks =
+            ul [ class "list-unstyled" ]
+                [ li []
+                    [ a (routeLinkAttributes <| PageDetails "home") [ text "Home Page" ]
+                    ]
+                , li []
+                    [ a [ href "/account/logout/", onClickPreventDefault LogOut, target "" ]
+                        [ text "Log Out" ]
+                    ]
+                ]
+    in
+    div [ class "admin container-fluid" ]
+        [ div [ id "site-header", class "row" ]
+            [ div [ class "col" ] [ logoAndName <| Admin CategoryList ]
+            , div [ class "col text-right" ] [ rightLinks ]
+            ]
+        ]

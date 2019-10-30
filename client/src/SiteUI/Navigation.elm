@@ -1,4 +1,4 @@
-module SiteUI.Navigation exposing (view)
+module SiteUI.Navigation exposing (adminView, view)
 
 import Category exposing (CategoryId(..))
 import Dict
@@ -9,7 +9,7 @@ import Messages exposing (Msg(..))
 import PageData
 import Products.Pagination as Pagination
 import RemoteData exposing (WebData)
-import Routing exposing (Route(..), reverse)
+import Routing exposing (AdminRoute(..), Route(..), reverse)
 import Search
 import SiteUI exposing (NavigationData)
 import SiteUI.Search as SiteSearch
@@ -171,6 +171,49 @@ view route authStatus navigationData activeCategoryIds searchData =
                 [ ul [ class "navbar-nav mx-auto d-flex text-left" ] <|
                     categoryNavigation
                         ++ mobileOnlyItems
+                ]
+            ]
+        ]
+
+
+adminView : Route -> Html Msg
+adminView route =
+    let
+        navItem : String -> AdminRoute -> Html Msg
+        navItem title targetRoute =
+            li [ class <| "nav-item" ++ activeClass targetRoute ]
+                [ a
+                    (class "nav-link"
+                        :: (routeLinkAttributes <| Admin <| targetRoute)
+                    )
+                    [ text title ]
+                ]
+
+        activeClass : AdminRoute -> String
+        activeClass targetRoute =
+            if Admin targetRoute == route then
+                " active "
+
+            else
+                ""
+    in
+    div [ id "navigation", class "admin container-fluid" ]
+        [ node "nav"
+            [ class "navbar navbar-expand-md navbar-light bg-success" ]
+            [ button
+                [ class "navbar-toggler ml-2"
+                , type_ "button"
+                , attribute "data-toggle" "collapse"
+                , attribute "data-target" "#admin-navbar"
+                , attribute "aria-controls" "navbarSupportedContent"
+                , attribute "aria-expanded" "false"
+                , attribute "aria-label" "Toggle navigation"
+                ]
+                [ span [ class "navbar-toggler-icon" ] [] ]
+            , div [ id "admin-navbar", class "collapse navbar-collapse" ]
+                [ ul [ class "navbar-nav" ]
+                    [ navItem "Categories" CategoryList
+                    ]
                 ]
             ]
         ]

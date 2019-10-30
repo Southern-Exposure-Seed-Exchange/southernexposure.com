@@ -7,7 +7,7 @@ import PageData exposing (PageData)
 import Paginate
 import Products.Pagination as Pagination
 import RemoteData
-import Routing exposing (Route(..))
+import Routing exposing (AdminRoute(..), Route(..))
 import Views.Utils exposing (routeLinkAttributes)
 
 
@@ -104,6 +104,9 @@ view route pageData =
 
                 CheckoutSuccess _ _ ->
                     singleItem "Order Complete"
+
+                Admin CategoryList ->
+                    singleItem "Categories"
 
                 NotFound ->
                     singleItem "Page Not Found"

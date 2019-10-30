@@ -26,7 +26,7 @@ import Ports
 import Product exposing (ProductId(..), ProductVariantId(..))
 import QuickOrder
 import RemoteData exposing (WebData)
-import Routing exposing (Route(..), parseRoute)
+import Routing exposing (AdminRoute(..), Route(..), parseRoute)
 import Search exposing (UniqueSearch(..))
 import SiteUI
 import SiteUI.Search as SiteSearch
@@ -248,6 +248,11 @@ fetchDataForRoute ({ route, pageData, key } as model) =
                         User.Anonymous ->
                             ( pageData, redirectIfAuthRequired key model.route )
 
+                Admin CategoryList ->
+                    ( { pageData | adminCategoryList = RemoteData.Loading }
+                    , getAdminCategoryList
+                    )
+
                 NotFound ->
                     doNothing
 
@@ -419,6 +424,13 @@ getCheckoutSuccessDetails orderId =
         |> Api.withJsonBody (Encode.object [ ( "orderId", Encode.int orderId ) ])
         |> Api.withJsonResponse PageData.orderDetailsDecoder
         |> Api.sendRequest GetCheckoutSuccessDetails
+
+
+getAdminCategoryList : Cmd Msg
+getAdminCategoryList =
+    Api.get Api.AdminCategoryList
+        |> Api.withJsonResponse PageData.adminCategoryListDataDecoder
+        |> Api.sendRequest GetAdminCategoryList
 
 
 logOut : Cmd Msg
@@ -893,6 +905,13 @@ update msg ({ pageData, key } as model) =
                 |> Tuple.mapFirst (\sr -> { pageData | searchResults = sr })
                 |> Tuple.mapFirst (\pd -> { model | pageData = pd })
                 |> extraCommand (always Ports.scrollToTop)
+
+        GetAdminCategoryList response ->
+            let
+                updatedPageData =
+                    { pageData | adminCategoryList = response }
+            in
+            ( { model | pageData = updatedPageData }, Cmd.none )
 
 
 updatePageFromPagination : Routing.Key -> Route -> Paginated a b c -> Cmd msg

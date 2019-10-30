@@ -1,8 +1,8 @@
-module Views.Category exposing (details)
+module Views.Category exposing (adminList, details)
 
 import Category
 import Html exposing (..)
-import Html.Attributes exposing (attribute, class, src)
+import Html.Attributes exposing (attribute, class, src, style)
 import Messages exposing (Msg)
 import Model exposing (CartForms)
 import Models.Fields exposing (imageToSrcSet, imgSrcFallback)
@@ -77,3 +77,24 @@ details pagination addToCartForms products =
     , subCategoryCards
     ]
         ++ ProductViews.list (CategoryDetails category.slug) pagination addToCartForms products
+
+
+{-| TODO: Add Button to Create New Category, Add Edit Buttons to Table
+-}
+adminList : PageData.AdminCategoryListData -> List (Html Msg)
+adminList { roots } =
+    let
+        depthPadding depth =
+            style "margin-left" <| String.fromInt (depth * 20) ++ "px"
+
+        renderCategory depth (PageData.AdminListCategory c) =
+            tr []
+                [ td [] [ div [ depthPadding depth ] [ text c.name ] ]
+                ]
+                :: List.concatMap (renderCategory <| depth + 1) c.children
+    in
+    [ table [ class "table table-sm table-striped" ]
+        [ tbody [] <|
+            List.concatMap (renderCategory 0) roots
+        ]
+    ]

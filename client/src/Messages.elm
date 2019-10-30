@@ -69,3 +69,4 @@ type Msg
     | GetCheckoutSuccessDetails (WebData PageData.OrderDetails)
     | CategoryPaginationMsg (Paginate.Msg ProductData PageData.CategoryDetails)
     | SearchPaginationMsg (Paginate.Msg ProductData String)
+    | GetAdminCategoryList (WebData PageData.AdminCategoryListData)

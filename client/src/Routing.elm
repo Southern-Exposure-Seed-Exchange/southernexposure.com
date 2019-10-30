@@ -1,7 +1,9 @@
 module Routing exposing
-    ( Key
+    ( AdminRoute(..)
+    , Key
     , Route(..)
     , authRequired
+    , isAdminRoute
     , newUrl
     , parseRoute
     , reverse
@@ -35,7 +37,24 @@ type Route
     | QuickOrder
     | Checkout
     | CheckoutSuccess Int Bool
+    | Admin AdminRoute
     | NotFound
+
+
+{-| Does the 'Route' specify a Page to the Admin Backend?
+-}
+isAdminRoute : Route -> Bool
+isAdminRoute route =
+    case route of
+        Admin _ ->
+            True
+
+        _ ->
+            False
+
+
+type AdminRoute
+    = CategoryList
 
 
 parseRoute : Url -> Route
@@ -73,6 +92,11 @@ parseRoute =
                 , Url.map OrderDetails (Url.s "order" </> Url.int)
                 ]
 
+        adminParser =
+            Url.oneOf
+                [ Url.map CategoryList (Url.s "categories")
+                ]
+
         routeParser =
             Url.oneOf
                 [ Url.map (PageDetails "home") Url.top
@@ -89,6 +113,7 @@ parseRoute =
                 , Url.map QuickOrder (Url.s "quick-order")
                 , Url.map Checkout (Url.s "checkout")
                 , Url.map CheckoutSuccess (Url.s "checkout" </> Url.s "success" </> Url.int <?> parseFlag "newAccount")
+                , Url.map Admin <| Url.s "admin" </> adminParser
                 , Url.map PageDetails Url.string
                 ]
     in
@@ -195,8 +220,18 @@ reverse route =
             joinPath [ "checkout", "success", String.fromInt orderId ]
                 ++ withQueryStrings [ queryFlag "newAccount" newAccount ]
 
+        Admin adminRoute ->
+            joinPath <| "admin" :: reverseAdmin adminRoute
+
         NotFound ->
             joinPath [ "page-not-found" ]
+
+
+reverseAdmin : AdminRoute -> List String
+reverseAdmin route =
+    case route of
+        CategoryList ->
+            [ "categories" ]
 
 
 authRequired : Route -> Bool
@@ -251,6 +286,9 @@ authRequired route =
             False
 
         CheckoutSuccess _ _ ->
+            True
+
+        Admin _ ->
             True
 
         NotFound ->

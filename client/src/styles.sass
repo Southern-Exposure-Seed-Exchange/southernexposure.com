@@ -468,3 +468,23 @@ tr.checkout-coupon-line
       padding-right: 0.3rem
   table
     margin-top: 0.5rem
+
+
+/** Admin Site **/
+
+// Hide the Background Image
+body > div.admin
+  background-color: white
+
+div.admin#navigation
+  // Space Out Header & Nav
+  padding-top: 0.25rem
+  // Remove Vertical Padding Inside Bar
+  nav
+    padding: 0 10px
+  // Highlight Current Page
+  .nav-item.active
+    background-color: $navbar-light-active-bg
+  // Condense the Navbar
+  .nav-link
+    padding: 0.25rem 0.5rem

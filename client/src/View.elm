@@ -22,7 +22,7 @@ import Products.Pagination as Pagination
 import Products.Views as ProductViews
 import QuickOrder
 import RemoteData exposing (WebData)
-import Routing exposing (Route(..))
+import Routing exposing (AdminRoute(..), Route(..), isAdminRoute)
 import Search exposing (UniqueSearch(..))
 import SeedAttribute
 import SiteUI.Breadcrumbs as SiteBreadcrumbs
@@ -39,20 +39,30 @@ view : Model -> Document Msg
 view ({ route, pageData, navigationData, zone } as model) =
     let
         middleContent =
-            if route == Checkout then
-                div [ class "container" ]
-                    [ div [ class "row justify-content-center" ]
-                        [ div [ class "col-md-10" ] pageContent
+            case route of
+                Checkout ->
+                    div [ class "container" ]
+                        [ div [ class "row justify-content-center" ]
+                            [ div [ class "col-md-10" ] pageContent
+                            ]
                         ]
-                    ]
 
-            else
-                div [ class "container" ]
-                    [ div [ class "row" ]
-                        [ div [ class "col order-md-2" ] pageContent
-                        , SiteSidebar.view route
+                Admin adminRoute ->
+                    div [ class "admin container-fluid" ]
+                        [ div [ class "row" ]
+                            [ div [ class "col" ] <|
+                                h2 [] [ text <| adminTitle adminRoute ]
+                                    :: pageContent
+                            ]
                         ]
-                    ]
+
+                _ ->
+                    div [ class "container" ]
+                        [ div [ class "row" ]
+                            [ div [ class "col order-md-2" ] pageContent
+                            , SiteSidebar.view route
+                            ]
+                        ]
 
         pageContent =
             case route of
@@ -132,6 +142,9 @@ view ({ route, pageData, navigationData, zone } as model) =
                 CheckoutSuccess orderId newAccount ->
                     RemoteData.map2 Tuple.pair pageData.locations pageData.orderDetails
                         |> withIntermediateText (apply <| Checkout.successView zone LogOut orderId newAccount)
+
+                Admin CategoryList ->
+                    withIntermediateText CategoryViews.adminList pageData.adminCategoryList
 
                 NotFound ->
                     notFoundView
@@ -218,8 +231,17 @@ view ({ route, pageData, navigationData, zone } as model) =
                 CheckoutSuccess _ _ ->
                     "Order Complete"
 
+                Admin adminRoute ->
+                    adminTitle adminRoute ++ " - Admin"
+
                 NotFound ->
                     "Page Not Found"
+
+        adminTitle : AdminRoute -> String
+        adminTitle adminRoute =
+            case adminRoute of
+                CategoryList ->
+                    "Categories"
 
         -- TODO: Have "Error" & "Loading" titles?
         getFromPageData :
@@ -250,13 +272,20 @@ view ({ route, pageData, navigationData, zone } as model) =
                 _ ->
                     []
     in
-    Document pageTitle
-        [ SiteHeader.view SearchMsg model.searchData model.currentUser model.cartItemCount
-        , SiteNavigation.view route model.currentUser navigationData activeCategoryIds model.searchData
-        , SiteBreadcrumbs.view route pageData
-        , middleContent
-        , SiteFooter.view
-        ]
+    Document pageTitle <|
+        if isAdminRoute route then
+            [ SiteHeader.adminView
+            , SiteNavigation.adminView route
+            , middleContent
+            ]
+
+        else
+            [ SiteHeader.view SearchMsg model.searchData model.currentUser model.cartItemCount
+            , SiteNavigation.view route model.currentUser navigationData activeCategoryIds model.searchData
+            , SiteBreadcrumbs.view route pageData
+            , middleContent
+            , SiteFooter.view
+            ]
 
 
 withIntermediateText : (a -> List (Html msg)) -> WebData a -> List (Html msg)
