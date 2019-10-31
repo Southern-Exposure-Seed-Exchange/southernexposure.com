@@ -7,7 +7,8 @@ module Routes.Admin.Categories
     , categoryRoutes
     ) where
 
-import Control.Monad.Reader (asks)
+import Control.Concurrent.STM (atomically, modifyTVar')
+import Control.Monad.Reader (asks, liftIO)
 import Data.Aeson (ToJSON(..), FromJSON(..), (.=), (.:), object, withObject)
 import Data.List (sortOn)
 import Data.Maybe (fromMaybe)
@@ -19,7 +20,8 @@ import System.FilePath ((</>), takeFileName)
 import Text.HTML.SanitizeXSS (sanitize)
 
 import Auth (Cookied, WrappedAuthToken, withAdminCookie, validateAdminAndParameters)
-import Config (Config(getMediaDirectory))
+import Cache (Caches(..), syncCategoryPredecessorCache)
+import Config (Config(getMediaDirectory, getCaches))
 import Images (makeImageConfig, scaleImage)
 import Models (Category(..), CategoryId, EntityField(CategoryName), Unique(UniqueCategorySlug), slugify)
 import Server (App, runDB)
@@ -199,7 +201,9 @@ newCategoryRoute = validateAdminAndParameters $ \_ NewCategoryParameters {..} ->
             , categoryImageUrl = imageFileName
             , categoryOrder = ncpOrder
             }
-    runDB $ insert newCategory
+    newCategoryId <- runDB $ insert newCategory
+    updateCategoryCaches
+    return newCategoryId
   where
     makeImage :: T.Text -> BS.ByteString -> App T.Text
     makeImage fileName imageData =
@@ -213,3 +217,14 @@ newCategoryRoute = validateAdminAndParameters $ \_ NewCategoryParameters {..} ->
                 mediaDirectory <- asks getMediaDirectory
                 T.pack . takeFileName
                     <$> scaleImage imageConfig fileName (mediaDirectory </> "categories") rawImageData
+
+
+-- UTILS
+
+
+updateCategoryCaches :: App ()
+updateCategoryCaches = do
+    newCPCache <- runDB syncCategoryPredecessorCache
+    caches <- asks getCaches
+    liftIO . atomically . modifyTVar' caches $ \c ->
+        c { getCategoryPredecessorCache = newCPCache }
