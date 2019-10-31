@@ -9,6 +9,7 @@ import Auth.Login as Login
 import Auth.ResetPassword as ResetPassword
 import Browser exposing (UrlRequest)
 import Cart
+import Categories.AdminViews as CategoryAdmin
 import Checkout
 import Locations exposing (AddressLocations)
 import PageData exposing (ProductData)
@@ -53,6 +54,7 @@ type Msg
     | EditCartMsg Cart.Msg
     | QuickOrderMsg QuickOrder.Msg
     | CheckoutMsg Checkout.Msg
+    | NewCategoryMsg CategoryAdmin.NewMsg
       -- API Requests
     | ReAuthorize (WebData User.AuthStatus)
     | LogOutResponse (WebData ())
@@ -70,3 +72,4 @@ type Msg
     | CategoryPaginationMsg (Paginate.Msg ProductData PageData.CategoryDetails)
     | SearchPaginationMsg (Paginate.Msg ProductData String)
     | GetAdminCategoryList (WebData PageData.AdminCategoryListData)
+    | GetAdminNewCategoryData (WebData PageData.AdminNewCategoryData)

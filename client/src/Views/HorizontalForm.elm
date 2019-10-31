@@ -3,13 +3,14 @@ module Views.HorizontalForm exposing
     , inputRow
     , selectRow
     , submitButton
+    , textareaRow
     , withLabel
     )
 
 import Api
 import Dict
 import Html exposing (..)
-import Html.Attributes exposing (class, for, id, name, required, type_, value)
+import Html.Attributes exposing (class, for, id, name, required, rows, type_, value)
 import Html.Events exposing (on, onInput, targetValue)
 import Json.Decode as Decode
 import Views.Utils exposing (autocomplete)
@@ -82,6 +83,49 @@ inputRow errors inputValue inputMsg isRequired labelText errorField inputType au
         , autocomplete autocompleteType
         ]
         []
+        |> (\i -> [ i, errorHtml ])
+        |> withLabel labelText isRequired
+
+
+textareaRow : Api.FormErrors -> String -> (String -> msg) -> Bool -> String -> String -> Int -> Html msg
+textareaRow errors inputValue inputMsg isRequired labelText errorField rowCount =
+    let
+        inputId =
+            String.filter (\c -> c /= ' ') labelText
+
+        fieldErrors =
+            Dict.get errorField errors
+                |> Maybe.withDefault []
+
+        inputClass =
+            if List.isEmpty fieldErrors && not (Dict.isEmpty errors) then
+                "form-control is-valid"
+
+            else if List.isEmpty fieldErrors then
+                "form-control"
+
+            else
+                "form-control is-invalid"
+
+        errorHtml =
+            if List.isEmpty fieldErrors then
+                text ""
+
+            else
+                fieldErrors
+                    |> List.map text
+                    |> List.intersperse (br [] [])
+                    |> div [ class "invalid-feedback" ]
+    in
+    textarea
+        [ id <| "textarea" ++ inputId
+        , name inputId
+        , class inputClass
+        , required isRequired
+        , onInput inputMsg
+        , rows rowCount
+        ]
+        [ text inputValue ]
         |> (\i -> [ i, errorHtml ])
         |> withLabel labelText isRequired
 

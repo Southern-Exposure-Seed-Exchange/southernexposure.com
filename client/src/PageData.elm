@@ -2,6 +2,7 @@ module PageData exposing
     ( AddressDetails
     , AdminCategoryListData
     , AdminListCategory(..)
+    , AdminNewCategoryData
     , AdvancedSearch
     , CartDetails
     , CartItem
@@ -19,6 +20,7 @@ module PageData exposing
     , SearchResults
     , addressDetailsDecoder
     , adminCategoryListDataDecoder
+    , adminNewCategoryDataDecoder
     , advancedSearchDecoder
     , blankCartDetails
     , cartDetailsDecoder
@@ -73,6 +75,7 @@ type alias PageData =
     , checkoutDetails : WebData CheckoutDetails
     , orderDetails : WebData OrderDetails
     , adminCategoryList : WebData AdminCategoryListData
+    , adminNewCategory : WebData AdminNewCategoryData
     }
 
 
@@ -105,6 +108,7 @@ initial =
     , checkoutDetails = RemoteData.NotAsked
     , orderDetails = RemoteData.NotAsked
     , adminCategoryList = RemoteData.NotAsked
+    , adminNewCategory = RemoteData.NotAsked
     }
 
 
@@ -592,7 +596,7 @@ orderProductDecoder =
 
 
 
--- Admin
+-- Category Admin
 
 
 type alias AdminCategoryListData =
@@ -620,6 +624,18 @@ adminListCategoryDecoder =
         (Decode.field "id" <| Decode.map CategoryId Decode.int)
         (Decode.field "name" Decode.string)
         (Decode.field "children" <| Decode.list <| Decode.lazy <| \_ -> adminListCategoryDecoder)
+
+
+type alias AdminNewCategoryData =
+    List { name : String, id : CategoryId }
+
+
+adminNewCategoryDataDecoder : Decoder AdminNewCategoryData
+adminNewCategoryDataDecoder =
+    Decode.list <|
+        Decode.map2 (\id name -> { id = id, name = name })
+            (Decode.field "id" <| Decode.map CategoryId Decode.int)
+            (Decode.field "name" Decode.string)
 
 
 

@@ -9,6 +9,8 @@ import Auth.MyAccount as MyAccount
 import Auth.ResetPassword as ResetPassword
 import Browser exposing (Document)
 import Cart
+import Categories.AdminViews as CategoryAdminViews
+import Categories.Views as CategoryViews
 import Checkout
 import Html exposing (..)
 import Html.Attributes exposing (class)
@@ -31,7 +33,6 @@ import SiteUI.Header as SiteHeader
 import SiteUI.Navigation as SiteNavigation
 import SiteUI.Sidebar as SiteSidebar
 import StaticPage exposing (StaticPage)
-import Views.Category as CategoryViews
 import Views.Utils exposing (rawHtml)
 
 
@@ -144,7 +145,11 @@ view ({ route, pageData, navigationData, zone } as model) =
                         |> withIntermediateText (apply <| Checkout.successView zone LogOut orderId newAccount)
 
                 Admin CategoryList ->
-                    withIntermediateText CategoryViews.adminList pageData.adminCategoryList
+                    withIntermediateText CategoryAdminViews.list pageData.adminCategoryList
+
+                Admin CategoryNew ->
+                    withIntermediateText (CategoryAdminViews.new model.newCategoryForm) pageData.adminNewCategory
+                        |> List.map (Html.map NewCategoryMsg)
 
                 NotFound ->
                     notFoundView
@@ -242,6 +247,9 @@ view ({ route, pageData, navigationData, zone } as model) =
             case adminRoute of
                 CategoryList ->
                     "Categories"
+
+                CategoryNew ->
+                    "New Category"
 
         -- TODO: Have "Error" & "Loading" titles?
         getFromPageData :

@@ -488,3 +488,21 @@ div.admin#navigation
   // Condense the Navbar
   .nav-link
     padding: 0.25rem 0.5rem
+.admin
+  // Limit height of image previews
+  .image-preview > img
+    max-height: 200px
+  form:after
+    content: ''
+    position: absolute
+    top: 0
+    left: 0
+    height: 100%
+    width: 100%
+    transition: opacity 0.3s ease-in
+    z-index: -1
+    opacity: 0
+    background: linear-gradient(rgba(black,0.25), rgba(black,0.25))
+  .form-loading:after
+    opacity: 1
+    z-index: 100

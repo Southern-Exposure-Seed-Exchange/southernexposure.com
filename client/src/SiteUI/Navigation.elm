@@ -190,11 +190,28 @@ adminView route =
 
         activeClass : AdminRoute -> String
         activeClass targetRoute =
-            if Admin targetRoute == route then
+            if Admin targetRoute == route || isChildRoute targetRoute then
                 " active "
 
             else
                 ""
+
+        isChildRoute : AdminRoute -> Bool
+        isChildRoute parentRoute =
+            case route of
+                Admin subRoute ->
+                    case ( subRoute, parentRoute ) of
+                        ( CategoryNew, CategoryList ) ->
+                            True
+
+                        ( CategoryNew, _ ) ->
+                            False
+
+                        ( CategoryList, _ ) ->
+                            False
+
+                _ ->
+                    False
     in
     div [ id "navigation", class "admin container-fluid" ]
         [ node "nav"

@@ -55,6 +55,7 @@ isAdminRoute route =
 
 type AdminRoute
     = CategoryList
+    | CategoryNew
 
 
 parseRoute : Url -> Route
@@ -95,6 +96,7 @@ parseRoute =
         adminParser =
             Url.oneOf
                 [ Url.map CategoryList (Url.s "categories")
+                , Url.map CategoryNew (Url.s "categories" </> Url.s "new")
                 ]
 
         routeParser =
@@ -232,6 +234,9 @@ reverseAdmin route =
     case route of
         CategoryList ->
             [ "categories" ]
+
+        CategoryNew ->
+            [ "categories", "new" ]
 
 
 authRequired : Route -> Bool

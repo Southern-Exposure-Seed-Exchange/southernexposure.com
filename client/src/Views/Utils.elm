@@ -9,8 +9,11 @@ module Views.Utils exposing
     , onIntInput
     , rawHtml
     , routeLinkAttributes
+    , selectImageFile
     )
 
+import File exposing (File)
+import File.Select as Select
 import Html exposing (Attribute, Html, i, text)
 import Html.Attributes exposing (attribute, class, href)
 import Html.Events exposing (on)
@@ -81,3 +84,19 @@ decimalInput =
 autocomplete : String -> Attribute msg
 autocomplete =
     attribute "autocomplete"
+
+
+{-| Run a command to show the User a file selector. Limits files to the image mimetypes supported by the backend.
+
+Note: Must be used in a response to some user action(e.g., an onClick message handler).
+
+-}
+selectImageFile : (File -> msg) -> Cmd msg
+selectImageFile =
+    Select.file
+        [ "image/bmp"
+        , "image/gif"
+        , "image/png"
+        , "image/jpeg"
+        , "image/jpg"
+        ]

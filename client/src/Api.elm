@@ -68,6 +68,7 @@ type Endpoint
     | CheckoutPlaceOrderAnonymous
     | CheckoutSuccess
     | AdminCategoryList
+    | AdminNewCategory
 
 
 toUrl : Endpoint -> String
@@ -180,6 +181,9 @@ toUrl endpoint =
 
                 AdminCategoryList ->
                     joinPath [ "admin", "categories", "list" ]
+
+                AdminNewCategory ->
+                    joinPath [ "admin", "categories", "new" ]
     in
     "/api" ++ endpointUrl
 
