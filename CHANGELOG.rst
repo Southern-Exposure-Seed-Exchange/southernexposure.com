@@ -3,6 +3,14 @@ CHANGELOG
 =========
 
 
+v0.9.0
+======
+
+* Sanitize new/updated Category names & descriptions to prevent Cross-Site
+  Scripting vulnerabilities.
+* Automatically scale & optimize new Category images.
+
+
 v0.8.0
 ======
 
