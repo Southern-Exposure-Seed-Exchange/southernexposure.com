@@ -20,6 +20,7 @@ module Auth
     , withValidatedCookie
     , withAdminCookie
     , validateCookieAndParameters
+    , validateAdminAndParameters
     , temporarySession
     , permanentSession
       -- * Server Setup
@@ -153,6 +154,19 @@ validateCookieAndParameters handler token param =
     withCookie token $ \authToken -> do
         customer <- validateToken authToken
         validate param >>= handler customer
+
+-- | Validate both the cookie & route parameters, ensuring the Customer is
+-- an Administrator. Throws a 403 for authorization errors & a 422 for
+-- validation errors.
+validateAdminAndParameters
+    :: (CookiedWrapperClass (App c) (App b) AuthToken, Validation p)
+    => (Entity Customer -> p -> App c)
+    -> WrappedAuthToken
+    -> p
+    -> App b
+validateAdminAndParameters handler token param =
+    withAdminCookie token $ \e ->
+        validate param >>= handler e
 
 
 -- | Cookie session settings for logins that expire when the browser

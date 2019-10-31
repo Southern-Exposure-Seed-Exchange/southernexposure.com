@@ -46,6 +46,7 @@ dependencies:
     - base >= 4.7 && < 5
     - aeson
     - async
+    - base64-bytestring
     - bcrypt
     - blaze-html
     - blaze-markup
@@ -86,6 +87,7 @@ dependencies:
     - uuid
     - wai
     - xmlgen
+    - xss-sanitize
 
 
 library:
