@@ -210,7 +210,7 @@ new model categories =
                 [ value "", selected <| Nothing == model.parent ]
                 [ text "" ]
     in
-    [ form [ onSubmit SubmitNew, class (formSavingClass model.isSaving) ]
+    [ form [ onSubmit SubmitNew, class (formSavingClass model) ]
         [ Form.genericErrorText <| not <| Dict.isEmpty model.errors
         , Api.generalFormErrors model
         , inputRow model.name NInputName True "Name" "name" "text" "off"
@@ -230,7 +230,7 @@ new model categories =
                 [ text "Upload Image..." ]
             ]
         , div [ class "form-group" ]
-            [ submitOrSavingButton model.isSaving "Add Category"
+            [ submitOrSavingButton model "Add Category"
             ]
         ]
     ]
@@ -486,7 +486,7 @@ edit categoryId model categories originalCategory =
                 Just ( imageData, imageName ) ->
                     base64ImagePreview imageName imageData
     in
-    [ form [ class (formSavingClass model.isSaving), onSubmit SubmitEdit ]
+    [ form [ class (formSavingClass model), onSubmit SubmitEdit ]
         [ Form.genericErrorText <| not <| Dict.isEmpty model.errors
         , Api.generalFormErrors model
         , inputRow .name .name EInputName True "Name" "name" "text" "off"
@@ -513,7 +513,7 @@ edit categoryId model categories originalCategory =
                 [ text "Upload Image..." ]
             ]
         , div [ class "form-group" ]
-            [ submitOrSavingButton model.isSaving "Update Category" ]
+            [ submitOrSavingButton model "Update Category" ]
         ]
     ]
 

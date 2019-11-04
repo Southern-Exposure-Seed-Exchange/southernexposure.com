@@ -135,14 +135,14 @@ new model =
         inputRow =
             Form.inputRow model.errors
     in
-    [ form [ class (formSavingClass model.isSaving), onSubmit SubmitNew ]
+    [ form [ class (formSavingClass model), onSubmit SubmitNew ]
         [ Form.genericErrorText <| not <| Dict.isEmpty model.errors
         , Api.generalFormErrors model
         , inputRow model.title NInputName True "Title" "title" "text" "off"
         , inputRow model.slug NInputSlug True "Slug" "slug" "text" "off"
         , Form.textareaRow model.errors model.content NInputContent True "Content" "content" 20
         , div [ class "form-group" ]
-            [ submitOrSavingButton model.isSaving "Add Page"
+            [ submitOrSavingButton model "Add Page"
             ]
         ]
     ]
