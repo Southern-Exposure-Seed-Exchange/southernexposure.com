@@ -1,6 +1,7 @@
 module PageData exposing
     ( AddressDetails
     , AdminCategoryListData
+    , AdminEditCategoryData
     , AdminListCategory(..)
     , AdminNewCategoryData
     , AdvancedSearch
@@ -20,6 +21,7 @@ module PageData exposing
     , SearchResults
     , addressDetailsDecoder
     , adminCategoryListDataDecoder
+    , adminEditCategoryDataDecoder
     , adminNewCategoryDataDecoder
     , advancedSearchDecoder
     , blankCartDetails
@@ -46,7 +48,7 @@ import Dict exposing (Dict)
 import Iso8601
 import Json.Decode as Decode exposing (Decoder)
 import Locations exposing (AddressLocations)
-import Models.Fields exposing (Cents(..), LotSize, centsDecoder, centsMap, centsMap2, lotSizeDecoder)
+import Models.Fields exposing (Cents(..), ImageData, LotSize, centsDecoder, centsMap, centsMap2, imageDecoder, lotSizeDecoder)
 import Paginate exposing (Paginated)
 import Product exposing (Product, ProductVariant, ProductVariantId(..), variantPrice)
 import Products.Pagination as Pagination
@@ -76,6 +78,7 @@ type alias PageData =
     , orderDetails : WebData OrderDetails
     , adminCategoryList : WebData AdminCategoryListData
     , adminNewCategory : WebData AdminNewCategoryData
+    , adminEditCategory : WebData AdminEditCategoryData
     }
 
 
@@ -109,6 +112,7 @@ initial =
     , orderDetails = RemoteData.NotAsked
     , adminCategoryList = RemoteData.NotAsked
     , adminNewCategory = RemoteData.NotAsked
+    , adminEditCategory = RemoteData.NotAsked
     }
 
 
@@ -636,6 +640,29 @@ adminNewCategoryDataDecoder =
         Decode.map2 (\id name -> { id = id, name = name })
             (Decode.field "id" <| Decode.map CategoryId Decode.int)
             (Decode.field "name" Decode.string)
+
+
+type alias AdminEditCategoryData =
+    { id : CategoryId
+    , name : String
+    , slug : String
+    , parent : Maybe CategoryId
+    , description : String
+    , image : ImageData
+    , order : Int
+    }
+
+
+adminEditCategoryDataDecoder : Decoder AdminEditCategoryData
+adminEditCategoryDataDecoder =
+    Decode.map7 AdminEditCategoryData
+        (Decode.field "id" <| Decode.map CategoryId Decode.int)
+        (Decode.field "name" Decode.string)
+        (Decode.field "slug" Decode.string)
+        (Decode.field "parentId" <| Decode.maybe <| Decode.map CategoryId Decode.int)
+        (Decode.field "description" Decode.string)
+        (Decode.field "image" imageDecoder)
+        (Decode.field "order" Decode.int)
 
 
 

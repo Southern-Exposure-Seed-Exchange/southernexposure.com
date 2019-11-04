@@ -10,6 +10,7 @@ module Routing exposing
     )
 
 import Browser.Navigation
+import Category exposing (CategoryId(..))
 import Products.Pagination as Pagination
 import Routing.Utils exposing (joinPath, parseFlag, queryFlag, queryParameter, withQueryStrings)
 import Search exposing (UniqueSearch(..))
@@ -56,6 +57,7 @@ isAdminRoute route =
 type AdminRoute
     = CategoryList
     | CategoryNew
+    | CategoryEdit CategoryId
 
 
 parseRoute : Url -> Route
@@ -97,6 +99,7 @@ parseRoute =
             Url.oneOf
                 [ Url.map CategoryList (Url.s "categories")
                 , Url.map CategoryNew (Url.s "categories" </> Url.s "new")
+                , Url.map (CategoryEdit << CategoryId) (Url.s "categories" </> Url.s "edit" </> Url.int)
                 ]
 
         routeParser =
@@ -237,6 +240,9 @@ reverseAdmin route =
 
         CategoryNew ->
             [ "categories", "new" ]
+
+        CategoryEdit (CategoryId cid) ->
+            [ "categories", "edit", String.fromInt cid ]
 
 
 authRequired : Route -> Bool

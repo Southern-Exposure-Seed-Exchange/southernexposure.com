@@ -1,9 +1,14 @@
 module Categories.AdminViews exposing
-    ( NewForm
+    ( EditForm
+    , EditMsg
+    , NewForm
     , NewMsg
+    , edit
+    , initialEditForm
     , initialNewForm
     , list
     , new
+    , updateEditForm
     , updateNewForm
     )
 
@@ -21,15 +26,15 @@ import Models.Utils exposing (slugify)
 import PageData
 import Ports
 import RemoteData
+import Result.Extra as Result
 import Routing exposing (AdminRoute(..), Route(..))
 import Task
 import Update.Utils exposing (noCommand)
 import Views.HorizontalForm as Form
+import Views.Images exposing (media)
 import Views.Utils exposing (icon, routeLinkAttributes, selectImageFile)
 
 
-{-| TODO: Add Edit Buttons to Table
--}
 list : PageData.AdminCategoryListData -> List (Html msg)
 list { roots } =
     let
@@ -39,6 +44,7 @@ list { roots } =
         renderCategory depth (PageData.AdminListCategory c) =
             tr []
                 [ td [] [ div [ depthPadding depth ] [ text c.name ] ]
+                , td [] [ a (routeLinkAttributes <| Admin <| CategoryEdit c.id) [ text "Edit" ] ]
                 ]
                 :: List.concatMap (renderCategory <| depth + 1) c.children
     in
@@ -51,15 +57,19 @@ list { roots } =
     ]
 
 
+
+-- NEW
+
+
 type NewMsg
-    = InputName String
-    | InputSlug String
-    | InputParent (Maybe CategoryId)
-    | InputDescription String
-    | InputOrder String
-    | SelectImage
-    | ImageUploaded File
-    | ImageEncoded String
+    = NInputName String
+    | NInputSlug String
+    | NInputParent (Maybe CategoryId)
+    | NInputDescription String
+    | NInputOrder String
+    | NSelectImage
+    | NImageUploaded File
+    | NImageEncoded String
     | SubmitNew
     | SubmitNewResponse (RemoteData.WebData (Result FormErrors Int))
 
@@ -91,10 +101,10 @@ initialNewForm =
     }
 
 
-updateNewForm : NewMsg -> NewForm -> ( NewForm, Cmd NewMsg )
-updateNewForm msg model =
+updateNewForm : Routing.Key -> NewMsg -> NewForm -> ( NewForm, Cmd NewMsg )
+updateNewForm key msg model =
     case msg of
-        InputName val ->
+        NInputName val ->
             noCommand <|
                 if model.slug == slugify model.name then
                     { model | name = val, slug = slugify val }
@@ -102,34 +112,31 @@ updateNewForm msg model =
                 else
                     { model | name = val }
 
-        InputSlug val ->
+        NInputSlug val ->
             { model | slug = val }
                 |> noCommand
 
-        InputParent val ->
+        NInputParent val ->
             { model | parent = val }
                 |> noCommand
 
-        InputDescription val ->
+        NInputDescription val ->
             { model | description = val }
                 |> noCommand
 
-        InputOrder val ->
+        NInputOrder val ->
             { model | order = val }
                 |> noCommand
 
-        SelectImage ->
-            ( model, selectImageFile ImageUploaded )
+        NSelectImage ->
+            ( model, selectImageFile NImageUploaded )
 
-        ImageUploaded imageFile ->
+        NImageUploaded imageFile ->
             ( { model | imageName = File.name imageFile }
-            , File.toBytes imageFile
-                |> Task.map Base64.fromBytes
-                |> Task.map (Maybe.withDefault "")
-                |> Task.perform ImageEncoded
+            , encodeImageData NImageEncoded imageFile
             )
 
-        ImageEncoded imageData ->
+        NImageEncoded imageData ->
             { model | imageData = imageData }
                 |> noCommand
 
@@ -143,8 +150,7 @@ updateNewForm msg model =
                     let
                         encodedParent =
                             model.parent
-                                |> Maybe.map (\(CategoryId i) -> Encode.int i)
-                                |> Maybe.withDefault Encode.null
+                                |> encodeMaybe (\(CategoryId i) -> Encode.int i)
 
                         jsonBody =
                             Encode.object
@@ -166,10 +172,9 @@ updateNewForm msg model =
 
         SubmitNewResponse response ->
             case response of
-                RemoteData.Success (Ok _) ->
+                RemoteData.Success (Ok cId) ->
                     ( initialNewForm
-                    , Cmd.none
-                      -- TODO: Redirect to Edit Category Route
+                    , Routing.newUrl key <| Admin <| CategoryEdit <| CategoryId cId
                     )
 
                 RemoteData.Success (Err errors) ->
@@ -192,18 +197,6 @@ new model categories =
         inputRow =
             Form.inputRow model.errors
 
-        categoryIdParser val =
-            if String.isEmpty val then
-                Ok Nothing
-
-            else
-                case String.toInt val of
-                    Just i ->
-                        Ok << Just <| CategoryId i
-
-                    Nothing ->
-                        Err "Could not parse category ID."
-
         renderCategoryOption { id, name } =
             option
                 [ value <| (\(CategoryId i) -> String.fromInt i) id
@@ -216,15 +209,274 @@ new model categories =
                 [ value "", selected <| Nothing == model.parent ]
                 [ text "" ]
 
-        imagePreview =
-            if String.isEmpty model.imageData then
-                text ""
+        formClass =
+            if model.isLoading then
+                "form-loading"
 
             else
-                div [ class "image-preview mb-4" ]
-                    [ div [] [ text model.imageName ]
-                    , img [ class "img-fluid", src <| "data:*/*;base64," ++ model.imageData ] []
-                    ]
+                ""
+    in
+    [ form [ onSubmit SubmitNew, class formClass ]
+        [ Form.genericErrorText <| not <| Dict.isEmpty model.errors
+        , Api.generalFormErrors model
+        , inputRow model.name NInputName True "Name" "name" "text" "off"
+        , inputRow model.slug NInputSlug True "Slug" "slug" "text" "off"
+        , Form.selectRow categoryIdParser NInputParent "Parent Category" True <|
+            blankOption
+                :: List.map renderCategoryOption categories
+        , Form.textareaRow model.errors model.description NInputDescription False "Description" "description" 10
+        , inputRow model.order NInputOrder True "Sort Order" "order" "number" "off"
+        , Form.withLabel "Image" False <|
+            [ base64ImagePreview model.imageName model.imageData
+            , button
+                [ class "btn btn-sm btn-secondary"
+                , type_ "button"
+                , onClick NSelectImage
+                ]
+                [ text "Upload Image..." ]
+            ]
+        , div [ class "form-group" ]
+            [ submitOrSavingButton model.isLoading "Add Category"
+            ]
+        ]
+    ]
+
+
+
+-- EDIT
+
+
+type EditMsg
+    = EInputName String
+    | EInputSlug String
+    | EInputParent (Maybe CategoryId)
+    | EInputDescription String
+    | EInputOrder String
+    | ESelectImage
+    | EImageUploaded File
+    | EImageEncoded String
+    | SubmitEdit
+    | SubmitEditResponse (RemoteData.WebData (Result FormErrors ()))
+
+
+type alias EditForm =
+    { name : Maybe String
+    , slug : Maybe String
+    , parent : Result () (Maybe CategoryId) -- Err = no change, Ok = new value
+    , description : Maybe String
+    , order : Maybe String
+    , imageName : Maybe String
+    , imageData : Maybe String
+    , errors : FormErrors
+    , isLoading : Bool
+    }
+
+
+initialEditForm : EditForm
+initialEditForm =
+    { name = Nothing
+    , slug = Nothing
+    , parent = Err ()
+    , description = Nothing
+    , order = Nothing
+    , imageName = Nothing
+    , imageData = Nothing
+    , errors = Api.initialErrors
+    , isLoading = False
+    }
+
+
+updateEditForm : Routing.Key -> RemoteData.WebData PageData.AdminEditCategoryData -> EditMsg -> EditForm -> ( EditForm, Cmd EditMsg )
+updateEditForm key original msg model =
+    case msg of
+        EInputName val ->
+            noCommand <|
+                if equalsOriginal val original .name then
+                    if slugFromName model original then
+                        { model | name = Nothing, slug = Nothing }
+
+                    else
+                        { model | name = Nothing }
+
+                else if slugFromName model original then
+                    { model | name = Just val, slug = Just (slugify val) }
+
+                else
+                    { model | name = Just val }
+
+        EInputSlug val ->
+            noCommand <|
+                if equalsOriginal val original .slug then
+                    { model | slug = Nothing }
+
+                else
+                    { model | slug = Just val }
+
+        EInputParent val ->
+            noCommand <|
+                if equalsOriginal val original .parent then
+                    { model | parent = Err () }
+
+                else
+                    { model | parent = Ok val }
+
+        EInputDescription val ->
+            noCommand <|
+                if equalsOriginal val original .description then
+                    { model | description = Nothing }
+
+                else
+                    { model | description = Just val }
+
+        EInputOrder val ->
+            noCommand <|
+                if equalsOriginal val original (.order >> String.fromInt) then
+                    { model | order = Nothing }
+
+                else
+                    { model | order = Just val }
+
+        ESelectImage ->
+            ( model, selectImageFile EImageUploaded )
+
+        EImageUploaded imageFile ->
+            ( { model | imageName = Just <| File.name imageFile }
+            , encodeImageData EImageEncoded imageFile
+            )
+
+        EImageEncoded imageData ->
+            { model | imageData = Just imageData }
+                |> noCommand
+
+        SubmitEdit ->
+            case ( Maybe.map String.toInt model.order, RemoteData.toMaybe original |> Maybe.map .id ) of
+                ( Just Nothing, _ ) ->
+                    { model | errors = Dict.fromList [ ( "order", [ "Value must be a whole number." ] ) ] }
+                        |> noCommand
+
+                ( _, Just categoryId ) ->
+                    let
+                        encodedParent =
+                            Result.unwrap []
+                                (\maybeId ->
+                                    [ ( "parentId"
+                                      , encodeMaybe (\(CategoryId i) -> Encode.int i) maybeId
+                                      )
+                                    ]
+                                )
+                                model.parent
+
+                        order =
+                            Maybe.andThen String.toInt model.order
+
+                        jsonBody =
+                            Encode.object <|
+                                [ ( "id", (\(CategoryId cId) -> Encode.int cId) categoryId )
+                                , ( "name", encodeMaybe Encode.string model.name )
+                                , ( "slug", encodeMaybe Encode.string model.slug )
+                                , ( "description", encodeMaybe Encode.string model.description )
+                                , ( "imageData", encodeMaybe Encode.string model.imageData )
+                                , ( "imageName", encodeMaybe Encode.string model.imageName )
+                                , ( "order", encodeMaybe Encode.int order )
+                                ]
+                                    ++ encodedParent
+                    in
+                    ( { model | isLoading = True }
+                    , Api.patch Api.AdminEditCategory
+                        |> Api.withJsonBody jsonBody
+                        |> Api.withErrorHandler (Decode.succeed ())
+                        |> Api.sendRequest SubmitEditResponse
+                    )
+
+                _ ->
+                    noCommand model
+
+        SubmitEditResponse response ->
+            case response of
+                RemoteData.Success (Ok ()) ->
+                    ( initialEditForm
+                    , Routing.newUrl key <| Admin CategoryList
+                    )
+
+                RemoteData.Success (Err errors) ->
+                    ( { model | errors = errors }, Ports.scrollToID "form-errors-text" )
+
+                RemoteData.Failure error ->
+                    ( { model | errors = Api.apiFailureToError error, isLoading = False }
+                    , Ports.scrollToID "form-errors-text"
+                    )
+
+                _ ->
+                    noCommand model
+
+
+type Tuple4 a b c d
+    = Tuple4 a b c d
+
+
+slugFromName : EditForm -> RemoteData.WebData PageData.AdminEditCategoryData -> Bool
+slugFromName model original =
+    let
+        maybeField : RemoteData.WebData a -> (a -> b) -> Maybe b
+        maybeField m s =
+            RemoteData.toMaybe m |> Maybe.map s
+
+        oName =
+            maybeField original .name
+
+        oSlug =
+            maybeField original .slug
+    in
+    case Tuple4 model.name model.slug oName oSlug of
+        Tuple4 (Just n) (Just s) _ _ ->
+            slugify n == s
+
+        Tuple4 (Just n) Nothing _ (Just s) ->
+            slugify n == s
+
+        Tuple4 Nothing (Just s) (Just n) _ ->
+            slugify n == s
+
+        Tuple4 _ _ (Just n) (Just s) ->
+            slugify n == s
+
+        _ ->
+            False
+
+
+equalsOriginal :
+    val
+    -> RemoteData.WebData PageData.AdminEditCategoryData
+    -> (PageData.AdminEditCategoryData -> val)
+    -> Bool
+equalsOriginal val original selector =
+    original
+        |> RemoteData.toMaybe
+        |> Maybe.map selector
+        |> (\originalField -> originalField == Just val)
+
+
+edit : CategoryId -> EditForm -> PageData.AdminNewCategoryData -> PageData.AdminEditCategoryData -> List (Html EditMsg)
+edit categoryId model categories originalCategory =
+    let
+        valueWithFallback s1 s2 =
+            s1 model
+                |> Maybe.withDefault (s2 originalCategory)
+
+        inputRow selector selector2 =
+            Form.inputRow model.errors (valueWithFallback selector selector2)
+
+        blankOption =
+            option
+                [ value "", selected <| Nothing == (model.parent |> Result.withDefault originalCategory.parent) ]
+                [ text "" ]
+
+        renderCategoryOption { id, name } =
+            option
+                [ value <| (\(CategoryId i) -> String.fromInt i) id
+                , selected <| Just id == (model.parent |> Result.withDefault originalCategory.parent)
+                ]
+                [ text name ]
 
         formClass =
             if model.isLoading then
@@ -233,35 +485,116 @@ new model categories =
             else
                 ""
 
-        submitButton =
-            if model.isLoading then
-                button [ class "btn btn-primary", disabled True, type_ "submit" ]
-                    [ text "Saving...", icon "spinner fa-spin ml-2" ]
+        imagePreview =
+            case Maybe.map2 Tuple.pair model.imageData model.imageName of
+                Nothing ->
+                    div [ class "image-preview mb-4" ]
+                        [ img
+                            [ class "img-fluid"
+                            , src <| media originalCategory.image.original
+                            ]
+                            []
+                        ]
 
-            else
-                button [ class "btn btn-primary", type_ "submit" ]
-                    [ text "Add Category" ]
+                Just ( imageData, imageName ) ->
+                    base64ImagePreview imageName imageData
     in
-    [ form [ onSubmit SubmitNew, class formClass ]
+    [ form [ class formClass, onSubmit SubmitEdit ]
         [ Form.genericErrorText <| not <| Dict.isEmpty model.errors
-        , inputRow model.name InputName True "Name" "name" "text" "off"
-        , inputRow model.slug InputSlug True "Slug" "slug" "text" "off"
-        , Form.selectRow categoryIdParser InputParent "Parent Category" True <|
+        , Api.generalFormErrors model
+        , inputRow .name .name EInputName True "Name" "name" "text" "off"
+        , inputRow .slug .slug EInputSlug True "Slug" "slug" "text" "off"
+        , Form.selectRow categoryIdParser EInputParent "Parent Category" True <|
             blankOption
-                :: List.map renderCategoryOption categories
-        , Form.textareaRow model.errors model.description InputDescription False "Description" "description" 10
-        , inputRow model.order InputOrder True "Sort Order" "order" "number" "off"
+                :: List.map renderCategoryOption
+                    (List.filter (\c -> c.id /= categoryId) categories)
+        , Form.textareaRow model.errors
+            (model.description |> Maybe.withDefault originalCategory.description)
+            EInputDescription
+            False
+            "Description"
+            "description"
+            10
+        , inputRow .order (.order >> String.fromInt) EInputOrder True "Sort Order" "order" "number" "off"
         , Form.withLabel "Image" False <|
             [ imagePreview
             , button
                 [ class "btn btn-sm btn-secondary"
                 , type_ "button"
-                , onClick SelectImage
+                , onClick ESelectImage
                 ]
                 [ text "Upload Image..." ]
             ]
         , div [ class "form-group" ]
-            [ submitButton
-            ]
+            [ submitOrSavingButton model.isLoading "Update Category" ]
         ]
     ]
+
+
+
+-- UTILS
+
+
+{-| Build a command to encode an Image's data as a Base64 string.
+-}
+encodeImageData : (String -> msg) -> File -> Cmd msg
+encodeImageData msg imageFile =
+    File.toBytes imageFile
+        |> Task.map Base64.fromBytes
+        |> Task.map (Maybe.withDefault "")
+        |> Task.perform msg
+
+
+{-| Build a height-limited image preview showing the image name & the image,
+using the Base64 encoded image data.
+-}
+base64ImagePreview : String -> String -> Html msg
+base64ImagePreview imageName imageData =
+    if String.isEmpty imageData then
+        text ""
+
+    else
+        div [ class "image-preview mb-4" ]
+            [ div [] [ text imageName ]
+            , img [ class "img-fluid", src <| "data:*/*;base64," ++ imageData ] []
+            ]
+
+
+{-| Show a submit button, or a disabled saving button with a spinner if the
+form is being saved.
+-}
+submitOrSavingButton : Bool -> String -> Html msg
+submitOrSavingButton isLoading content =
+    if isLoading then
+        button [ class "btn btn-primary", disabled True, type_ "submit" ]
+            [ text "Saving...", icon "spinner fa-spin ml-2" ]
+
+    else
+        button [ class "btn btn-primary", type_ "submit" ]
+            [ text content ]
+
+
+{-| Parse a potential Category ID from the string-representation of an Integer.
+An empty string signals a Nothing value.
+-}
+categoryIdParser : String -> Result String (Maybe CategoryId)
+categoryIdParser val =
+    if String.isEmpty val then
+        Ok Nothing
+
+    else
+        case String.toInt val of
+            Just i ->
+                Ok << Just <| CategoryId i
+
+            Nothing ->
+                Err "Could not parse category ID."
+
+
+{-| Encode Nothing to Null and Just using the encoder.
+-}
+encodeMaybe : (a -> Encode.Value) -> Maybe a -> Encode.Value
+encodeMaybe encoder val =
+    val
+        |> Maybe.map encoder
+        |> Maybe.withDefault Encode.null

@@ -40,6 +40,7 @@ type alias Model =
     , quickOrderForms : QuickOrder.Forms
     , checkoutForm : Checkout.Form
     , newCategoryForm : CategoryAdmin.NewForm
+    , editCategoryForm : CategoryAdmin.EditForm
     , cartItemCount : Int
     , maybeSessionToken : Maybe String
     , currentUser : AuthStatus
@@ -72,6 +73,7 @@ initial key route =
     , quickOrderForms = QuickOrder.initial
     , checkoutForm = Checkout.initial
     , newCategoryForm = CategoryAdmin.initialNewForm
+    , editCategoryForm = CategoryAdmin.initialEditForm
     , cartItemCount = 0
     , maybeSessionToken = Nothing
     , currentUser = User.unauthorized

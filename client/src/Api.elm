@@ -21,6 +21,7 @@ module Api exposing
     , withStringResponse
     )
 
+import Category exposing (CategoryId(..))
 import Dict exposing (Dict)
 import Html
 import Html.Attributes exposing (class)
@@ -71,6 +72,8 @@ type Endpoint
     | CheckoutSuccess
     | AdminCategoryList
     | AdminNewCategory
+    | AdminEditCategoryData CategoryId
+    | AdminEditCategory
 
 
 toUrl : Endpoint -> String
@@ -186,6 +189,12 @@ toUrl endpoint =
 
                 AdminNewCategory ->
                     joinPath [ "admin", "categories", "new" ]
+
+                AdminEditCategoryData (CategoryId cId) ->
+                    joinPath [ "admin", "categories", "edit", String.fromInt cId ]
+
+                AdminEditCategory ->
+                    joinPath [ "admin", "categories", "edit" ]
     in
     "/api" ++ endpointUrl
 

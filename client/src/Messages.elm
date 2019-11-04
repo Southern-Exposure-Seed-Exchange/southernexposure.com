@@ -55,6 +55,7 @@ type Msg
     | QuickOrderMsg QuickOrder.Msg
     | CheckoutMsg Checkout.Msg
     | NewCategoryMsg CategoryAdmin.NewMsg
+    | EditCategoryMsg CategoryAdmin.EditMsg
       -- API Requests
     | ReAuthorize (WebData User.AuthStatus)
     | LogOutResponse (WebData ())
@@ -73,3 +74,4 @@ type Msg
     | SearchPaginationMsg (Paginate.Msg ProductData String)
     | GetAdminCategoryList (WebData PageData.AdminCategoryListData)
     | GetAdminNewCategoryData (WebData PageData.AdminNewCategoryData)
+    | GetAdminEditCategoryData (WebData PageData.AdminEditCategoryData)

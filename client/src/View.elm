@@ -151,6 +151,11 @@ view ({ route, pageData, navigationData, zone } as model) =
                     withIntermediateText (CategoryAdminViews.new model.newCategoryForm) pageData.adminNewCategory
                         |> List.map (Html.map NewCategoryMsg)
 
+                Admin (CategoryEdit cId) ->
+                    RemoteData.map2 Tuple.pair pageData.adminNewCategory pageData.adminEditCategory
+                        |> withIntermediateText (apply <| CategoryAdminViews.edit cId model.editCategoryForm)
+                        |> List.map (Html.map EditCategoryMsg)
+
                 NotFound ->
                     notFoundView
 
@@ -250,6 +255,13 @@ view ({ route, pageData, navigationData, zone } as model) =
 
                 CategoryNew ->
                     "New Category"
+
+                CategoryEdit _ ->
+                    pageData.adminEditCategory
+                        |> RemoteData.map (\c -> " - " ++ c.name)
+                        |> RemoteData.toMaybe
+                        |> Maybe.withDefault ""
+                        |> (\name -> "Edit Category" ++ name)
 
         -- TODO: Have "Error" & "Loading" titles?
         getFromPageData :

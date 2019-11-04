@@ -113,6 +113,11 @@ view route pageData =
                     , activeItem "New Category"
                     ]
 
+                Admin (CategoryEdit _) ->
+                    [ inactiveItem "Categories" (Admin CategoryList)
+                    , activeItem "Edit Category"
+                    ]
+
                 NotFound ->
                     singleItem "Page Not Found"
 

@@ -207,6 +207,12 @@ adminView route =
                         ( CategoryNew, _ ) ->
                             False
 
+                        ( CategoryEdit _, CategoryList ) ->
+                            True
+
+                        ( CategoryEdit _, _ ) ->
+                            False
+
                         ( CategoryList, _ ) ->
                             False
 

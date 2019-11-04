@@ -13,6 +13,7 @@ import Browser
 import Browser.Navigation
 import Cart
 import Categories.AdminViews as CategoryAdmin
+import Category exposing (CategoryId)
 import Checkout
 import Dict
 import Http
@@ -259,6 +260,14 @@ fetchDataForRoute ({ route, pageData, key } as model) =
                     , getAdminNewCategoryData
                     )
 
+                Admin (CategoryEdit cId) ->
+                    ( { pageData
+                        | adminEditCategory = RemoteData.Loading
+                        , adminNewCategory = RemoteData.Loading
+                      }
+                    , Cmd.batch [ getAdminEditCategoryData cId, getAdminNewCategoryData ]
+                    )
+
                 NotFound ->
                     doNothing
 
@@ -451,6 +460,13 @@ getAdminNewCategoryData =
     Api.get Api.AdminNewCategory
         |> Api.withJsonResponse PageData.adminNewCategoryDataDecoder
         |> Api.sendRequest GetAdminNewCategoryData
+
+
+getAdminEditCategoryData : CategoryId -> Cmd Msg
+getAdminEditCategoryData cId =
+    Api.get (Api.AdminEditCategoryData cId)
+        |> Api.withJsonResponse PageData.adminEditCategoryDataDecoder
+        |> Api.sendRequest GetAdminEditCategoryData
 
 
 
@@ -729,9 +745,14 @@ update msg ({ pageData, key } as model) =
                    )
 
         NewCategoryMsg subMsg ->
-            CategoryAdmin.updateNewForm subMsg model.newCategoryForm
+            CategoryAdmin.updateNewForm model.key subMsg model.newCategoryForm
                 |> Tuple.mapFirst (\form -> { model | newCategoryForm = form })
                 |> Tuple.mapSecond (Cmd.map NewCategoryMsg)
+
+        EditCategoryMsg subMsg ->
+            CategoryAdmin.updateEditForm model.key pageData.adminEditCategory subMsg model.editCategoryForm
+                |> Tuple.mapFirst (\form -> { model | editCategoryForm = form })
+                |> Tuple.mapSecond (Cmd.map EditCategoryMsg)
 
         ReAuthorize response ->
             case response of
@@ -935,6 +956,13 @@ update msg ({ pageData, key } as model) =
             let
                 updatedPageData =
                     { pageData | adminNewCategory = response }
+            in
+            ( { model | pageData = updatedPageData }, Cmd.none )
+
+        GetAdminEditCategoryData response ->
+            let
+                updatedPageData =
+                    { pageData | adminEditCategory = response }
             in
             ( { model | pageData = updatedPageData }, Cmd.none )
 
