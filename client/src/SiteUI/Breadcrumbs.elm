@@ -1,6 +1,6 @@
 module SiteUI.Breadcrumbs exposing (view)
 
-import Html exposing (..)
+import Html exposing (Html, a, div, li, ol, text)
 import Html.Attributes exposing (class, id)
 import Messages exposing (Msg(..))
 import PageData exposing (PageData)
