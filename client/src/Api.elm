@@ -6,9 +6,11 @@ module Api exposing
     , delete
     , errorHtml
     , formErrorsDecoder
+    , generalFormErrors
     , get
     , getErrorHtml
     , initialErrors
+    , patch
     , post
     , put
     , sendRequest
@@ -235,6 +237,11 @@ put =
     initialMethod "PUT"
 
 
+patch : Endpoint -> Request (Maybe String)
+patch =
+    initialMethod "PATCH"
+
+
 delete : Endpoint -> Request (Maybe String)
 delete =
     initialMethod "DELETE"
@@ -400,6 +407,11 @@ errorHtml =
     List.map Html.text
         >> List.intersperse (Html.br [] [])
         >> Html.div [ class "text-danger" ]
+
+
+generalFormErrors : { model | errors : FormErrors } -> Html.Html msg
+generalFormErrors =
+    .errors >> getErrorHtml ""
 
 
 {-| Transform an HTTP Error into a FormError.
