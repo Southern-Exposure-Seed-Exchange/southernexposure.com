@@ -33,6 +33,7 @@ import SiteUI.Header as SiteHeader
 import SiteUI.Navigation as SiteNavigation
 import SiteUI.Sidebar as SiteSidebar
 import StaticPage exposing (StaticPage)
+import Views.StaticPageAdmin as StaticPageAdmin
 import Views.Utils exposing (rawHtml)
 
 
@@ -156,6 +157,9 @@ view ({ route, pageData, navigationData, zone } as model) =
                         |> withIntermediateText (apply <| CategoryAdminViews.edit cId model.editCategoryForm)
                         |> List.map (Html.map EditCategoryMsg)
 
+                Admin PageList ->
+                    withIntermediateText StaticPageAdmin.list pageData.adminPageList
+
                 NotFound ->
                     notFoundView
 
@@ -262,6 +266,9 @@ view ({ route, pageData, navigationData, zone } as model) =
                         |> RemoteData.toMaybe
                         |> Maybe.withDefault ""
                         |> (\name -> "Edit Category" ++ name)
+
+                PageList ->
+                    "Pages"
 
         -- TODO: Have "Error" & "Loading" titles?
         getFromPageData :

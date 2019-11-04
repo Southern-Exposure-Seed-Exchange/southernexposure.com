@@ -58,6 +58,7 @@ type AdminRoute
     = CategoryList
     | CategoryNew
     | CategoryEdit CategoryId
+    | PageList
 
 
 parseRoute : Url -> Route
@@ -100,6 +101,7 @@ parseRoute =
                 [ Url.map CategoryList (Url.s "categories")
                 , Url.map CategoryNew (Url.s "categories" </> Url.s "new")
                 , Url.map (CategoryEdit << CategoryId) (Url.s "categories" </> Url.s "edit" </> Url.int)
+                , Url.map PageList (Url.s "pages")
                 ]
 
         routeParser =
@@ -243,6 +245,9 @@ reverseAdmin route =
 
         CategoryEdit (CategoryId cid) ->
             [ "categories", "edit", String.fromInt cid ]
+
+        PageList ->
+            [ "pages" ]
 
 
 authRequired : Route -> Bool

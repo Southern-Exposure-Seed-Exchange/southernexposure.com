@@ -118,6 +118,9 @@ view route pageData =
                     , activeItem "Edit Category"
                     ]
 
+                Admin PageList ->
+                    singleItem "Pages"
+
                 NotFound ->
                     singleItem "Page Not Found"
 

@@ -216,6 +216,9 @@ adminView route =
                         ( CategoryList, _ ) ->
                             False
 
+                        ( PageList, _ ) ->
+                            False
+
                 _ ->
                     False
     in
@@ -235,6 +238,7 @@ adminView route =
             , div [ id "admin-navbar", class "collapse navbar-collapse" ]
                 [ ul [ class "navbar-nav" ]
                     [ navItem "Categories" CategoryList
+                    , navItem "Pages" PageList
                     ]
                 ]
             ]

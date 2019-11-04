@@ -3,7 +3,9 @@ module PageData exposing
     , AdminCategoryListData
     , AdminEditCategoryData
     , AdminListCategory(..)
+    , AdminListPage
     , AdminNewCategoryData
+    , AdminPageListData
     , AdvancedSearch
     , CartDetails
     , CartItem
@@ -22,7 +24,9 @@ module PageData exposing
     , addressDetailsDecoder
     , adminCategoryListDataDecoder
     , adminEditCategoryDataDecoder
+    , adminListPageDecoder
     , adminNewCategoryDataDecoder
+    , adminPageListDataDecoder
     , advancedSearchDecoder
     , blankCartDetails
     , cartDetailsDecoder
@@ -56,7 +60,7 @@ import Products.Sorting as Sorting
 import RemoteData exposing (WebData)
 import Search
 import SeedAttribute exposing (SeedAttribute)
-import StaticPage exposing (StaticPage)
+import StaticPage exposing (StaticPage, StaticPageId)
 import Time exposing (Posix)
 
 
@@ -79,6 +83,7 @@ type alias PageData =
     , adminCategoryList : WebData AdminCategoryListData
     , adminNewCategory : WebData AdminNewCategoryData
     , adminEditCategory : WebData AdminEditCategoryData
+    , adminPageList : WebData AdminPageListData
     }
 
 
@@ -113,6 +118,7 @@ initial =
     , adminCategoryList = RemoteData.NotAsked
     , adminNewCategory = RemoteData.NotAsked
     , adminEditCategory = RemoteData.NotAsked
+    , adminPageList = RemoteData.NotAsked
     }
 
 
@@ -663,6 +669,38 @@ adminEditCategoryDataDecoder =
         (Decode.field "description" Decode.string)
         (Decode.field "image" imageDecoder)
         (Decode.field "order" Decode.int)
+
+
+
+-- Page Admin
+
+
+type alias AdminPageListData =
+    { pages : List AdminListPage
+    }
+
+
+adminPageListDataDecoder : Decoder AdminPageListData
+adminPageListDataDecoder =
+    Decode.map AdminPageListData
+        (Decode.field "pages" <| Decode.list adminListPageDecoder)
+
+
+type alias AdminListPage =
+    { id : StaticPageId
+    , name : String
+    , slug : String
+    , content : String
+    }
+
+
+adminListPageDecoder : Decoder AdminListPage
+adminListPageDecoder =
+    Decode.map4 AdminListPage
+        (Decode.field "id" StaticPage.idDecoder)
+        (Decode.field "name" Decode.string)
+        (Decode.field "slug" Decode.string)
+        (Decode.field "content" Decode.string)
 
 
 

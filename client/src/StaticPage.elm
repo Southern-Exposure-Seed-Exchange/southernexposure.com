@@ -1,9 +1,20 @@
 module StaticPage exposing
     ( StaticPage
+    , StaticPageId
     , decoder
+    , idDecoder
     )
 
 import Json.Decode as Decode exposing (Decoder)
+
+
+type StaticPageId
+    = StaticPageId Int
+
+
+idDecoder : Decoder StaticPageId
+idDecoder =
+    Decode.map StaticPageId Decode.int
 
 
 type alias StaticPage =

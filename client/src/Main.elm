@@ -268,6 +268,11 @@ fetchDataForRoute ({ route, pageData, key } as model) =
                     , Cmd.batch [ getAdminEditCategoryData cId, getAdminNewCategoryData ]
                     )
 
+                Admin PageList ->
+                    ( { pageData | adminPageList = RemoteData.Loading }
+                    , getAdminPageList
+                    )
+
                 NotFound ->
                     doNothing
 
@@ -467,6 +472,13 @@ getAdminEditCategoryData cId =
     Api.get (Api.AdminEditCategoryData cId)
         |> Api.withJsonResponse PageData.adminEditCategoryDataDecoder
         |> Api.sendRequest GetAdminEditCategoryData
+
+
+getAdminPageList : Cmd Msg
+getAdminPageList =
+    Api.get Api.AdminPageList
+        |> Api.withJsonResponse PageData.adminPageListDataDecoder
+        |> Api.sendRequest GetAdminPageList
 
 
 
@@ -963,6 +975,13 @@ update msg ({ pageData, key } as model) =
             let
                 updatedPageData =
                     { pageData | adminEditCategory = response }
+            in
+            ( { model | pageData = updatedPageData }, Cmd.none )
+
+        GetAdminPageList response ->
+            let
+                updatedPageData =
+                    { pageData | adminPageList = response }
             in
             ( { model | pageData = updatedPageData }, Cmd.none )
 

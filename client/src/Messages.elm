@@ -75,3 +75,4 @@ type Msg
     | GetAdminCategoryList (WebData PageData.AdminCategoryListData)
     | GetAdminNewCategoryData (WebData PageData.AdminNewCategoryData)
     | GetAdminEditCategoryData (WebData PageData.AdminEditCategoryData)
+    | GetAdminPageList (WebData PageData.AdminPageListData)
