@@ -7,30 +7,35 @@ module Routes.Admin.Categories
     , categoryRoutes
     ) where
 
-import Control.Concurrent.STM (atomically, modifyTVar')
-import Control.Monad.Reader (asks, liftIO)
-import Data.Aeson (ToJSON(..), FromJSON(..), (.=), (.:), object, withObject)
+import Control.Concurrent.STM (atomically, modifyTVar', readTVar)
+import Control.Monad.Reader (asks, liftIO, unless)
+import Data.Aeson (ToJSON(..), FromJSON(..), (.=), (.:), Value(Null), Object, object, withObject)
+import Data.Aeson.Types (Parser)
 import Data.List (sortOn)
-import Data.Maybe (fromMaybe)
+import Data.Maybe (fromMaybe, catMaybes)
 import Data.Monoid ((<>))
 import Data.Text.Encoding (encodeUtf8)
-import Database.Persist (Entity(..), SelectOpt(Asc), selectList, insert)
-import Servant ((:>), (:<|>)(..), AuthProtect, ReqBody, Get, Post, JSON)
+import Database.Persist
+    ( (=.), Entity(..), PersistField, SelectOpt(Asc), Update, selectList
+    , insert, get, update
+    )
+import Servant ((:>), (:<|>)(..), AuthProtect, ReqBody, Capture, Get, Post, Patch, JSON, err404)
 import System.FilePath ((</>), takeFileName)
 import Text.HTML.SanitizeXSS (sanitize)
 
 import Auth (Cookied, WrappedAuthToken, withAdminCookie, validateAdminAndParameters)
-import Cache (Caches(..), syncCategoryPredecessorCache)
+import Cache (Caches(..), syncCategoryPredecessorCache, queryCategoryPredecessorCache)
 import Config (Config(getMediaDirectory, getCaches))
-import Images (makeImageConfig, scaleImage)
-import Models (Category(..), CategoryId, EntityField(CategoryName), Unique(UniqueCategorySlug), slugify)
-import Server (App, runDB)
+import Images (ImageSourceSet, makeSourceSet, makeImageConfig, scaleImage)
+import Models (Category(..), CategoryId, EntityField(..), Unique(UniqueCategorySlug), slugify)
+import Server (App, runDB, serverError)
 import Validation (Validation(..))
 
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Base64 as Base64
 import qualified Data.Text as T
 import qualified Data.Map.Strict as M
+import qualified Data.HashMap.Strict as HM
 import qualified Validation as V
 
 
@@ -38,17 +43,23 @@ type CategoryAPI =
          "list" :> CategoryListRoute
     :<|> "new" :> NewCategoryDataRoute
     :<|> "new" :> NewCategoryRoute
+    :<|> "edit" :> EditCategoryDataRoute
+    :<|> "edit" :> EditCategoryRoute
 
 type CategoryRoutes =
          (WrappedAuthToken -> App (Cookied CategoryListData))
     :<|> (WrappedAuthToken -> App (Cookied [NewCategoryData]))
     :<|> (WrappedAuthToken -> NewCategoryParameters -> App (Cookied CategoryId))
+    :<|> (WrappedAuthToken -> CategoryId -> App (Cookied EditCategoryData))
+    :<|> (WrappedAuthToken -> EditCategoryParameters -> App (Cookied ()))
 
 categoryRoutes :: CategoryRoutes
 categoryRoutes =
          categoryListRoute
     :<|> newCategoryDataRoute
     :<|> newCategoryRoute
+    :<|> editCategoryDataRoute
+    :<|> editCategoryRoute
 
 
 -- LIST
@@ -188,11 +199,14 @@ instance Validation NewCategoryParameters where
                   )
                 ]
               )
+            , ( "order"
+              , [ V.zeroOrPositive ncpOrder ]
+              )
             ]
 
 newCategoryRoute :: WrappedAuthToken -> NewCategoryParameters -> App (Cookied CategoryId)
 newCategoryRoute = validateAdminAndParameters $ \_ NewCategoryParameters {..} -> do
-    imageFileName <- makeImage ncpImageName ncpImageData
+    imageFileName <- makeImageFromBase64 ncpImageName ncpImageData
     let newCategory = Category
             { categoryName = sanitize ncpName
             , categorySlug = slugify $ sanitize ncpSlug
@@ -204,27 +218,213 @@ newCategoryRoute = validateAdminAndParameters $ \_ NewCategoryParameters {..} ->
     newCategoryId <- runDB $ insert newCategory
     updateCategoryCaches
     return newCategoryId
+
+
+-- EDIT
+
+
+type EditCategoryDataRoute =
+       AuthProtect "cookie-auth"
+    :> Capture "id" CategoryId
+    :> Get '[JSON] (Cookied EditCategoryData)
+
+data EditCategoryData =
+    EditCategoryData
+        { ecdId :: CategoryId
+        , ecdName :: T.Text
+        , ecdSlug :: T.Text
+        , ecdParentId :: Maybe CategoryId
+        , ecdDescription :: T.Text
+        , ecdImage :: ImageSourceSet
+        , ecdOrder :: Int
+        } deriving (Show)
+
+instance ToJSON EditCategoryData where
+    toJSON EditCategoryData {..} =
+        object
+            [ "id" .= ecdId
+            , "name" .= ecdName
+            , "slug" .= ecdSlug
+            , "parentId" .= ecdParentId
+            , "description" .= ecdDescription
+            , "image" .= ecdImage
+            , "order" .= ecdOrder
+            ]
+
+editCategoryDataRoute :: WrappedAuthToken -> CategoryId -> App (Cookied EditCategoryData)
+editCategoryDataRoute token categoryId = withAdminCookie token $ \_ -> do
+    mCategory <- runDB $ get categoryId
+    case mCategory  of
+        Nothing ->
+            serverError err404
+        Just Category {..} -> do
+            image <- makeSourceSet "categories" $ T.unpack categoryImageUrl
+            return EditCategoryData
+                { ecdId = categoryId
+                , ecdName = categoryName
+                , ecdSlug = categorySlug
+                , ecdParentId = categoryParentId
+                , ecdDescription = categoryDescription
+                , ecdImage = image
+                , ecdOrder = categoryOrder
+                }
+
+
+type EditCategoryRoute =
+       AuthProtect "cookie-auth"
+    :> ReqBody '[JSON] EditCategoryParameters
+    :> Patch '[JSON] (Cookied ())
+
+data EditCategoryParameters =
+    EditCategoryParameters
+        { ecpId :: CategoryId
+        , ecpName :: Maybe T.Text
+        , ecpSlug :: Maybe T.Text
+        , ecpParentId :: Either () (Maybe CategoryId)
+        -- ^ Left == no change, Right == update
+        , ecpDescription :: Maybe T.Text
+        , ecpImageName :: Maybe T.Text
+        , ecpImageData :: Maybe BS.ByteString
+        -- ^ Base64 Encoded
+        , ecpOrder :: Maybe Int
+        } deriving (Show)
+
+instance FromJSON EditCategoryParameters where
+    -- | A missing @parentId@ key does no update for the CategoryParentId,
+    -- while a @null@ value deletes it.
+    parseJSON = withObject "EditCategoryParameters" $ \v -> do
+        ecpId <- v .: "id"
+        ecpName <- v .: "name"
+        ecpSlug <- v .: "slug"
+        ecpParentId <- parseParentId v
+        ecpDescription <- v .: "description"
+        ecpImageName <- v .: "imageName"
+        ecpImageData <- fmap encodeUtf8 <$> v .: "imageData"
+        ecpOrder <- v .: "order"
+        return EditCategoryParameters {..}
+      where
+        parseParentId :: Object -> Parser (Either () (Maybe CategoryId))
+        parseParentId v =
+            case HM.lookup "parentId" v of
+                Nothing ->
+                    return $ Left ()
+                Just Null ->
+                    return $ Right Nothing
+                Just val ->
+                    Right . Just <$> parseJSON val
+
+instance Validation EditCategoryParameters where
+    validators EditCategoryParameters {..} = do
+        slugCheck <- case ecpSlug of
+            Nothing -> return []
+            Just slug -> do
+                doesntExist <- V.doesntExist $ UniqueCategorySlug slug
+                return
+                    [ ( "slug"
+                      , [ V.required slug
+                        , ( "A Category with this Slug already exists."
+                          , doesntExist
+                          )
+                        ]
+                      )
+                    ]
+        parentCheck <- case ecpParentId of
+            Left _ -> return []
+            Right Nothing -> return []
+            Right (Just parentId) -> do
+                exists <- V.exists parentId
+                noCycle <- checkCycle ecpId parentId
+                return
+                    [ ( "parentId"
+                      , [ ( "Could not find this Parent Category in the database."
+                          , exists
+                          )
+                        , ( "Can not set Parent Category to a Child of the Category."
+                          , noCycle
+                          )
+                        ]
+                      )
+                    ]
+        return $ catMaybes
+            [ mapCheck ecpName $ \name ->
+                ( "name"
+                , [ V.required name ]
+                )
+            , mapCheck ecpOrder $ \order ->
+                ( "order"
+                , [ V.zeroOrPositive order ]
+                )
+            ]
+            ++ slugCheck
+            ++ parentCheck
+      where
+        mapCheck param validator = validator <$> param
+        -- Ensure that the new parent Category is not an eventual descendant of
+        -- the Category.
+        checkCycle :: CategoryId -> CategoryId -> App Bool
+        checkCycle targetId parentId = do
+            caches <- asks getCaches
+            liftIO . atomically $ do
+                parentPredecessors <- queryCategoryPredecessorCache parentId
+                    . getCategoryPredecessorCache
+                    <$> readTVar caches
+                return $ targetId `elem` map entityKey parentPredecessors
+
+editCategoryRoute :: WrappedAuthToken -> EditCategoryParameters -> App (Cookied ())
+editCategoryRoute = validateAdminAndParameters $ \_ parameters -> do
+    imageUpdate <-
+        case (,) <$> ecpImageName parameters <*> ecpImageData parameters of
+            Nothing ->
+                return []
+            Just (imageName, imageData) -> do
+                newImageName <- makeImageFromBase64 imageName imageData
+                return [CategoryImageUrl =. newImageName]
+
+    let updates = makeUpdates parameters ++ imageUpdate
+    unless (null updates) $ do
+        runDB $ update (ecpId parameters) updates
+        updateCategoryCaches
   where
-    makeImage :: T.Text -> BS.ByteString -> App T.Text
-    makeImage fileName imageData =
-        if BS.null imageData then
-            return ""
-        else case Base64.decode imageData of
-            Left _ ->
-                return ""
-            Right rawImageData -> do
-                imageConfig <- makeImageConfig
-                mediaDirectory <- asks getMediaDirectory
-                T.pack . takeFileName
-                    <$> scaleImage imageConfig fileName (mediaDirectory </> "categories") rawImageData
+    makeUpdates :: EditCategoryParameters -> [Update Category]
+    makeUpdates EditCategoryParameters {..} =
+        catMaybes
+            [ mapUpdateWith CategoryName ecpName sanitize
+            , mapUpdateWith CategorySlug ecpSlug (slugify . sanitize)
+            , mapUpdate CategoryParentId $ either (const Nothing) Just ecpParentId
+            , mapUpdateWith CategoryDescription ecpDescription sanitize
+            , mapUpdate CategoryOrder ecpOrder
+            ]
+    mapUpdate :: PersistField a => EntityField Category a -> Maybe a -> Maybe (Update Category)
+    mapUpdate field =
+        fmap (field =.)
+    mapUpdateWith :: PersistField b => EntityField Category b -> Maybe a -> (a -> b) -> Maybe (Update Category)
+    mapUpdateWith field param transform =
+        mapUpdate field $ fmap transform param
+
 
 
 -- UTILS
 
 
+-- | Rebuild the CategoryPredecessorCache.
 updateCategoryCaches :: App ()
 updateCategoryCaches = do
     newCPCache <- runDB syncCategoryPredecessorCache
     caches <- asks getCaches
     liftIO . atomically . modifyTVar' caches $ \c ->
         c { getCategoryPredecessorCache = newCPCache }
+
+-- | Save an Image encoded in a Base64 ByteString, returning the filename
+-- appended with the content hash.
+makeImageFromBase64 :: T.Text -> BS.ByteString -> App T.Text
+makeImageFromBase64 fileName imageData =
+    if BS.null imageData then
+        return ""
+    else case Base64.decode imageData of
+        Left _ ->
+            return ""
+        Right rawImageData -> do
+            imageConfig <- makeImageConfig
+            mediaDirectory <- asks getMediaDirectory
+            T.pack . takeFileName
+                <$> scaleImage imageConfig fileName (mediaDirectory </> "categories") rawImageData
