@@ -121,6 +121,11 @@ view route pageData =
                 Admin PageList ->
                     singleItem "Pages"
 
+                Admin PageNew ->
+                    [ inactiveItem "Pages" (Admin PageList)
+                    , activeItem "New Page"
+                    ]
+
                 NotFound ->
                     singleItem "Page Not Found"
 

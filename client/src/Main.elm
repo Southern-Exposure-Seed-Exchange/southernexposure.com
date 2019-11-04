@@ -39,6 +39,7 @@ import Update.Utils exposing (batchCommand, discardCommand, extraCommand, noComm
 import Url exposing (Url)
 import User exposing (AuthStatus)
 import View exposing (view)
+import Views.StaticPageAdmin as StaticPageAdmin
 
 
 main : Program Flags Model Msg
@@ -272,6 +273,9 @@ fetchDataForRoute ({ route, pageData, key } as model) =
                     ( { pageData | adminPageList = RemoteData.Loading }
                     , getAdminPageList
                     )
+
+                Admin PageNew ->
+                    doNothing
 
                 NotFound ->
                     doNothing
@@ -765,6 +769,11 @@ update msg ({ pageData, key } as model) =
             CategoryAdmin.updateEditForm model.key pageData.adminEditCategory subMsg model.editCategoryForm
                 |> Tuple.mapFirst (\form -> { model | editCategoryForm = form })
                 |> Tuple.mapSecond (Cmd.map EditCategoryMsg)
+
+        NewPageMsg subMsg ->
+            StaticPageAdmin.updateNewForm subMsg model.newPageForm
+                |> Tuple.mapFirst (\form -> { model | newPageForm = form })
+                |> Tuple.mapSecond (Cmd.map NewPageMsg)
 
         ReAuthorize response ->
             case response of

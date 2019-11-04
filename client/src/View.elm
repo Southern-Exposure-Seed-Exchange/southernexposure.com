@@ -160,6 +160,10 @@ view ({ route, pageData, navigationData, zone } as model) =
                 Admin PageList ->
                     withIntermediateText StaticPageAdmin.list pageData.adminPageList
 
+                Admin PageNew ->
+                    StaticPageAdmin.new model.newPageForm
+                        |> List.map (Html.map NewPageMsg)
+
                 NotFound ->
                     notFoundView
 
@@ -269,6 +273,9 @@ view ({ route, pageData, navigationData, zone } as model) =
 
                 PageList ->
                     "Pages"
+
+                PageNew ->
+                    "New Page"
 
         -- TODO: Have "Error" & "Loading" titles?
         getFromPageData :

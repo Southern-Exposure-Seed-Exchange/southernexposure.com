@@ -23,6 +23,7 @@ import SiteUI.Search as SiteSearch
 import StaticPage exposing (StaticPage)
 import Time
 import User
+import Views.StaticPageAdmin as StaticPageAdmin
 
 
 type Msg
@@ -56,6 +57,7 @@ type Msg
     | CheckoutMsg Checkout.Msg
     | NewCategoryMsg CategoryAdmin.NewMsg
     | EditCategoryMsg CategoryAdmin.EditMsg
+    | NewPageMsg StaticPageAdmin.NewMsg
       -- API Requests
     | ReAuthorize (WebData User.AuthStatus)
     | LogOutResponse (WebData ())

@@ -18,7 +18,7 @@ import Category exposing (CategoryId(..))
 import Dict
 import File exposing (File)
 import Html exposing (Html, a, button, div, form, img, option, table, tbody, td, text, tr)
-import Html.Attributes exposing (class, disabled, selected, src, style, type_, value)
+import Html.Attributes exposing (class, selected, src, style, type_, value)
 import Html.Events exposing (onClick, onSubmit)
 import Json.Decode as Decode
 import Json.Encode as Encode
@@ -30,9 +30,10 @@ import Result.Extra as Result
 import Routing exposing (AdminRoute(..), Route(..))
 import Task
 import Update.Utils exposing (noCommand)
+import Views.Admin exposing (formSavingClass, submitOrSavingButton)
 import Views.HorizontalForm as Form
 import Views.Images exposing (media)
-import Views.Utils exposing (icon, routeLinkAttributes, selectImageFile)
+import Views.Utils exposing (routeLinkAttributes, selectImageFile)
 
 
 list : PageData.AdminCategoryListData -> List (Html msg)
@@ -208,15 +209,8 @@ new model categories =
             option
                 [ value "", selected <| Nothing == model.parent ]
                 [ text "" ]
-
-        formClass =
-            if model.isSaving then
-                "form-saving"
-
-            else
-                ""
     in
-    [ form [ onSubmit SubmitNew, class formClass ]
+    [ form [ onSubmit SubmitNew, class (formSavingClass model.isSaving) ]
         [ Form.genericErrorText <| not <| Dict.isEmpty model.errors
         , Api.generalFormErrors model
         , inputRow model.name NInputName True "Name" "name" "text" "off"
@@ -478,13 +472,6 @@ edit categoryId model categories originalCategory =
                 ]
                 [ text name ]
 
-        formClass =
-            if model.isSaving then
-                "form-saving"
-
-            else
-                ""
-
         imagePreview =
             case Maybe.map2 Tuple.pair model.imageData model.imageName of
                 Nothing ->
@@ -499,7 +486,7 @@ edit categoryId model categories originalCategory =
                 Just ( imageData, imageName ) ->
                     base64ImagePreview imageName imageData
     in
-    [ form [ class formClass, onSubmit SubmitEdit ]
+    [ form [ class (formSavingClass model.isSaving), onSubmit SubmitEdit ]
         [ Form.genericErrorText <| not <| Dict.isEmpty model.errors
         , Api.generalFormErrors model
         , inputRow .name .name EInputName True "Name" "name" "text" "off"
@@ -558,20 +545,6 @@ base64ImagePreview imageName imageData =
             [ div [] [ text imageName ]
             , img [ class "img-fluid", src <| "data:*/*;base64," ++ imageData ] []
             ]
-
-
-{-| Show a submit button, or a disabled saving button with a spinner if the
-form is being saved.
--}
-submitOrSavingButton : Bool -> String -> Html msg
-submitOrSavingButton isSaving content =
-    if isSaving then
-        button [ class "btn btn-primary", disabled True, type_ "submit" ]
-            [ text "Saving...", icon "spinner fa-spin ml-2" ]
-
-    else
-        button [ class "btn btn-primary", type_ "submit" ]
-            [ text content ]
 
 
 {-| Parse a potential Category ID from the string-representation of an Integer.

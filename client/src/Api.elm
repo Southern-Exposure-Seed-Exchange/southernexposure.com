@@ -75,6 +75,7 @@ type Endpoint
     | AdminEditCategoryData CategoryId
     | AdminEditCategory
     | AdminPageList
+    | AdminNewPage
 
 
 toUrl : Endpoint -> String
@@ -199,6 +200,9 @@ toUrl endpoint =
 
                 AdminPageList ->
                     joinPath [ "admin", "pages", "list" ]
+
+                AdminNewPage ->
+                    joinPath [ "admin", "pages", "new" ]
     in
     "/api" ++ endpointUrl
 

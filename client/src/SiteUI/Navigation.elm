@@ -219,6 +219,12 @@ adminView route =
                         ( PageList, _ ) ->
                             False
 
+                        ( PageNew, PageList ) ->
+                            True
+
+                        ( PageNew, _ ) ->
+                            False
+
                 _ ->
                     False
     in

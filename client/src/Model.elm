@@ -22,6 +22,7 @@ import Search
 import SiteUI exposing (NavigationData)
 import Time
 import User exposing (AuthStatus)
+import Views.StaticPageAdmin as StaticPageAdmin
 
 
 type alias Model =
@@ -41,6 +42,7 @@ type alias Model =
     , checkoutForm : Checkout.Form
     , newCategoryForm : CategoryAdmin.NewForm
     , editCategoryForm : CategoryAdmin.EditForm
+    , newPageForm : StaticPageAdmin.NewForm
     , cartItemCount : Int
     , maybeSessionToken : Maybe String
     , currentUser : AuthStatus
@@ -74,6 +76,7 @@ initial key route =
     , checkoutForm = Checkout.initial
     , newCategoryForm = CategoryAdmin.initialNewForm
     , editCategoryForm = CategoryAdmin.initialEditForm
+    , newPageForm = StaticPageAdmin.initialNewForm
     , cartItemCount = 0
     , maybeSessionToken = Nothing
     , currentUser = User.unauthorized
