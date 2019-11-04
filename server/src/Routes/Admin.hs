@@ -5,15 +5,18 @@ module Routes.Admin
     , adminRoutes
     ) where
 
-import Servant ((:>), ServerT)
+import Servant ((:<|>)(..), (:>), ServerT)
 
 import Routes.Admin.Categories
+import Routes.Admin.StaticPages
 import Server (App)
 
 type AdminAPI =
-       "categories" :> CategoryAPI
+         "categories" :> CategoryAPI
+    :<|> "pages" :> StaticPageAPI
 
 
 adminRoutes :: ServerT AdminAPI App
 adminRoutes =
-       categoryRoutes
+         categoryRoutes
+    :<|> staticPageRoutes
