@@ -83,7 +83,7 @@ type alias NewForm =
     , imageName : String
     , imageData : String
     , errors : FormErrors
-    , isLoading : Bool
+    , isSaving : Bool
     }
 
 
@@ -97,7 +97,7 @@ initialNewForm =
     , imageName = ""
     , imageData = ""
     , errors = Api.initialErrors
-    , isLoading = False
+    , isSaving = False
     }
 
 
@@ -163,7 +163,7 @@ updateNewForm key msg model =
                                 , ( "order", Encode.int order )
                                 ]
                     in
-                    ( { model | isLoading = True }
+                    ( { model | isSaving = True }
                     , Api.post Api.AdminNewCategory
                         |> Api.withJsonBody jsonBody
                         |> Api.withErrorHandler Decode.int
@@ -178,12 +178,12 @@ updateNewForm key msg model =
                     )
 
                 RemoteData.Success (Err errors) ->
-                    ( { model | errors = errors, isLoading = False }
+                    ( { model | errors = errors, isSaving = False }
                     , Ports.scrollToID "form-errors-text"
                     )
 
                 RemoteData.Failure error ->
-                    ( { model | errors = Api.apiFailureToError error, isLoading = False }
+                    ( { model | errors = Api.apiFailureToError error, isSaving = False }
                     , Ports.scrollToID "form-errors-text"
                     )
 
@@ -210,8 +210,8 @@ new model categories =
                 [ text "" ]
 
         formClass =
-            if model.isLoading then
-                "form-loading"
+            if model.isSaving then
+                "form-saving"
 
             else
                 ""
@@ -236,7 +236,7 @@ new model categories =
                 [ text "Upload Image..." ]
             ]
         , div [ class "form-group" ]
-            [ submitOrSavingButton model.isLoading "Add Category"
+            [ submitOrSavingButton model.isSaving "Add Category"
             ]
         ]
     ]
@@ -268,7 +268,7 @@ type alias EditForm =
     , imageName : Maybe String
     , imageData : Maybe String
     , errors : FormErrors
-    , isLoading : Bool
+    , isSaving : Bool
     }
 
 
@@ -282,7 +282,7 @@ initialEditForm =
     , imageName = Nothing
     , imageData = Nothing
     , errors = Api.initialErrors
-    , isLoading = False
+    , isSaving = False
     }
 
 
@@ -381,7 +381,7 @@ updateEditForm key original msg model =
                                 ]
                                     ++ encodedParent
                     in
-                    ( { model | isLoading = True }
+                    ( { model | isSaving = True }
                     , Api.patch Api.AdminEditCategory
                         |> Api.withJsonBody jsonBody
                         |> Api.withErrorHandler (Decode.succeed ())
@@ -402,7 +402,7 @@ updateEditForm key original msg model =
                     ( { model | errors = errors }, Ports.scrollToID "form-errors-text" )
 
                 RemoteData.Failure error ->
-                    ( { model | errors = Api.apiFailureToError error, isLoading = False }
+                    ( { model | errors = Api.apiFailureToError error, isSaving = False }
                     , Ports.scrollToID "form-errors-text"
                     )
 
@@ -479,8 +479,8 @@ edit categoryId model categories originalCategory =
                 [ text name ]
 
         formClass =
-            if model.isLoading then
-                "form-loading"
+            if model.isSaving then
+                "form-saving"
 
             else
                 ""
@@ -526,7 +526,7 @@ edit categoryId model categories originalCategory =
                 [ text "Upload Image..." ]
             ]
         , div [ class "form-group" ]
-            [ submitOrSavingButton model.isLoading "Update Category" ]
+            [ submitOrSavingButton model.isSaving "Update Category" ]
         ]
     ]
 
@@ -564,8 +564,8 @@ base64ImagePreview imageName imageData =
 form is being saved.
 -}
 submitOrSavingButton : Bool -> String -> Html msg
-submitOrSavingButton isLoading content =
-    if isLoading then
+submitOrSavingButton isSaving content =
+    if isSaving then
         button [ class "btn btn-primary", disabled True, type_ "submit" ]
             [ text "Saving...", icon "spinner fa-spin ml-2" ]
 
