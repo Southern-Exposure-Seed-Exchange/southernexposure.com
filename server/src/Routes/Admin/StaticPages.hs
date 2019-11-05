@@ -7,14 +7,19 @@ module Routes.Admin.StaticPages
     , staticPageRoutes
     ) where
 
+import Control.Monad (unless)
 import Data.Aeson (ToJSON(..), FromJSON(..), (.=), (.:), withObject, object)
-import Database.Persist (Entity(..), SelectOpt(Asc), selectList, insert)
-import Servant ((:<|>)(..), (:>), AuthProtect, ReqBody, Get, Post, JSON)
+import Data.Maybe (catMaybes)
+import Database.Persist
+    ( (=.), Entity(..), PersistField, SelectOpt(Asc), Update, selectList, insert
+    , get, update
+    )
+import Servant ((:<|>)(..), (:>), AuthProtect, ReqBody, Capture, Get, Post, Patch, JSON, err404)
 import Text.HTML.SanitizeXSS (sanitize)
 
 import Auth (WrappedAuthToken, Cookied, withAdminCookie, validateAdminAndParameters)
-import Models (Page(..), PageId, EntityField(PageName), Unique(UniquePageSlug), slugify)
-import Server (App, runDB)
+import Models (Page(..), PageId, EntityField(..), Unique(UniquePageSlug), slugify)
+import Server (App, runDB, serverError)
 import Validation (Validation(..))
 
 import qualified Data.Text as T
@@ -24,15 +29,21 @@ import qualified Validation as V
 type StaticPageAPI =
          "list" :> PageListRoute
     :<|> "new" :> NewPageRoute
+    :<|> "edit" :> EditPageDataRoute
+    :<|> "edit" :> EditPageRoute
 
 type StaticPageRoutes =
          (WrappedAuthToken -> App (Cookied PageListData))
     :<|> (WrappedAuthToken -> NewPageParameters -> App (Cookied PageId))
+    :<|> (WrappedAuthToken -> PageId -> App (Cookied EditPageData))
+    :<|> (WrappedAuthToken -> EditPageParameters -> App (Cookied ()))
 
 staticPageRoutes :: StaticPageRoutes
 staticPageRoutes =
          pageListRoute
     :<|> newPageRoute
+    :<|> editPageDataRoute
+    :<|> editPageRoute
 
 
 -- LIST
@@ -132,3 +143,110 @@ newPageRoute = validateAdminAndParameters $ \_ NewPageParameters {..} -> do
                 , pageContent = sanitize nppContent
                 }
     runDB $ insert newPage
+
+
+-- EDIT
+
+
+type EditPageDataRoute =
+       AuthProtect "cookie-auth"
+    :> Capture "id" PageId
+    :> Get '[JSON] (Cookied EditPageData)
+
+data EditPageData =
+    EditPageData
+        { epdId :: PageId
+        , epdTitle :: T.Text
+        , epdSlug :: T.Text
+        , epdContent :: T.Text
+        } deriving (Show)
+
+instance ToJSON EditPageData where
+    toJSON EditPageData {..} =
+        object
+            [ "id" .= epdId
+            , "title" .= epdTitle
+            , "slug" .= epdSlug
+            , "content" .= epdContent
+            ]
+
+editPageDataRoute :: WrappedAuthToken -> PageId -> App (Cookied EditPageData)
+editPageDataRoute token pageId = withAdminCookie token $ \_ -> do
+    mPage <- runDB $ get pageId
+    case mPage of
+        Nothing ->
+            serverError err404
+        Just Page {..} ->
+            return EditPageData
+                { epdId = pageId
+                , epdTitle = pageName
+                , epdSlug = pageSlug
+                , epdContent = pageContent
+                }
+
+
+type EditPageRoute =
+       AuthProtect "cookie-auth"
+    :> ReqBody '[JSON] EditPageParameters
+    :> Patch '[JSON] (Cookied ())
+
+data EditPageParameters =
+    EditPageParameters
+        { eppId :: PageId
+        , eppTitle :: Maybe T.Text
+        , eppSlug :: Maybe T.Text
+        , eppContent :: Maybe T.Text
+        } deriving (Show)
+
+instance FromJSON EditPageParameters where
+    parseJSON = withObject "EditPageParameters" $ \v -> do
+        eppId <- v .: "id"
+        eppTitle <- v .: "title"
+        eppSlug <- v .: "slug"
+        eppContent <- v .: "content"
+        return EditPageParameters {..}
+
+instance Validation EditPageParameters where
+    validators EditPageParameters {..} = do
+        slugCheck <- case eppSlug of
+            Nothing ->
+                return []
+            Just slug -> do
+                doesntExist <- V.doesntExist $ UniquePageSlug slug
+                return
+                    [ ( "slug"
+                      , [ V.required slug
+                        , ( "A Page with this slug already exists."
+                          , doesntExist
+                          )
+                        ]
+                      )
+                    ]
+        return $ catMaybes
+            [ mapCheck eppTitle $ \title ->
+                ( "title", [ V.required title ] )
+            , mapCheck eppContent $ \content ->
+                ( "content", [ V.required content ] )
+            ]
+            ++ slugCheck
+      where
+        -- TODO: This is duplicated here & in Admin.Categories
+        mapCheck param validator = validator <$> param
+
+editPageRoute :: WrappedAuthToken -> EditPageParameters -> App (Cookied ())
+editPageRoute = validateAdminAndParameters $ \_ parameters -> do
+    let updates = makeUpdates parameters
+    unless (null updates) $
+        runDB $ update (eppId parameters) updates
+  where
+    makeUpdates :: EditPageParameters -> [Update Page]
+    makeUpdates EditPageParameters {..} =
+        catMaybes
+            [ mapUpdateWith PageName eppTitle sanitize
+            , mapUpdateWith PageSlug eppSlug (slugify . sanitize)
+            , mapUpdateWith PageContent eppContent sanitize
+            ]
+    -- TODO: Refactor out from here & Admin.Categories
+    mapUpdateWith :: PersistField b => EntityField Page b -> Maybe a -> (a -> b) -> Maybe (Update Page)
+    mapUpdateWith field param transform =
+        (field =.) . transform <$> param
