@@ -30,7 +30,7 @@ import Result.Extra as Result
 import Routing exposing (AdminRoute(..), Route(..))
 import Task
 import Update.Utils exposing (noCommand)
-import Views.Admin exposing (equalsOriginal, formSavingClass, slugFrom, submitOrSavingButton)
+import Views.Admin exposing (equalsOriginal, formSavingClass, slugFrom, submitOrSavingButton, updateEditField)
 import Views.HorizontalForm as Form
 import Views.Images exposing (media)
 import Views.Utils exposing (routeLinkAttributes, selectImageFile)
@@ -300,35 +300,29 @@ updateEditForm key original msg model =
 
         EInputSlug val ->
             noCommand <|
-                if equalsOriginal val original .slug then
-                    { model | slug = Nothing }
-
-                else
-                    { model | slug = Just val }
+                updateEditField val original .slug <|
+                    \v -> { model | slug = v }
 
         EInputParent val ->
             noCommand <|
-                if equalsOriginal val original .parent then
-                    { model | parent = Err () }
+                updateEditField val original .parent <|
+                    \v ->
+                        case v of
+                            Nothing ->
+                                { model | parent = Err () }
 
-                else
-                    { model | parent = Ok val }
+                            Just newParent ->
+                                { model | parent = Ok newParent }
 
         EInputDescription val ->
             noCommand <|
-                if equalsOriginal val original .description then
-                    { model | description = Nothing }
-
-                else
-                    { model | description = Just val }
+                updateEditField val original .description <|
+                    \v -> { model | description = v }
 
         EInputOrder val ->
             noCommand <|
-                if equalsOriginal val original (.order >> String.fromInt) then
-                    { model | order = Nothing }
-
-                else
-                    { model | order = Just val }
+                updateEditField val original (String.fromInt << .order) <|
+                    \v -> { model | order = v }
 
         ESelectImage ->
             ( model, selectImageFile EImageUploaded )

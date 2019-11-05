@@ -3,6 +3,7 @@ module Views.Admin exposing
     , formSavingClass
     , slugFrom
     , submitOrSavingButton
+    , updateEditField
     )
 
 {-| Helper functions for the Admin views.
@@ -96,3 +97,15 @@ slugFrom mSelector oSelector model original =
 -}
 type Tuple4 a b c d
     = Tuple4 a b c d
+
+
+{-| Update a field of an Edit Form, setting it to Nothing if the new value
+matches the original value.
+-}
+updateEditField : val -> WebData original -> (original -> val) -> (Maybe val -> model) -> model
+updateEditField val original selector updater =
+    if equalsOriginal val original selector then
+        updater Nothing
+
+    else
+        updater <| Just val

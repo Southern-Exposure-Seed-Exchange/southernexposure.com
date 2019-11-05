@@ -26,7 +26,7 @@ import RemoteData exposing (WebData)
 import Routing exposing (AdminRoute(..), Route(..))
 import StaticPage exposing (StaticPageId)
 import Update.Utils exposing (noCommand)
-import Views.Admin as Admin exposing (equalsOriginal, formSavingClass)
+import Views.Admin as Admin exposing (equalsOriginal, formSavingClass, updateEditField)
 import Views.HorizontalForm as Form
 import Views.Utils exposing (rawHtml, routeLinkAttributes)
 
@@ -265,18 +265,6 @@ updateEditForm key original msg model =
 
                 _ ->
                     noCommand model
-
-
-{-| Update a field of an Edit Form, setting it to Nothing if the new value
-matches the original value.
--}
-updateEditField : val -> WebData original -> (original -> val) -> (Maybe val -> model) -> model
-updateEditField val original selector updater =
-    if equalsOriginal val original selector then
-        updater Nothing
-
-    else
-        updater <| Just val
 
 
 slugFromTitle : EditForm -> WebData PageData.AdminEditPageData -> Bool
