@@ -69,7 +69,6 @@ data ListPage =
         { lpId :: PageId
         , lpName :: T.Text
         , lpSlug :: T.Text
-        , lpContent :: T.Text
         } deriving (Show)
 
 instance ToJSON ListPage where
@@ -78,7 +77,6 @@ instance ToJSON ListPage where
             [ "id" .= lpId
             , "name" .= lpName
             , "slug" .= lpSlug
-            , "content" .= lpContent
             ]
 
 pageListRoute :: WrappedAuthToken -> App (Cookied PageListData)
@@ -91,7 +89,6 @@ pageListRoute = flip withAdminCookie $ const $
             { lpId = pageId
             , lpName = pageName page
             , lpSlug = pageSlug page
-            , lpContent = pageContent page
             }
 
 

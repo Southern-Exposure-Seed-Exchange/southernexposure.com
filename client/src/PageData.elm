@@ -694,17 +694,15 @@ type alias AdminListPage =
     { id : StaticPageId
     , name : String
     , slug : String
-    , content : String
     }
 
 
 adminListPageDecoder : Decoder AdminListPage
 adminListPageDecoder =
-    Decode.map4 AdminListPage
+    Decode.map3 AdminListPage
         (Decode.field "id" StaticPage.idDecoder)
         (Decode.field "name" Decode.string)
         (Decode.field "slug" Decode.string)
-        (Decode.field "content" Decode.string)
 
 
 type alias AdminEditPageData =
