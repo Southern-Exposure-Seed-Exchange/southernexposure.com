@@ -31,6 +31,7 @@ import Json.Encode exposing (Value)
 import Products.Pagination as Pagination
 import RemoteData exposing (WebData)
 import Routing.Utils exposing (joinPath, queryParameter, withQueryStrings)
+import StaticPage exposing (StaticPageId)
 
 
 
@@ -76,6 +77,8 @@ type Endpoint
     | AdminEditCategory
     | AdminPageList
     | AdminNewPage
+    | AdminEditPageData StaticPageId
+    | AdminEditPage
 
 
 toUrl : Endpoint -> String
@@ -203,6 +206,12 @@ toUrl endpoint =
 
                 AdminNewPage ->
                     joinPath [ "admin", "pages", "new" ]
+
+                AdminEditPageData pageId ->
+                    joinPath [ "admin", "pages", "edit", StaticPage.idToString pageId ]
+
+                AdminEditPage ->
+                    joinPath [ "admin", "pages", "edit" ]
     in
     "/api" ++ endpointUrl
 

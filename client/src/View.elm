@@ -164,6 +164,11 @@ view ({ route, pageData, navigationData, zone } as model) =
                     StaticPageAdmin.new model.newPageForm
                         |> List.map (Html.map NewPageMsg)
 
+                Admin (PageEdit _) ->
+                    withIntermediateText (StaticPageAdmin.edit model.editPageForm)
+                        pageData.adminEditPage
+                        |> List.map (Html.map EditPageMsg)
+
                 NotFound ->
                     notFoundView
 
@@ -276,6 +281,13 @@ view ({ route, pageData, navigationData, zone } as model) =
 
                 PageNew ->
                     "New Page"
+
+                PageEdit _ ->
+                    pageData.adminEditPage
+                        |> RemoteData.map (\p -> " - " ++ p.title)
+                        |> RemoteData.toMaybe
+                        |> Maybe.withDefault ""
+                        |> (\title -> "Edit Page" ++ title)
 
         -- TODO: Have "Error" & "Loading" titles?
         getFromPageData :

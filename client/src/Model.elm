@@ -43,6 +43,7 @@ type alias Model =
     , newCategoryForm : CategoryAdmin.NewForm
     , editCategoryForm : CategoryAdmin.EditForm
     , newPageForm : StaticPageAdmin.NewForm
+    , editPageForm : StaticPageAdmin.EditForm
     , cartItemCount : Int
     , maybeSessionToken : Maybe String
     , currentUser : AuthStatus
@@ -77,6 +78,7 @@ initial key route =
     , newCategoryForm = CategoryAdmin.initialNewForm
     , editCategoryForm = CategoryAdmin.initialEditForm
     , newPageForm = StaticPageAdmin.initialNewForm
+    , editPageForm = StaticPageAdmin.initialEditForm
     , cartItemCount = 0
     , maybeSessionToken = Nothing
     , currentUser = User.unauthorized

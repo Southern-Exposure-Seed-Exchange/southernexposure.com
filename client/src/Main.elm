@@ -32,7 +32,7 @@ import Routing exposing (AdminRoute(..), Route(..), parseRoute)
 import Search exposing (UniqueSearch(..))
 import SiteUI
 import SiteUI.Search as SiteSearch
-import StaticPage
+import StaticPage exposing (StaticPageId)
 import Task
 import Time
 import Update.Utils exposing (batchCommand, discardCommand, extraCommand, noCommand, updateAndCommand, withCommand)
@@ -277,6 +277,11 @@ fetchDataForRoute ({ route, pageData, key } as model) =
                 Admin PageNew ->
                     doNothing
 
+                Admin (PageEdit pageId) ->
+                    ( { pageData | adminEditPage = RemoteData.Loading }
+                    , getAdminEditPageData pageId
+                    )
+
                 NotFound ->
                     doNothing
 
@@ -483,6 +488,13 @@ getAdminPageList =
     Api.get Api.AdminPageList
         |> Api.withJsonResponse PageData.adminPageListDataDecoder
         |> Api.sendRequest GetAdminPageList
+
+
+getAdminEditPageData : StaticPageId -> Cmd Msg
+getAdminEditPageData pageId =
+    Api.get (Api.AdminEditPageData pageId)
+        |> Api.withJsonResponse PageData.adminEditPageDataDecoder
+        |> Api.sendRequest GetAdminEditPageData
 
 
 
@@ -772,9 +784,14 @@ update msg ({ pageData, key } as model) =
                 |> Tuple.mapSecond (Cmd.map EditCategoryMsg)
 
         NewPageMsg subMsg ->
-            StaticPageAdmin.updateNewForm subMsg model.newPageForm
+            StaticPageAdmin.updateNewForm model.key subMsg model.newPageForm
                 |> Tuple.mapFirst (\form -> { model | newPageForm = form })
                 |> Tuple.mapSecond (Cmd.map NewPageMsg)
+
+        EditPageMsg subMsg ->
+            StaticPageAdmin.updateEditForm model.key pageData.adminEditPage subMsg model.editPageForm
+                |> Tuple.mapFirst (\form -> { model | editPageForm = form })
+                |> Tuple.mapSecond (Cmd.map EditPageMsg)
 
         ReAuthorize response ->
             case response of
@@ -995,6 +1012,13 @@ update msg ({ pageData, key } as model) =
             in
             ( { model | pageData = updatedPageData }, Cmd.none )
 
+        GetAdminEditPageData response ->
+            let
+                updatedPageData =
+                    { pageData | adminEditPage = response }
+            in
+            ( { model | pageData = updatedPageData }, Cmd.none )
+
 
 updatePageFromPagination : Routing.Key -> Route -> Paginated a b c -> Cmd msg
 updatePageFromPagination key route paginated =
@@ -1064,6 +1088,8 @@ resetForm oldRoute model =
                 PageNew ->
                     { model | newPageForm = StaticPageAdmin.initialNewForm }
 
+                PageEdit _ ->
+                    { model | editPageForm = StaticPageAdmin.initialEditForm }
     in
     case oldRoute of
         ProductDetails _ ->

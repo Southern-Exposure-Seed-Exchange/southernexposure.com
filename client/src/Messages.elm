@@ -58,6 +58,7 @@ type Msg
     | NewCategoryMsg CategoryAdmin.NewMsg
     | EditCategoryMsg CategoryAdmin.EditMsg
     | NewPageMsg StaticPageAdmin.NewMsg
+    | EditPageMsg StaticPageAdmin.EditMsg
       -- API Requests
     | ReAuthorize (WebData User.AuthStatus)
     | LogOutResponse (WebData ())
@@ -78,3 +79,4 @@ type Msg
     | GetAdminNewCategoryData (WebData PageData.AdminNewCategoryData)
     | GetAdminEditCategoryData (WebData PageData.AdminEditCategoryData)
     | GetAdminPageList (WebData PageData.AdminPageListData)
+    | GetAdminEditPageData (WebData PageData.AdminEditPageData)

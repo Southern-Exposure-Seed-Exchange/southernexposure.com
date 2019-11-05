@@ -225,6 +225,12 @@ adminView route =
                         ( PageNew, _ ) ->
                             False
 
+                        ( PageEdit _, PageList ) ->
+                            True
+
+                        ( PageEdit _, _ ) ->
+                            False
+
                 _ ->
                     False
     in

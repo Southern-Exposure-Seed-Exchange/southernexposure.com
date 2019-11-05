@@ -6,8 +6,9 @@ CHANGELOG
 v0.9.0
 ======
 
-* Sanitize new/updated Category names & descriptions to prevent Cross-Site
-  Scripting vulnerabilities.
+* Show a live preview of the content on the Add Page & Edit Page admin pages.
+* Sanitize text fields in the Admin to prevent Cross-Site Scripting
+  vulnerabilities.
 * Automatically scale & optimize new Category images.
 
 

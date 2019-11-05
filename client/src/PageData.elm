@@ -2,6 +2,7 @@ module PageData exposing
     ( AddressDetails
     , AdminCategoryListData
     , AdminEditCategoryData
+    , AdminEditPageData
     , AdminListCategory(..)
     , AdminListPage
     , AdminNewCategoryData
@@ -24,6 +25,7 @@ module PageData exposing
     , addressDetailsDecoder
     , adminCategoryListDataDecoder
     , adminEditCategoryDataDecoder
+    , adminEditPageDataDecoder
     , adminListPageDecoder
     , adminNewCategoryDataDecoder
     , adminPageListDataDecoder
@@ -84,6 +86,7 @@ type alias PageData =
     , adminNewCategory : WebData AdminNewCategoryData
     , adminEditCategory : WebData AdminEditCategoryData
     , adminPageList : WebData AdminPageListData
+    , adminEditPage : WebData AdminEditPageData
     }
 
 
@@ -119,6 +122,7 @@ initial =
     , adminNewCategory = RemoteData.NotAsked
     , adminEditCategory = RemoteData.NotAsked
     , adminPageList = RemoteData.NotAsked
+    , adminEditPage = RemoteData.NotAsked
     }
 
 
@@ -699,6 +703,23 @@ adminListPageDecoder =
     Decode.map4 AdminListPage
         (Decode.field "id" StaticPage.idDecoder)
         (Decode.field "name" Decode.string)
+        (Decode.field "slug" Decode.string)
+        (Decode.field "content" Decode.string)
+
+
+type alias AdminEditPageData =
+    { id : StaticPageId
+    , title : String
+    , slug : String
+    , content : String
+    }
+
+
+adminEditPageDataDecoder : Decoder AdminEditPageData
+adminEditPageDataDecoder =
+    Decode.map4 AdminEditPageData
+        (Decode.field "id" StaticPage.idDecoder)
+        (Decode.field "title" Decode.string)
         (Decode.field "slug" Decode.string)
         (Decode.field "content" Decode.string)
 

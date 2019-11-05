@@ -1,5 +1,7 @@
 module Views.Admin exposing
-    ( formSavingClass
+    ( equalsOriginal
+    , formSavingClass
+    , slugFrom
     , submitOrSavingButton
     )
 
@@ -8,6 +10,8 @@ module Views.Admin exposing
 
 import Html exposing (Html, button, text)
 import Html.Attributes exposing (class, disabled, type_)
+import Models.Utils exposing (slugify)
+import RemoteData exposing (WebData)
 import Views.Utils exposing (icon)
 
 
@@ -34,3 +38,61 @@ formSavingClass { isSaving } =
 
     else
         ""
+
+
+{-| Check to see if the new value for an Edit Form's field is equal to the
+original item's value. Returns False if the original has not been loaded yet.
+-}
+equalsOriginal : a -> WebData m -> (m -> a) -> Bool
+equalsOriginal val original selector =
+    original
+        |> RemoteData.toMaybe
+        |> Maybe.map selector
+        |> (\originalVal -> originalVal == Just val)
+
+
+{-| Determine if the current Form slug has been generated from a source field.
+
+    >>> slugFrom .name .name model original
+    True
+
+-}
+slugFrom :
+    ({ m | slug : Maybe String } -> Maybe String)
+    -> ({ o | slug : String } -> String)
+    -> { m | slug : Maybe String }
+    -> WebData { o | slug : String }
+    -> Bool
+slugFrom mSelector oSelector model original =
+    let
+        maybeField : WebData a -> (a -> b) -> Maybe b
+        maybeField m s =
+            RemoteData.toMaybe m |> Maybe.map s
+
+        oSource =
+            maybeField original oSelector
+
+        oSlug =
+            maybeField original .slug
+    in
+    case Tuple4 (mSelector model) model.slug oSource oSlug of
+        Tuple4 (Just n) (Just s) _ _ ->
+            slugify n == s
+
+        Tuple4 (Just n) Nothing _ (Just s) ->
+            slugify n == s
+
+        Tuple4 Nothing (Just s) (Just n) _ ->
+            slugify n == s
+
+        Tuple4 _ _ (Just n) (Just s) ->
+            slugify n == s
+
+        _ ->
+            False
+
+
+{-| Helper type for case matching in the 'slugFrom' function.
+-}
+type Tuple4 a b c d
+    = Tuple4 a b c d

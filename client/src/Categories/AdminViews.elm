@@ -30,7 +30,7 @@ import Result.Extra as Result
 import Routing exposing (AdminRoute(..), Route(..))
 import Task
 import Update.Utils exposing (noCommand)
-import Views.Admin exposing (formSavingClass, submitOrSavingButton)
+import Views.Admin exposing (equalsOriginal, formSavingClass, slugFrom, submitOrSavingButton)
 import Views.HorizontalForm as Form
 import Views.Images exposing (media)
 import Views.Utils exposing (routeLinkAttributes, selectImageFile)
@@ -404,50 +404,9 @@ updateEditForm key original msg model =
                     noCommand model
 
 
-type Tuple4 a b c d
-    = Tuple4 a b c d
-
-
 slugFromName : EditForm -> RemoteData.WebData PageData.AdminEditCategoryData -> Bool
-slugFromName model original =
-    let
-        maybeField : RemoteData.WebData a -> (a -> b) -> Maybe b
-        maybeField m s =
-            RemoteData.toMaybe m |> Maybe.map s
-
-        oName =
-            maybeField original .name
-
-        oSlug =
-            maybeField original .slug
-    in
-    case Tuple4 model.name model.slug oName oSlug of
-        Tuple4 (Just n) (Just s) _ _ ->
-            slugify n == s
-
-        Tuple4 (Just n) Nothing _ (Just s) ->
-            slugify n == s
-
-        Tuple4 Nothing (Just s) (Just n) _ ->
-            slugify n == s
-
-        Tuple4 _ _ (Just n) (Just s) ->
-            slugify n == s
-
-        _ ->
-            False
-
-
-equalsOriginal :
-    val
-    -> RemoteData.WebData PageData.AdminEditCategoryData
-    -> (PageData.AdminEditCategoryData -> val)
-    -> Bool
-equalsOriginal val original selector =
-    original
-        |> RemoteData.toMaybe
-        |> Maybe.map selector
-        |> (\originalField -> originalField == Just val)
+slugFromName =
+    slugFrom .name .name
 
 
 edit : CategoryId -> EditForm -> PageData.AdminNewCategoryData -> PageData.AdminEditCategoryData -> List (Html EditMsg)

@@ -126,6 +126,11 @@ view route pageData =
                     , activeItem "New Page"
                     ]
 
+                Admin (PageEdit _) ->
+                    [ inactiveItem "Pages" (Admin PageList)
+                    , activeItem "Edit Page"
+                    ]
+
                 NotFound ->
                     singleItem "Page Not Found"
 

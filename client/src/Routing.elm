@@ -15,6 +15,7 @@ import Products.Pagination as Pagination
 import Routing.Utils exposing (joinPath, parseFlag, queryFlag, queryParameter, withQueryStrings)
 import Search exposing (UniqueSearch(..))
 import SeedAttribute
+import StaticPage exposing (StaticPageId)
 import Url exposing (Url)
 import Url.Parser as Url exposing ((</>), (<?>))
 import Url.Parser.Query as Query
@@ -60,6 +61,7 @@ type AdminRoute
     | CategoryEdit CategoryId
     | PageList
     | PageNew
+    | PageEdit StaticPageId
 
 
 parseRoute : Url -> Route
@@ -104,6 +106,7 @@ parseRoute =
                 , Url.map (CategoryEdit << CategoryId) (Url.s "categories" </> Url.s "edit" </> Url.int)
                 , Url.map PageList (Url.s "pages")
                 , Url.map PageNew (Url.s "pages" </> Url.s "new")
+                , Url.map PageEdit (Url.s "pages" </> Url.s "edit" </> StaticPage.idPath)
                 ]
 
         routeParser =
@@ -253,6 +256,9 @@ reverseAdmin route =
 
         PageNew ->
             [ "pages", "new" ]
+
+        PageEdit pageId ->
+            [ "pages", "edit", StaticPage.idToString pageId ]
 
 
 authRequired : Route -> Bool
