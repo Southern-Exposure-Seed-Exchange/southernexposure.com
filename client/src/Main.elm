@@ -496,6 +496,7 @@ update msg ({ pageData, key } as model) =
     case msg of
         UrlUpdate route ->
             { model | route = route }
+                |> resetForm model.route
                 |> fetchDataForRoute
                 |> clearSearchForm
                 |> extraCommand (always (Ports.collapseMobileMenus ()))
@@ -1039,6 +1040,88 @@ clearSearchForm ( model, cmd ) =
                     | searchData = Search.initial
                     , advancedSearchData = Search.initial
                 }
+
+
+{-| Reset any forms from the previous route
+-}
+resetForm : Route -> Model -> Model
+resetForm oldRoute model =
+    let
+        resetAdminForm adminRoute =
+            case adminRoute of
+                CategoryList ->
+                    model
+
+                CategoryNew ->
+                    { model | newCategoryForm = CategoryAdmin.initialNewForm }
+
+                CategoryEdit _ ->
+                    { model | editCategoryForm = CategoryAdmin.initialEditForm }
+
+                PageList ->
+                    model
+
+                PageNew ->
+                    { model | newPageForm = StaticPageAdmin.initialNewForm }
+
+    in
+    case oldRoute of
+        ProductDetails _ ->
+            model
+
+        CategoryDetails _ _ ->
+            model
+
+        AdvancedSearch ->
+            { model | advancedSearchData = Search.initial }
+
+        SearchResults _ _ ->
+            model
+
+        PageDetails _ ->
+            model
+
+        CreateAccount ->
+            { model | createAccountForm = CreateAccount.initial }
+
+        CreateAccountSuccess ->
+            model
+
+        Login _ ->
+            { model | loginForm = Login.initial }
+
+        ResetPassword _ ->
+            { model | resetPasswordForm = ResetPassword.initial }
+
+        MyAccount ->
+            model
+
+        EditLogin ->
+            { model | editLoginForm = EditLogin.initial }
+
+        EditAddress ->
+            { model | editAddressForm = EditAddress.initial }
+
+        OrderDetails _ ->
+            model
+
+        Cart ->
+            { model | editCartForm = Cart.initial }
+
+        QuickOrder ->
+            { model | quickOrderForms = QuickOrder.initial }
+
+        Checkout ->
+            { model | checkoutForm = Checkout.initial }
+
+        CheckoutSuccess _ _ ->
+            model
+
+        Admin adminRoute ->
+            resetAdminForm adminRoute
+
+        NotFound ->
+            model
 
 
 updateCartQuantity : ProductId -> Int -> Model -> Model
