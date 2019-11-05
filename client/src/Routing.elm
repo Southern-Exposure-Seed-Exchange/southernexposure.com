@@ -56,7 +56,8 @@ isAdminRoute route =
 
 
 type AdminRoute
-    = CategoryList
+    = Dashboard
+    | CategoryList
     | CategoryNew
     | CategoryEdit CategoryId
     | PageList
@@ -101,7 +102,8 @@ parseRoute =
 
         adminParser =
             Url.oneOf
-                [ Url.map CategoryList (Url.s "categories")
+                [ Url.map Dashboard Url.top
+                , Url.map CategoryList (Url.s "categories")
                 , Url.map CategoryNew (Url.s "categories" </> Url.s "new")
                 , Url.map (CategoryEdit << CategoryId) (Url.s "categories" </> Url.s "edit" </> Url.int)
                 , Url.map PageList (Url.s "pages")
@@ -242,6 +244,9 @@ reverse route =
 reverseAdmin : AdminRoute -> List String
 reverseAdmin route =
     case route of
+        Dashboard ->
+            []
+
         CategoryList ->
             [ "categories" ]
 

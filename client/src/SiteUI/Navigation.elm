@@ -201,6 +201,9 @@ adminView route =
             case route of
                 Admin subRoute ->
                     case ( subRoute, parentRoute ) of
+                        ( Dashboard, _ ) ->
+                            False
+
                         ( CategoryNew, CategoryList ) ->
                             True
 

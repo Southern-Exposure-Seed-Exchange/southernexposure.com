@@ -145,6 +145,9 @@ view ({ route, pageData, navigationData, zone } as model) =
                     RemoteData.map2 Tuple.pair pageData.locations pageData.orderDetails
                         |> withIntermediateText (apply <| Checkout.successView zone LogOut orderId newAccount)
 
+                Admin Dashboard ->
+                    adminDashboardView
+
                 Admin CategoryList ->
                     withIntermediateText CategoryAdminViews.list pageData.adminCategoryList
 
@@ -263,6 +266,9 @@ view ({ route, pageData, navigationData, zone } as model) =
         adminTitle : AdminRoute -> String
         adminTitle adminRoute =
             case adminRoute of
+                Dashboard ->
+                    "Dashboard"
+
                 CategoryList ->
                     "Categories"
 
@@ -459,6 +465,19 @@ staticPageView { name, slug, content } =
     in
     [ header
     , rawHtml content
+    ]
+
+
+adminDashboardView : List (Html msg)
+adminDashboardView =
+    [ text "This page will eventually contain sections like:"
+    , ul []
+        [ li [] [ text "Lastest Orders" ]
+        , li [] [ text "Newest Accounts" ]
+        , li [] [ text "Unapproved Reviews" ]
+        , li [] [ text "Monthly Order Count & Totals" ]
+        , li [] [ text "Graph of Monthly Order Totals" ]
+        ]
     ]
 
 

@@ -105,6 +105,9 @@ view route pageData =
                 CheckoutSuccess _ _ ->
                     singleItem "Order Complete"
 
+                Admin Dashboard ->
+                    singleItem "Dashboard"
+
                 Admin CategoryList ->
                     singleItem "Categories"
 

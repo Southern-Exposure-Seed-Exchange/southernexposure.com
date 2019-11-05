@@ -251,6 +251,9 @@ fetchDataForRoute ({ route, pageData, key } as model) =
                         User.Anonymous ->
                             ( pageData, redirectIfAuthRequired key model.route )
 
+                Admin Dashboard ->
+                    doNothing
+
                 Admin CategoryList ->
                     ( { pageData | adminCategoryList = RemoteData.Loading }
                     , getAdminCategoryList
@@ -1073,6 +1076,9 @@ resetForm oldRoute model =
     let
         resetAdminForm adminRoute =
             case adminRoute of
+                Dashboard ->
+                    model
+
                 CategoryList ->
                     model
 

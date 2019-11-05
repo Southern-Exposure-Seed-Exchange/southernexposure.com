@@ -110,7 +110,7 @@ adminView =
     in
     div [ class "admin container-fluid" ]
         [ div [ id "site-header", class "row" ]
-            [ div [ class "col" ] [ logoAndName <| Admin CategoryList ]
+            [ div [ class "col" ] [ logoAndName <| Admin Dashboard ]
             , div [ class "col text-right" ] [ rightLinks ]
             ]
         ]
