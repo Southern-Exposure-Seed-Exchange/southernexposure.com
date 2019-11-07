@@ -15,6 +15,7 @@ module PageData exposing
     , CheckoutDetails
     , LineItemType(..)
     , MyAccount
+    , OrderData
     , OrderDetails
     , OrderSummary
     , PageData
@@ -41,6 +42,7 @@ module PageData exposing
     , myAccountDecoder
     , orderDetailsDecoder
     , orderTotals
+    , ordersConfig
     , productDataDecoder
     , productDetailsDecoder
     , searchConfig
@@ -87,6 +89,7 @@ type alias PageData =
     , adminEditCategory : WebData AdminEditCategoryData
     , adminPageList : WebData AdminPageListData
     , adminEditPage : WebData AdminEditPageData
+    , adminOrderList : Paginated OrderData () ()
     }
 
 
@@ -106,6 +109,10 @@ initial =
                 (.page Pagination.default)
                 (.perPage Pagination.default)
                 |> Tuple.first
+
+        ordersPaginate =
+            Paginate.initial ordersConfig () 1 50
+                |> Tuple.first
     in
     { categoryDetails = categoryPaginate
     , productDetails = RemoteData.NotAsked
@@ -123,6 +130,7 @@ initial =
     , adminEditCategory = RemoteData.NotAsked
     , adminPageList = RemoteData.NotAsked
     , adminEditPage = RemoteData.NotAsked
+    , adminOrderList = ordersPaginate
     }
 
 
@@ -720,6 +728,52 @@ adminEditPageDataDecoder =
         (Decode.field "title" Decode.string)
         (Decode.field "slug" Decode.string)
         (Decode.field "content" Decode.string)
+
+
+
+-- Order Admin
+
+
+ordersConfig : Paginate.Config OrderData () ()
+ordersConfig =
+    let
+        request () page perPage =
+            Api.get (Api.AdminOrderList page perPage)
+                |> Api.withJsonResponse fetchDecoder
+                |> Api.sendRequest identity
+
+        fetchDecoder =
+            Decode.map3 Paginate.FetchResponse
+                (Decode.field "orders" <| Decode.list orderDataDecoder)
+                (Decode.field "total" Decode.int)
+                (Decode.succeed <| Just ())
+    in
+    Paginate.makeConfig request
+
+
+type alias OrderData =
+    { id : Int
+    , date : Posix
+    , name : String
+    , email : String
+    , street : String
+    , state : Locations.Region
+    , status : OrderStatus
+    , total : Cents
+    }
+
+
+orderDataDecoder : Decoder OrderData
+orderDataDecoder =
+    Decode.map8 OrderData
+        (Decode.field "id" Decode.int)
+        (Decode.field "date" Iso8601.decoder)
+        (Decode.field "customerName" Decode.string)
+        (Decode.field "customerEmail" Decode.string)
+        (Decode.field "shippingStreet" Decode.string)
+        (Decode.field "shippingRegion" Locations.regionDecoder)
+        (Decode.field "orderStatus" orderStatusDecoder)
+        (Decode.field "orderTotal" centsDecoder)
 
 
 

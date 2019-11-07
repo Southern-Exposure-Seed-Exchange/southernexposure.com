@@ -33,6 +33,7 @@ import SiteUI.Header as SiteHeader
 import SiteUI.Navigation as SiteNavigation
 import SiteUI.Sidebar as SiteSidebar
 import StaticPage exposing (StaticPage)
+import Views.OrderAdmin as OrderAdmin
 import Views.StaticPageAdmin as StaticPageAdmin
 import Views.Utils exposing (rawHtml)
 
@@ -172,6 +173,10 @@ view ({ route, pageData, navigationData, zone } as model) =
                         pageData.adminEditPage
                         |> List.map (Html.map EditPageMsg)
 
+                Admin (OrderList _ _) ->
+                    withIntermediateText (\locs -> OrderAdmin.list zone locs pageData.adminOrderList)
+                        pageData.locations
+
                 NotFound ->
                     notFoundView
 
@@ -294,6 +299,9 @@ view ({ route, pageData, navigationData, zone } as model) =
                         |> RemoteData.toMaybe
                         |> Maybe.withDefault ""
                         |> (\title -> "Edit Page" ++ title)
+
+                OrderList _ _ ->
+                    "Orders"
 
         -- TODO: Have "Error" & "Loading" titles?
         getFromPageData :

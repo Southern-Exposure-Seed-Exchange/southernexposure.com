@@ -285,6 +285,14 @@ fetchDataForRoute ({ route, pageData, key } as model) =
                     , getAdminEditPageData pageId
                     )
 
+                Admin (OrderList page perPage) ->
+                    ( pageData.adminOrderList, Cmd.none )
+                        |> discardCommand (Paginate.updatePerPage PageData.ordersConfig perPage)
+                        |> discardCommand (Paginate.jumpTo PageData.ordersConfig page)
+                        |> Tuple.mapFirst (\ol -> { pageData | adminOrderList = ol })
+                        |> Tuple.mapSecond (Cmd.map AdminOrderPaginationMsg)
+                        |> updateAndCommand fetchLocationsOnce
+
                 NotFound ->
                     doNothing
 
@@ -1022,6 +1030,17 @@ update msg ({ pageData, key } as model) =
             in
             ( { model | pageData = updatedPageData }, Cmd.none )
 
+        AdminOrderPaginationMsg subMsg ->
+            pageData.adminOrderList
+                |> Paginate.update PageData.ordersConfig subMsg
+                |> Tuple.mapSecond (Cmd.map AdminOrderPaginationMsg)
+                |> (\( ol, cmd ) ->
+                        ( ol, Cmd.batch [ cmd, updatePageFromPagination key model.route ol ] )
+                   )
+                |> Tuple.mapFirst (\ol -> { pageData | adminOrderList = ol })
+                |> Tuple.mapFirst (\pd -> { model | pageData = pd })
+                |> extraCommand (always Ports.scrollToTop)
+
 
 updatePageFromPagination : Routing.Key -> Route -> Paginated a b c -> Cmd msg
 updatePageFromPagination key route paginated =
@@ -1033,6 +1052,9 @@ updatePageFromPagination key route paginated =
 
                 SearchResults data pagination ->
                     ( Just pagination.page, \p -> SearchResults data { pagination | page = p } )
+
+                Admin (OrderList page perPage) ->
+                    ( Just page, \p -> Admin <| OrderList p perPage )
 
                 _ ->
                     ( Nothing, always route )
@@ -1096,6 +1118,9 @@ resetForm oldRoute model =
 
                 PageEdit _ ->
                     { model | editPageForm = StaticPageAdmin.initialEditForm }
+
+                OrderList _ _ ->
+                    model
     in
     case oldRoute of
         ProductDetails _ ->

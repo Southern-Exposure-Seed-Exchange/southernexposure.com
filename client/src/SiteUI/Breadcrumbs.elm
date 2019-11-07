@@ -134,6 +134,9 @@ view route pageData =
                     , activeItem "Edit Page"
                     ]
 
+                Admin (OrderList _ _) ->
+                    [ activeItem "Orders" ]
+
                 NotFound ->
                     singleItem "Page Not Found"
 

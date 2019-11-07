@@ -12,7 +12,7 @@ module Routing exposing
 import Browser.Navigation
 import Category exposing (CategoryId(..))
 import Products.Pagination as Pagination
-import Routing.Utils exposing (joinPath, parseFlag, queryFlag, queryParameter, withQueryStrings)
+import Routing.Utils exposing (joinPath, optionalIntParam, parseFlag, queryFlag, queryParameter, withQueryStrings)
 import Search exposing (UniqueSearch(..))
 import SeedAttribute
 import StaticPage exposing (StaticPageId)
@@ -63,6 +63,7 @@ type AdminRoute
     | PageList
     | PageNew
     | PageEdit StaticPageId
+    | OrderList Int Int
 
 
 parseRoute : Url -> Route
@@ -109,6 +110,7 @@ parseRoute =
                 , Url.map PageList (Url.s "pages")
                 , Url.map PageNew (Url.s "pages" </> Url.s "new")
                 , Url.map PageEdit (Url.s "pages" </> Url.s "edit" </> StaticPage.idPath)
+                , Url.map OrderList (Url.s "orders" <?> optionalIntParam "page" 1 <?> optionalIntParam "perPage" 50)
                 ]
 
         routeParser =
@@ -235,35 +237,71 @@ reverse route =
                 ++ withQueryStrings [ queryFlag "newAccount" newAccount ]
 
         Admin adminRoute ->
-            joinPath <| "admin" :: reverseAdmin adminRoute
+            reverseAdmin adminRoute
 
         NotFound ->
             joinPath [ "page-not-found" ]
 
 
-reverseAdmin : AdminRoute -> List String
+reverseAdmin : AdminRoute -> String
 reverseAdmin route =
-    case route of
-        Dashboard ->
-            []
+    let
+        basePath =
+            case route of
+                Dashboard ->
+                    []
 
-        CategoryList ->
-            [ "categories" ]
+                CategoryList ->
+                    [ "categories" ]
 
-        CategoryNew ->
-            [ "categories", "new" ]
+                CategoryNew ->
+                    [ "categories", "new" ]
 
-        CategoryEdit (CategoryId cid) ->
-            [ "categories", "edit", String.fromInt cid ]
+                CategoryEdit (CategoryId cid) ->
+                    [ "categories", "edit", String.fromInt cid ]
 
-        PageList ->
-            [ "pages" ]
+                PageList ->
+                    [ "pages" ]
 
-        PageNew ->
-            [ "pages", "new" ]
+                PageNew ->
+                    [ "pages", "new" ]
 
-        PageEdit pageId ->
-            [ "pages", "edit", StaticPage.idToString pageId ]
+                PageEdit pageId ->
+                    [ "pages", "edit", StaticPage.idToString pageId ]
+
+                OrderList _ _ ->
+                    [ "orders" ]
+
+        queryStrings =
+            case route of
+                Dashboard ->
+                    []
+
+                CategoryList ->
+                    []
+
+                CategoryNew ->
+                    []
+
+                CategoryEdit _ ->
+                    []
+
+                PageList ->
+                    []
+
+                PageNew ->
+                    []
+
+                PageEdit _ ->
+                    []
+
+                OrderList page perPage ->
+                    [ queryParameter ( "page", String.fromInt page )
+                    , queryParameter ( "perPage", String.fromInt perPage )
+                    ]
+    in
+    joinPath ("admin" :: basePath)
+        ++ withQueryStrings queryStrings
 
 
 authRequired : Route -> Bool

@@ -12,7 +12,7 @@ import Cart
 import Categories.AdminViews as CategoryAdmin
 import Checkout
 import Locations exposing (AddressLocations)
-import PageData exposing (ProductData)
+import PageData exposing (OrderData, ProductData)
 import Paginate
 import Product exposing (ProductId, ProductVariantId)
 import QuickOrder
@@ -80,3 +80,4 @@ type Msg
     | GetAdminEditCategoryData (WebData PageData.AdminEditCategoryData)
     | GetAdminPageList (WebData PageData.AdminPageListData)
     | GetAdminEditPageData (WebData PageData.AdminEditPageData)
+    | AdminOrderPaginationMsg (Paginate.Msg OrderData ())
