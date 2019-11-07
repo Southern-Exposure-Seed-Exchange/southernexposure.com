@@ -173,9 +173,10 @@ view ({ route, pageData, navigationData, zone } as model) =
                         pageData.adminEditPage
                         |> List.map (Html.map EditPageMsg)
 
-                Admin (OrderList _ _) ->
-                    withIntermediateText (\locs -> OrderAdmin.list zone locs pageData.adminOrderList)
+                Admin (OrderList { query }) ->
+                    withIntermediateText (\locs -> OrderAdmin.list zone locs query model.orderSearchForm pageData.adminOrderList)
                         pageData.locations
+                        |> List.map (Html.map OrderSearchMsg)
 
                 NotFound ->
                     notFoundView
@@ -300,7 +301,7 @@ view ({ route, pageData, navigationData, zone } as model) =
                         |> Maybe.withDefault ""
                         |> (\title -> "Edit Page" ++ title)
 
-                OrderList _ _ ->
+                OrderList _ ->
                     "Orders"
 
         -- TODO: Have "Error" & "Loading" titles?

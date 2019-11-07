@@ -12,7 +12,7 @@ module Routing exposing
 import Browser.Navigation
 import Category exposing (CategoryId(..))
 import Products.Pagination as Pagination
-import Routing.Utils exposing (joinPath, optionalIntParam, parseFlag, queryFlag, queryParameter, withQueryStrings)
+import Routing.Utils exposing (fromStringParam, joinPath, optionalIntParam, parseFlag, queryFlag, queryParameter, withQueryStrings)
 import Search exposing (UniqueSearch(..))
 import SeedAttribute
 import StaticPage exposing (StaticPageId)
@@ -63,7 +63,7 @@ type AdminRoute
     | PageList
     | PageNew
     | PageEdit StaticPageId
-    | OrderList Int Int
+    | OrderList { page : Int, perPage : Int, query : String }
 
 
 parseRoute : Url -> Route
@@ -110,8 +110,16 @@ parseRoute =
                 , Url.map PageList (Url.s "pages")
                 , Url.map PageNew (Url.s "pages" </> Url.s "new")
                 , Url.map PageEdit (Url.s "pages" </> Url.s "edit" </> StaticPage.idPath)
-                , Url.map OrderList (Url.s "orders" <?> optionalIntParam "page" 1 <?> optionalIntParam "perPage" 50)
+                , Url.map OrderList (Url.s "orders" </> orderQueryParser)
                 ]
+
+        orderQueryParser =
+            Url.map (\page perPage query -> { page = page, perPage = perPage, query = query })
+                (Url.top
+                    <?> optionalIntParam "page" 1
+                    <?> optionalIntParam "perPage" 50
+                    <?> fromStringParam "query" identity
+                )
 
         routeParser =
             Url.oneOf
@@ -269,7 +277,7 @@ reverseAdmin route =
                 PageEdit pageId ->
                     [ "pages", "edit", StaticPage.idToString pageId ]
 
-                OrderList _ _ ->
+                OrderList _ ->
                     [ "orders" ]
 
         queryStrings =
@@ -295,10 +303,19 @@ reverseAdmin route =
                 PageEdit _ ->
                     []
 
-                OrderList page perPage ->
-                    [ queryParameter ( "page", String.fromInt page )
-                    , queryParameter ( "perPage", String.fromInt perPage )
-                    ]
+                OrderList { page, perPage, query } ->
+                    List.concat
+                        [ unlessDefault "page" (String.fromInt page) "1"
+                        , unlessDefault "perPage" (String.fromInt perPage) "50"
+                        , unlessDefault "query" query ""
+                        ]
+
+        unlessDefault name value default =
+            if value == default then
+                []
+
+            else
+                [ queryParameter ( name, value ) ]
     in
     joinPath ("admin" :: basePath)
         ++ withQueryStrings queryStrings

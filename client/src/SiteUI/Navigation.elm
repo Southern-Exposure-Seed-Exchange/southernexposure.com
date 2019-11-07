@@ -234,7 +234,10 @@ adminView route =
                         ( PageEdit _, _ ) ->
                             False
 
-                        ( OrderList _ _, _ ) ->
+                        ( OrderList _, OrderList _ ) ->
+                            True
+
+                        ( OrderList _, _ ) ->
                             False
 
                 _ ->
@@ -257,7 +260,7 @@ adminView route =
                 [ ul [ class "navbar-nav" ]
                     [ navItem "Categories" CategoryList
                     , navItem "Pages" PageList
-                    , navItem "Orders" <| OrderList 1 50
+                    , navItem "Orders" <| OrderList { page = 1, perPage = 50, query = "" }
                     ]
                 ]
             ]

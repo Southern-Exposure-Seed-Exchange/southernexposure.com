@@ -89,7 +89,7 @@ type alias PageData =
     , adminEditCategory : WebData AdminEditCategoryData
     , adminPageList : WebData AdminPageListData
     , adminEditPage : WebData AdminEditPageData
-    , adminOrderList : Paginated OrderData () ()
+    , adminOrderList : Paginated OrderData String ()
     }
 
 
@@ -111,7 +111,7 @@ initial =
                 |> Tuple.first
 
         ordersPaginate =
-            Paginate.initial ordersConfig () 1 50
+            Paginate.initial ordersConfig "" 1 50
                 |> Tuple.first
     in
     { categoryDetails = categoryPaginate
@@ -734,11 +734,11 @@ adminEditPageDataDecoder =
 -- Order Admin
 
 
-ordersConfig : Paginate.Config OrderData () ()
+ordersConfig : Paginate.Config OrderData String ()
 ordersConfig =
     let
-        request () page perPage =
-            Api.get (Api.AdminOrderList page perPage)
+        request query page perPage =
+            Api.get (Api.AdminOrderList page perPage query)
                 |> Api.withJsonResponse fetchDecoder
                 |> Api.sendRequest identity
 

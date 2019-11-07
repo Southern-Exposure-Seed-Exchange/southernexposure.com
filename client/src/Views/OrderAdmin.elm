@@ -1,7 +1,14 @@
-module Views.OrderAdmin exposing (list)
+module Views.OrderAdmin exposing
+    ( SearchForm
+    , SearchMsg
+    , initialSearchForm
+    , list
+    , updateSearchForm
+    )
 
-import Html exposing (Html, div, table, tbody, td, text, th, thead, tr)
-import Html.Attributes exposing (class)
+import Html exposing (Html, button, div, form, input, table, tbody, td, text, th, thead, tr)
+import Html.Attributes exposing (class, type_, value)
+import Html.Events exposing (onInput, onSubmit)
 import Locations exposing (AddressLocations)
 import PageData exposing (OrderData)
 import Paginate exposing (Paginated)
@@ -9,13 +16,57 @@ import Routing exposing (AdminRoute(..), Route(..))
 import Time exposing (Zone)
 import Views.Format as Format
 import Views.Pager as Pager
+import Views.Utils exposing (icon)
 
 
-list : Zone -> AddressLocations -> Paginated OrderData () () -> List (Html msg)
-list zone locations orders =
+type alias SearchForm =
+    { query : String
+    }
+
+
+initialSearchForm : SearchForm
+initialSearchForm =
+    { query = ""
+    }
+
+
+type SearchMsg
+    = InputQuery String
+    | SubmitSearch
+
+
+updateSearchForm : Routing.Key -> SearchMsg -> SearchForm -> ( SearchForm, Cmd SearchMsg )
+updateSearchForm key msg model =
+    case msg of
+        InputQuery val ->
+            ( { model | query = val }, Cmd.none )
+
+        SubmitSearch ->
+            ( model
+            , Routing.newUrl key <| Admin <| OrderList { page = 1, perPage = 50, query = model.query }
+            )
+
+
+list : Zone -> AddressLocations -> String -> SearchForm -> Paginated OrderData String () -> List (Html SearchMsg)
+list zone locations currentQuery { query } orders =
     let
+        searchForm =
+            form [ onSubmit SubmitSearch ]
+                [ div [ class "input-group input-group-sm" ]
+                    [ input
+                        [ class "form-control"
+                        , value query
+                        , type_ "search"
+                        , onInput InputQuery
+                        ]
+                        []
+                    , div [ class "input-group-append" ]
+                        [ button [ class "btn btn-primary", type_ "submit" ] [ icon "search" ] ]
+                    ]
+                ]
+
         header =
-            thead []
+            thead [ class "text-center" ]
                 [ th [] [ text "ID" ]
                 , th [] [ text "Date" ]
                 , th [] [ text "Customer" ]
@@ -48,15 +99,33 @@ list zone locations orders =
                 , pagerAriaLabel = "Orders Table Pages"
                 , pagerCssClass = ""
                 , pageSizes = [ 25, 50, 100, 250 ]
-                , routeConstructor = \{ page, perPage } -> Admin <| OrderList page perPage
+                , routeConstructor =
+                    \{ page, perPage } ->
+                        Admin <|
+                            OrderList { page = page, perPage = perPage, query = currentQuery }
                 }
                 orders
+
+        orderTable =
+            if Paginate.isLoading orders then
+                div [ class "p-4 text-center" ]
+                    [ text "Loading..."
+                    , icon "spinner fa-spin ml-2"
+                    ]
+
+            else if Paginate.hasNone orders then
+                div [ class "p-4 text-center" ]
+                    [ text "No Orders Found" ]
+
+            else
+                table [ class "table table-striped table-sm my-2 order-table" ]
+                    [ header
+                    , tbody [] <| List.map renderOrder <| Paginate.getCurrent orders
+                    ]
     in
-    [ div [ class "text-right mb-2" ] [ pager.perPageLinks () ]
+    [ div [ class "d-flex justify-content-between align-items-center mb-2" ]
+        [ searchForm, pager.perPageLinks () ]
     , pager.viewTop ()
-    , table [ class "table table-striped table-sm my-2" ]
-        [ header
-        , tbody [] <| List.map renderOrder <| Paginate.getCurrent orders
-        ]
+    , orderTable
     , pager.viewBottom ()
     ]

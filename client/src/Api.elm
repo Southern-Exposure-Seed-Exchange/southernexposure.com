@@ -79,7 +79,7 @@ type Endpoint
     | AdminNewPage
     | AdminEditPageData StaticPageId
     | AdminEditPage
-    | AdminOrderList Int Int
+    | AdminOrderList Int Int String
 
 
 toUrl : Endpoint -> String
@@ -214,11 +214,12 @@ toUrl endpoint =
                 AdminEditPage ->
                     joinPath [ "admin", "pages", "edit" ]
 
-                AdminOrderList page perPage ->
+                AdminOrderList page perPage query ->
                     joinPath [ "admin", "orders", "list" ]
                         ++ withQueryStrings
                             [ queryParameter ( "page", String.fromInt page )
                             , queryParameter ( "perPage", String.fromInt perPage )
+                            , queryParameter ( "query", query )
                             ]
     in
     "/api" ++ endpointUrl

@@ -39,6 +39,7 @@ import Update.Utils exposing (batchCommand, discardCommand, extraCommand, noComm
 import Url exposing (Url)
 import User exposing (AuthStatus)
 import View exposing (view)
+import Views.OrderAdmin as OrderAdmin
 import Views.StaticPageAdmin as StaticPageAdmin
 
 
@@ -285,8 +286,9 @@ fetchDataForRoute ({ route, pageData, key } as model) =
                     , getAdminEditPageData pageId
                     )
 
-                Admin (OrderList page perPage) ->
-                    ( pageData.adminOrderList, Cmd.none )
+                Admin (OrderList { page, perPage, query }) ->
+                    pageData.adminOrderList
+                        |> Paginate.updateData PageData.ordersConfig query
                         |> discardCommand (Paginate.updatePerPage PageData.ordersConfig perPage)
                         |> discardCommand (Paginate.jumpTo PageData.ordersConfig page)
                         |> Tuple.mapFirst (\ol -> { pageData | adminOrderList = ol })
@@ -804,6 +806,11 @@ update msg ({ pageData, key } as model) =
                 |> Tuple.mapFirst (\form -> { model | editPageForm = form })
                 |> Tuple.mapSecond (Cmd.map EditPageMsg)
 
+        OrderSearchMsg subMsg ->
+            OrderAdmin.updateSearchForm key subMsg model.orderSearchForm
+                |> Tuple.mapFirst (\form -> { model | orderSearchForm = form })
+                |> Tuple.mapSecond (Cmd.map OrderSearchMsg)
+
         ReAuthorize response ->
             case response of
                 RemoteData.Success authStatus ->
@@ -1042,6 +1049,13 @@ update msg ({ pageData, key } as model) =
                 |> extraCommand (always Ports.scrollToTop)
 
 
+{-| Update the current page number using the Paginated data.
+
+This redirects users to the last page of the paginated data if they have
+reached a page that is beyond the pagination(e.g., by manually setting the page
+query parameter to a number above the page count).
+
+-}
 updatePageFromPagination : Routing.Key -> Route -> Paginated a b c -> Cmd msg
 updatePageFromPagination key route paginated =
     let
@@ -1053,8 +1067,8 @@ updatePageFromPagination key route paginated =
                 SearchResults data pagination ->
                     ( Just pagination.page, \p -> SearchResults data { pagination | page = p } )
 
-                Admin (OrderList page perPage) ->
-                    ( Just page, \p -> Admin <| OrderList p perPage )
+                Admin (OrderList params) ->
+                    ( Just params.page, \p -> Admin <| OrderList { params | page = p } )
 
                 _ ->
                     ( Nothing, always route )
@@ -1119,8 +1133,8 @@ resetForm oldRoute model =
                 PageEdit _ ->
                     { model | editPageForm = StaticPageAdmin.initialEditForm }
 
-                OrderList _ _ ->
-                    model
+                OrderList _ ->
+                    { model | orderSearchForm = OrderAdmin.initialSearchForm }
     in
     case oldRoute of
         ProductDetails _ ->
