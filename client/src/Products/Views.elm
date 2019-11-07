@@ -2,7 +2,7 @@ module Products.Views exposing (details, list)
 
 import Dict exposing (Dict)
 import Html exposing (..)
-import Html.Attributes as A exposing (attribute, class, for, id, selected, src, tabindex, type_, value)
+import Html.Attributes as A exposing (attribute, class, for, id, selected, src, type_, value)
 import Html.Events exposing (on, onSubmit, targetValue)
 import Html.Extra exposing (viewIfLazy)
 import Html.Keyed as Keyed
@@ -18,6 +18,7 @@ import Products.Sorting as Sorting
 import Routing exposing (Route(..))
 import SeedAttribute exposing (SeedAttribute)
 import Views.Format as Format
+import Views.Pager as Pager
 import Views.Utils exposing (htmlOrBlank, numericInput, onIntInput, rawHtml, routeLinkAttributes)
 
 
@@ -82,7 +83,7 @@ list routeConstructor pagination addToCartForms products =
             if productsCount > 1 then
                 div [ class "d-flex mb-2 justify-content-between align-items-center" ]
                     [ sortingInput
-                    , perPageLinks
+                    , pager.perPageLinks ()
                     ]
 
             else
@@ -127,122 +128,17 @@ list routeConstructor pagination addToCartForms products =
                     )
                 |> on "change"
 
-        perPageLinks =
-            [ 10, 25, 50, 75, 100 ]
-                |> List.map
-                    (\c ->
-                        if c == pagination.perPage then
-                            span [ class "font-weight-bold" ]
-                                [ text <| String.fromInt c ]
-
-                        else
-                            a (routeLinkAttributes <| routeConstructor { pagination | perPage = c })
-                                [ text <| String.fromInt c ]
-                    )
-                |> List.intersperse (text " | ")
-                |> (\ps ->
-                        span [ class "font-weight-bold" ] [ text "Products per page: " ]
-                            :: ps
-                            |> span [ class "d-none d-md-block" ]
-                   )
-
-        paginationHtml content =
-            div [ class "d-flex mb-2 justify-content-between align-items-center" ] content
-
-        paginationTop =
-            paginationHtml [ pagingText, div [ class "d-none d-md-block" ] [ pager ] ]
-
-        paginationBottom =
-            paginationHtml [ div [ class "d-none d-md-block" ] [ pagingText ], pager ]
-
-        pagingText =
-            if productsCount == 0 then
-                text ""
-
-            else
-                span []
-                    [ text "Displaying "
-                    , b [] [ text <| pagingStart () ]
-                    , text " to "
-                    , b [] [ text <| pagingEnd () ]
-                    , text " (of "
-                    , b [] [ text <| String.fromInt productsCount ]
-                    , text " products)"
-                    ]
-
-        pagingStart _ =
-            String.fromInt <|
-                (currentPage - 1)
-                    * pagination.perPage
-                    + 1
-
-        pagingEnd _ =
-            String.fromInt <|
-                if (not << Paginate.hasNext) products || productsCount < pagination.perPage then
-                    productsCount
-
-                else
-                    currentPage * pagination.perPage
-
-        totalPages =
-            Paginate.getTotalPages products
-
-        currentPage =
-            Paginate.getPage products
-
         pager =
-            if totalPages <= 1 then
-                text ""
-
-            else
-                node "nav"
-                    [ attribute "aria-label" "Category Product Pages", class "products-pagination" ]
-                    [ ul [ class "pagination pagination-sm mb-0" ] <|
-                        previousLink ()
-                            :: renderSections ()
-                            ++ [ nextLink () ]
-                    ]
-
-        renderSections _ =
-            Paginate.bootstrapPager
-                (\p -> routeLinkAttributes <| routeConstructor { pagination | page = p })
-                2
-                2
+            Pager.elements
+                { itemDescription = "Products"
+                , pagerAriaLabel = "Category Product Pages"
+                , pagerCssClass = "products-pagination"
+                , pageSizes = [ 10, 25, 50, 75, 100 ]
+                , routeConstructor =
+                    \{ page, perPage } ->
+                        routeConstructor { pagination | page = page, perPage = perPage }
+                }
                 products
-
-        previousLink _ =
-            let
-                previousPage =
-                    max 1 (pagination.page - 1)
-
-                previousRoute =
-                    routeConstructor { pagination | page = previousPage }
-            in
-            prevNextLink (not << Paginate.hasPrevious) previousRoute "« Prev"
-
-        nextLink _ =
-            let
-                nextPage =
-                    min totalPages (pagination.page + 1)
-
-                nextRoute =
-                    routeConstructor { pagination | page = nextPage }
-            in
-            prevNextLink (not << Paginate.hasNext) nextRoute "Next »"
-
-        prevNextLink isDisabled route content =
-            let
-                ( itemClass, linkAttrs ) =
-                    if isDisabled products then
-                        ( " disabled", [ tabindex -1 ] )
-
-                    else
-                        ( "", [] )
-            in
-            li [ class <| "page-item" ++ itemClass ]
-                [ a (class "page-link" :: linkAttrs ++ routeLinkAttributes route)
-                    [ text content ]
-                ]
 
         ( productRows, productBlocks ) =
             List.map
@@ -290,11 +186,11 @@ list routeConstructor pagination addToCartForms products =
     in
     if productsCount /= 0 then
         [ sortHtml
-        , paginationTop
+        , pager.viewTop ()
         , table [ class "products-table table table-striped table-sm mb-2 d-none d-md-table" ]
             [ tbody [] <| productRows ]
         , mobileProductBlocks
-        , paginationBottom
+        , pager.viewBottom ()
         , SeedAttribute.legend
         ]
 
