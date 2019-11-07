@@ -1,4 +1,4 @@
-module Views.Pager exposing (elements)
+module Views.Pager exposing (Config, Elements, elements)
 
 {-| This module is responsible for generating the various bits of HTML used in
 pagianted Views.
@@ -112,7 +112,7 @@ elements cfg items =
                     )
                 |> List.intersperse (text " | ")
                 |> (\ps ->
-                        span [ class "font-weight-bold" ] [ text "Products per page: " ]
+                        span [ class "font-weight-bold" ] [ text <| cfg.itemDescription ++ " per page: " ]
                             :: ps
                             |> span [ class "d-none d-md-block" ]
                    )
@@ -174,6 +174,9 @@ elements cfg items =
     }
 
 
+{-| Helper to make the Previous/Next links for the pager, with the ability to
+disable them for the first/last pages.
+-}
 prevNextLink : Paginated a b c -> (Paginated a b c -> Bool) -> Route -> String -> Html msg
 prevNextLink items isDisabled route content =
     let
