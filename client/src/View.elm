@@ -33,6 +33,7 @@ import SiteUI.Header as SiteHeader
 import SiteUI.Navigation as SiteNavigation
 import SiteUI.Sidebar as SiteSidebar
 import StaticPage exposing (StaticPage)
+import User
 import Views.OrderAdmin as OrderAdmin
 import Views.StaticPageAdmin as StaticPageAdmin
 import Views.Utils exposing (rawHtml)
@@ -51,21 +52,28 @@ view ({ route, pageData, navigationData, zone } as model) =
                         ]
 
                 Admin adminRoute ->
-                    div [ class "admin container-fluid" ]
-                        [ div [ class "row" ]
-                            [ div [ class "col" ] <|
-                                h2 [] [ text <| adminTitle adminRoute ]
-                                    :: pageContent
+                    if not <| User.isAdmin model.currentUser then
+                        withSidebar accessDeniedView
+
+                    else
+                        div [ class "admin container-fluid" ]
+                            [ div [ class "row" ]
+                                [ div [ class "col" ] <|
+                                    h2 [] [ text <| adminTitle adminRoute ]
+                                        :: pageContent
+                                ]
                             ]
-                        ]
 
                 _ ->
-                    div [ class "container" ]
-                        [ div [ class "row" ]
-                            [ div [ class "col order-md-2" ] pageContent
-                            , SiteSidebar.view route
-                            ]
-                        ]
+                    withSidebar pageContent
+
+        withSidebar content =
+            div [ class "container" ]
+                [ div [ class "row" ]
+                    [ div [ class "col order-md-2" ] content
+                    , SiteSidebar.view route
+                    ]
+                ]
 
         pageContent =
             case route of
@@ -334,7 +342,7 @@ view ({ route, pageData, navigationData, zone } as model) =
                     []
     in
     Document pageTitle <|
-        if isAdminRoute route then
+        if isAdminRoute route && User.isAdmin model.currentUser then
             [ SiteHeader.adminView
             , SiteNavigation.adminView route
             , middleContent
