@@ -9,19 +9,29 @@ module Routes.Admin.Orders
     , orderRoutes
     ) where
 
-import Control.Monad (forM)
+import Control.Monad (forM, join)
+import Control.Monad.Trans (lift)
 import Data.Aeson (ToJSON(..), (.=), object)
 import Data.Maybe (fromMaybe, listToMaybe)
 import Data.Monoid ((<>))
 import Data.Time (UTCTime)
-import Database.Persist ((==.), Entity(..), Filter, SelectOpt(..), count, get, selectList)
-import Servant ((:>), AuthProtect, QueryParam, Get, JSON)
+import Database.Persist
+    ( (==.), Entity(..), Filter, SelectOpt(..), count, get, selectList
+    , getEntity, getJustEntity
+    )
+import Servant ((:<|>)(..), (:>), AuthProtect, QueryParam, Capture, Get, JSON, err404)
 import Text.Read (readMaybe)
 
 import Auth (withAdminCookie, WrappedAuthToken, Cookied)
-import Models (OrderId, Order(..), OrderProduct(..), OrderLineItem(..), Customer(customerEmail), Address(..), EntityField(..))
+import Models
+    ( OrderId, Order(..), OrderProduct(..), OrderLineItem(..), Customer(customerEmail)
+    , Address(..), EntityField(..)
+    )
 import Models.Fields (OrderStatus, Region, Cents(..), creditLineItemTypes)
-import Server (App, AppSQL, runDB)
+import Routes.CommonData
+    ( OrderDetails(..), toCheckoutOrder, getCheckoutProducts, toAddressData
+    )
+import Server (App, AppSQL, runDB, serverError)
 
 import qualified Data.List as L
 import qualified Data.Text as T
@@ -30,13 +40,16 @@ import qualified Database.Esqueleto as E
 
 type OrderAPI =
          "list" :> OrderListRoute
+    :<|> "details" :> OrderDetailsRoute
 
 type OrderRoutes =
          (WrappedAuthToken -> Maybe Int -> Maybe Int -> Maybe T.Text -> App (Cookied OrderListData))
+    :<|> (WrappedAuthToken -> OrderId -> App (Cookied OrderDetails))
 
 orderRoutes :: OrderRoutes
 orderRoutes =
          orderListRoute
+    :<|> orderDetailsRoute
 
 
 -- LIST
@@ -207,3 +220,27 @@ orderListRoute token maybePage maybePerPage maybeQuery = withAdminCookie token $
             , loOrderStatus = orderStatus order
             , loOrderTotal = orderTotal
             }
+
+
+-- DETAILS
+
+
+type OrderDetailsRoute =
+       AuthProtect "cookie-auth"
+    :> Capture "id" OrderId
+    :> Get '[JSON] (Cookied OrderDetails)
+
+orderDetailsRoute :: WrappedAuthToken -> OrderId -> App (Cookied OrderDetails)
+orderDetailsRoute token orderId = withAdminCookie token $ \_ -> runDB $ do
+    order <- get orderId >>= maybe (lift $ serverError err404) return
+    lineItems <- selectList [OrderLineItemOrderId ==. orderId] []
+    products <- getCheckoutProducts orderId
+    shipping <- getJustEntity $ orderShippingAddressId order
+    maybeBilling <- sequence $ getEntity <$> orderBillingAddressId order
+    return OrderDetails
+        { odOrder = toCheckoutOrder order
+        , odLineItems = lineItems
+        , odProducts = products
+        , odShippingAddress = toAddressData shipping
+        , odBillingAddress = toAddressData <$> join maybeBilling
+        }
