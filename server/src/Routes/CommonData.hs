@@ -255,16 +255,16 @@ getCategorySales product = do
 
 data PredecessorCategory =
     PredecessorCategory
-        { cpCategoryId :: Key Category
-        , cpName :: T.Text
-        , cpSlug :: T.Text
+        { pcCategoryId :: Key Category
+        , pcName :: T.Text
+        , pcSlug :: T.Text
         } deriving (Show)
 
 instance ToJSON PredecessorCategory where
-    toJSON PredecessorCategory { cpCategoryId, cpName, cpSlug } =
-        object [ "id" .= toJSON cpCategoryId
-               , "name" .= toJSON cpName
-               , "slug" .= toJSON cpSlug
+    toJSON PredecessorCategory { pcCategoryId, pcName, pcSlug } =
+        object [ "id" .= toJSON pcCategoryId
+               , "name" .= toJSON pcName
+               , "slug" .= toJSON pcSlug
                ]
 
 categoryToPredecessor :: Entity Category -> PredecessorCategory
