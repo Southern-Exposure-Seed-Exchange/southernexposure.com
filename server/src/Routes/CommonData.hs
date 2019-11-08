@@ -31,6 +31,10 @@ module Routes.CommonData
     , AddressData(..)
     , fromAddressData
     , toAddressData
+    , OrderDetails(..)
+    , CheckoutOrder(..)
+    , toCheckoutOrder
+    , CheckoutProduct(..)
     ) where
 
 import Prelude hiding (product)
@@ -43,7 +47,7 @@ import Data.List (intersect)
 import Data.Maybe (mapMaybe, listToMaybe, fromMaybe)
 import Data.Monoid ((<>))
 import Data.Ratio ((%))
-import Data.Time (getCurrentTime)
+import Data.Time (UTCTime, getCurrentTime)
 import Database.Persist ((==.), (>=.), (<=.), Entity(..), SelectOpt(Asc), selectList, getBy)
 import Numeric.Natural (Natural)
 
@@ -760,3 +764,71 @@ toAddressData (Entity addressId address) =
         , adCountry = addressCountry address
         , adIsDefault = addressIsDefault address
         }
+
+
+-- Order Details
+
+
+data OrderDetails =
+    OrderDetails
+        { odOrder :: CheckoutOrder
+        , odLineItems :: [Entity OrderLineItem]
+        , odProducts :: [CheckoutProduct]
+        , odShippingAddress :: AddressData
+        , odBillingAddress :: Maybe AddressData
+        }
+
+instance ToJSON OrderDetails where
+    toJSON details =
+        object
+            [ "order" .= odOrder details
+            , "lineItems" .= odLineItems details
+            , "products" .= odProducts details
+            , "shippingAddress" .= odShippingAddress details
+            , "billingAddress" .= odBillingAddress details
+            ]
+
+data CheckoutOrder =
+    CheckoutOrder
+        { coStatus :: OrderStatus
+        , coComment :: T.Text
+        , coTaxDescription :: T.Text
+        , coCreatedAt :: UTCTime
+        }
+
+instance ToJSON CheckoutOrder where
+    toJSON order =
+        object
+            [ "status" .= coStatus order
+            , "comment" .= coComment order
+            , "taxDescription" .= coTaxDescription order
+            , "createdAt" .= coCreatedAt order
+            ]
+
+toCheckoutOrder :: Order -> CheckoutOrder
+toCheckoutOrder order =
+    CheckoutOrder
+        { coStatus = orderStatus order
+        , coComment = orderCustomerComment order
+        , coTaxDescription = orderTaxDescription order
+        , coCreatedAt = orderCreatedAt order
+        }
+
+data CheckoutProduct =
+    CheckoutProduct
+        { cpName :: T.Text
+        , cpLotSize :: Maybe LotSize
+        , cpQuantity :: Natural
+        , cpPrice :: Cents
+        , cpTax :: Cents
+        }
+
+instance ToJSON CheckoutProduct where
+    toJSON prod =
+        object
+            [ "name" .= cpName prod
+            , "lotSize" .= cpLotSize prod
+            , "quantity" .= cpQuantity prod
+            , "price" .= cpPrice prod
+            , "tax" .= cpTax prod
+            ]

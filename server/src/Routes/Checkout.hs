@@ -26,7 +26,6 @@ import Database.Persist
     ( (==.), (=.), (-=.), Entity(..), insert, insert_, insertEntity, get, getBy
     , selectList, update, updateWhere, delete, deleteWhere, count
     )
-import Numeric.Natural (Natural)
 import Servant ((:<|>)(..), (:>), AuthProtect, JSON, Post, ReqBody, err404)
 import Web.Stripe ((-&-), StripeConfig, stripe)
 import Web.Stripe.Card (createCustomerCardByToken, updateCustomerCard, getCustomerCards)
@@ -42,6 +41,7 @@ import Routes.CommonData
     ( AuthorizationData, toAuthorizationData, CartItemData(..), CartCharges(..)
     , CartCharge(..), getCartItems, getCharges, AddressData(..), toAddressData
     , fromAddressData, ShippingCharge(..), VariantData(..), getVariantPrice
+    , OrderDetails(..), toCheckoutOrder, CheckoutProduct(..)
     )
 import Routes.Utils (hashPassword, generateUniqueToken)
 import Validation (Validation(..))
@@ -988,70 +988,6 @@ createProducts maybeTaxRate items orderId =
 -- TODO: Move to Customers Module or make Orders Module
 -- (used for My Account Order Details page as well)
 
-
-data OrderDetails =
-    OrderDetails
-        { odOrder :: CheckoutOrder
-        , odLineItems :: [Entity OrderLineItem]
-        , odProducts :: [CheckoutProduct]
-        , odShippingAddress :: AddressData
-        , odBillingAddress :: Maybe AddressData
-        }
-
-instance ToJSON OrderDetails where
-    toJSON details =
-        object
-            [ "order" .= odOrder details
-            , "lineItems" .= odLineItems details
-            , "products" .= odProducts details
-            , "shippingAddress" .= odShippingAddress details
-            , "billingAddress" .= odBillingAddress details
-            ]
-
-data CheckoutOrder =
-    CheckoutOrder
-        { coStatus :: OrderStatus
-        , coComment :: T.Text
-        , coTaxDescription :: T.Text
-        , coCreatedAt :: UTCTime
-        }
-
-instance ToJSON CheckoutOrder where
-    toJSON order =
-        object
-            [ "status" .= coStatus order
-            , "comment" .= coComment order
-            , "taxDescription" .= coTaxDescription order
-            , "createdAt" .= coCreatedAt order
-            ]
-
-toCheckoutOrder :: Order -> CheckoutOrder
-toCheckoutOrder order =
-    CheckoutOrder
-        { coStatus = orderStatus order
-        , coComment = orderCustomerComment order
-        , coTaxDescription = orderTaxDescription order
-        , coCreatedAt = orderCreatedAt order
-        }
-
-data CheckoutProduct =
-    CheckoutProduct
-        { cpName :: T.Text
-        , cpLotSize :: Maybe LotSize
-        , cpQuantity :: Natural
-        , cpPrice :: Cents
-        , cpTax :: Cents
-        }
-
-instance ToJSON CheckoutProduct where
-    toJSON prod =
-        object
-            [ "name" .= cpName prod
-            , "lotSize" .= cpLotSize prod
-            , "quantity" .= cpQuantity prod
-            , "price" .= cpPrice prod
-            , "tax" .= cpTax prod
-            ]
 
 newtype SuccessParameters =
     SuccessParameters
