@@ -310,6 +310,9 @@ fetchLocationsOnce pageData =
         RemoteData.Success _ ->
             ( pageData, Cmd.none )
 
+        RemoteData.Loading ->
+            ( pageData, Cmd.none )
+
         _ ->
             ( { pageData | locations = RemoteData.Loading }
             , getAddressLocations
