@@ -873,7 +873,8 @@ makeOrders mysql = do
         -> ((T.Text, Maybe Scientific), [OrderLineItem])
     makeLineItem (taxInfo, items) [MySQLText title, MySQLDecimal dollars, MySQLText lineType] =
         let cents = dollarsToCents dollars
-            make type_ = (taxInfo, OrderLineItem (toSqlKey 0) type_ title cents : items)
+            cleanedTitle = T.replace ":" "" title
+            make type_ = (taxInfo, OrderLineItem (toSqlKey 0) type_ cleanedTitle cents : items)
             discard = (taxInfo, items)
         in  case lineType of
             "ot_total" ->
@@ -883,7 +884,7 @@ makeOrders mysql = do
             "ot_shipping" ->
                 make ShippingLine
             "ot_tax" ->
-                ((title, Just dollars), items)
+                ((cleanedTitle, Just dollars), items)
             "ot_coupon" ->
                 ( taxInfo
                 , OrderLineItem (toSqlKey 0) CouponDiscountLine
