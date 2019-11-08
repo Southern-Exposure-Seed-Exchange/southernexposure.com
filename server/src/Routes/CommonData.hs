@@ -317,14 +317,14 @@ data AuthorizationData =
     AuthorizationData
         { adId :: CustomerId
         , adEmail :: T.Text
-        , adToken :: T.Text
+        , adIsAdmin :: Bool
         } deriving (Show)
 
 instance ToJSON AuthorizationData where
     toJSON authData =
         object [ "id" .= toJSON (adId authData)
                , "email" .= toJSON (adEmail authData)
-               , "token" .= toJSON (adToken authData)
+               , "isAdmin" .= toJSON (adIsAdmin authData)
                ]
 
 toAuthorizationData :: Entity Customer -> AuthorizationData
@@ -332,7 +332,7 @@ toAuthorizationData (Entity customerId customer) =
     AuthorizationData
         { adId = customerId
         , adEmail = customerEmail customer
-        , adToken = customerAuthToken customer
+        , adIsAdmin = customerIsAdmin customer
         }
 
 

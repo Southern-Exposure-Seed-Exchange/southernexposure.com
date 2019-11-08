@@ -3,6 +3,7 @@ module User exposing
     , User
     , UserId(..)
     , decoder
+    , isAdmin
     , storeDetails
     , unauthorized
     )
@@ -23,6 +24,7 @@ type AuthStatus
 type alias User =
     { id : UserId
     , email : String
+    , isAdmin : Bool
     }
 
 
@@ -31,13 +33,24 @@ unauthorized =
     Anonymous
 
 
+isAdmin : AuthStatus -> Bool
+isAdmin auth =
+    case auth of
+        Anonymous ->
+            False
+
+        Authorized user ->
+            user.isAdmin
+
+
 decoder : Decoder AuthStatus
 decoder =
     let
         authorizedUserDecoder =
-            Decode.map2 User
+            Decode.map3 User
                 (Decode.field "id" <| Decode.map UserId Decode.int)
                 (Decode.field "email" Decode.string)
+                (Decode.field "isAdmin" Decode.bool)
                 |> Decode.map Authorized
     in
     Decode.oneOf
