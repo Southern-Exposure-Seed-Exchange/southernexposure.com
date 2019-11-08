@@ -137,6 +137,12 @@ view route pageData =
                 Admin (OrderList _) ->
                     [ activeItem "Orders" ]
 
+                Admin (AdminOrderDetails orderId) ->
+                    [ inactiveItem "Orders"
+                        (Admin <| OrderList { page = 1, perPage = 50, query = "" })
+                    , activeItem <| "Order #" ++ String.fromInt orderId
+                    ]
+
                 NotFound ->
                     singleItem "Page Not Found"
 

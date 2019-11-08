@@ -59,7 +59,7 @@ view ({ route, pageData, navigationData, zone } as model) =
                         div [ class "admin container-fluid" ]
                             [ div [ class "row" ]
                                 [ div [ class "col" ] <|
-                                    h2 [] [ text <| adminTitle adminRoute ]
+                                    renderAdminTitle adminRoute
                                         :: pageContent
                                 ]
                             ]
@@ -74,6 +74,14 @@ view ({ route, pageData, navigationData, zone } as model) =
                     , SiteSidebar.view route
                     ]
                 ]
+
+        renderAdminTitle adminRoute =
+            case adminRoute of
+                AdminOrderDetails _ ->
+                    text ""
+
+                _ ->
+                    h2 [] [ text <| adminTitle adminRoute ]
 
         pageContent =
             case route of
@@ -185,6 +193,10 @@ view ({ route, pageData, navigationData, zone } as model) =
                     withIntermediateText (\locs -> OrderAdmin.list zone locs query model.orderSearchForm pageData.adminOrderList)
                         pageData.locations
                         |> List.map (Html.map OrderSearchMsg)
+
+                Admin (AdminOrderDetails orderId) ->
+                    RemoteData.map2 Tuple.pair pageData.locations pageData.adminOrderDetails
+                        |> withIntermediateText (apply <| OrderAdmin.details zone orderId)
 
                 NotFound ->
                     notFoundView
@@ -311,6 +323,9 @@ view ({ route, pageData, navigationData, zone } as model) =
 
                 OrderList _ ->
                     "Orders"
+
+                AdminOrderDetails orderId ->
+                    "Order #" ++ String.fromInt orderId
 
         -- TODO: Have "Error" & "Loading" titles?
         getFromPageData :

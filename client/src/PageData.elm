@@ -90,6 +90,7 @@ type alias PageData =
     , adminPageList : WebData AdminPageListData
     , adminEditPage : WebData AdminEditPageData
     , adminOrderList : Paginated OrderData String ()
+    , adminOrderDetails : WebData OrderDetails
     }
 
 
@@ -131,6 +132,7 @@ initial =
     , adminPageList = RemoteData.NotAsked
     , adminEditPage = RemoteData.NotAsked
     , adminOrderList = ordersPaginate
+    , adminOrderDetails = RemoteData.NotAsked
     }
 
 

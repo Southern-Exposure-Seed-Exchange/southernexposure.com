@@ -295,6 +295,11 @@ fetchDataForRoute ({ route, pageData, key } as model) =
                         |> Tuple.mapSecond (Cmd.map AdminOrderPaginationMsg)
                         |> updateAndCommand fetchLocationsOnce
 
+                Admin (AdminOrderDetails orderId) ->
+                    { pageData | adminOrderDetails = RemoteData.Loading }
+                        |> fetchLocationsOnce
+                        |> batchCommand (getAdminOrderDetails orderId)
+
                 NotFound ->
                     doNothing
 
@@ -511,6 +516,13 @@ getAdminEditPageData pageId =
     Api.get (Api.AdminEditPageData pageId)
         |> Api.withJsonResponse PageData.adminEditPageDataDecoder
         |> Api.sendRequest GetAdminEditPageData
+
+
+getAdminOrderDetails : Int -> Cmd Msg
+getAdminOrderDetails orderId =
+    Api.get (Api.AdminOrderDetails orderId)
+        |> Api.withJsonResponse PageData.orderDetailsDecoder
+        |> Api.sendRequest GetAdminOrderDetails
 
 
 
@@ -1051,6 +1063,13 @@ update msg ({ pageData, key } as model) =
                 |> Tuple.mapFirst (\pd -> { model | pageData = pd })
                 |> extraCommand (always Ports.scrollToTop)
 
+        GetAdminOrderDetails response ->
+            let
+                updatedPageData =
+                    { pageData | adminOrderDetails = response }
+            in
+            ( { model | pageData = updatedPageData }, Cmd.none )
+
 
 {-| Update the current page number using the Paginated data.
 
@@ -1138,6 +1157,9 @@ resetForm oldRoute model =
 
                 OrderList _ ->
                     { model | orderSearchForm = OrderAdmin.initialSearchForm }
+
+                AdminOrderDetails _ ->
+                    model
     in
     case oldRoute of
         ProductDetails _ ->

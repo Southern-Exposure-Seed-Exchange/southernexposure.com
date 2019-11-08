@@ -83,3 +83,4 @@ type Msg
     | GetAdminPageList (WebData PageData.AdminPageListData)
     | GetAdminEditPageData (WebData PageData.AdminEditPageData)
     | AdminOrderPaginationMsg (Paginate.Msg OrderData ())
+    | GetAdminOrderDetails (WebData PageData.OrderDetails)

@@ -64,6 +64,7 @@ type AdminRoute
     | PageNew
     | PageEdit StaticPageId
     | OrderList { page : Int, perPage : Int, query : String }
+    | AdminOrderDetails Int
 
 
 parseRoute : Url -> Route
@@ -111,6 +112,7 @@ parseRoute =
                 , Url.map PageNew (Url.s "pages" </> Url.s "new")
                 , Url.map PageEdit (Url.s "pages" </> Url.s "edit" </> StaticPage.idPath)
                 , Url.map OrderList (Url.s "orders" </> orderQueryParser)
+                , Url.map AdminOrderDetails (Url.s "orders" </> Url.s "details" </> Url.int)
                 ]
 
         orderQueryParser =
@@ -280,6 +282,9 @@ reverseAdmin route =
                 OrderList _ ->
                     [ "orders" ]
 
+                AdminOrderDetails orderId ->
+                    [ "orders", "details", String.fromInt orderId ]
+
         queryStrings =
             case route of
                 Dashboard ->
@@ -309,6 +314,9 @@ reverseAdmin route =
                         , unlessDefault "perPage" (String.fromInt perPage) "50"
                         , unlessDefault "query" query ""
                         ]
+
+                AdminOrderDetails _ ->
+                    []
 
         unlessDefault name value default =
             if value == default then

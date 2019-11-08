@@ -1,22 +1,28 @@
 module Views.OrderAdmin exposing
     ( SearchForm
     , SearchMsg
+    , details
     , initialSearchForm
     , list
     , updateSearchForm
     )
 
-import Html exposing (Html, button, div, form, input, table, tbody, td, text, th, thead, tr)
+import Html exposing (Html, a, button, div, form, input, table, tbody, td, text, th, thead, tr)
 import Html.Attributes exposing (class, type_, value)
 import Html.Events exposing (onInput, onSubmit)
 import Locations exposing (AddressLocations)
+import OrderDetails
 import PageData exposing (OrderData)
 import Paginate exposing (Paginated)
 import Routing exposing (AdminRoute(..), Route(..))
 import Time exposing (Zone)
 import Views.Format as Format
 import Views.Pager as Pager
-import Views.Utils exposing (icon)
+import Views.Utils exposing (icon, routeLinkAttributes)
+
+
+
+-- LIST
 
 
 type alias SearchForm =
@@ -88,9 +94,10 @@ list zone locations currentQuery { query } orders =
                 , td [] [ text <| Maybe.withDefault "" <| Locations.regionName locations order.state ]
                 , td [] [ text <| PageData.statusText order.status ]
                 , td [] [ text <| Format.cents order.total ]
-
-                -- TODO: Link to view/refund page
-                , td [] [ text "View" ]
+                , td []
+                    [ a (routeLinkAttributes <| Admin <| AdminOrderDetails order.id)
+                        [ text "View" ]
+                    ]
                 ]
 
         pager =
@@ -128,4 +135,14 @@ list zone locations currentQuery { query } orders =
     , pager.viewTop ()
     , orderTable
     , pager.viewBottom ()
+    ]
+
+
+
+-- DETAILS
+
+
+details : Zone -> Int -> AddressLocations -> PageData.OrderDetails -> List (Html msg)
+details zone orderId locations orderDetails =
+    [ div [] <| OrderDetails.view zone orderId locations orderDetails
     ]

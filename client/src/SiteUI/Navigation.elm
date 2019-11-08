@@ -240,6 +240,12 @@ adminView route =
                         ( OrderList _, _ ) ->
                             False
 
+                        ( AdminOrderDetails _, OrderList _ ) ->
+                            True
+
+                        ( AdminOrderDetails _, _ ) ->
+                            False
+
                 _ ->
                     False
     in
