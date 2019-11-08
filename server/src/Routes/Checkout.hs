@@ -41,7 +41,7 @@ import Routes.CommonData
     ( AuthorizationData, toAuthorizationData, CartItemData(..), CartCharges(..)
     , CartCharge(..), getCartItems, getCharges, AddressData(..), toAddressData
     , fromAddressData, ShippingCharge(..), VariantData(..), getVariantPrice
-    , OrderDetails(..), toCheckoutOrder, CheckoutProduct(..)
+    , OrderDetails(..), toCheckoutOrder, getCheckoutProducts
     )
 import Routes.Utils (hashPassword, generateUniqueToken)
 import Validation (Validation(..))
@@ -1040,24 +1040,6 @@ getOrderAndAddress customerId orderId =
                 o E.^. OrderId E.==. E.val orderId E.&&.
                 o E.^. OrderCustomerId E.==. E.val customerId
             return (o, s, b)
-
-getCheckoutProducts :: OrderId -> AppSQL [CheckoutProduct]
-getCheckoutProducts orderId = do
-    orderProducts <- E.select $ E.from $
-        \(op `E.InnerJoin` v `E.InnerJoin` p) -> do
-            E.on $ p E.^. ProductId E.==. v E.^. ProductVariantProductId
-            E.on $ v E.^. ProductVariantId E.==. op E.^. OrderProductProductVariantId
-            E.where_ $ op E.^. OrderProductOrderId E.==. E.val orderId
-            return (op, v E.^. ProductVariantLotSize, p E.^. ProductName)
-    return $ map makeCheckoutProduct orderProducts
-    where makeCheckoutProduct (Entity _ orderProd, variantLotSize, productName) =
-            CheckoutProduct
-                { cpName = E.unValue productName
-                , cpLotSize = E.unValue variantLotSize
-                , cpQuantity = orderProductQuantity orderProd
-                , cpPrice = orderProductPrice orderProd
-                , cpTax = orderProductTax orderProd
-                }
 
 
 -- Utils

@@ -35,6 +35,7 @@ module Routes.CommonData
     , CheckoutOrder(..)
     , toCheckoutOrder
     , CheckoutProduct(..)
+    , getCheckoutProducts
     ) where
 
 import Prelude hiding (product)
@@ -832,3 +833,21 @@ instance ToJSON CheckoutProduct where
             , "price" .= cpPrice prod
             , "tax" .= cpTax prod
             ]
+
+getCheckoutProducts :: OrderId -> AppSQL [CheckoutProduct]
+getCheckoutProducts orderId = do
+    orderProducts <- E.select $ E.from $
+        \(op `E.InnerJoin` v `E.InnerJoin` p) -> do
+            E.on $ p E.^. ProductId E.==. v E.^. ProductVariantProductId
+            E.on $ v E.^. ProductVariantId E.==. op E.^. OrderProductProductVariantId
+            E.where_ $ op E.^. OrderProductOrderId E.==. E.val orderId
+            return (op, v E.^. ProductVariantLotSize, p E.^. ProductName)
+    return $ map makeCheckoutProduct orderProducts
+    where makeCheckoutProduct (Entity _ orderProd, variantLotSize, productName) =
+            CheckoutProduct
+                { cpName = E.unValue productName
+                , cpLotSize = E.unValue variantLotSize
+                , cpQuantity = orderProductQuantity orderProd
+                , cpPrice = orderProductPrice orderProd
+                , cpTax = orderProductTax orderProd
+                }
