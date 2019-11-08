@@ -1068,7 +1068,7 @@ type SuccessRoute =
     :> Post '[JSON] (Cookied OrderDetails)
 
 customerSuccessRoute :: WrappedAuthToken -> SuccessParameters -> App (Cookied OrderDetails)
-customerSuccessRoute token parameters = withValidatedCookie token $ \(Entity customerId _) -> do
+customerSuccessRoute token parameters = withValidatedCookie token $ \(Entity customerId _) ->
     eitherM handleError <=< try . runDB $ do
         (Entity orderId order, shipping, billing) <-
             getOrderAndAddress customerId (E.toSqlKey $ cspOrderId parameters)
