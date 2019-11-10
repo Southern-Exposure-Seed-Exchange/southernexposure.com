@@ -373,9 +373,15 @@ transformOrder (order, createdAt, customer, shipping, maybeBilling, maybeCoupon,
                      Just $ orderComment <> "\r\n\r\n---\r\n\r\n" <> "PRIORITY!"
                 else
                     nothingIfNull orderComment
+            instructions =
+                case orderAdminComments $ entityVal order of
+                    [] ->
+                        Nothing
+                    cs ->
+                        Just $ T.intercalate "\r\n\r\n---\r\n\r\n" cs
 
         in StoneEdgeOtherData
-            { seodOrderInstructions = Nothing
+            { seodOrderInstructions = instructions
             , seodComments = comments
             , seodCustomerId = Just . fromIntegral . fromSqlKey $ entityKey customer
             }

@@ -843,6 +843,7 @@ createOrder (Entity customerId customer) cartId shippingEntity billingId maybeSt
         , orderBillingAddressId = billingId
         , orderShippingAddressId = shippingId
         , orderCustomerComment = comment
+        , orderAdminComments = []
         , orderTaxDescription = maybe "" taxRateDescription maybeTaxRate
         , orderStripeChargeId = Nothing
         , orderStripeLastFour = Nothing

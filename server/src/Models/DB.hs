@@ -170,6 +170,7 @@ Order
     shippingAddressId AddressId
     taxDescription T.Text
     customerComment T.Text
+    adminComments [T.Text]
     couponId CouponId Maybe
     stripeChargeId StripeChargeId Maybe
     stripeLastFour T.Text Maybe

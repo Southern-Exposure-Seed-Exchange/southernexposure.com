@@ -1,3 +1,4 @@
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE Rank2Types #-}
@@ -672,6 +673,7 @@ makeOrders mysql = do
         , MySQLDecimal orderTotal, MySQLDecimal orderTax, nullableCustomerComment
         ] = do
             createdAt <- convertLocalTimeToUTC purchaseDate
+            adminComments <- getAdminComments orderId
             shippingAddress <-
                 if isAddressEmpty shippingName shippingStreet &&
                     isAddressEmpty customerName customerStreet then
@@ -711,6 +713,7 @@ makeOrders mysql = do
                     , orderShippingAddressId = toSqlKey 0
                     , orderTaxDescription = taxDescription
                     , orderCustomerComment = fromNullableText "" nullableCustomerComment
+                    , orderAdminComments = adminComments
                     , orderCouponId = Nothing
                     , orderStripeChargeId = Nothing
                     , orderStripeLastFour = Nothing
@@ -736,6 +739,20 @@ makeOrders mysql = do
     makeOrder args = error
         $ "Invalid arguments to makeOrder:\n\t"
             <> concatMap (\a -> show a <> "\n\t") args
+    getAdminComments :: Int32 -> IO [T.Text]
+    getAdminComments orderId = do
+        commentsQuery <- prepareStmt mysql . Query $
+            "SELECT comments FROM order_status_history "
+            <> "WHERE cusomter_notified='-1' AND comments != '' AND orders_id=?"
+        queryStmt mysql commentsQuery [MySQLInt32 orderId]
+            >>= Streams.toList . snd
+            >>= mapM (\case
+                        [MySQLText comment] ->
+                            return comment
+                        args ->
+                            error $ "Invalid arguments to getAdminComments:\n\t"
+                                <> concatMap (\a -> show a <> "\n\t") args
+                     )
     getOrderStatus :: Int32 -> OrderStatus
     getOrderStatus status =
         case status of
