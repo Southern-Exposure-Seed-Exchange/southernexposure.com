@@ -168,23 +168,31 @@ orderTable order productData lineItems =
                 productData
         tax =
             sum $ map (\(op, _, _) -> orderProductTax op) productData
-        (maybeShippingLine, maybePriorityCharge, maybeStoreCredit, maybeMemberDiscount, maybeCouponDiscount, surcharges) =
-            foldl (\(shippingLine, priorityLine, creditLine, memberLine, couponLine, surchargeLines) lineItem ->
+        -- TODO: turn this tuple into a type, & do this in a separate
+        -- function in the Models.Utils module. Use that function & type in
+        -- the OrderDetails route so we don't have to do the same exact
+        -- thing in the client code.
+        (maybeShippingLine, maybePriorityCharge, maybeStoreCredit, maybeMemberDiscount, maybeCouponDiscount, refunds, surcharges) =
+            foldl (\(shippingLine, priorityLine, creditLine, memberLine, couponLine, refundLines, surchargeLines) lineItem ->
                 case orderLineItemType lineItem of
                     ShippingLine ->
-                        (Just lineItem, priorityLine, creditLine, memberLine, couponLine, surchargeLines)
+                        (Just lineItem, priorityLine, creditLine, memberLine, couponLine, refundLines, surchargeLines)
                     PriorityShippingLine ->
-                        (shippingLine, Just lineItem, creditLine, memberLine, couponLine, surchargeLines)
+                        (shippingLine, Just lineItem, creditLine, memberLine, couponLine, refundLines, surchargeLines)
                     StoreCreditLine ->
-                        (shippingLine, priorityLine, Just lineItem, memberLine, couponLine, surchargeLines)
+                        (shippingLine, priorityLine, Just lineItem, memberLine, couponLine, refundLines, surchargeLines)
                     SurchargeLine ->
-                        (shippingLine, priorityLine, creditLine, memberLine, couponLine, lineItem : surchargeLines)
+                        (shippingLine, priorityLine, creditLine, memberLine, couponLine, refundLines, lineItem : surchargeLines)
                     MemberDiscountLine ->
-                        (shippingLine, priorityLine, creditLine, Just lineItem, couponLine, surchargeLines)
+                        (shippingLine, priorityLine, creditLine, Just lineItem, couponLine, refundLines, surchargeLines)
                     CouponDiscountLine ->
-                        (shippingLine, priorityLine, creditLine, memberLine, Just lineItem, surchargeLines)
+                        (shippingLine, priorityLine, creditLine, memberLine, Just lineItem, refundLines, surchargeLines)
+                    RefundLine ->
+                        (shippingLine, priorityLine, creditLine, memberLine, couponLine, lineItem : refundLines, surchargeLines)
 
-            ) (Nothing, Nothing, Nothing, Nothing, Nothing, []) lineItems
+
+
+            ) (Nothing, Nothing, Nothing, Nothing, Nothing, [], []) lineItems
         total =
             subTotal + tax + sum (map orderLineItemAmount lineItems)
     in
@@ -209,6 +217,7 @@ orderTable order productData lineItems =
                 discountRow maybeStoreCredit
                 discountRow maybeMemberDiscount
                 discountRow maybeCouponDiscount
+                mapM_ (discountRow . Just) refunds
                 H.tr $ do
                     H.th H.! A.colspan "4" H.! alignRight $ "Total"
                     H.th H.! alignLeft $ H.text $ formatCents total

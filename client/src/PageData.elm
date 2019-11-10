@@ -453,6 +453,9 @@ orderTotals { lineItems, products } =
 
                         CouponDiscount ->
                             ( centsMap2 (+) charge.amount cs, ds )
+
+                        Refund ->
+                            ( centsMap2 (+) charge.amount cs, ds )
                 )
                 ( Cents 0, Cents 0 )
                 lineItems
@@ -566,6 +569,7 @@ type LineItemType
     | MemberDiscount
     | PriorityShipping
     | CouponDiscount
+    | Refund
 
 
 lineItemTypeDecoder : Decoder LineItemType
@@ -590,6 +594,9 @@ lineItemTypeDecoder =
 
                 "CouponDiscountLine" ->
                     Decode.succeed CouponDiscount
+
+                "RefundLine" ->
+                    Decode.succeed Refund
 
                 _ ->
                     Decode.fail <| "Invalid LineItemType: " ++ str

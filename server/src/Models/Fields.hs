@@ -409,7 +409,8 @@ data LineItemType
     | StoreCreditLine
     | MemberDiscountLine
     | CouponDiscountLine
-    deriving (Show, Eq, Read, Generic)
+    | RefundLine
+    deriving (Show, Eq, Read, Generic, Enum, Bounded)
 
 instance ToJSON LineItemType
 instance FromJSON LineItemType
@@ -419,7 +420,23 @@ derivePersistField "LineItemType"
 -- | An enumeration of `LineItemType`s containing only credits.
 creditLineItemTypes :: [LineItemType]
 creditLineItemTypes =
-    [StoreCreditLine, MemberDiscountLine, CouponDiscountLine]
+    filter isCreditLine [minBound .. maxBound]
+ where
+    isCreditLine = \case
+        StoreCreditLine ->
+            True
+        MemberDiscountLine ->
+            True
+        CouponDiscountLine ->
+            True
+        RefundLine ->
+            True
+        ShippingLine ->
+            False
+        PriorityShippingLine ->
+            False
+        SurchargeLine ->
+            False
 
 
 

@@ -343,6 +343,8 @@ transformOrder (order, createdAt, customer, shipping, maybeBilling, maybeCoupon,
                             (ds, ss, mShip, mCoupon)
                         MemberDiscountLine ->
                             (item : ds, ss, mShip, mCoupon)
+                        RefundLine ->
+                            (ds, ss, mShip, mCoupon)
                 ) ([], [], Nothing, Nothing) items
             subTotal = productTotal - sum (map (orderLineItemAmount . entityVal) discounts)
             grandTotal =
