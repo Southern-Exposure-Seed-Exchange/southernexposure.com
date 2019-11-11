@@ -1007,14 +1007,14 @@ type SuccessRoute =
 customerSuccessRoute :: WrappedAuthToken -> SuccessParameters -> App (Cookied OrderDetails)
 customerSuccessRoute token parameters = withValidatedCookie token $ \(Entity customerId _) ->
     eitherM handleError <=< try . runDB $ do
-        (Entity orderId order, shipping, billing) <-
+        (e@(Entity orderId _), shipping, billing) <-
             getOrderAndAddress customerId (E.toSqlKey $ cspOrderId parameters)
                 >>= maybe (throwM OrderNotFound) return
         lineItems <-
             selectList [OrderLineItemOrderId ==. orderId] []
         products <- getCheckoutProducts orderId
         return OrderDetails
-            { odOrder = toCheckoutOrder order
+            { odOrder = toCheckoutOrder e
             , odLineItems = lineItems
             , odProducts = products
             , odShippingAddress = toAddressData shipping

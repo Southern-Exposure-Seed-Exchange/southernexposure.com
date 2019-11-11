@@ -664,7 +664,7 @@ data AddressData =
         , adZipCode :: T.Text
         , adCountry :: Country
         , adIsDefault :: Bool
-        } deriving (Eq)
+        } deriving (Eq, Show)
 
 instance FromJSON AddressData where
     parseJSON = withObject "AddressData" $ \v ->
@@ -777,7 +777,7 @@ data OrderDetails =
         , odProducts :: [CheckoutProduct]
         , odShippingAddress :: AddressData
         , odBillingAddress :: Maybe AddressData
-        }
+        } deriving (Show)
 
 instance ToJSON OrderDetails where
     toJSON details =
@@ -791,25 +791,28 @@ instance ToJSON OrderDetails where
 
 data CheckoutOrder =
     CheckoutOrder
-        { coStatus :: OrderStatus
+        { coId :: OrderId
+        , coStatus :: OrderStatus
         , coComment :: T.Text
         , coTaxDescription :: T.Text
         , coCreatedAt :: UTCTime
-        }
+        } deriving (Show)
 
 instance ToJSON CheckoutOrder where
     toJSON order =
         object
-            [ "status" .= coStatus order
+            [ "id" .= coId order
+            , "status" .= coStatus order
             , "comment" .= coComment order
             , "taxDescription" .= coTaxDescription order
             , "createdAt" .= coCreatedAt order
             ]
 
-toCheckoutOrder :: Order -> CheckoutOrder
-toCheckoutOrder order =
+toCheckoutOrder :: Entity Order -> CheckoutOrder
+toCheckoutOrder (Entity orderId order) =
     CheckoutOrder
-        { coStatus = orderStatus order
+        { coId = orderId
+        , coStatus = orderStatus order
         , coComment = orderCustomerComment order
         , coTaxDescription = orderTaxDescription order
         , coCreatedAt = orderCreatedAt order
@@ -822,7 +825,7 @@ data CheckoutProduct =
         , cpQuantity :: Natural
         , cpPrice :: Cents
         , cpTax :: Cents
-        }
+        } deriving (Show)
 
 instance ToJSON CheckoutProduct where
     toJSON prod =
