@@ -521,7 +521,7 @@ getAdminEditPageData pageId =
 getAdminOrderDetails : Int -> Cmd Msg
 getAdminOrderDetails orderId =
     Api.get (Api.AdminOrderDetails orderId)
-        |> Api.withJsonResponse PageData.orderDetailsDecoder
+        |> Api.withJsonResponse PageData.adminOrderDetailsDecoder
         |> Api.sendRequest GetAdminOrderDetails
 
 
@@ -825,6 +825,11 @@ update msg ({ pageData, key } as model) =
             OrderAdmin.updateSearchForm key subMsg model.orderSearchForm
                 |> Tuple.mapFirst (\form -> { model | orderSearchForm = form })
                 |> Tuple.mapSecond (Cmd.map OrderSearchMsg)
+
+        OrderDetailsMsg subMsg ->
+            OrderAdmin.updateDetailsForm key pageData.adminOrderDetails subMsg model.orderDetailsForm
+                |> Tuple.mapFirst (\form -> { model | orderDetailsForm = form })
+                |> Tuple.mapSecond (Cmd.map OrderDetailsMsg)
 
         ReAuthorize response ->
             case response of
@@ -1159,7 +1164,7 @@ resetForm oldRoute model =
                     { model | orderSearchForm = OrderAdmin.initialSearchForm }
 
                 AdminOrderDetails _ ->
-                    model
+                    { model | orderDetailsForm = OrderAdmin.initialDetailsForm }
     in
     case oldRoute of
         ProductDetails _ ->

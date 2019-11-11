@@ -196,7 +196,8 @@ view ({ route, pageData, navigationData, zone } as model) =
 
                 Admin (AdminOrderDetails orderId) ->
                     RemoteData.map2 Tuple.pair pageData.locations pageData.adminOrderDetails
-                        |> withIntermediateText (apply <| OrderAdmin.details zone orderId)
+                        |> withIntermediateText (apply <| OrderAdmin.details zone orderId model.orderDetailsForm)
+                        |> List.map (Html.map OrderDetailsMsg)
 
                 NotFound ->
                     notFoundView

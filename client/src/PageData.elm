@@ -1,11 +1,13 @@
 module PageData exposing
     ( AddressDetails
     , AdminCategoryListData
+    , AdminComment
     , AdminEditCategoryData
     , AdminEditPageData
     , AdminListCategory(..)
     , AdminListPage
     , AdminNewCategoryData
+    , AdminOrderDetails
     , AdminPageListData
     , AdvancedSearch
     , CartDetails
@@ -29,6 +31,7 @@ module PageData exposing
     , adminEditPageDataDecoder
     , adminListPageDecoder
     , adminNewCategoryDataDecoder
+    , adminOrderDetailsDecoder
     , adminPageListDataDecoder
     , advancedSearchDecoder
     , blankCartDetails
@@ -90,7 +93,7 @@ type alias PageData =
     , adminPageList : WebData AdminPageListData
     , adminEditPage : WebData AdminEditPageData
     , adminOrderList : Paginated OrderData String ()
-    , adminOrderDetails : WebData OrderDetails
+    , adminOrderDetails : WebData AdminOrderDetails
     }
 
 
@@ -473,7 +476,8 @@ orderTotals { lineItems, products } =
 
 
 type alias Order =
-    { status : OrderStatus
+    { id : Int
+    , status : OrderStatus
     , comment : String
     , taxDescription : String
     , createdAt : Posix
@@ -482,7 +486,8 @@ type alias Order =
 
 orderDecoder : Decoder Order
 orderDecoder =
-    Decode.map4 Order
+    Decode.map5 Order
+        (Decode.field "id" Decode.int)
         (Decode.field "status" orderStatusDecoder)
         (Decode.field "comment" Decode.string)
         (Decode.field "taxDescription" Decode.string)
@@ -783,6 +788,32 @@ orderDataDecoder =
         (Decode.field "shippingRegion" Locations.regionDecoder)
         (Decode.field "orderStatus" orderStatusDecoder)
         (Decode.field "orderTotal" centsDecoder)
+
+
+type alias AdminOrderDetails =
+    { details : OrderDetails
+    , adminComments : List AdminComment
+    }
+
+
+adminOrderDetailsDecoder : Decoder AdminOrderDetails
+adminOrderDetailsDecoder =
+    Decode.map2 AdminOrderDetails
+        (Decode.field "details" orderDetailsDecoder)
+        (Decode.field "adminComments" <| Decode.list adminCommentDecoder)
+
+
+type alias AdminComment =
+    { time : Posix
+    , content : String
+    }
+
+
+adminCommentDecoder : Decoder AdminComment
+adminCommentDecoder =
+    Decode.map2 AdminComment
+        (Decode.field "time" Iso8601.decoder)
+        (Decode.field "content" Decode.string)
 
 
 

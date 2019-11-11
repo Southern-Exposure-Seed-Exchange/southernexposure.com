@@ -46,6 +46,7 @@ type alias Model =
     , newPageForm : StaticPageAdmin.NewForm
     , editPageForm : StaticPageAdmin.EditForm
     , orderSearchForm : OrderAdmin.SearchForm
+    , orderDetailsForm : OrderAdmin.DetailsForm
     , cartItemCount : Int
     , maybeSessionToken : Maybe String
     , currentUser : AuthStatus
@@ -82,6 +83,7 @@ initial key route =
     , newPageForm = StaticPageAdmin.initialNewForm
     , editPageForm = StaticPageAdmin.initialEditForm
     , orderSearchForm = OrderAdmin.initialSearchForm
+    , orderDetailsForm = OrderAdmin.initialDetailsForm
     , cartItemCount = 0
     , maybeSessionToken = Nothing
     , currentUser = User.unauthorized

@@ -81,6 +81,8 @@ type Endpoint
     | AdminEditPage
     | AdminOrderList Int Int String
     | AdminOrderDetails Int
+    | AdminOrderComment
+    | AdminOrderRefund
 
 
 toUrl : Endpoint -> String
@@ -225,6 +227,12 @@ toUrl endpoint =
 
                 AdminOrderDetails orderId ->
                     joinPath [ "admin", "orders", "details", String.fromInt orderId ]
+
+                AdminOrderComment ->
+                    joinPath [ "admin", "orders", "comment" ]
+
+                AdminOrderRefund ->
+                    joinPath [ "admin", "orders", "refund" ]
     in
     "/api" ++ endpointUrl
 

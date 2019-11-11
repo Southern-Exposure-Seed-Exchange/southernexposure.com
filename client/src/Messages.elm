@@ -61,6 +61,7 @@ type Msg
     | NewPageMsg StaticPageAdmin.NewMsg
     | EditPageMsg StaticPageAdmin.EditMsg
     | OrderSearchMsg OrderAdmin.SearchMsg
+    | OrderDetailsMsg OrderAdmin.DetailsMsg
       -- API Requests
     | ReAuthorize (WebData User.AuthStatus)
     | LogOutResponse (WebData ())
@@ -83,4 +84,4 @@ type Msg
     | GetAdminPageList (WebData PageData.AdminPageListData)
     | GetAdminEditPageData (WebData PageData.AdminEditPageData)
     | AdminOrderPaginationMsg (Paginate.Msg OrderData ())
-    | GetAdminOrderDetails (WebData PageData.OrderDetails)
+    | GetAdminOrderDetails (WebData PageData.AdminOrderDetails)
