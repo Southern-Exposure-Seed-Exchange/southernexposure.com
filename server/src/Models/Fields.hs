@@ -13,6 +13,7 @@ import Data.ISO3166_CountryCodes (CountryCode)
 import Data.Monoid ((<>))
 import Data.Ratio ((%), numerator, denominator)
 import Data.StateCodes (StateCode)
+import Data.Time (UTCTime)
 import Database.Persist (PersistField(..))
 import Database.Persist.Sql (PersistFieldSql(..), SqlType(SqlString))
 import Database.Persist.TH (derivePersistField)
@@ -437,6 +438,23 @@ creditLineItemTypes =
             False
         SurchargeLine ->
             False
+
+
+-- | Admin comments added to an Order, containing the message & creation time.
+data AdminOrderComment =
+    AdminOrderComment
+        { adminCommentContent :: T.Text
+        , adminCommentTime :: UTCTime
+        } deriving (Show, Read, Generic)
+
+derivePersistField "AdminOrderComment"
+
+instance ToJSON AdminOrderComment where
+    toJSON comment =
+        object
+            [ "content" .= adminCommentContent comment
+            , "time" .= adminCommentTime comment
+            ]
 
 
 

@@ -5,6 +5,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeApplications #-}
 module Routes.StoneEdge
     (
@@ -30,7 +31,9 @@ import Data.Maybe (fromMaybe, mapMaybe, listToMaybe, maybeToList)
 import Data.Monoid ((<>))
 import Data.Text (Text)
 import Data.Text.Encoding (decodeUtf8)
-import Data.Time (LocalTime, getTimeZone, utcToLocalTime)
+import Data.Time
+    ( UTCTime, LocalTime, getTimeZone, utcToLocalTime, formatTime, defaultTimeLocale
+    )
 import Database.Persist.Sql
     ( (>.), (<-.), (==.), Entity(..), count, toSqlKey, fromSqlKey, selectList
     )
@@ -42,7 +45,7 @@ import Config
 import Models
 import Models.Fields
     ( Cents(..), Country(..), Region(..), OrderStatus(..), LineItemType(..)
-    , StripeChargeId(..), renderLotSize
+    , StripeChargeId(..), AdminOrderComment(..), renderLotSize
     )
 import Server
 import StoneEdge
@@ -200,16 +203,22 @@ downloadOrdersRoute DownloadOrdersRequest { dorLastOrder, dorStartNumber, dorBat
             limitAndOffset
             return (o, c, sa, ba, cp)
         forM orders $ \(o, c, sa, ba, cp) -> do
-            let utcCreated = orderCreatedAt $ entityVal o
-            timeZone <- liftIO $ getTimeZone utcCreated
-            let createdAt = utcToLocalTime timeZone utcCreated
+            createdAt <- convertToLocalTime $ orderCreatedAt $ entityVal o
+            adminComments <- forM (orderAdminComments $ entityVal o) $ \comment ->
+                (adminCommentContent comment,)
+                    <$> convertToLocalTime (adminCommentTime comment)
             lineItems <- selectList [OrderLineItemOrderId ==. entityKey o] []
             products <- E.select $ E.from $ \(op `E.InnerJoin` p `E.InnerJoin` v) -> do
                 E.on (op E.^. OrderProductProductVariantId E.==. v E.^. ProductVariantId)
                 E.on (v E.^. ProductVariantProductId E.==. p E.^. ProductId)
                 return (op, p, v)
-            return (o, createdAt, c, sa, ba, cp, lineItems, products)
+            return (o, createdAt, c, sa, ba, cp, lineItems, products, adminComments)
     return . DownloadOrdersResponse $ map transformOrder rawOrderData
+    where
+        convertToLocalTime :: UTCTime -> AppSQL LocalTime
+        convertToLocalTime utcTime = do
+            timeZone <- liftIO $ getTimeZone utcTime
+            return $ utcToLocalTime timeZone utcTime
 
 transformOrder
     :: ( Entity Order
@@ -220,9 +229,10 @@ transformOrder
        , Maybe (Entity Coupon)
        , [Entity OrderLineItem]
        , [( Entity OrderProduct, Entity Product, Entity ProductVariant )]
+       , [( T.Text, LocalTime )]
        )
     -> StoneEdgeOrder
-transformOrder (order, createdAt, customer, shipping, maybeBilling, maybeCoupon, items, products) =
+transformOrder (order, createdAt, customer, shipping, maybeBilling, maybeCoupon, items, products, adminComments) =
     StoneEdgeOrder
         { seoOrderNumber = fromIntegral . fromSqlKey $ entityKey order
         , seoOrderDate = createdAt
@@ -374,17 +384,26 @@ transformOrder (order, createdAt, customer, shipping, maybeBilling, maybeCoupon,
                 else
                     nothingIfNull orderComment
             instructions =
-                case orderAdminComments $ entityVal order of
+                case adminComments of
                     [] ->
                         Nothing
                     cs ->
-                        Just $ T.intercalate "\r\n\r\n---\r\n\r\n" cs
+                        Just $ T.intercalate "\r\n\r\n---\r\n\r\n"
+                            $ map renderAdminComment cs
 
         in StoneEdgeOtherData
             { seodOrderInstructions = instructions
             , seodComments = comments
             , seodCustomerId = Just . fromIntegral . fromSqlKey $ entityKey customer
             }
+    renderAdminComment :: (T.Text, LocalTime) -> T.Text
+    renderAdminComment (comment, time) =
+        T.concat
+        [ "["
+        , T.pack $ formatTime defaultTimeLocale "%m/%d/%y %T" time
+        , "]: "
+        , comment
+        ]
 
 transformCoupon :: Entity Coupon -> Entity OrderLineItem -> Maybe StoneEdgeCoupon
 transformCoupon (Entity _ coupon) (Entity _ item) =

@@ -739,16 +739,20 @@ makeOrders mysql = do
     makeOrder args = error
         $ "Invalid arguments to makeOrder:\n\t"
             <> concatMap (\a -> show a <> "\n\t") args
-    getAdminComments :: Int32 -> IO [T.Text]
+    getAdminComments :: Int32 -> IO [AdminOrderComment]
     getAdminComments orderId = do
         commentsQuery <- prepareStmt mysql . Query $
-            "SELECT comments FROM order_status_history "
+            "SELECT comments, date_added FROM order_status_history "
             <> "WHERE cusomter_notified='-1' AND comments != '' AND orders_id=?"
         queryStmt mysql commentsQuery [MySQLInt32 orderId]
             >>= Streams.toList . snd
             >>= mapM (\case
-                        [MySQLText comment] ->
-                            return comment
+                        [MySQLText comment, MySQLDateTime localTime] -> do
+                            utcTime <- convertLocalTimeToUTC localTime
+                            return $ AdminOrderComment
+                                { adminCommentContent = comment
+                                , adminCommentTime = utcTime
+                                }
                         args ->
                             error $ "Invalid arguments to getAdminComments:\n\t"
                                 <> concatMap (\a -> show a <> "\n\t") args
