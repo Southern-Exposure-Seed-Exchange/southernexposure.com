@@ -1,4 +1,5 @@
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TupleSections #-}
@@ -9,47 +10,68 @@ module Routes.Admin.Orders
     , orderRoutes
     ) where
 
-import Control.Monad (forM, join)
-import Control.Monad.Trans (lift)
-import Data.Aeson (ToJSON(..), (.=), object)
+import Control.Exception.Safe (MonadThrow, Exception, try, throwM)
+import Control.Monad ((>=>), forM, join, void)
+import Control.Monad.Trans (MonadIO, lift, liftIO)
+import Data.Aeson (ToJSON(..), FromJSON(..), (.=), (.:), object, withObject)
+import Data.List (sortOn)
 import Data.Maybe (fromMaybe, listToMaybe)
 import Data.Monoid ((<>))
-import Data.Time (UTCTime)
-import Database.Persist
-    ( (==.), Entity(..), Filter, SelectOpt(..), count, get, selectList
-    , getEntity, getJustEntity
+import Data.Time
+    ( UTCTime, LocalTime, getCurrentTimeZone, getCurrentTime, formatTime
+    , defaultTimeLocale, utcToLocalTime
     )
-import Servant ((:<|>)(..), (:>), AuthProtect, QueryParam, Capture, Get, JSON, err404)
+import Database.Persist
+    ( (==.), (=.), Entity(..), Filter, SelectOpt(..), count, get, selectList
+    , getEntity, getJustEntity, insert, update
+    )
+import Servant
+    ( (:<|>)(..), (:>), AuthProtect, QueryParam, Capture, ReqBody, Get, Post
+    , JSON, err404
+    )
 import Text.Read (readMaybe)
+import Web.Stripe ((-&-), StripeError(..))
+import Web.Stripe.Refund (Amount(..), createRefund)
 
-import Auth (withAdminCookie, WrappedAuthToken, Cookied)
+import Auth (WrappedAuthToken, Cookied, withAdminCookie, validateAdminAndParameters)
 import Models
     ( OrderId, Order(..), OrderProduct(..), OrderLineItem(..), Customer(customerEmail)
     , Address(..), EntityField(..)
     )
-import Models.Fields (OrderStatus, Region, Cents(..), creditLineItemTypes)
+import Models.Fields
+    ( OrderStatus, Region, Cents(..), LineItemType(..), StripeChargeId(..)
+    , AdminOrderComment(..), creditLineItemTypes, formatCents
+    )
 import Routes.CommonData
     ( OrderDetails(..), toCheckoutOrder, getCheckoutProducts, toAddressData
     )
-import Server (App, AppSQL, runDB, serverError)
+import Server (App, AppSQL, runDB, serverError, stripeRequest)
+import Validation (Validation(..))
 
 import qualified Data.List as L
 import qualified Data.Text as T
 import qualified Database.Esqueleto as E
+import qualified Validation as V
 
 
 type OrderAPI =
          "list" :> OrderListRoute
     :<|> "details" :> OrderDetailsRoute
+    :<|> "comment" :> OrderCommentRoute
+    :<|> "refund" :> OrderRefundRoute
 
 type OrderRoutes =
          (WrappedAuthToken -> Maybe Int -> Maybe Int -> Maybe T.Text -> App (Cookied OrderListData))
-    :<|> (WrappedAuthToken -> OrderId -> App (Cookied OrderDetails))
+    :<|> (WrappedAuthToken -> OrderId -> App (Cookied AdminOrderDetails))
+    :<|> (WrappedAuthToken -> OrderCommentParameters -> App (Cookied OrderId))
+    :<|> (WrappedAuthToken -> OrderRefundParameters -> App (Cookied OrderId))
 
 orderRoutes :: OrderRoutes
 orderRoutes =
          orderListRoute
     :<|> orderDetailsRoute
+    :<|> orderCommentRoute
+    :<|> orderRefundRoute
 
 
 -- LIST
@@ -135,18 +157,7 @@ orderListRoute token maybePage maybePerPage maybeQuery = withAdminCookie token $
                         E.where_ $ makeQuery o c sa queryParts
                         return (o, c, sa)
             forM orders $ \(o@(Entity orderId order), c, sa) -> do
-                products <- selectList [OrderProductOrderId ==. orderId] []
-                lineItems <- selectList [OrderLineItemOrderId ==. orderId] []
-                let (credits, debits) =
-                        L.partition isCreditLine lineItems
-                    productTotal =
-                        sum $ map finalProductPrice products
-                    creditTotal =
-                        sum $ map (orderLineItemAmount . entityVal) credits
-                    debitTotal =
-                        sum $ map (orderLineItemAmount . entityVal) debits
-                    total =
-                        centsInt productTotal + centsInt debitTotal - centsInt creditTotal
+                total <- getOrderTotal orderId
                 customer <- getIfNothing (orderCustomerId order) c
                 shipAddr <- getIfNothing (orderShippingAddressId order) sa
                 return (o, customer, shipAddr, total)
@@ -187,18 +198,6 @@ orderListRoute token maybePage maybePerPage maybeQuery = withAdminCookie token $
     -- | Extract a row count by defaulting to 0 if no rows are returned.
     extractRowCount :: AppSQL [E.Value Int] -> AppSQL Int
     extractRowCount = fmap $ maybe 0 E.unValue . listToMaybe
-    -- | Is the line item a credit?
-    isCreditLine :: Entity OrderLineItem -> Bool
-    isCreditLine =
-        (`elem` creditLineItemTypes) . orderLineItemType . entityVal
-    -- | Caclulate the total price + tax for a Product.
-    finalProductPrice :: Entity OrderProduct -> Cents
-    finalProductPrice (Entity _ p) =
-        (fromIntegral (orderProductQuantity p) * orderProductPrice p) + orderProductTax p
-    -- | Convert Cents to an Integer so it can handle negative numbers.
-    centsInt :: Cents -> Integer
-    centsInt (Cents c) =
-        toInteger c
     -- | Try fetching a row if we haven't yet.
     getIfNothing :: (E.PersistEntityBackend a ~ E.SqlBackend, E.PersistEntity a)
         => E.Key a -> Maybe (Entity a) -> AppSQL (Maybe a)
@@ -228,19 +227,240 @@ orderListRoute token maybePage maybePerPage maybeQuery = withAdminCookie token $
 type OrderDetailsRoute =
        AuthProtect "cookie-auth"
     :> Capture "id" OrderId
-    :> Get '[JSON] (Cookied OrderDetails)
+    :> Get '[JSON] (Cookied AdminOrderDetails)
 
-orderDetailsRoute :: WrappedAuthToken -> OrderId -> App (Cookied OrderDetails)
+data AdminOrderDetails =
+    AdminOrderDetails
+        { aodDetails :: OrderDetails
+        , aodAdminComments :: [AdminOrderComment]
+        } deriving (Show)
+
+instance ToJSON AdminOrderDetails where
+    toJSON AdminOrderDetails {..} =
+        object
+            [ "details" .= aodDetails
+            , "adminComments" .= aodAdminComments
+            ]
+
+orderDetailsRoute :: WrappedAuthToken -> OrderId -> App (Cookied AdminOrderDetails)
 orderDetailsRoute token orderId = withAdminCookie token $ \_ -> runDB $ do
     order <- get orderId >>= maybe (lift $ serverError err404) return
     lineItems <- selectList [OrderLineItemOrderId ==. orderId] []
     products <- getCheckoutProducts orderId
     shipping <- getJustEntity $ orderShippingAddressId order
     maybeBilling <- sequence $ getEntity <$> orderBillingAddressId order
-    return OrderDetails
-        { odOrder = toCheckoutOrder order
-        , odLineItems = lineItems
-        , odProducts = products
-        , odShippingAddress = toAddressData shipping
-        , odBillingAddress = toAddressData <$> join maybeBilling
+    let details = OrderDetails
+            { odOrder = toCheckoutOrder $ Entity orderId order
+            , odLineItems = lineItems
+            , odProducts = products
+            , odShippingAddress = toAddressData shipping
+            , odBillingAddress = toAddressData <$> join maybeBilling
+            }
+    return AdminOrderDetails
+        { aodDetails = details
+        , aodAdminComments = sortOn adminCommentTime $ orderAdminComments order
         }
+
+
+-- COMMENT
+
+
+type OrderCommentRoute =
+       AuthProtect "cookie-auth"
+    :> ReqBody '[JSON] OrderCommentParameters
+    :> Post '[JSON] (Cookied OrderId)
+
+data OrderCommentParameters =
+    OrderCommentParameters
+        { ocpId :: OrderId
+        , ocpComment :: T.Text
+        } deriving (Show)
+
+instance FromJSON OrderCommentParameters where
+    parseJSON = withObject "OrderCommentParameters" $ \v -> do
+        ocpId <- v .: "id"
+        ocpComment <- v .: "comment"
+        return OrderCommentParameters {..}
+
+instance Validation OrderCommentParameters where
+    validators OrderCommentParameters {..} = do
+        orderExists <- V.exists ocpId
+        return
+            [ ( ""
+              , [ ("Could not find this order in the database.", orderExists) ]
+              )
+            , ( "comment"
+              , [ V.required ocpComment ]
+              )
+            ]
+
+orderCommentRoute :: WrappedAuthToken -> OrderCommentParameters -> App (Cookied OrderId)
+orderCommentRoute = validateAdminAndParameters $ \_ parameters -> do
+    time <- liftIO getCurrentTime
+    let orderId = ocpId parameters
+        comment = AdminOrderComment
+            { adminCommentContent = ocpComment parameters
+            , adminCommentTime = time
+            }
+    runDB $ get orderId >>= \case
+        Nothing ->
+            lift $ serverError err404
+        Just order ->
+            update orderId
+                [ OrderAdminComments =. comment : orderAdminComments order
+                ]
+                >> return orderId
+
+
+-- REFUND
+
+
+type OrderRefundRoute =
+       AuthProtect "cookie-auth"
+    :> ReqBody '[JSON] OrderRefundParameters
+    :> Post '[JSON] (Cookied OrderId)
+
+data OrderRefundParameters =
+    OrderRefundParameters
+        { orpId :: OrderId
+        , orpAmount :: Cents
+        } deriving (Show)
+
+instance FromJSON OrderRefundParameters where
+    parseJSON = withObject "OrderRefundParameters" $ \v -> do
+        orpId <- v .: "id"
+        orpAmount <- v .: "amount"
+        return OrderRefundParameters {..}
+
+instance Validation OrderRefundParameters where
+    validators OrderRefundParameters {..} = do
+        orderExists <- V.exists orpId
+        amountUnderBalance <- do
+            total <- runDB $ getOrderTotal orpId
+            return
+                [ ( "The amount must be less than the current order total."
+                  , toInteger (fromCents orpAmount) > total
+                  )
+                ]
+        return
+            [ ( ""
+              , [ ("Could not find this order in the database.", orderExists) ]
+              )
+            , ( "amount"
+              ,  amountUnderBalance
+              )
+            ]
+
+data OrderRefundError
+    = OrderNotFound
+    | NoStripeCharge
+    | StripeRefundError StripeError
+    deriving (Show)
+
+instance Exception OrderRefundError
+
+handleOrderRefundErrors :: App a -> App a
+handleOrderRefundErrors =
+    try >=> either handler return
+  where
+    handler :: OrderRefundError -> App a
+    handler = V.singleError . \case
+        OrderNotFound ->
+            "Could not find this order in the database."
+        NoStripeCharge ->
+            "There is no charge available to refund."
+        StripeRefundError stripeError -> T.intercalate ""
+            [ "We encountered an error while trying to process the refund: "
+            , T.pack $ show (errorType stripeError)
+            , ":"
+            , errorMsg stripeError
+            ]
+
+
+orderRefundRoute :: WrappedAuthToken -> OrderRefundParameters -> App (Cookied OrderId)
+orderRefundRoute = validateAdminAndParameters $ \_ parameters -> do
+    let orderId = orpId parameters
+        refundAmount = orpAmount parameters
+    mOrder <- runDB $ get orderId
+    handleOrderRefundErrors $ maybeM mOrder OrderNotFound $ \order ->
+        maybeM (orderStripeChargeId order) NoStripeCharge $ \chargeId -> do
+        refundResult <- stripeRequest $ createRefund (fromStripeChargeId chargeId)
+            -&- Amount (fromIntegral $ fromCents refundAmount)
+        case refundResult of
+            Left stripeError ->
+                throwM $ StripeRefundError stripeError
+            Right _ ->
+                runDB (addRefundLineItem orderId refundAmount)
+                    >> return orderId
+  where
+    maybeM :: (MonadThrow m, Exception e) => Maybe a -> e -> (a -> m b) -> m b
+    maybeM val exception justAction = maybe (throwM exception) justAction val
+    -- | Add the refund OrderLineItem & add an admin comment to the Order.
+    addRefundLineItem :: OrderId -> Cents -> AppSQL ()
+    addRefundLineItem orderId refundAmount = do
+        time <- liftIO getCurrentTime
+        shortDate <- getRefundDateDescription
+        let lineDescription = "Refund (" <> shortDate <> ")"
+            comment = AdminOrderComment
+                { adminCommentContent = "Refunded " <> formatCents refundAmount <> "."
+                , adminCommentTime = time
+                }
+        void $ insert OrderLineItem
+            { orderLineItemOrderId = orderId
+            , orderLineItemType = RefundLine
+            , orderLineItemDescription = lineDescription
+            , orderLineItemAmount = refundAmount
+            }
+        get orderId >>= \case
+            Nothing -> return ()
+            Just order_ ->
+                update orderId
+                    [ OrderAdminComments =.
+                        comment : orderAdminComments order_
+                    ]
+    -- | Get short & long representations of the current date.
+    getRefundDateDescription :: MonadIO m => m T.Text
+    getRefundDateDescription =
+        T.pack . formatTime defaultTimeLocale "%m/%d/%y" <$> getCurrentLocalTime
+
+
+
+-- UTILS
+
+
+-- | Get the final total for an order.
+getOrderTotal :: OrderId -> AppSQL Integer
+getOrderTotal orderId = do
+    products <- selectList [OrderProductOrderId ==. orderId] []
+    lineItems <- selectList [OrderLineItemOrderId ==. orderId] []
+    let (credits, debits) =
+            L.partition isCreditLine lineItems
+        productTotal =
+            sum $ map finalProductPrice products
+        creditTotal =
+            sum $ map (orderLineItemAmount . entityVal) credits
+        debitTotal =
+            sum $ map (orderLineItemAmount . entityVal) debits
+
+    return $ centsInt productTotal + centsInt debitTotal - centsInt creditTotal
+  where
+    -- | Is the line item a credit?
+    isCreditLine :: Entity OrderLineItem -> Bool
+    isCreditLine =
+        (`elem` creditLineItemTypes) . orderLineItemType . entityVal
+    -- | Caclulate the total price + tax for a Product.
+    finalProductPrice :: Entity OrderProduct -> Cents
+    finalProductPrice (Entity _ p) =
+        (fromIntegral (orderProductQuantity p) * orderProductPrice p) + orderProductTax p
+    -- | Convert Cents to an Integer so it can handle negative numbers.
+    centsInt :: Cents -> Integer
+    centsInt (Cents c) =
+        toInteger c
+
+
+-- | Get the current local time.
+getCurrentLocalTime :: MonadIO m => m LocalTime
+getCurrentLocalTime = liftIO $
+    utcToLocalTime
+        <$> getCurrentTimeZone
+        <*> getCurrentTime
