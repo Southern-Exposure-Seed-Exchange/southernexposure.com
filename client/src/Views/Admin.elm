@@ -1,6 +1,8 @@
 module Views.Admin exposing
-    ( equalsOriginal
+    ( SearchableTableConfig
+    , equalsOriginal
     , formSavingClass
+    , searchableTable
     , slugFrom
     , submitOrSavingButton
     , updateEditField
@@ -9,10 +11,13 @@ module Views.Admin exposing
 {-| Helper functions for the Admin views.
 -}
 
-import Html exposing (Html, button, text)
-import Html.Attributes exposing (class, disabled, type_)
+import Html exposing (Html, button, div, form, input, table, tbody, text)
+import Html.Attributes exposing (class, disabled, type_, value)
+import Html.Events exposing (onInput, onSubmit)
 import Models.Utils exposing (slugify)
+import Paginate exposing (Paginated)
 import RemoteData exposing (WebData)
+import Views.Pager as Pager
 import Views.Utils exposing (icon)
 
 
@@ -28,6 +33,65 @@ submitOrSavingButton { isSaving } content =
     else
         button [ class "btn btn-primary", type_ "submit" ]
             [ text content ]
+
+
+{-| Configuration parameters for the `searchableTable` rendering function.
+-}
+type alias SearchableTableConfig a msg =
+    { itemDescription : String
+    , searchFormQuery : String
+    , searchMsg : msg
+    , queryInputMsg : String -> msg
+    , pager : Pager.Elements msg
+    , tableHeader : Html msg
+    , rowRenderer : a -> Html msg
+    }
+
+
+{-| A re-usable view for Admin pages containing searchable, paginated items in
+a table view.
+-}
+searchableTable : SearchableTableConfig a msg -> Paginated a b c -> List (Html msg)
+searchableTable cfg items =
+    let
+        searchForm =
+            form [ onSubmit cfg.searchMsg ]
+                [ div [ class "input-group input-group-sm" ]
+                    [ input
+                        [ class "form-control"
+                        , value cfg.searchFormQuery
+                        , type_ "search"
+                        , onInput cfg.queryInputMsg
+                        ]
+                        []
+                    , div [ class "input-group-append" ]
+                        [ button [ class "btn btn-primary", type_ "submit" ] [ icon "search" ] ]
+                    ]
+                ]
+
+        renderedTable =
+            if Paginate.isLoading items then
+                div [ class "p-4 text-center" ]
+                    [ text "Loading..."
+                    , icon "spinner fa-spin ml-2"
+                    ]
+
+            else if Paginate.hasNone items then
+                div [ class "p-4 text-center" ]
+                    [ text <| "No " ++ cfg.itemDescription ++ " Found" ]
+
+            else
+                table [ class "table table-striped table-sm my-2 customer-table" ]
+                    [ cfg.tableHeader
+                    , tbody [] <| List.map cfg.rowRenderer <| Paginate.getCurrent items
+                    ]
+    in
+    [ div [ class "d-flex justify-content-between align-items-center mb-2" ]
+        [ searchForm, cfg.pager.perPageLinks () ]
+    , cfg.pager.viewTop ()
+    , renderedTable
+    , cfg.pager.viewBottom ()
+    ]
 
 
 {-| Return the class to indicate form saving if the saving state is True.

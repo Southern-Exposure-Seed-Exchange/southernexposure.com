@@ -13,9 +13,9 @@ module Views.OrderAdmin exposing
 
 import Api
 import Dict
-import Html exposing (Html, a, button, div, form, h4, hr, input, li, table, tbody, td, text, th, thead, tr, ul)
-import Html.Attributes exposing (class, type_, value)
-import Html.Events exposing (onInput, onSubmit)
+import Html exposing (Html, a, div, form, h4, hr, li, td, text, th, thead, tr, ul)
+import Html.Attributes exposing (class)
+import Html.Events exposing (onSubmit)
 import Json.Decode as Decode
 import Json.Encode as Encode
 import Locations exposing (AddressLocations)
@@ -31,7 +31,7 @@ import Views.Admin as Admin
 import Views.Format as Format
 import Views.HorizontalForm as Form
 import Views.Pager as Pager
-import Views.Utils exposing (icon, routeLinkAttributes)
+import Views.Utils exposing (routeLinkAttributes)
 
 
 
@@ -69,20 +69,15 @@ updateSearchForm key msg model =
 list : Zone -> AddressLocations -> String -> SearchForm -> Paginated OrderData String () -> List (Html SearchMsg)
 list zone locations currentQuery { query } orders =
     let
-        searchForm =
-            form [ onSubmit SubmitSearch ]
-                [ div [ class "input-group input-group-sm" ]
-                    [ input
-                        [ class "form-control"
-                        , value query
-                        , type_ "search"
-                        , onInput InputQuery
-                        ]
-                        []
-                    , div [ class "input-group-append" ]
-                        [ button [ class "btn btn-primary", type_ "submit" ] [ icon "search" ] ]
-                    ]
-                ]
+        tableConfig =
+            { itemDescription = "Orders"
+            , searchFormQuery = query
+            , searchMsg = SubmitSearch
+            , queryInputMsg = InputQuery
+            , pager = pager
+            , tableHeader = header
+            , rowRenderer = renderOrder
+            }
 
         header =
             thead [ class "text-center" ]
@@ -125,30 +120,8 @@ list zone locations currentQuery { query } orders =
                             OrderList { page = page, perPage = perPage, query = currentQuery }
                 }
                 orders
-
-        orderTable =
-            if Paginate.isLoading orders then
-                div [ class "p-4 text-center" ]
-                    [ text "Loading..."
-                    , icon "spinner fa-spin ml-2"
-                    ]
-
-            else if Paginate.hasNone orders then
-                div [ class "p-4 text-center" ]
-                    [ text "No Orders Found" ]
-
-            else
-                table [ class "table table-striped table-sm my-2 order-table" ]
-                    [ header
-                    , tbody [] <| List.map renderOrder <| Paginate.getCurrent orders
-                    ]
     in
-    [ div [ class "d-flex justify-content-between align-items-center mb-2" ]
-        [ searchForm, pager.perPageLinks () ]
-    , pager.viewTop ()
-    , orderTable
-    , pager.viewBottom ()
-    ]
+    Admin.searchableTable tableConfig orders
 
 
 
@@ -213,8 +186,9 @@ updateDetailsForm key orderDetails msg model =
         SubmitCommentResponse response ->
             case response of
                 RemoteData.Success (Ok orderId) ->
-                    -- TODO: Reload page
-                    ( initialDetailsForm, Routing.newUrl key <| Admin (AdminOrderDetails orderId) )
+                    ( initialDetailsForm
+                    , Routing.newUrl key <| Admin (AdminOrderDetails orderId)
+                    )
 
                 RemoteData.Success (Err errors) ->
                     { model | commentErrors = errors, isSaving = False }
