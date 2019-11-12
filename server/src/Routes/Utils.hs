@@ -1,9 +1,14 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeFamilies #-}
 module Routes.Utils
-    ( paginatedSelect
+    ( -- * Products
+      paginatedSelect
+      -- * Customers
     , generateUniqueToken
     , hashPassword
+      -- * General
+    , extractRowCount
+    , buildWhereQuery
     ) where
 
 import Control.Monad (void)
@@ -96,14 +101,11 @@ countProducts
     :: (E.SqlExpr (Entity Product) -> E.SqlExpr (Maybe (Entity SeedAttribute)) -> E.SqlExpr (E.Value Bool))
     -> AppSQL Int
 countProducts filters =
-    rowsToCount . E.select $ E.from $ \(p `E.LeftOuterJoin` sa) -> do
+    extractRowCount . E.select $ E.from $ \(p `E.LeftOuterJoin` sa) -> do
         E.on (E.just (p E.^. ProductId) E.==. sa E.?. SeedAttributeProductId)
         E.where_ $ filters p sa E.&&. p E.^. ProductIsActive E.==. E.val True
             E.&&. activeVariantExists p
         return (E.countRows :: E.SqlExpr (E.Value Int))
-  where
-    rowsToCount :: AppSQL [E.Value Int] -> AppSQL Int
-    rowsToCount = fmap $ maybe 0 E.unValue . listToMaybe
 
 -- | Determine if the Product has an active ProductVariant.
 activeVariantExists :: E.SqlExpr (Entity Product) -> E.SqlExpr (E.Value Bool)
@@ -135,3 +137,41 @@ hashPassword password = do
             serverError $ err500 { errBody = "Misconfigured Hashing Policy" }
         Just pass ->
             return $ decodeUtf8 pass
+
+
+-- GENERAL
+
+-- | Extract a row count from a query that uses functions like 'E.count' or
+-- 'E.countRows'. Defaults to 0 if the query returns no rows.
+extractRowCount :: AppSQL [E.Value Int] -> AppSQL Int
+extractRowCount =
+    fmap $ maybe 0 E.unValue . listToMaybe
+
+-- | A helper function to build an 'esqueleto' 'E.where_' query using
+-- a search query.
+--
+-- The query will be split at space characters into a list of search terms.
+--
+-- The passed function should generates a list of matches for a single
+-- term. These matches will be ORed together with 'E.||.' and each
+-- resulting sub-expression will be ANDed together with 'E.&&.'.
+--
+-- E.g., if the function generates `[term == CustomerId, term ==
+-- CustomerEmail]` and you pass in the search query `1234 @gmail.com`, the
+-- following expression will be generated:
+--
+-- @
+--  (1234 == CustomerId OR 1234 == CustomerEmail)
+--  AND
+--  (@gmail == CustomerId OR @gmail == CustomerEmail)
+-- @
+--
+-- If the passed `query` is empty, this will simply return 'True'.
+buildWhereQuery :: (T.Text -> [E.SqlExpr (E.Value Bool)]) -> T.Text -> E.SqlExpr (E.Value Bool)
+buildWhereQuery generator query =
+    foldr (\term expr -> expr E.&&. singleTermExpr term) (E.val True)
+        $ T.words query
+  where
+    singleTermExpr :: T.Text -> E.SqlExpr (E.Value Bool)
+    singleTermExpr term =
+        foldr (E.||.) (E.val False) $ generator term
