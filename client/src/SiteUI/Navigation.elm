@@ -246,6 +246,12 @@ adminView route =
                         ( AdminOrderDetails _, _ ) ->
                             False
 
+                        ( CustomerList _, CustomerList _ ) ->
+                            True
+
+                        ( CustomerList _, _ ) ->
+                            False
+
                 _ ->
                     False
     in
@@ -267,6 +273,7 @@ adminView route =
                     [ navItem "Categories" CategoryList
                     , navItem "Pages" PageList
                     , navItem "Orders" <| OrderList { page = 1, perPage = 50, query = "" }
+                    , navItem "Customers" <| CustomerList { page = 1, perPage = 50, query = "" }
                     ]
                 ]
             ]

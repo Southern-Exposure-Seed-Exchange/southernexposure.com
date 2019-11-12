@@ -65,6 +65,7 @@ type AdminRoute
     | PageEdit StaticPageId
     | OrderList { page : Int, perPage : Int, query : String }
     | AdminOrderDetails Int
+    | CustomerList { page : Int, perPage : Int, query : String }
 
 
 parseRoute : Url -> Route
@@ -111,11 +112,12 @@ parseRoute =
                 , Url.map PageList (Url.s "pages")
                 , Url.map PageNew (Url.s "pages" </> Url.s "new")
                 , Url.map PageEdit (Url.s "pages" </> Url.s "edit" </> StaticPage.idPath)
-                , Url.map OrderList (Url.s "orders" </> orderQueryParser)
+                , Url.map OrderList (Url.s "orders" </> adminPaginationQueryParser)
                 , Url.map AdminOrderDetails (Url.s "orders" </> Url.s "details" </> Url.int)
+                , Url.map CustomerList (Url.s "customers" </> adminPaginationQueryParser)
                 ]
 
-        orderQueryParser =
+        adminPaginationQueryParser =
             Url.map (\page perPage query -> { page = page, perPage = perPage, query = query })
                 (Url.top
                     <?> optionalIntParam "page" 1
@@ -285,6 +287,9 @@ reverseAdmin route =
                 AdminOrderDetails orderId ->
                     [ "orders", "details", String.fromInt orderId ]
 
+                CustomerList _ ->
+                    [ "customers" ]
+
         queryStrings =
             case route of
                 Dashboard ->
@@ -317,6 +322,13 @@ reverseAdmin route =
 
                 AdminOrderDetails _ ->
                     []
+
+                CustomerList { page, perPage, query } ->
+                    List.concat
+                        [ unlessDefault "page" (String.fromInt page) "1"
+                        , unlessDefault "perPage" (String.fromInt perPage) "50"
+                        , unlessDefault "query" query ""
+                        ]
 
         unlessDefault name value default =
             if value == default then

@@ -12,7 +12,7 @@ import Cart
 import Categories.AdminViews as CategoryAdmin
 import Checkout
 import Locations exposing (AddressLocations)
-import PageData exposing (OrderData, ProductData)
+import PageData exposing (CustomerData, OrderData, ProductData)
 import Paginate
 import Product exposing (ProductId, ProductVariantId)
 import QuickOrder
@@ -23,6 +23,7 @@ import SiteUI.Search as SiteSearch
 import StaticPage exposing (StaticPage)
 import Time
 import User
+import Views.CustomerAdmin as CustomerAdmin
 import Views.OrderAdmin as OrderAdmin
 import Views.StaticPageAdmin as StaticPageAdmin
 
@@ -62,6 +63,7 @@ type Msg
     | EditPageMsg StaticPageAdmin.EditMsg
     | OrderSearchMsg OrderAdmin.SearchMsg
     | OrderDetailsMsg OrderAdmin.DetailsMsg
+    | CustomerSearchMsg CustomerAdmin.SearchMsg
       -- API Requests
     | ReAuthorize (WebData User.AuthStatus)
     | LogOutResponse (WebData ())
@@ -85,3 +87,4 @@ type Msg
     | GetAdminEditPageData (WebData PageData.AdminEditPageData)
     | AdminOrderPaginationMsg (Paginate.Msg OrderData ())
     | GetAdminOrderDetails (WebData PageData.AdminOrderDetails)
+    | AdminCustomerPaginationMsg (Paginate.Msg CustomerData ())

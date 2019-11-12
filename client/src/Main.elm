@@ -39,6 +39,7 @@ import Update.Utils exposing (batchCommand, discardCommand, extraCommand, noComm
 import Url exposing (Url)
 import User exposing (AuthStatus)
 import View exposing (view)
+import Views.CustomerAdmin as CustomerAdmin
 import Views.OrderAdmin as OrderAdmin
 import Views.StaticPageAdmin as StaticPageAdmin
 
@@ -299,6 +300,14 @@ fetchDataForRoute ({ route, pageData, key } as model) =
                     { pageData | adminOrderDetails = RemoteData.Loading }
                         |> fetchLocationsOnce
                         |> batchCommand (getAdminOrderDetails orderId)
+
+                Admin (CustomerList { page, perPage, query }) ->
+                    pageData.adminCustomerList
+                        |> Paginate.updateData PageData.customersConfig query
+                        |> discardCommand (Paginate.updatePerPage PageData.customersConfig perPage)
+                        |> discardCommand (Paginate.jumpTo PageData.customersConfig page)
+                        |> Tuple.mapFirst (\cl -> { pageData | adminCustomerList = cl })
+                        |> Tuple.mapSecond (Cmd.map AdminCustomerPaginationMsg)
 
                 NotFound ->
                     doNothing
@@ -831,6 +840,11 @@ update msg ({ pageData, key } as model) =
                 |> Tuple.mapFirst (\form -> { model | orderDetailsForm = form })
                 |> Tuple.mapSecond (Cmd.map OrderDetailsMsg)
 
+        CustomerSearchMsg subMsg ->
+            CustomerAdmin.updateSearchForm key subMsg model.customerSearchForm
+                |> Tuple.mapFirst (\form -> { model | customerSearchForm = form })
+                |> Tuple.mapSecond (Cmd.map CustomerSearchMsg)
+
         ReAuthorize response ->
             case response of
                 RemoteData.Success authStatus ->
@@ -1075,6 +1089,17 @@ update msg ({ pageData, key } as model) =
             in
             ( { model | pageData = updatedPageData }, Cmd.none )
 
+        AdminCustomerPaginationMsg subMsg ->
+            pageData.adminCustomerList
+                |> Paginate.update PageData.customersConfig subMsg
+                |> Tuple.mapSecond (Cmd.map AdminCustomerPaginationMsg)
+                |> (\( cl, cmd ) ->
+                        ( cl, Cmd.batch [ cmd, updatePageFromPagination key model.route cl ] )
+                   )
+                |> Tuple.mapFirst (\cl -> { pageData | adminCustomerList = cl })
+                |> Tuple.mapFirst (\pd -> { model | pageData = pd })
+                |> extraCommand (always Ports.scrollToTop)
+
 
 {-| Update the current page number using the Paginated data.
 
@@ -1096,6 +1121,9 @@ updatePageFromPagination key route paginated =
 
                 Admin (OrderList params) ->
                     ( Just params.page, \p -> Admin <| OrderList { params | page = p } )
+
+                Admin (CustomerList params) ->
+                    ( Just params.page, \p -> Admin <| CustomerList { params | page = p } )
 
                 _ ->
                     ( Nothing, always route )
@@ -1165,6 +1193,9 @@ resetForm oldRoute model =
 
                 AdminOrderDetails _ ->
                     { model | orderDetailsForm = OrderAdmin.initialDetailsForm }
+
+                CustomerList _ ->
+                    { model | customerSearchForm = CustomerAdmin.initialSearchForm }
     in
     case oldRoute of
         ProductDetails _ ->

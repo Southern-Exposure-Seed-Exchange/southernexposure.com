@@ -15,6 +15,7 @@ module PageData exposing
     , CartItemId(..)
     , CategoryDetails
     , CheckoutDetails
+    , CustomerData
     , LineItemType(..)
     , MyAccount
     , OrderData
@@ -40,6 +41,7 @@ module PageData exposing
     , categoryConfig
     , categoryDetailsDecoder
     , checkoutDetailsDecoder
+    , customersConfig
     , initial
     , isFreeCheckout
     , myAccountDecoder
@@ -94,6 +96,7 @@ type alias PageData =
     , adminEditPage : WebData AdminEditPageData
     , adminOrderList : Paginated OrderData String ()
     , adminOrderDetails : WebData AdminOrderDetails
+    , adminCustomerList : Paginated CustomerData String ()
     }
 
 
@@ -117,6 +120,10 @@ initial =
         ordersPaginate =
             Paginate.initial ordersConfig "" 1 50
                 |> Tuple.first
+
+        customersPaginate =
+            Paginate.initial customersConfig "" 1 50
+                |> Tuple.first
     in
     { categoryDetails = categoryPaginate
     , productDetails = RemoteData.NotAsked
@@ -136,6 +143,7 @@ initial =
     , adminEditPage = RemoteData.NotAsked
     , adminOrderList = ordersPaginate
     , adminOrderDetails = RemoteData.NotAsked
+    , adminCustomerList = customersPaginate
     }
 
 
@@ -814,6 +822,42 @@ adminCommentDecoder =
     Decode.map2 AdminComment
         (Decode.field "time" Iso8601.decoder)
         (Decode.field "content" Decode.string)
+
+
+
+-- Customer Admin
+
+
+customersConfig : Paginate.Config CustomerData String ()
+customersConfig =
+    let
+        request query page perPage =
+            Api.get (Api.AdminCustomerList page perPage query)
+                |> Api.withJsonResponse fetchDecoder
+                |> Api.sendRequest identity
+
+        fetchDecoder =
+            Decode.map3 Paginate.FetchResponse
+                (Decode.field "customers" <| Decode.list customerDataDecoder)
+                (Decode.field "total" Decode.int)
+                (Decode.succeed <| Just ())
+    in
+    Paginate.makeConfig request
+
+
+type alias CustomerData =
+    { id : Int
+    , email : String
+    , name : String
+    }
+
+
+customerDataDecoder : Decoder CustomerData
+customerDataDecoder =
+    Decode.map3 CustomerData
+        (Decode.field "id" Decode.int)
+        (Decode.field "email" Decode.string)
+        (Decode.field "name" Decode.string)
 
 
 

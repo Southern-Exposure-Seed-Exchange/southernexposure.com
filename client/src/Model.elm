@@ -22,6 +22,7 @@ import Search
 import SiteUI exposing (NavigationData)
 import Time
 import User exposing (AuthStatus)
+import Views.CustomerAdmin as CustomerAdmin
 import Views.OrderAdmin as OrderAdmin
 import Views.StaticPageAdmin as StaticPageAdmin
 
@@ -47,6 +48,7 @@ type alias Model =
     , editPageForm : StaticPageAdmin.EditForm
     , orderSearchForm : OrderAdmin.SearchForm
     , orderDetailsForm : OrderAdmin.DetailsForm
+    , customerSearchForm : CustomerAdmin.SearchForm
     , cartItemCount : Int
     , maybeSessionToken : Maybe String
     , currentUser : AuthStatus
@@ -84,6 +86,7 @@ initial key route =
     , editPageForm = StaticPageAdmin.initialEditForm
     , orderSearchForm = OrderAdmin.initialSearchForm
     , orderDetailsForm = OrderAdmin.initialDetailsForm
+    , customerSearchForm = CustomerAdmin.initialSearchForm
     , cartItemCount = 0
     , maybeSessionToken = Nothing
     , currentUser = User.unauthorized

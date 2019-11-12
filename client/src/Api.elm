@@ -83,6 +83,7 @@ type Endpoint
     | AdminOrderDetails Int
     | AdminOrderComment
     | AdminOrderRefund
+    | AdminCustomerList Int Int String
 
 
 toUrl : Endpoint -> String
@@ -233,6 +234,14 @@ toUrl endpoint =
 
                 AdminOrderRefund ->
                     joinPath [ "admin", "orders", "refund" ]
+
+                AdminCustomerList page perPage query ->
+                    joinPath [ "admin", "customers", "list" ]
+                        ++ withQueryStrings
+                            [ queryParameter ( "page", String.fromInt page )
+                            , queryParameter ( "perPage", String.fromInt perPage )
+                            , queryParameter ( "query", query )
+                            ]
     in
     "/api" ++ endpointUrl
 

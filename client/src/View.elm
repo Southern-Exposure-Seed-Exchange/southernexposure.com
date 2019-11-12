@@ -34,6 +34,7 @@ import SiteUI.Navigation as SiteNavigation
 import SiteUI.Sidebar as SiteSidebar
 import StaticPage exposing (StaticPage)
 import User
+import Views.CustomerAdmin as CustomerAdmin
 import Views.OrderAdmin as OrderAdmin
 import Views.StaticPageAdmin as StaticPageAdmin
 import Views.Utils exposing (rawHtml)
@@ -202,6 +203,10 @@ view ({ route, pageData, navigationData, zone } as model) =
                 NotFound ->
                     notFoundView
 
+                Admin (CustomerList { query }) ->
+                    CustomerAdmin.list query model.customerSearchForm pageData.adminCustomerList
+                        |> List.map (Html.map CustomerSearchMsg)
+
         apply : (a -> b -> c) -> ( a, b ) -> c
         apply f ( a, b ) =
             f a b
@@ -327,6 +332,9 @@ view ({ route, pageData, navigationData, zone } as model) =
 
                 AdminOrderDetails orderId ->
                     "Order #" ++ String.fromInt orderId
+
+                CustomerList _ ->
+                    "Customers"
 
         -- TODO: Have "Error" & "Loading" titles?
         getFromPageData :
