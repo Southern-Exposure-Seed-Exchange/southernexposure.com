@@ -4,7 +4,7 @@ var { CleanWebpackPlugin } = require('clean-webpack-plugin');
 var HtmlWebpackPlugin = require('html-webpack-plugin');
 var CopyWebpackPlugin = require('copy-webpack-plugin');
 var SriWebpackPlugin = require('webpack-subresource-integrity');
-var WebappWebpackPlugin = require('webapp-webpack-plugin');
+var FaviconsWebpackPlugin = require('favicons-webpack-plugin');
 var ImageminWebpackPlugin = require('imagemin-webpack-plugin').default;
 
 var isProduction = process.env.NODE_ENV === 'production';
@@ -132,7 +132,7 @@ module.exports = {
       hashFuncNames: ['sha512'],
       enabled: isProduction,
     }),
-    new WebappWebpackPlugin({
+    new FaviconsWebpackPlugin({
       logo: './src/favicon.png',
       prefix: 'static/favicon-[hash]/',
       cache: true,
