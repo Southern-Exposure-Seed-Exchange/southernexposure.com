@@ -11,14 +11,14 @@ import Control.Monad (unless)
 import Data.Aeson (ToJSON(..), FromJSON(..), (.=), (.:), withObject, object)
 import Data.Maybe (catMaybes)
 import Database.Persist
-    ( (=.), Entity(..), PersistField, SelectOpt(Asc), Update, selectList, insert
-    , get, update
+    ( Entity(..), SelectOpt(Asc), Update, selectList, insert, get, update
     )
 import Servant ((:<|>)(..), (:>), AuthProtect, ReqBody, Capture, Get, Post, Patch, JSON, err404)
 import Text.HTML.SanitizeXSS (sanitize)
 
 import Auth (WrappedAuthToken, Cookied, withAdminCookie, validateAdminAndParameters)
 import Models (Page(..), PageId, EntityField(..), Unique(UniquePageSlug), slugify)
+import Routes.Utils (mapUpdateWith)
 import Server (App, runDB, serverError)
 import Validation (Validation(..))
 
@@ -243,7 +243,3 @@ editPageRoute = validateAdminAndParameters $ \_ parameters -> do
             , mapUpdateWith PageSlug eppSlug (slugify . sanitize)
             , mapUpdateWith PageContent eppContent sanitize
             ]
-    -- TODO: Refactor out from here & Admin.Categories
-    mapUpdateWith :: PersistField b => EntityField Page b -> Maybe a -> (a -> b) -> Maybe (Update Page)
-    mapUpdateWith field param transform =
-        (field =.) . transform <$> param

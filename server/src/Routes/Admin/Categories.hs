@@ -16,8 +16,7 @@ import Data.Maybe (fromMaybe, catMaybes)
 import Data.Monoid ((<>))
 import Data.Text.Encoding (encodeUtf8)
 import Database.Persist
-    ( (=.), Entity(..), PersistField, SelectOpt(Asc), Update, selectList
-    , insert, get, update
+    ( (=.), Entity(..), SelectOpt(Asc), Update, selectList, insert, get, update
     )
 import Servant ((:>), (:<|>)(..), AuthProtect, ReqBody, Capture, Get, Post, Patch, JSON, err404)
 import System.FilePath ((</>), takeFileName)
@@ -28,6 +27,7 @@ import Cache (Caches(..), syncCategoryPredecessorCache, queryCategoryPredecessor
 import Config (Config(getMediaDirectory, getCaches))
 import Images (ImageSourceSet, makeSourceSet, makeImageConfig, scaleImage)
 import Models (Category(..), CategoryId, EntityField(..), Unique(UniqueCategorySlug), slugify)
+import Routes.Utils (mapUpdate, mapUpdateWith)
 import Server (App, runDB, serverError)
 import Validation (Validation(..))
 
@@ -394,12 +394,6 @@ editCategoryRoute = validateAdminAndParameters $ \_ parameters -> do
             , mapUpdateWith CategoryDescription ecpDescription sanitize
             , mapUpdate CategoryOrder ecpOrder
             ]
-    mapUpdate :: PersistField a => EntityField Category a -> Maybe a -> Maybe (Update Category)
-    mapUpdate field =
-        fmap (field =.)
-    mapUpdateWith :: PersistField b => EntityField Category b -> Maybe a -> (a -> b) -> Maybe (Update Category)
-    mapUpdateWith field param transform =
-        mapUpdate field $ fmap transform param
 
 
 

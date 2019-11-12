@@ -9,6 +9,8 @@ module Routes.Utils
       -- * General
     , extractRowCount
     , buildWhereQuery
+    , mapUpdate
+    , mapUpdateWith
     ) where
 
 import Control.Monad (void)
@@ -16,7 +18,7 @@ import Control.Monad.Trans (liftIO)
 import Data.Int (Int64)
 import Data.Maybe (fromMaybe, listToMaybe)
 import Data.Text.Encoding (encodeUtf8, decodeUtf8)
-import Database.Persist (Entity(..), getBy, PersistEntityBackend, PersistEntity)
+import Database.Persist ((=.), Entity(..), getBy, PersistEntityBackend, PersistEntity, Update)
 import Database.Persist.Sql (SqlBackend)
 import Servant (errBody, err500)
 
@@ -175,3 +177,15 @@ buildWhereQuery generator query =
     singleTermExpr :: T.Text -> E.SqlExpr (E.Value Bool)
     singleTermExpr term =
         foldr (E.||.) (E.val False) $ generator term
+
+-- | Create an 'Update' for an Entity's field if there is a value inside
+-- the Maybe.
+mapUpdate :: E.PersistField a => EntityField e a -> Maybe a -> Maybe (Update e)
+mapUpdate field =
+    fmap (field =.)
+
+-- | Similar to 'mapUpdate', but transforms the inner Maybe value before
+-- creating the 'Update'.
+mapUpdateWith :: E.PersistField b => EntityField e b -> Maybe a -> (a -> b) -> Maybe (Update e)
+mapUpdateWith field param transform =
+    mapUpdate field $ transform <$> param
