@@ -1,4 +1,5 @@
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TypeOperators #-}
@@ -7,30 +8,45 @@ module Routes.Admin.Customers
     , customerRoutes
     ) where
 
-import Data.Aeson ((.=), ToJSON(..), object)
-import Data.Maybe (fromMaybe)
+import Control.Monad (unless)
+import Data.Aeson ((.=), (.:), ToJSON(..), FromJSON(..), object, withObject)
+import Data.Maybe (fromMaybe, catMaybes)
 import Data.Monoid ((<>))
-import Database.Persist ((==.), Entity(..), Filter, count, selectFirst)
-import Servant ((:>), AuthProtect, QueryParam, Get, JSON)
+import Database.Persist
+    ( (=.), (==.), Entity(..), Filter, Update, count, selectFirst, get, update
+    )
+import Servant
+    ( (:<|>)(..), (:>), AuthProtect, QueryParam, Capture, ReqBody, Get, Patch
+    , JSON, err404
+    )
 
-import Auth (Cookied, WrappedAuthToken, withAdminCookie)
-import Models (CustomerId, Customer(..), Address(..), EntityField(..))
-import Routes.Utils (extractRowCount, buildWhereQuery)
-import Server (App, AppSQL, runDB)
+import Auth (Cookied, WrappedAuthToken, withAdminCookie, validateAdminAndParameters)
+import Models (CustomerId, Customer(..), Address(..), EntityField(..), Unique(..))
+import Models.Fields (Cents)
+import Routes.Utils (extractRowCount, buildWhereQuery, hashPassword, generateUniqueToken, mapUpdate)
+import Server (App, AppSQL, runDB, serverError)
+import Validation (Validation(..))
 
 import qualified Data.Text as T
 import qualified Database.Esqueleto as E
+import qualified Validation as V
 
 
 type CustomerAPI =
          "list" :> CustomerListRoute
+    :<|> "edit" :> CustomerEditDataRoute
+    :<|> "edit" :> CustomerEditRoute
 
 type CustomerRoutes =
          (WrappedAuthToken -> Maybe Int -> Maybe Int -> Maybe T.Text -> App (Cookied CustomerListData))
+    :<|> (WrappedAuthToken -> CustomerId -> App (Cookied CustomerEditData))
+    :<|> (WrappedAuthToken -> CustomerEditParameters -> App (Cookied CustomerId))
 
 customerRoutes :: CustomerRoutes
 customerRoutes =
          customerListRoute
+    :<|> customerEditDataRoute
+    :<|> customerEditRoute
 
 
 -- LIST
@@ -147,3 +163,131 @@ customerListRoute t mPage mPerPage maybeQuery = withAdminCookie t $ \_ -> do
             , lcEmail = customerEmail customer
             , lcName = name
             }
+
+
+-- EDIT
+
+
+type CustomerEditDataRoute =
+       AuthProtect "cookie-auth"
+    :> Capture "id" CustomerId
+    :> Get '[JSON] (Cookied CustomerEditData)
+
+data CustomerEditData =
+    CustomerEditData
+        { cedId :: CustomerId
+        , cedEmail :: T.Text
+        , cedStoreCredit :: Cents
+        , cedIsAdmin :: Bool
+        } deriving (Show)
+
+instance ToJSON CustomerEditData where
+    toJSON CustomerEditData {..} =
+        object
+            [ "id" .= cedId
+            , "email" .= cedEmail
+            , "storeCredit" .= cedStoreCredit
+            , "isAdmin" .= cedIsAdmin
+            ]
+
+customerEditDataRoute :: WrappedAuthToken -> CustomerId -> App (Cookied CustomerEditData)
+customerEditDataRoute t customerId = withAdminCookie t $ \_ ->
+    runDB (get customerId) >>= \case
+        Nothing ->
+            serverError err404
+        Just customer ->
+            return CustomerEditData
+                { cedId = customerId
+                , cedEmail = customerEmail customer
+                , cedStoreCredit = customerStoreCredit customer
+                , cedIsAdmin = customerIsAdmin customer
+                }
+
+
+type CustomerEditRoute =
+       AuthProtect "cookie-auth"
+    :> ReqBody '[JSON] CustomerEditParameters
+    :> Patch '[JSON] (Cookied CustomerId)
+
+data CustomerEditParameters =
+    CustomerEditParameters
+        { cepId :: CustomerId
+        , cepEmail :: Maybe T.Text
+        , cepStoreCredit :: Maybe Cents
+        , cepIsAdmin :: Maybe Bool
+        , cepPassword :: Maybe T.Text
+        , cepPasswordConfirm :: Maybe T.Text
+        } deriving (Show)
+
+instance FromJSON CustomerEditParameters where
+    parseJSON = withObject "CustomerEditParameters" $ \v -> do
+        cepId <- v .: "id"
+        cepEmail <- v .: "email"
+        cepStoreCredit <- v .: "storeCredit"
+        cepIsAdmin <- v .: "isAdmin"
+        cepPassword <- v .: "password"
+        cepPasswordConfirm <- v .: "passwordConfirm"
+        return CustomerEditParameters {..}
+
+
+instance Validation CustomerEditParameters where
+    validators CustomerEditParameters {..} = do
+        customerExists <- V.exists cepId
+        uniqueEmail <- case cepEmail of
+            Nothing -> return []
+            Just email -> do
+                doesntExist <- V.doesntExist $ UniqueEmail email
+                return
+                    [ ( "email"
+                      , [ V.required email
+                        , ( "A Customer with this Email already exists."
+                          , doesntExist
+                          )
+                        ]
+                      )
+                    ]
+
+        return $ catMaybes
+            [ V.mapCheck ((,) <$> cepPassword <*> cepPasswordConfirm) $ \(pass, confirm) ->
+                ( "password"
+                , [ V.required pass
+                  , ( "Passwords do not match.", pass /= confirm )
+                  ]
+                )
+            ]
+            ++ uniqueEmail
+            ++
+            [ ( ""
+              , [ ( "Could not find this Customer in the database."
+                  , customerExists
+                  )
+                ]
+              )
+            ]
+
+customerEditRoute :: WrappedAuthToken -> CustomerEditParameters -> App (Cookied CustomerId)
+customerEditRoute = validateAdminAndParameters $ \_ parameters -> do
+    passwordUpdate <- case (,) <$> cepPassword parameters <*> cepPasswordConfirm parameters of
+        Nothing ->
+            return []
+        Just (password, confirm) ->
+            if password == confirm then do
+                passwordHash <- hashPassword password
+                newToken <- generateUniqueToken UniqueToken
+                return
+                    [ CustomerEncryptedPassword =. passwordHash
+                    , CustomerAuthToken =. newToken
+                    ]
+            else
+                return []
+    let updates = makeUpdates parameters ++ passwordUpdate
+    unless (null updates) $ runDB $ update (cepId parameters) updates
+    return $ cepId parameters
+  where
+    makeUpdates :: CustomerEditParameters -> [Update Customer]
+    makeUpdates CustomerEditParameters {..} =
+        catMaybes
+            [ mapUpdate CustomerEmail cepEmail
+            , mapUpdate CustomerStoreCredit cepStoreCredit
+            , mapUpdate CustomerIsAdmin cepIsAdmin
+            ]
