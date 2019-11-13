@@ -6,6 +6,7 @@ module Validation
     , singleError
     , singleFieldError
     , validateMap
+    , mapCheck
     , required
     , doesntExist
     , exists
@@ -84,6 +85,10 @@ validateMap :: Show k => [v -> (T.Text, Bool)] -> M.Map k v -> [(T.Text, [(T.Tex
 validateMap funcs =
     M.foldlWithKey
         (\acc key val -> ( T.pack $ show key, map ($ val) funcs) : acc) []
+
+-- | Apply a validation to the inner value of a 'Maybe'.
+mapCheck :: Maybe a -> (a -> (FieldName, [(ErrorMessage, Bool)])) -> Maybe (FieldName, [(ErrorMessage, Bool)])
+mapCheck = flip fmap
 
 required :: T.Text -> (T.Text, Bool)
 required text =

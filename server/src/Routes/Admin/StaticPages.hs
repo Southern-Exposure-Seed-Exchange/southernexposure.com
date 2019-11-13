@@ -220,15 +220,12 @@ instance Validation EditPageParameters where
                       )
                     ]
         return $ catMaybes
-            [ mapCheck eppTitle $ \title ->
+            [ V.mapCheck eppTitle $ \title ->
                 ( "title", [ V.required title ] )
-            , mapCheck eppContent $ \content ->
+            , V.mapCheck eppContent $ \content ->
                 ( "content", [ V.required content ] )
             ]
             ++ slugCheck
-      where
-        -- TODO: This is duplicated here & in Admin.Categories
-        mapCheck param validator = validator <$> param
 
 editPageRoute :: WrappedAuthToken -> EditPageParameters -> App (Cookied ())
 editPageRoute = validateAdminAndParameters $ \_ parameters -> do

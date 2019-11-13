@@ -346,11 +346,11 @@ instance Validation EditCategoryParameters where
                       )
                     ]
         return $ catMaybes
-            [ mapCheck ecpName $ \name ->
+            [ V.mapCheck ecpName $ \name ->
                 ( "name"
                 , [ V.required name ]
                 )
-            , mapCheck ecpOrder $ \order ->
+            , V.mapCheck ecpOrder $ \order ->
                 ( "order"
                 , [ V.zeroOrPositive order ]
                 )
@@ -358,7 +358,6 @@ instance Validation EditCategoryParameters where
             ++ slugCheck
             ++ parentCheck
       where
-        mapCheck param validator = validator <$> param
         -- Ensure that the new parent Category is not an eventual descendant of
         -- the Category.
         checkCycle :: CategoryId -> CategoryId -> App Bool
