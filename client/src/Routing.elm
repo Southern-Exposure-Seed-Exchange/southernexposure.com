@@ -66,6 +66,7 @@ type AdminRoute
     | OrderList { page : Int, perPage : Int, query : String }
     | AdminOrderDetails Int
     | CustomerList { page : Int, perPage : Int, query : String }
+    | CustomerEdit Int
 
 
 parseRoute : Url -> Route
@@ -115,6 +116,7 @@ parseRoute =
                 , Url.map OrderList (Url.s "orders" </> adminPaginationQueryParser)
                 , Url.map AdminOrderDetails (Url.s "orders" </> Url.s "details" </> Url.int)
                 , Url.map CustomerList (Url.s "customers" </> adminPaginationQueryParser)
+                , Url.map CustomerEdit (Url.s "customers" </> Url.s "edit" </> Url.int)
                 ]
 
         adminPaginationQueryParser =
@@ -290,6 +292,9 @@ reverseAdmin route =
                 CustomerList _ ->
                     [ "customers" ]
 
+                CustomerEdit customerId ->
+                    [ "customers", "edit", String.fromInt customerId ]
+
         queryStrings =
             case route of
                 Dashboard ->
@@ -313,22 +318,24 @@ reverseAdmin route =
                 PageEdit _ ->
                     []
 
-                OrderList { page, perPage, query } ->
-                    List.concat
-                        [ unlessDefault "page" (String.fromInt page) "1"
-                        , unlessDefault "perPage" (String.fromInt perPage) "50"
-                        , unlessDefault "query" query ""
-                        ]
+                OrderList params ->
+                    recordToQueryParams params
 
                 AdminOrderDetails _ ->
                     []
 
-                CustomerList { page, perPage, query } ->
-                    List.concat
-                        [ unlessDefault "page" (String.fromInt page) "1"
-                        , unlessDefault "perPage" (String.fromInt perPage) "50"
-                        , unlessDefault "query" query ""
-                        ]
+                CustomerList params ->
+                    recordToQueryParams params
+
+                CustomerEdit _ ->
+                    []
+
+        recordToQueryParams { page, perPage, query } =
+            List.concat
+                [ unlessDefault "page" (String.fromInt page) "1"
+                , unlessDefault "perPage" (String.fromInt perPage) "50"
+                , unlessDefault "query" query ""
+                ]
 
         unlessDefault name value default =
             if value == default then

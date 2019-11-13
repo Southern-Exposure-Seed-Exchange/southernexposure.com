@@ -207,6 +207,10 @@ view ({ route, pageData, navigationData, zone } as model) =
                     CustomerAdmin.list query model.customerSearchForm pageData.adminCustomerList
                         |> List.map (Html.map CustomerSearchMsg)
 
+                Admin (CustomerEdit _) ->
+                    withIntermediateText (CustomerAdmin.edit model.editCustomerForm) pageData.adminEditCustomer
+                        |> List.map (Html.map EditCustomerMsg)
+
         apply : (a -> b -> c) -> ( a, b ) -> c
         apply f ( a, b ) =
             f a b
@@ -335,6 +339,13 @@ view ({ route, pageData, navigationData, zone } as model) =
 
                 CustomerList _ ->
                     "Customers"
+
+                CustomerEdit _ ->
+                    pageData.adminEditCustomer
+                        |> RemoteData.map (\c -> " - " ++ c.email)
+                        |> RemoteData.toMaybe
+                        |> Maybe.withDefault ""
+                        |> (\email -> "Edit Customer" ++ email)
 
         -- TODO: Have "Error" & "Loading" titles?
         getFromPageData :

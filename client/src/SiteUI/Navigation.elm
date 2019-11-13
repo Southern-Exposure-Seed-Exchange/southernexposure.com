@@ -252,6 +252,12 @@ adminView route =
                         ( CustomerList _, _ ) ->
                             False
 
+                        ( CustomerEdit _, CustomerList _ ) ->
+                            True
+
+                        ( CustomerEdit _, _ ) ->
+                            False
+
                 _ ->
                     False
     in

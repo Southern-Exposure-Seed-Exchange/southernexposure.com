@@ -64,6 +64,7 @@ type Msg
     | OrderSearchMsg OrderAdmin.SearchMsg
     | OrderDetailsMsg OrderAdmin.DetailsMsg
     | CustomerSearchMsg CustomerAdmin.SearchMsg
+    | EditCustomerMsg CustomerAdmin.EditMsg
       -- API Requests
     | ReAuthorize (WebData User.AuthStatus)
     | LogOutResponse (WebData ())
@@ -88,3 +89,4 @@ type Msg
     | AdminOrderPaginationMsg (Paginate.Msg OrderData ())
     | GetAdminOrderDetails (WebData PageData.AdminOrderDetails)
     | AdminCustomerPaginationMsg (Paginate.Msg CustomerData ())
+    | GetAdminEditCustomerData (WebData PageData.AdminEditCustomerData)

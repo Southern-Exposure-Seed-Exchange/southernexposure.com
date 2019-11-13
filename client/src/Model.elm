@@ -49,6 +49,7 @@ type alias Model =
     , orderSearchForm : OrderAdmin.SearchForm
     , orderDetailsForm : OrderAdmin.DetailsForm
     , customerSearchForm : CustomerAdmin.SearchForm
+    , editCustomerForm : CustomerAdmin.EditForm
     , cartItemCount : Int
     , maybeSessionToken : Maybe String
     , currentUser : AuthStatus
@@ -87,6 +88,7 @@ initial key route =
     , orderSearchForm = OrderAdmin.initialSearchForm
     , orderDetailsForm = OrderAdmin.initialDetailsForm
     , customerSearchForm = CustomerAdmin.initialSearchForm
+    , editCustomerForm = CustomerAdmin.initialEditForm
     , cartItemCount = 0
     , maybeSessionToken = Nothing
     , currentUser = User.unauthorized

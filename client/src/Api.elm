@@ -84,6 +84,8 @@ type Endpoint
     | AdminOrderComment
     | AdminOrderRefund
     | AdminCustomerList Int Int String
+    | AdminEditCustomerData Int
+    | AdminEditCustomer
 
 
 toUrl : Endpoint -> String
@@ -242,6 +244,12 @@ toUrl endpoint =
                             , queryParameter ( "perPage", String.fromInt perPage )
                             , queryParameter ( "query", query )
                             ]
+
+                AdminEditCustomerData customerId ->
+                    joinPath [ "admin", "customers", "edit", String.fromInt customerId ]
+
+                AdminEditCustomer ->
+                    joinPath [ "admin", "customers", "edit" ]
     in
     "/api" ++ endpointUrl
 

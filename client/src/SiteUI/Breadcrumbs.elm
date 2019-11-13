@@ -146,6 +146,12 @@ view route pageData =
                 Admin (CustomerList _) ->
                     singleItem "Customers"
 
+                Admin (CustomerEdit _) ->
+                    [ inactiveItem "Customers"
+                        (Admin <| CustomerList { page = 1, perPage = 50, query = "" })
+                    , activeItem "Edit Customer"
+                    ]
+
                 NotFound ->
                     singleItem "Page Not Found"
 

@@ -3,6 +3,7 @@ module PageData exposing
     , AdminCategoryListData
     , AdminComment
     , AdminEditCategoryData
+    , AdminEditCustomerData
     , AdminEditPageData
     , AdminListCategory(..)
     , AdminListPage
@@ -29,6 +30,7 @@ module PageData exposing
     , addressDetailsDecoder
     , adminCategoryListDataDecoder
     , adminEditCategoryDataDecoder
+    , adminEditCustomerDataDecoder
     , adminEditPageDataDecoder
     , adminListPageDecoder
     , adminNewCategoryDataDecoder
@@ -97,6 +99,7 @@ type alias PageData =
     , adminOrderList : Paginated OrderData String ()
     , adminOrderDetails : WebData AdminOrderDetails
     , adminCustomerList : Paginated CustomerData String ()
+    , adminEditCustomer : WebData AdminEditCustomerData
     }
 
 
@@ -144,6 +147,7 @@ initial =
     , adminOrderList = ordersPaginate
     , adminOrderDetails = RemoteData.NotAsked
     , adminCustomerList = customersPaginate
+    , adminEditCustomer = RemoteData.NotAsked
     }
 
 
@@ -858,6 +862,23 @@ customerDataDecoder =
         (Decode.field "id" Decode.int)
         (Decode.field "email" Decode.string)
         (Decode.field "name" Decode.string)
+
+
+type alias AdminEditCustomerData =
+    { id : Int
+    , email : String
+    , storeCredit : Cents
+    , isAdmin : Bool
+    }
+
+
+adminEditCustomerDataDecoder : Decoder AdminEditCustomerData
+adminEditCustomerDataDecoder =
+    Decode.map4 AdminEditCustomerData
+        (Decode.field "id" Decode.int)
+        (Decode.field "email" Decode.string)
+        (Decode.field "storeCredit" centsDecoder)
+        (Decode.field "isAdmin" Decode.bool)
 
 
 
