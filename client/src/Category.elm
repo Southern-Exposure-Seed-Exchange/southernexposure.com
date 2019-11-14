@@ -2,7 +2,9 @@ module Category exposing
     ( Category
     , CategoryId(..)
     , decoder
+    , idParser
     , initial
+    , maybeIdParser
     )
 
 import Json.Decode as Decode exposing (Decoder)
@@ -11,6 +13,30 @@ import Models.Fields exposing (ImageData, blankImage, imageDecoder)
 
 type CategoryId
     = CategoryId Int
+
+
+{-| Parse a potential Category ID from the string-representation of an Integer.
+An empty string signals a Nothing value.
+-}
+idParser : String -> Result String CategoryId
+idParser val =
+    case String.toInt val of
+        Just i ->
+            Ok <| CategoryId i
+
+        Nothing ->
+            Err "Could not parse category ID."
+
+
+{-| Parse a CategoryId or a Blank Option.
+-}
+maybeIdParser : String -> Result String (Maybe CategoryId)
+maybeIdParser val =
+    if String.isEmpty val then
+        Ok Nothing
+
+    else
+        Result.map Just <| idParser val
 
 
 type alias Category =

@@ -213,7 +213,7 @@ new model categories =
         , Api.generalFormErrors model
         , inputRow model.name NInputName True "Name" "name" "text" "off"
         , inputRow model.slug NInputSlug True "Slug" "slug" "text" "off"
-        , Form.selectRow categoryIdParser NInputParent "Parent Category" True <|
+        , Form.selectRow Category.maybeIdParser NInputParent "Parent Category" True <|
             blankOption
                 :: List.map renderCategoryOption categories
         , Form.textareaRow model.errors model.description NInputDescription False "Description" "description" 10
@@ -434,7 +434,7 @@ edit categoryId model categories originalCategory =
         , Api.generalFormErrors model
         , inputRow .name .name EInputName True "Name" "name" "text" "off"
         , inputRow .slug .slug EInputSlug True "Slug" "slug" "text" "off"
-        , Form.selectRow categoryIdParser EInputParent "Parent Category" True <|
+        , Form.selectRow Category.maybeIdParser EInputParent "Parent Category" True <|
             blankOption
                 :: List.map renderCategoryOption
                     (List.filter (\c -> c.id /= categoryId) categories)
@@ -463,23 +463,6 @@ edit categoryId model categories originalCategory =
 
 
 -- UTILS
-
-
-{-| Parse a potential Category ID from the string-representation of an Integer.
-An empty string signals a Nothing value.
--}
-categoryIdParser : String -> Result String (Maybe CategoryId)
-categoryIdParser val =
-    if String.isEmpty val then
-        Ok Nothing
-
-    else
-        case String.toInt val of
-            Just i ->
-                Ok << Just <| CategoryId i
-
-            Nothing ->
-                Err "Could not parse category ID."
 
 
 {-| Encode Nothing to Null and Just using the encoder.
