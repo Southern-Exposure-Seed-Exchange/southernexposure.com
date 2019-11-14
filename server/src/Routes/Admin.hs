@@ -10,6 +10,7 @@ import Servant ((:<|>)(..), (:>), ServerT)
 import Routes.Admin.Categories
 import Routes.Admin.Customers
 import Routes.Admin.Orders
+import Routes.Admin.Products
 import Routes.Admin.StaticPages
 import Server (App)
 
@@ -18,6 +19,7 @@ type AdminAPI =
     :<|> "pages" :> StaticPageAPI
     :<|> "orders" :> OrderAPI
     :<|> "customers" :> CustomerAPI
+    :<|> "products" :> ProductAPI
 
 
 adminRoutes :: ServerT AdminAPI App
@@ -26,3 +28,4 @@ adminRoutes =
     :<|> staticPageRoutes
     :<|> orderRoutes
     :<|> customerRoutes
+    :<|> productRoutes
