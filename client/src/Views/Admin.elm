@@ -1,7 +1,10 @@
 module Views.Admin exposing
     ( SearchableTableConfig
+    , base64ImagePreview
+    , encodeImageData
     , equalsOriginal
     , formSavingClass
+    , imageSelectRow
     , searchableTable
     , slugFrom
     , submitOrSavingButton
@@ -11,12 +14,16 @@ module Views.Admin exposing
 {-| Helper functions for the Admin views.
 -}
 
-import Html exposing (Html, button, div, form, input, table, tbody, text)
-import Html.Attributes exposing (class, disabled, type_, value)
-import Html.Events exposing (onInput, onSubmit)
+import Base64
+import File exposing (File)
+import Html exposing (Html, button, div, form, img, input, table, tbody, text)
+import Html.Attributes exposing (class, disabled, src, type_, value)
+import Html.Events exposing (onClick, onInput, onSubmit)
 import Models.Utils exposing (slugify)
 import Paginate exposing (Paginated)
 import RemoteData exposing (WebData)
+import Task
+import Views.HorizontalForm as Form
 import Views.Pager as Pager
 import Views.Utils exposing (icon)
 
@@ -173,3 +180,43 @@ updateEditField val original selector updater =
 
     else
         updater <| Just val
+
+
+{-| Build a command to encode an Image's data as a Base64 string.
+-}
+encodeImageData : (String -> msg) -> File -> Cmd msg
+encodeImageData msg imageFile =
+    File.toBytes imageFile
+        |> Task.map Base64.fromBytes
+        |> Task.map (Maybe.withDefault "")
+        |> Task.perform msg
+
+
+{-| Build a height-limited image preview showing the image name & the image,
+using the Base64 encoded image data.
+-}
+base64ImagePreview : String -> String -> Html msg
+base64ImagePreview imageName imageData =
+    if String.isEmpty imageData then
+        text ""
+
+    else
+        div [ class "image-preview mb-4" ]
+            [ div [] [ text imageName ]
+            , img [ class "img-fluid", src <| "data:*/*;base64," ++ imageData ] []
+            ]
+
+
+{-| Show an "Upload Image..." button with a preview if an image has been uploaded.
+-}
+imageSelectRow : String -> String -> msg -> String -> Html msg
+imageSelectRow imageName imageData msg label =
+    Form.withLabel label False <|
+        [ base64ImagePreview imageName imageData
+        , button
+            [ class "btn btn-sm btn-secondary"
+            , type_ "button"
+            , onClick msg
+            ]
+            [ text "Upload Image..." ]
+        ]

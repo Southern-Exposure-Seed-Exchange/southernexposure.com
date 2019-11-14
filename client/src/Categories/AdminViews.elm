@@ -13,7 +13,6 @@ module Categories.AdminViews exposing
     )
 
 import Api exposing (FormErrors)
-import Base64
 import Category exposing (CategoryId(..))
 import Dict
 import File exposing (File)
@@ -28,9 +27,8 @@ import Ports
 import RemoteData
 import Result.Extra as Result
 import Routing exposing (AdminRoute(..), Route(..))
-import Task
 import Update.Utils exposing (noCommand)
-import Views.Admin exposing (equalsOriginal, formSavingClass, slugFrom, submitOrSavingButton, updateEditField)
+import Views.Admin as Admin exposing (equalsOriginal, formSavingClass, slugFrom, submitOrSavingButton, updateEditField)
 import Views.HorizontalForm as Form
 import Views.Images exposing (media)
 import Views.Utils exposing (routeLinkAttributes, selectImageFile)
@@ -134,7 +132,7 @@ updateNewForm key msg model =
 
         NImageUploaded imageFile ->
             ( { model | imageName = File.name imageFile }
-            , encodeImageData NImageEncoded imageFile
+            , Admin.encodeImageData NImageEncoded imageFile
             )
 
         NImageEncoded imageData ->
@@ -220,15 +218,7 @@ new model categories =
                 :: List.map renderCategoryOption categories
         , Form.textareaRow model.errors model.description NInputDescription False "Description" "description" 10
         , inputRow model.order NInputOrder True "Sort Order" "order" "number" "off"
-        , Form.withLabel "Image" False <|
-            [ base64ImagePreview model.imageName model.imageData
-            , button
-                [ class "btn btn-sm btn-secondary"
-                , type_ "button"
-                , onClick NSelectImage
-                ]
-                [ text "Upload Image..." ]
-            ]
+        , Admin.imageSelectRow model.imageName model.imageData NSelectImage "Image"
         , div [ class "form-group" ]
             [ submitOrSavingButton model "Add Category"
             ]
@@ -329,7 +319,7 @@ updateEditForm key original msg model =
 
         EImageUploaded imageFile ->
             ( { model | imageName = Just <| File.name imageFile }
-            , encodeImageData EImageEncoded imageFile
+            , Admin.encodeImageData EImageEncoded imageFile
             )
 
         EImageEncoded imageData ->
@@ -437,7 +427,7 @@ edit categoryId model categories originalCategory =
                         ]
 
                 Just ( imageData, imageName ) ->
-                    base64ImagePreview imageName imageData
+                    Admin.base64ImagePreview imageName imageData
     in
     [ form [ class (formSavingClass model), onSubmit SubmitEdit ]
         [ Form.genericErrorText <| not <| Dict.isEmpty model.errors
@@ -473,31 +463,6 @@ edit categoryId model categories originalCategory =
 
 
 -- UTILS
-
-
-{-| Build a command to encode an Image's data as a Base64 string.
--}
-encodeImageData : (String -> msg) -> File -> Cmd msg
-encodeImageData msg imageFile =
-    File.toBytes imageFile
-        |> Task.map Base64.fromBytes
-        |> Task.map (Maybe.withDefault "")
-        |> Task.perform msg
-
-
-{-| Build a height-limited image preview showing the image name & the image,
-using the Base64 encoded image data.
--}
-base64ImagePreview : String -> String -> Html msg
-base64ImagePreview imageName imageData =
-    if String.isEmpty imageData then
-        text ""
-
-    else
-        div [ class "image-preview mb-4" ]
-            [ div [] [ text imageName ]
-            , img [ class "img-fluid", src <| "data:*/*;base64," ++ imageData ] []
-            ]
 
 
 {-| Parse a potential Category ID from the string-representation of an Integer.
