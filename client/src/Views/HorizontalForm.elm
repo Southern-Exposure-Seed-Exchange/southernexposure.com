@@ -1,5 +1,6 @@
 module Views.HorizontalForm exposing
-    ( genericErrorText
+    ( checkboxRow
+    , genericErrorText
     , inputRow
     , selectRow
     , submitButton
@@ -10,8 +11,8 @@ module Views.HorizontalForm exposing
 import Api
 import Dict
 import Html exposing (..)
-import Html.Attributes exposing (class, for, id, name, required, rows, type_, value)
-import Html.Events exposing (on, onInput, targetValue)
+import Html.Attributes exposing (checked, class, for, id, name, required, rows, type_, value)
+import Html.Events exposing (on, onCheck, onInput, targetValue)
 import Json.Decode as Decode
 import Views.Utils exposing (autocomplete)
 
@@ -128,6 +129,31 @@ textareaRow errors inputValue inputMsg isRequired labelText errorField rowCount 
         [ text inputValue ]
         |> (\i -> [ i, errorHtml ])
         |> withLabel labelText isRequired
+
+
+checkboxRow : Bool -> (Bool -> msg) -> String -> String -> Html msg
+checkboxRow value msg labelText name_ =
+    div [ class "form-group form-row align-items-center" ]
+        [ div [ class "col-sm-3 col-form-label" ] []
+        , div [ class "col" ]
+            [ div [ class "form-check" ]
+                [ input
+                    [ id <| "input" ++ name_
+                    , name name_
+                    , class "form-check-input"
+                    , type_ "checkbox"
+                    , onCheck msg
+                    , checked value
+                    ]
+                    []
+                , label
+                    [ class "form-check-label w-100"
+                    , for <| "input" ++ name_
+                    ]
+                    [ text labelText ]
+                ]
+            ]
+        ]
 
 
 selectRow : (String -> Result String a) -> (a -> msg) -> String -> Bool -> List (Html msg) -> Html msg

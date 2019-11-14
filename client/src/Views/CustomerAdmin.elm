@@ -13,9 +13,9 @@ module Views.CustomerAdmin exposing
 
 import Api
 import Dict
-import Html exposing (Html, a, div, form, input, label, td, text, th, thead, tr)
-import Html.Attributes exposing (checked, class, for, id, name, type_)
-import Html.Events exposing (onCheck, onSubmit)
+import Html exposing (Html, a, div, form, td, text, th, thead, tr)
+import Html.Attributes exposing (class)
+import Html.Events exposing (onSubmit)
 import Json.Decode as Decode
 import Json.Encode as Encode
 import Models.Fields exposing (Cents(..), centsFromString)
@@ -264,25 +264,6 @@ edit model original =
 
         inputRow modelSelector originalSelector =
             Form.inputRow model.errors (valueWithFallback modelSelector originalSelector)
-
-        adminCheckbox =
-            div [ class "form-group form-row align-items-center" ]
-                [ div [ class "col-sm-3 col-form-label" ] [ text "" ]
-                , div [ class "col" ]
-                    [ div [ class "form-check" ]
-                        [ input
-                            [ id "inputIsAdmin"
-                            , name "IsAdmin"
-                            , class "form-check-input"
-                            , type_ "checkbox"
-                            , onCheck InputIsAdmin
-                            , checked <| valueWithFallback .isAdmin .isAdmin
-                            ]
-                            []
-                        , label [ class "form-check-label", for "inputIsAdmin" ] [ text "Is Administrator" ]
-                        ]
-                    ]
-                ]
     in
     [ form [ class (Admin.formSavingClass model), onSubmit Submit ]
         [ Form.genericErrorText <| not <| Dict.isEmpty model.errors
@@ -298,7 +279,10 @@ edit model original =
             "off"
         , Form.inputRow model.errors model.password InputPassword False "New Password" "password" "password" "off"
         , Form.inputRow model.errors model.passwordConfirm InputPasswordConfirm False "Confirm Password" "passwordConfirm" "password" "off"
-        , adminCheckbox
+        , Form.checkboxRow (valueWithFallback .isAdmin .isAdmin)
+            InputIsAdmin
+            "Is Administrator"
+            "IsAdmin"
         , div [ class "form-group" ]
             [ Admin.submitOrSavingButton model "Update Customer" ]
         ]
