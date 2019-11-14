@@ -26,6 +26,7 @@ import PageData exposing (CartItemId(..), PageData)
 import Paginate exposing (Paginated)
 import Ports
 import Product exposing (ProductId(..), ProductVariantId(..))
+import Products.AdminViews as ProductAdmin
 import QuickOrder
 import RemoteData exposing (WebData)
 import Routing exposing (AdminRoute(..), Route(..), parseRoute)
@@ -314,6 +315,11 @@ fetchDataForRoute ({ route, pageData, key } as model) =
                     , getAdminEditCustomerData customerId
                     )
 
+                Admin ProductList ->
+                    ( { pageData | adminProductList = RemoteData.Loading }
+                    , getAdminProductList
+                    )
+
                 NotFound ->
                     doNothing
 
@@ -544,6 +550,13 @@ getAdminEditCustomerData customerId =
     Api.get (Api.AdminEditCustomerData customerId)
         |> Api.withJsonResponse PageData.adminEditCustomerDataDecoder
         |> Api.sendRequest GetAdminEditCustomerData
+
+
+getAdminProductList : Cmd Msg
+getAdminProductList =
+    Api.get Api.AdminProductList
+        |> Api.withJsonResponse PageData.adminProductListDataDecoder
+        |> Api.sendRequest GetAdminProductList
 
 
 
@@ -862,6 +875,11 @@ update msg ({ pageData, key } as model) =
                 |> Tuple.mapFirst (\form -> { model | editCustomerForm = form })
                 |> Tuple.mapSecond (Cmd.map EditCustomerMsg)
 
+        ProductListMsg subMsg ->
+            ProductAdmin.updateListForm subMsg model.productListForm
+                |> (\form -> { model | productListForm = form })
+                |> noCommand
+
         ReAuthorize response ->
             case response of
                 RemoteData.Success authStatus ->
@@ -1124,6 +1142,13 @@ update msg ({ pageData, key } as model) =
             in
             ( { model | pageData = updatedPageData }, Cmd.none )
 
+        GetAdminProductList response ->
+            let
+                updatedPageData =
+                    { pageData | adminProductList = response }
+            in
+            ( { model | pageData = updatedPageData }, Cmd.none )
+
 
 {-| Update the current page number using the Paginated data.
 
@@ -1223,6 +1248,9 @@ resetForm oldRoute model =
 
                 CustomerEdit _ ->
                     { model | editCustomerForm = CustomerAdmin.initialEditForm }
+
+                ProductList ->
+                    { model | productListForm = ProductAdmin.initialListForm }
     in
     case oldRoute of
         ProductDetails _ ->

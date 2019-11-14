@@ -7,9 +7,11 @@ module PageData exposing
     , AdminEditPageData
     , AdminListCategory(..)
     , AdminListPage
+    , AdminListProduct
     , AdminNewCategoryData
     , AdminOrderDetails
     , AdminPageListData
+    , AdminProductListData
     , AdvancedSearch
     , CartDetails
     , CartItem
@@ -36,6 +38,7 @@ module PageData exposing
     , adminNewCategoryDataDecoder
     , adminOrderDetailsDecoder
     , adminPageListDataDecoder
+    , adminProductListDataDecoder
     , advancedSearchDecoder
     , blankCartDetails
     , cartDetailsDecoder
@@ -100,6 +103,7 @@ type alias PageData =
     , adminOrderDetails : WebData AdminOrderDetails
     , adminCustomerList : Paginated CustomerData String ()
     , adminEditCustomer : WebData AdminEditCustomerData
+    , adminProductList : WebData AdminProductListData
     }
 
 
@@ -148,6 +152,7 @@ initial =
     , adminOrderDetails = RemoteData.NotAsked
     , adminCustomerList = customersPaginate
     , adminEditCustomer = RemoteData.NotAsked
+    , adminProductList = RemoteData.NotAsked
     }
 
 
@@ -879,6 +884,39 @@ adminEditCustomerDataDecoder =
         (Decode.field "email" Decode.string)
         (Decode.field "storeCredit" centsDecoder)
         (Decode.field "isAdmin" Decode.bool)
+
+
+
+-- Product Admin
+
+
+type alias AdminProductListData =
+    { products : List AdminListProduct }
+
+
+adminProductListDataDecoder : Decoder AdminProductListData
+adminProductListDataDecoder =
+    Decode.map AdminProductListData
+        (Decode.field "products" <| Decode.list adminListProductDecoder)
+
+
+type alias AdminListProduct =
+    { id : Int
+    , name : String
+    , baseSku : String
+    , categories : List String
+    , isActive : Bool
+    }
+
+
+adminListProductDecoder : Decoder AdminListProduct
+adminListProductDecoder =
+    Decode.map5 AdminListProduct
+        (Decode.field "id" Decode.int)
+        (Decode.field "name" Decode.string)
+        (Decode.field "baseSKU" Decode.string)
+        (Decode.field "categories" <| Decode.list Decode.string)
+        (Decode.field "isActive" Decode.bool)
 
 
 

@@ -258,6 +258,9 @@ adminView route =
                         ( CustomerEdit _, _ ) ->
                             False
 
+                        ( ProductList, _ ) ->
+                            False
+
                 _ ->
                     False
     in
@@ -277,6 +280,7 @@ adminView route =
             , div [ id "admin-navbar", class "collapse navbar-collapse" ]
                 [ ul [ class "navbar-nav" ]
                     [ navItem "Categories" CategoryList
+                    , navItem "Products" ProductList
                     , navItem "Pages" PageList
                     , navItem "Orders" <| OrderList { page = 1, perPage = 50, query = "" }
                     , navItem "Customers" <| CustomerList { page = 1, perPage = 50, query = "" }

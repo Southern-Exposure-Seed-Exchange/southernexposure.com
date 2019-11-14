@@ -152,6 +152,9 @@ view route pageData =
                     , activeItem "Edit Customer"
                     ]
 
+                Admin ProductList ->
+                    singleItem "Products"
+
                 NotFound ->
                     singleItem "Page Not Found"
 

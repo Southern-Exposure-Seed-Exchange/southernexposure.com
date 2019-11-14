@@ -20,6 +20,7 @@ import Model exposing (CartForms, Model)
 import OrderDetails
 import PageData
 import Paginate
+import Products.AdminViews as ProductAdmin
 import Products.Pagination as Pagination
 import Products.Views as ProductViews
 import QuickOrder
@@ -211,6 +212,10 @@ view ({ route, pageData, navigationData, zone } as model) =
                     withIntermediateText (CustomerAdmin.edit model.editCustomerForm) pageData.adminEditCustomer
                         |> List.map (Html.map EditCustomerMsg)
 
+                Admin ProductList ->
+                    withIntermediateText (ProductAdmin.list model.productListForm) pageData.adminProductList
+                        |> List.map (Html.map ProductListMsg)
+
         apply : (a -> b -> c) -> ( a, b ) -> c
         apply f ( a, b ) =
             f a b
@@ -346,6 +351,9 @@ view ({ route, pageData, navigationData, zone } as model) =
                         |> RemoteData.toMaybe
                         |> Maybe.withDefault ""
                         |> (\email -> "Edit Customer" ++ email)
+
+                ProductList ->
+                    "Products"
 
         -- TODO: Have "Error" & "Loading" titles?
         getFromPageData :

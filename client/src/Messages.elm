@@ -15,6 +15,7 @@ import Locations exposing (AddressLocations)
 import PageData exposing (CustomerData, OrderData, ProductData)
 import Paginate
 import Product exposing (ProductId, ProductVariantId)
+import Products.AdminViews as ProductAdmin
 import QuickOrder
 import RemoteData exposing (WebData)
 import Routing exposing (Route)
@@ -65,6 +66,7 @@ type Msg
     | OrderDetailsMsg OrderAdmin.DetailsMsg
     | CustomerSearchMsg CustomerAdmin.SearchMsg
     | EditCustomerMsg CustomerAdmin.EditMsg
+    | ProductListMsg ProductAdmin.ListMsg
       -- API Requests
     | ReAuthorize (WebData User.AuthStatus)
     | LogOutResponse (WebData ())
@@ -90,3 +92,4 @@ type Msg
     | GetAdminOrderDetails (WebData PageData.AdminOrderDetails)
     | AdminCustomerPaginationMsg (Paginate.Msg CustomerData ())
     | GetAdminEditCustomerData (WebData PageData.AdminEditCustomerData)
+    | GetAdminProductList (WebData PageData.AdminProductListData)

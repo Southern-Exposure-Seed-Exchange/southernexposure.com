@@ -15,6 +15,7 @@ import Checkout
 import Dict exposing (Dict)
 import PageData exposing (PageData)
 import Product exposing (ProductVariantId)
+import Products.AdminViews as ProductAdmin
 import QuickOrder
 import RemoteData exposing (WebData)
 import Routing exposing (Route)
@@ -50,6 +51,7 @@ type alias Model =
     , orderDetailsForm : OrderAdmin.DetailsForm
     , customerSearchForm : CustomerAdmin.SearchForm
     , editCustomerForm : CustomerAdmin.EditForm
+    , productListForm : ProductAdmin.ListForm
     , cartItemCount : Int
     , maybeSessionToken : Maybe String
     , currentUser : AuthStatus
@@ -89,6 +91,7 @@ initial key route =
     , orderDetailsForm = OrderAdmin.initialDetailsForm
     , customerSearchForm = CustomerAdmin.initialSearchForm
     , editCustomerForm = CustomerAdmin.initialEditForm
+    , productListForm = ProductAdmin.initialListForm
     , cartItemCount = 0
     , maybeSessionToken = Nothing
     , currentUser = User.unauthorized
