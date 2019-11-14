@@ -175,5 +175,5 @@ view route pageData =
         maybeToList f =
             Maybe.map f >> Maybe.withDefault []
     in
-    div [ id "breadcrumbs", class "container" ]
+    div [ id "breadcrumbs", class "container d-print-none" ]
         [ ol [ class "breadcrumb mb-0" ] items ]

@@ -134,7 +134,7 @@ view route =
                     ]
                 ]
     in
-    div [ id "sidebar", class "col-12 col-md-3 col-lg-3 col-xl-2 order-md-1" ]
+    div [ id "sidebar", class "col-12 col-md-3 col-lg-3 col-xl-2 order-md-1 d-print-none" ]
         [ pageLinks
         , attributesCard
         , newsletterCard
