@@ -19,20 +19,18 @@ import Database.Persist
     ( (=.), Entity(..), SelectOpt(Asc), Update, selectList, insert, get, update
     )
 import Servant ((:>), (:<|>)(..), AuthProtect, ReqBody, Capture, Get, Post, Patch, JSON, err404)
-import System.FilePath ((</>), takeFileName)
 import Text.HTML.SanitizeXSS (sanitize)
 
 import Auth (Cookied, WrappedAuthToken, withAdminCookie, validateAdminAndParameters)
 import Cache (Caches(..), syncCategoryPredecessorCache, queryCategoryPredecessorCache)
-import Config (Config(getMediaDirectory, getCaches))
-import Images (ImageSourceSet, makeSourceSet, makeImageConfig, scaleImage)
+import Config (Config(getCaches))
+import Images (ImageSourceSet, makeSourceSet)
 import Models (Category(..), CategoryId, EntityField(..), Unique(UniqueCategorySlug), slugify)
-import Routes.Utils (mapUpdate, mapUpdateWith)
+import Routes.Utils (mapUpdate, mapUpdateWith, makeImageFromBase64)
 import Server (App, runDB, serverError)
 import Validation (Validation(..))
 
 import qualified Data.ByteString as BS
-import qualified Data.ByteString.Base64 as Base64
 import qualified Data.Text as T
 import qualified Data.Map.Strict as M
 import qualified Data.HashMap.Strict as HM
@@ -206,7 +204,7 @@ instance Validation NewCategoryParameters where
 
 newCategoryRoute :: WrappedAuthToken -> NewCategoryParameters -> App (Cookied CategoryId)
 newCategoryRoute = validateAdminAndParameters $ \_ NewCategoryParameters {..} -> do
-    imageFileName <- makeImageFromBase64 ncpImageName ncpImageData
+    imageFileName <- makeImageFromBase64 "categories" ncpImageName ncpImageData
     let newCategory = Category
             { categoryName = sanitize ncpName
             , categorySlug = slugify $ sanitize ncpSlug
@@ -376,7 +374,7 @@ editCategoryRoute = validateAdminAndParameters $ \_ parameters -> do
             Nothing ->
                 return []
             Just (imageName, imageData) -> do
-                newImageName <- makeImageFromBase64 imageName imageData
+                newImageName <- makeImageFromBase64 "categories" imageName imageData
                 return [CategoryImageUrl =. newImageName]
 
     let updates = makeUpdates parameters ++ imageUpdate
@@ -406,18 +404,3 @@ updateCategoryCaches = do
     caches <- asks getCaches
     liftIO . atomically . modifyTVar' caches $ \c ->
         c { getCategoryPredecessorCache = newCPCache }
-
--- | Save an Image encoded in a Base64 ByteString, returning the filename
--- appended with the content hash.
-makeImageFromBase64 :: T.Text -> BS.ByteString -> App T.Text
-makeImageFromBase64 fileName imageData =
-    if BS.null imageData then
-        return ""
-    else case Base64.decode imageData of
-        Left _ ->
-            return ""
-        Right rawImageData -> do
-            imageConfig <- makeImageConfig
-            mediaDirectory <- asks getMediaDirectory
-            T.pack . takeFileName
-                <$> scaleImage imageConfig fileName (mediaDirectory </> "categories") rawImageData

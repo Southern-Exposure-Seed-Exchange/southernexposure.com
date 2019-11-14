@@ -6,6 +6,8 @@ module Routes.Utils
       -- * Customers
     , generateUniqueToken
     , hashPassword
+      -- * Images
+    , makeImageFromBase64
       -- * General
     , extractRowCount
     , buildWhereQuery
@@ -14,6 +16,7 @@ module Routes.Utils
     ) where
 
 import Control.Monad (void)
+import Control.Monad.Reader (asks)
 import Control.Monad.Trans (liftIO)
 import Data.Int (Int64)
 import Data.Maybe (fromMaybe, listToMaybe)
@@ -21,12 +24,17 @@ import Data.Text.Encoding (encodeUtf8, decodeUtf8)
 import Database.Persist ((=.), Entity(..), getBy, PersistEntityBackend, PersistEntity, Update)
 import Database.Persist.Sql (SqlBackend)
 import Servant (errBody, err500)
+import System.FilePath ((</>), takeFileName)
 
+import Config (Config(getMediaDirectory))
+import Images (makeImageConfig, scaleImage)
 import Models
 import Models.Fields (Cents(..))
 import Server
 
 import qualified Crypto.BCrypt as BCrypt
+import qualified Data.ByteString as BS
+import qualified Data.ByteString.Base64 as Base64
 import qualified Data.Text as T
 import qualified Data.UUID as UUID
 import qualified Data.UUID.V4 as UUID4
@@ -139,6 +147,24 @@ hashPassword password = do
             serverError $ err500 { errBody = "Misconfigured Hashing Policy" }
         Just pass ->
             return $ decodeUtf8 pass
+
+
+-- IMAGES
+
+-- | Save an Image encoded in a Base64 ByteString, returning the new filename
+-- with the content hash appended to the original.
+makeImageFromBase64 :: FilePath -> T.Text -> BS.ByteString -> App T.Text
+makeImageFromBase64 basePath fileName imageData =
+    if BS.null imageData then
+        return ""
+    else case Base64.decode imageData of
+        Left _ ->
+            return ""
+        Right rawImageData -> do
+            imageConfig <- makeImageConfig
+            mediaDirectory <- asks getMediaDirectory
+            T.pack . takeFileName
+                <$> scaleImage imageConfig fileName (mediaDirectory </> basePath) rawImageData
 
 
 -- GENERAL
