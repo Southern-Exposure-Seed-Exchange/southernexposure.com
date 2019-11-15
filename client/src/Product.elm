@@ -4,6 +4,7 @@ module Product exposing
     , ProductVariant
     , ProductVariantId(..)
     , decoder
+    , idDecoder
     , isLimitedAvailablity
     , isOutOfStock
     , nameWithLotSize
@@ -22,6 +23,11 @@ import Models.Fields exposing (Cents(..), ImageData, LotSize, imageDecoder, lotS
 
 type ProductId
     = ProductId Int
+
+
+idDecoder : Decoder ProductId
+idDecoder =
+    Decode.map ProductId Decode.int
 
 
 type alias Product =
@@ -69,7 +75,7 @@ singleVariantName product variants =
 decoder : Decoder Product
 decoder =
     Decode.map6 Product
-        (Decode.field "id" <| Decode.map ProductId Decode.int)
+        (Decode.field "id" idDecoder)
         (Decode.field "name" Decode.string)
         (Decode.field "slug" Decode.string)
         (Decode.field "baseSku" Decode.string)
