@@ -14,6 +14,7 @@ module Models.Fields exposing
     , imgSrcFallback
     , lotSizeDecoder
     , lotSizeToString
+    , milligramsFromString
     , milligramsToString
     )
 
@@ -64,6 +65,20 @@ type Milligrams
 milligramsDecoder : Decoder Milligrams
 milligramsDecoder =
     Decode.map Milligrams Decode.int
+
+
+milligramsFromString : String -> Maybe Milligrams
+milligramsFromString =
+    Decimal.fromString >> Maybe.map milligramsFromDecimal
+
+
+milligramsFromDecimal : Decimal -> Milligrams
+milligramsFromDecimal =
+    Decimal.truncate -3
+        >> Decimal.mul (Decimal.fromInt 1000)
+        >> Decimal.toFloat
+        >> round
+        >> Milligrams
 
 
 milligramsToString : Milligrams -> String
