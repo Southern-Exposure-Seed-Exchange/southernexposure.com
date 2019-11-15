@@ -472,8 +472,17 @@ validateForm model =
         fromMaybe msg v =
             Maybe.map Ok v
                 |> Maybe.withDefault (Err msg)
+
+        categoryValidation =
+            if model.category == CategoryId 0 then
+                Array.repeat 1 <| Err <| Api.addError "category" "Select a Category" Api.initialErrors
+
+            else
+                Array.empty
     in
-    mergeValidations <| Array.indexedMap validateVariant model.variants
+    Array.indexedMap validateVariant model.variants
+        |> Array.append categoryValidation
+        |> mergeValidations
 
 
 validate : Int -> NewVariant -> Result String Cents -> Result String Int -> Result String (Maybe LotSize) -> Result Api.FormErrors ValidVariant
