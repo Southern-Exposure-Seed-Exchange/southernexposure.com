@@ -87,6 +87,7 @@ type Endpoint
     | AdminEditCustomerData Int
     | AdminEditCustomer
     | AdminProductList
+    | AdminNewProduct
 
 
 toUrl : Endpoint -> String
@@ -254,6 +255,9 @@ toUrl endpoint =
 
                 AdminProductList ->
                     joinPath [ "admin", "products", "list" ]
+
+                AdminNewProduct ->
+                    joinPath [ "admin", "products", "new" ]
     in
     "/api" ++ endpointUrl
 

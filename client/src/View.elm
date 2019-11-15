@@ -216,6 +216,10 @@ view ({ route, pageData, navigationData, zone } as model) =
                     withIntermediateText (ProductAdmin.list model.productListForm) pageData.adminProductList
                         |> List.map (Html.map ProductListMsg)
 
+                Admin ProductNew ->
+                    withIntermediateText (ProductAdmin.new model.newProductForm) pageData.adminNewProduct
+                        |> List.map (Html.map NewProductMsg)
+
         apply : (a -> b -> c) -> ( a, b ) -> c
         apply f ( a, b ) =
             f a b
@@ -354,6 +358,9 @@ view ({ route, pageData, navigationData, zone } as model) =
 
                 ProductList ->
                     "Products"
+
+                ProductNew ->
+                    "New Product"
 
         -- TODO: Have "Error" & "Loading" titles?
         getFromPageData :

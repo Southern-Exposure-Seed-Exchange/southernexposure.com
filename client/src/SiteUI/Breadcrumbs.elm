@@ -155,6 +155,11 @@ view route pageData =
                 Admin ProductList ->
                     singleItem "Products"
 
+                Admin ProductNew ->
+                    [ inactiveItem "Products" <| Admin ProductList
+                    , activeItem "New"
+                    ]
+
                 NotFound ->
                     singleItem "Page Not Found"
 

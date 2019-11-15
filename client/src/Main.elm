@@ -320,6 +320,11 @@ fetchDataForRoute ({ route, pageData, key } as model) =
                     , getAdminProductList
                     )
 
+                Admin ProductNew ->
+                    ( { pageData | adminNewProduct = RemoteData.Loading }
+                    , getAdminNewProductData
+                    )
+
                 NotFound ->
                     doNothing
 
@@ -557,6 +562,13 @@ getAdminProductList =
     Api.get Api.AdminProductList
         |> Api.withJsonResponse PageData.adminProductListDataDecoder
         |> Api.sendRequest GetAdminProductList
+
+
+getAdminNewProductData : Cmd Msg
+getAdminNewProductData =
+    Api.get Api.AdminNewProduct
+        |> Api.withJsonResponse PageData.adminNewProductDataDecoder
+        |> Api.sendRequest GetAdminNewProductData
 
 
 
@@ -880,6 +892,11 @@ update msg ({ pageData, key } as model) =
                 |> (\form -> { model | productListForm = form })
                 |> noCommand
 
+        NewProductMsg subMsg ->
+            ProductAdmin.updateNewForm subMsg model.newProductForm
+                |> Tuple.mapFirst (\form -> { model | newProductForm = form })
+                |> Tuple.mapSecond (Cmd.map NewProductMsg)
+
         ReAuthorize response ->
             case response of
                 RemoteData.Success authStatus ->
@@ -1149,6 +1166,13 @@ update msg ({ pageData, key } as model) =
             in
             ( { model | pageData = updatedPageData }, Cmd.none )
 
+        GetAdminNewProductData response ->
+            let
+                updatedPageData =
+                    { pageData | adminNewProduct = response }
+            in
+            ( { model | pageData = updatedPageData }, Cmd.none )
+
 
 {-| Update the current page number using the Paginated data.
 
@@ -1251,6 +1275,9 @@ resetForm oldRoute model =
 
                 ProductList ->
                     { model | productListForm = ProductAdmin.initialListForm }
+
+                ProductNew ->
+                    { model | newProductForm = ProductAdmin.initialNewForm }
     in
     case oldRoute of
         ProductDetails _ ->

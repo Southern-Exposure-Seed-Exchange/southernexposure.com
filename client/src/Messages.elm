@@ -67,6 +67,7 @@ type Msg
     | CustomerSearchMsg CustomerAdmin.SearchMsg
     | EditCustomerMsg CustomerAdmin.EditMsg
     | ProductListMsg ProductAdmin.ListMsg
+    | NewProductMsg ProductAdmin.NewMsg
       -- API Requests
     | ReAuthorize (WebData User.AuthStatus)
     | LogOutResponse (WebData ())
@@ -93,3 +94,4 @@ type Msg
     | AdminCustomerPaginationMsg (Paginate.Msg CustomerData ())
     | GetAdminEditCustomerData (WebData PageData.AdminEditCustomerData)
     | GetAdminProductList (WebData PageData.AdminProductListData)
+    | GetAdminNewProductData (WebData PageData.AdminNewProductData)

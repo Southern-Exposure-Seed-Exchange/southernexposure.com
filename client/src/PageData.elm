@@ -9,8 +9,10 @@ module PageData exposing
     , AdminListPage
     , AdminListProduct
     , AdminNewCategoryData
+    , AdminNewProductData
     , AdminOrderDetails
     , AdminPageListData
+    , AdminProductCategory
     , AdminProductListData
     , AdvancedSearch
     , CartDetails
@@ -36,6 +38,7 @@ module PageData exposing
     , adminEditPageDataDecoder
     , adminListPageDecoder
     , adminNewCategoryDataDecoder
+    , adminNewProductDataDecoder
     , adminOrderDetailsDecoder
     , adminPageListDataDecoder
     , adminProductListDataDecoder
@@ -104,6 +107,7 @@ type alias PageData =
     , adminCustomerList : Paginated CustomerData String ()
     , adminEditCustomer : WebData AdminEditCustomerData
     , adminProductList : WebData AdminProductListData
+    , adminNewProduct : WebData AdminNewProductData
     }
 
 
@@ -153,6 +157,7 @@ initial =
     , adminCustomerList = customersPaginate
     , adminEditCustomer = RemoteData.NotAsked
     , adminProductList = RemoteData.NotAsked
+    , adminNewProduct = RemoteData.NotAsked
     }
 
 
@@ -917,6 +922,31 @@ adminListProductDecoder =
         (Decode.field "baseSKU" Decode.string)
         (Decode.field "categories" <| Decode.list Decode.string)
         (Decode.field "isActive" Decode.bool)
+
+
+type alias AdminNewProductData =
+    { categories : List AdminProductCategory
+    }
+
+
+adminNewProductDataDecoder : Decoder AdminNewProductData
+adminNewProductDataDecoder =
+    Decode.map AdminNewProductData <|
+        Decode.field "categories" <|
+            Decode.list adminProductCategoryDecoder
+
+
+type alias AdminProductCategory =
+    { id : CategoryId
+    , name : String
+    }
+
+
+adminProductCategoryDecoder : Decoder AdminProductCategory
+adminProductCategoryDecoder =
+    Decode.map2 AdminProductCategory
+        (Decode.field "id" <| Decode.map CategoryId Decode.int)
+        (Decode.field "name" Decode.string)
 
 
 
