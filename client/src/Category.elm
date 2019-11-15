@@ -2,12 +2,14 @@ module Category exposing
     ( Category
     , CategoryId(..)
     , decoder
+    , idEncoder
     , idParser
     , initial
     , maybeIdParser
     )
 
 import Json.Decode as Decode exposing (Decoder)
+import Json.Encode as Encode
 import Models.Fields exposing (ImageData, blankImage, imageDecoder)
 
 
@@ -37,6 +39,11 @@ maybeIdParser val =
 
     else
         Result.map Just <| idParser val
+
+
+idEncoder : CategoryId -> Encode.Value
+idEncoder (CategoryId c) =
+    Encode.int c
 
 
 type alias Category =

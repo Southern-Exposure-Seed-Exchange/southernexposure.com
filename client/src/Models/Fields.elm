@@ -5,6 +5,7 @@ module Models.Fields exposing
     , Milligrams(..)
     , blankImage
     , centsDecoder
+    , centsEncoder
     , centsFromDecimal
     , centsFromString
     , centsMap
@@ -13,6 +14,7 @@ module Models.Fields exposing
     , imageToSrcSet
     , imgSrcFallback
     , lotSizeDecoder
+    , lotSizeEncoder
     , lotSizeToString
     , milligramsFromString
     , milligramsToString
@@ -22,6 +24,7 @@ import Decimal exposing (Decimal)
 import Html exposing (Attribute)
 import Html.Attributes exposing (attribute)
 import Json.Decode as Decode exposing (Decoder)
+import Json.Encode as Encode exposing (Value)
 import Views.Images exposing (media)
 
 
@@ -42,6 +45,11 @@ centsMap2 f (Cents a) (Cents b) =
 centsDecoder : Decoder Cents
 centsDecoder =
     Decode.map Cents Decode.int
+
+
+centsEncoder : Cents -> Value
+centsEncoder (Cents c) =
+    Encode.int c
 
 
 centsFromDecimal : Decimal -> Cents
@@ -65,6 +73,11 @@ type Milligrams
 milligramsDecoder : Decoder Milligrams
 milligramsDecoder =
     Decode.map Milligrams Decode.int
+
+
+milligramsEncoder : Milligrams -> Value
+milligramsEncoder (Milligrams mg) =
+    Encode.int mg
 
 
 milligramsFromString : String -> Maybe Milligrams
@@ -172,6 +185,32 @@ lotSizeDecoder =
     in
     Decode.field "type" Decode.string
         |> Decode.andThen decodeSize
+
+
+lotSizeEncoder : LotSize -> Value
+lotSizeEncoder ls =
+    let
+        ( type_, size ) =
+            case ls of
+                Mass mg ->
+                    ( "mass", milligramsEncoder mg )
+
+                Bulbs q ->
+                    ( "bulbs", Encode.int q )
+
+                Slips q ->
+                    ( "slips", Encode.int q )
+
+                Plugs q ->
+                    ( "plugs", Encode.int q )
+
+                CustomLotSize str ->
+                    ( "custom", Encode.string str )
+    in
+    Encode.object
+        [ ( "type", Encode.string type_ )
+        , ( "size", size )
+        ]
 
 
 lotSizeToString : LotSize -> String
