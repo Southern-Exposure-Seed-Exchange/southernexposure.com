@@ -228,6 +228,7 @@ type LotSizeSelector
     | LSSlips
     | LSPlugs
     | LSCustom
+    | LSNone
 
 
 type NewMsg
@@ -353,7 +354,10 @@ updateNewForm msg model =
                                 [ ( "skuSuffix", Encode.string variant.skuSuffix )
                                 , ( "price", centsEncoder variant.price )
                                 , ( "quantity", Encode.int variant.quantity )
-                                , ( "lotSize", lotSizeEncoder variant.lotSize )
+                                , ( "lotSize"
+                                  , Maybe.map lotSizeEncoder variant.lotSize
+                                        |> Maybe.withDefault Encode.null
+                                  )
                                 , ( "isActive", Encode.bool variant.isActive )
                                 ]
                     in
@@ -424,7 +428,7 @@ type alias ValidVariant =
     { skuSuffix : String
     , price : Cents
     , quantity : Int
-    , lotSize : LotSize
+    , lotSize : Maybe LotSize
     , isActive : Bool
     , id : Maybe Int
     }
@@ -443,21 +447,24 @@ validateForm model =
         validateLotSize { lotSizeSelector, lotSizeAmount } =
             case lotSizeSelector of
                 LSCustom ->
-                    Ok <| CustomLotSize lotSizeAmount
+                    Ok <| Just <| CustomLotSize lotSizeAmount
 
                 LSMass ->
                     milligramsFromString lotSizeAmount
-                        |> Maybe.map (Ok << Mass)
+                        |> Maybe.map (Ok << Just << Mass)
                         |> Maybe.withDefault (Err "Enter a valid decimal number.")
 
                 LSBulbs ->
-                    validateInt Bulbs lotSizeAmount
+                    validateInt (Just << Bulbs) lotSizeAmount
 
                 LSSlips ->
-                    validateInt Slips lotSizeAmount
+                    validateInt (Just << Slips) lotSizeAmount
 
                 LSPlugs ->
-                    validateInt Plugs lotSizeAmount
+                    validateInt (Just << Plugs) lotSizeAmount
+
+                LSNone ->
+                    Ok Nothing
 
         validateInt wrapper v =
             fromMaybe "Enter a whole number." <| Maybe.map wrapper <| String.toInt v
@@ -469,7 +476,7 @@ validateForm model =
     mergeValidations <| Array.indexedMap validateVariant model.variants
 
 
-validate : Int -> NewVariant -> Result String Cents -> Result String Int -> Result String LotSize -> Result Api.FormErrors ValidVariant
+validate : Int -> NewVariant -> Result String Cents -> Result String Int -> Result String (Maybe LotSize) -> Result Api.FormErrors ValidVariant
 validate index variant rPrice rQuantity rSize =
     let
         apply : String -> Result String a -> Result Api.FormErrors (a -> b) -> Result Api.FormErrors b
@@ -658,6 +665,9 @@ lotSizeRow errors index selectedType enteredAmount =
 
         inputAttrs =
             case selectedType of
+                LSNone ->
+                    [ type_ "hidden" ]
+
                 LSCustom ->
                     [ type_ "text" ]
 
@@ -693,6 +703,9 @@ lotSizeRow errors index selectedType enteredAmount =
                 LSPlugs ->
                     "plugs"
 
+                LSNone ->
+                    "none"
+
         sizeToString size =
             case size of
                 LSCustom ->
@@ -709,6 +722,9 @@ lotSizeRow errors index selectedType enteredAmount =
 
                 LSPlugs ->
                     "Plugs"
+
+                LSNone ->
+                    "No Lot Size"
 
         sizeDecoder str =
             case str of
@@ -727,11 +743,14 @@ lotSizeRow errors index selectedType enteredAmount =
                 "plugs" ->
                     Decode.succeed LSPlugs
 
+                "none" ->
+                    Decode.succeed LSNone
+
                 _ ->
                     Decode.fail <| "Unrecognized lot size type: " ++ str
 
         options =
-            [ LSMass, LSBulbs, LSSlips, LSPlugs, LSCustom ]
+            [ LSMass, LSBulbs, LSSlips, LSPlugs, LSCustom, LSNone ]
                 |> List.map
                     (\t ->
                         option [ value <| sizeToValue t ] [ text <| sizeToString t ]
@@ -745,7 +764,7 @@ lotSizeRow errors index selectedType enteredAmount =
              , required True
              , value enteredAmount
              , onInput (UpdateVariant index << InputLotSizeAmount)
-             , class "form-control w-50 d-inline-block"
+             , class "form-control w-50 d-inline-block mr-4"
              ]
                 ++ inputAttrs
             )
@@ -754,7 +773,7 @@ lotSizeRow errors index selectedType enteredAmount =
             [ id <| "input" ++ selectId
             , name selectId
             , onSelect
-            , class "form-control w-25 d-inline-block ml-4"
+            , class "form-control w-25 d-inline-block"
             ]
             options
         , errorHtml
