@@ -129,12 +129,12 @@ updateNewForm key msg model =
 
                 RemoteData.Success (Err errors) ->
                     ( { model | errors = errors, isSaving = False }
-                    , Ports.scrollToID "form-errors-text"
+                    , Ports.scrollToErrorMessage
                     )
 
                 RemoteData.Failure errors ->
                     ( { model | errors = Api.apiFailureToError errors, isSaving = False }
-                    , Ports.scrollToID "form-errors-text"
+                    , Ports.scrollToErrorMessage
                     )
 
                 _ ->
@@ -255,12 +255,12 @@ updateEditForm key original msg model =
 
                 RemoteData.Success (Err errors) ->
                     ( { model | errors = errors, isSaving = False }
-                    , Ports.scrollToID "form-errors-text"
+                    , Ports.scrollToErrorMessage
                     )
 
                 RemoteData.Failure errors ->
                     ( { model | errors = Api.apiFailureToError errors, isSaving = False }
-                    , Ports.scrollToID "form-errors-text"
+                    , Ports.scrollToErrorMessage
                     )
 
                 _ ->

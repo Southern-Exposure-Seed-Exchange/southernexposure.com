@@ -96,7 +96,7 @@ update key msg form maybeSessionToken =
                             |> Api.addError "password" "Passwords do not match."
                   }
                 , Nothing
-                , Ports.scrollToID "form-errors-text"
+                , Ports.scrollToErrorMessage
                 )
 
             else
@@ -122,13 +122,13 @@ update key msg form maybeSessionToken =
                 RemoteData.Success (Err errors) ->
                     ( { form | errors = errors }
                     , Nothing
-                    , Ports.scrollToID "form-errors-text"
+                    , Ports.scrollToErrorMessage
                     )
 
                 RemoteData.Failure error ->
                     ( { form | errors = Api.apiFailureToError error }
                     , Nothing
-                    , Ports.scrollToID "form-errors-text"
+                    , Ports.scrollToErrorMessage
                     )
 
                 _ ->
