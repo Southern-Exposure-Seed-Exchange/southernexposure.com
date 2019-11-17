@@ -20,7 +20,7 @@ import Html exposing (Html, a, br, button, div, fieldset, form, h3, hr, input, l
 import Html.Attributes as A exposing (checked, class, for, id, name, required, selected, step, type_, value)
 import Html.Events exposing (on, onCheck, onClick, onInput, onSubmit, targetValue)
 import Json.Decode as Decode
-import Json.Encode as Encode
+import Json.Encode as Encode exposing (Value)
 import Models.Fields exposing (Cents(..), LotSize(..), centsEncoder, centsFromString, lotSizeEncoder, milligramsFromString)
 import Models.Utils exposing (slugify)
 import PageData
@@ -161,12 +161,79 @@ list listForm { products } =
 
 
 type alias NewForm =
+    Form
+
+
+initialNewForm : NewForm
+initialNewForm =
+    initialForm
+
+
+type NewMsg
+    = NewFormMsg FormMsg
+    | Submit
+    | SubmitResponse (WebData (Result Api.FormErrors ProductId))
+
+
+updateNewForm : NewMsg -> NewForm -> ( NewForm, Cmd NewMsg )
+updateNewForm msg model =
+    case msg of
+        NewFormMsg subMsg ->
+            updateForm subMsg model
+                |> Tuple.mapSecond (Cmd.map NewFormMsg)
+
+        Submit ->
+            case validateForm model of
+                Ok validVariants ->
+                    ( { model | isSaving = True }
+                    , Api.post Api.AdminNewProduct
+                        |> Api.withJsonBody (encodeForm model validVariants)
+                        |> Api.withErrorHandler Product.idDecoder
+                        |> Api.sendRequest SubmitResponse
+                    )
+
+                Err errors ->
+                    ( { model | errors = errors }
+                    , Ports.scrollToErrorMessage
+                    )
+
+        SubmitResponse response ->
+            case response of
+                RemoteData.Success (Ok _) ->
+                    -- TODO: Redirect to ProductEdit page
+                    ( { model | isSaving = False }, Cmd.none )
+
+                RemoteData.Success (Err errors) ->
+                    ( { model | errors = errors, isSaving = False }
+                    , Ports.scrollToErrorMessage
+                    )
+
+                RemoteData.Failure error ->
+                    ( { model | errors = Api.apiFailureToError error, isSaving = False }
+                    , Ports.scrollToErrorMessage
+                    )
+
+                _ ->
+                    noCommand { model | isSaving = False }
+
+
+new : NewForm -> PageData.AdminNewProductData -> List (Html NewMsg)
+new model data =
+    [ formView Submit NewFormMsg model data
+    ]
+
+
+
+-- FORM
+
+
+type alias Form =
     { name : String
     , slug : String
     , category : CategoryId
     , baseSku : String
     , description : String
-    , variants : Array NewVariant
+    , variants : Array Variant
     , isActive : Bool
     , imageName : String
     , imageData : String
@@ -179,8 +246,8 @@ type alias NewForm =
     }
 
 
-initialNewForm : NewForm
-initialNewForm =
+initialForm : Form
+initialForm =
     { name = ""
     , slug = ""
     , category = CategoryId 0
@@ -199,7 +266,39 @@ initialNewForm =
     }
 
 
-type alias NewVariant =
+encodeForm : Form -> List ValidVariant -> Value
+encodeForm model validVariants =
+    let
+        seedAttributeValues =
+            [ model.isOrganic, model.isHeirloom, model.isRegional, model.isSmallGrower ]
+
+        encodedSeedAttribues =
+            if List.all ((==) False) seedAttributeValues then
+                Encode.null
+
+            else
+                Encode.object
+                    [ ( "organic", Encode.bool model.isOrganic )
+                    , ( "heirloom", Encode.bool model.isHeirloom )
+                    , ( "regional", Encode.bool model.isRegional )
+                    , ( "smallGrower", Encode.bool model.isSmallGrower )
+                    ]
+    in
+    Encode.object
+        [ ( "name", Encode.string model.name )
+        , ( "slug", Encode.string model.slug )
+        , ( "category", Category.idEncoder model.category )
+        , ( "baseSku", Encode.string model.baseSku )
+        , ( "longDescription", Encode.string model.description )
+        , ( "isActive", Encode.bool model.isActive )
+        , ( "imageName", Encode.string model.imageName )
+        , ( "imageData", Encode.string model.imageData )
+        , ( "seedAttributes", encodedSeedAttribues )
+        , ( "variants", Encode.list variantEncoder validVariants )
+        ]
+
+
+type alias Variant =
     { skuSuffix : String
     , price : String
     , quantity : String
@@ -210,7 +309,7 @@ type alias NewVariant =
     }
 
 
-initialVariant : NewVariant
+initialVariant : Variant
 initialVariant =
     { skuSuffix = ""
     , price = ""
@@ -231,7 +330,7 @@ type LotSizeSelector
     | LSNone
 
 
-type NewMsg
+type FormMsg
     = InputName String
     | InputSlug String
     | SelectCategory CategoryId
@@ -248,12 +347,10 @@ type NewMsg
     | UpdateVariant Int VariantMsg
     | AddVariant
     | RemoveVariant Int
-    | Submit
-    | SubmitResponse (WebData (Result Api.FormErrors ProductId))
 
 
-updateNewForm : NewMsg -> NewForm -> ( NewForm, Cmd NewMsg )
-updateNewForm msg model =
+updateForm : FormMsg -> Form -> ( Form, Cmd FormMsg )
+updateForm msg model =
     case msg of
         InputName val ->
             noCommand <|
@@ -319,79 +416,6 @@ updateNewForm msg model =
                         removeIndex index model.variants
                 }
 
-        Submit ->
-            case validateForm model of
-                Ok validVariants ->
-                    let
-                        jsonBody =
-                            Encode.object
-                                [ ( "name", Encode.string model.name )
-                                , ( "slug", Encode.string model.slug )
-                                , ( "category", Category.idEncoder model.category )
-                                , ( "baseSku", Encode.string model.baseSku )
-                                , ( "longDescription", Encode.string model.description )
-                                , ( "isActive", Encode.bool model.isActive )
-                                , ( "imageName", Encode.string model.imageName )
-                                , ( "imageData", Encode.string model.imageData )
-                                , ( "seedAttributes", encodedSeedAttribues )
-                                , ( "variants", Encode.list variantEncoder validVariants )
-                                ]
-
-                        encodedSeedAttribues =
-                            if List.all ((==) True) [ model.isOrganic, model.isHeirloom, model.isRegional, model.isSmallGrower ] then
-                                Encode.null
-
-                            else
-                                Encode.object
-                                    [ ( "organic", Encode.bool model.isOrganic )
-                                    , ( "heirloom", Encode.bool model.isHeirloom )
-                                    , ( "regional", Encode.bool model.isRegional )
-                                    , ( "smallGrower", Encode.bool model.isSmallGrower )
-                                    ]
-
-                        variantEncoder variant =
-                            Encode.object
-                                [ ( "skuSuffix", Encode.string variant.skuSuffix )
-                                , ( "price", centsEncoder variant.price )
-                                , ( "quantity", Encode.int variant.quantity )
-                                , ( "lotSize"
-                                  , Maybe.map lotSizeEncoder variant.lotSize
-                                        |> Maybe.withDefault Encode.null
-                                  )
-                                , ( "isActive", Encode.bool variant.isActive )
-                                ]
-                    in
-                    ( { model | isSaving = True }
-                    , Api.post Api.AdminNewProduct
-                        |> Api.withJsonBody jsonBody
-                        |> Api.withErrorHandler Product.idDecoder
-                        |> Api.sendRequest SubmitResponse
-                    )
-
-                Err errors ->
-                    ( { model | errors = errors }
-                    , Ports.scrollToErrorMessage
-                    )
-
-        SubmitResponse response ->
-            case response of
-                RemoteData.Success (Ok _) ->
-                    -- TODO: Redirect to ProductEdit page
-                    ( { model | isSaving = False }, Cmd.none )
-
-                RemoteData.Success (Err errors) ->
-                    ( { model | errors = errors, isSaving = False }
-                    , Ports.scrollToErrorMessage
-                    )
-
-                RemoteData.Failure error ->
-                    ( { model | errors = Api.apiFailureToError error, isSaving = False }
-                    , Ports.scrollToErrorMessage
-                    )
-
-                _ ->
-                    noCommand { model | isSaving = False }
-
 
 type VariantMsg
     = InputSkuSuffix String
@@ -402,7 +426,7 @@ type VariantMsg
     | ToggleVariantIsActive Bool
 
 
-updateVariant : VariantMsg -> NewVariant -> NewVariant
+updateVariant : VariantMsg -> Variant -> Variant
 updateVariant msg model =
     case msg of
         InputSkuSuffix val ->
@@ -424,6 +448,9 @@ updateVariant msg model =
             { model | isActive = val }
 
 
+{-| A validated variant has it's String inputs turned into the types expected
+by the API.
+-}
 type alias ValidVariant =
     { skuSuffix : String
     , price : Cents
@@ -434,7 +461,24 @@ type alias ValidVariant =
     }
 
 
-validateForm : NewForm -> Result Api.FormErrors (List ValidVariant)
+variantEncoder : ValidVariant -> Value
+variantEncoder variant =
+    Encode.object
+        [ ( "skuSuffix", Encode.string variant.skuSuffix )
+        , ( "price", centsEncoder variant.price )
+        , ( "quantity", Encode.int variant.quantity )
+        , ( "lotSize"
+          , Maybe.map lotSizeEncoder variant.lotSize
+                |> Maybe.withDefault Encode.null
+          )
+        , ( "isActive", Encode.bool variant.isActive )
+        ]
+
+
+{-| Validate the Variant fields in the `Form`, returning a list of validated
+variants or an error set.
+-}
+validateForm : Form -> Result Api.FormErrors (List ValidVariant)
 validateForm model =
     let
         validateVariant index variant =
@@ -466,9 +510,11 @@ validateForm model =
                 LSNone ->
                     Ok Nothing
 
+        -- Move to Validation module.
         validateInt wrapper v =
             fromMaybe "Enter a whole number." <| Maybe.map wrapper <| String.toInt v
 
+        -- Move to Validation module.
         fromMaybe msg v =
             Maybe.map Ok v
                 |> Maybe.withDefault (Err msg)
@@ -485,9 +531,12 @@ validateForm model =
         |> mergeValidations
 
 
-validate : Int -> NewVariant -> Result String Cents -> Result String Int -> Result String (Maybe LotSize) -> Result Api.FormErrors ValidVariant
+{-| After moving `apply` to a new Validation module, can we merge this back into 'validateForm'?
+-}
+validate : Int -> Variant -> Result String Cents -> Result String Int -> Result String (Maybe LotSize) -> Result Api.FormErrors ValidVariant
 validate index variant rPrice rQuantity rSize =
     let
+        -- TODO: Add Validation module?
         apply : String -> Result String a -> Result Api.FormErrors (a -> b) -> Result Api.FormErrors b
         apply fieldName validation result =
             let
@@ -523,6 +572,8 @@ validate index variant rPrice rQuantity rSize =
         |> apply "lotSize" rSize
 
 
+{-| This could go into a Validations module
+-}
 mergeValidations : Array (Result Api.FormErrors a) -> Result Api.FormErrors (List a)
 mergeValidations =
     let
@@ -554,8 +605,10 @@ mergeValidations =
     Array.foldr merge (Ok [])
 
 
-new : NewForm -> PageData.AdminNewProductData -> List (Html NewMsg)
-new model { categories } =
+{-| Render the form for updating/creating Products.
+-}
+formView : msg -> (FormMsg -> msg) -> Form -> PageData.AdminNewProductData -> Html msg
+formView submitMsg msgWrapper model { categories } =
     let
         inputRow s =
             Form.inputRow model.errors (s model)
@@ -574,42 +627,44 @@ new model { categories } =
             else
                 []
     in
-    [ form [ class <| Admin.formSavingClass model, onSubmit Submit ]
-        [ Form.genericErrorText <| not <| Dict.isEmpty model.errors
-        , Api.generalFormErrors model
-        , h3 [] [ text "Base Product" ]
-        , inputRow .name InputName True "Name" "name" "text" "off"
-        , inputRow .slug InputSlug True "Slug" "slug" "text" "off"
-        , Form.selectRow Category.idParser SelectCategory "Category" True <|
-            blankOption
-                ++ List.map renderCategoryOption categories
-        , inputRow .baseSku InputBaseSku True "Base SKU" "baseSku" "text" "off"
-        , Form.textareaRow model.errors model.description InputDescription False "Description" "description" 10
-        , Form.checkboxRow model.isActive ToggleIsActive "Is Enabled" "isEnabled"
-        , Form.checkboxRow model.isOrganic ToggleOrganic "Is Organic" "isOrganic"
-        , Form.checkboxRow model.isHeirloom ToggleHeirloom "Is Heirloom" "isHeirloom"
-        , Form.checkboxRow model.isSmallGrower ToggleSmallGrower "Is Small Grower" "isSmallGrower"
-        , Form.checkboxRow model.isRegional ToggleRegional "Is SouthEast" "isSouthEast"
-        , Admin.imageSelectRow model.imageName model.imageData SelectImage "Image"
-        , h3 [] [ text "Variants" ]
-        , div [] <|
-            List.intersperse (hr [] []) <|
-                Array.toList <|
-                    Array.indexedMap (variantForm model.errors) model.variants
-        , div [ class "form-group mb-4" ]
-            [ Admin.submitOrSavingButton model "Add Product"
-            , button
-                [ class "ml-3 btn btn-secondary"
-                , type_ "button"
-                , onClick AddVariant
+    form [ class <| Admin.formSavingClass model, onSubmit submitMsg ] <|
+        List.map (Html.map msgWrapper)
+            [ Form.genericErrorText <| not <| Dict.isEmpty model.errors
+            , Api.generalFormErrors model
+            , h3 [] [ text "Base Product" ]
+            , inputRow .name InputName True "Name" "name" "text" "off"
+            , inputRow .slug InputSlug True "Slug" "slug" "text" "off"
+            , Form.selectRow Category.idParser SelectCategory "Category" True <|
+                blankOption
+                    ++ List.map renderCategoryOption categories
+            , inputRow .baseSku InputBaseSku True "Base SKU" "baseSku" "text" "off"
+            , Form.textareaRow model.errors model.description InputDescription False "Description" "description" 10
+            , Form.checkboxRow model.isActive ToggleIsActive "Is Enabled" "isEnabled"
+            , Form.checkboxRow model.isOrganic ToggleOrganic "Is Organic" "isOrganic"
+            , Form.checkboxRow model.isHeirloom ToggleHeirloom "Is Heirloom" "isHeirloom"
+            , Form.checkboxRow model.isSmallGrower ToggleSmallGrower "Is Small Grower" "isSmallGrower"
+            , Form.checkboxRow model.isRegional ToggleRegional "Is SouthEast" "isSouthEast"
+            , Admin.imageSelectRow model.imageName model.imageData SelectImage "Image"
+            , h3 [] [ text "Variants" ]
+            , div [] <|
+                List.intersperse (hr [] []) <|
+                    Array.toList <|
+                        Array.indexedMap (variantForm model.errors) model.variants
+            , div [ class "form-group mb-4" ]
+                [ Admin.submitOrSavingButton model "Add Product"
+                , button
+                    [ class "ml-3 btn btn-secondary"
+                    , type_ "button"
+                    , onClick AddVariant
+                    ]
+                    [ text "Add Variant" ]
                 ]
-                [ text "Add Variant" ]
             ]
-        ]
-    ]
 
 
-variantForm : Api.FormErrors -> Int -> NewVariant -> Html NewMsg
+{-| Render the sub-form for ProductVariants.
+-}
+variantForm : Api.FormErrors -> Int -> Variant -> Html FormMsg
 variantForm errors index variant =
     let
         fieldName n =
@@ -652,7 +707,10 @@ variantForm errors index variant =
         ]
 
 
-lotSizeRow : Api.FormErrors -> Int -> LotSizeSelector -> String -> Html NewMsg
+{-| Render the Form row for LotSize selection, with an input for the amount &
+dropdown for the label.
+-}
+lotSizeRow : Api.FormErrors -> Int -> LotSizeSelector -> String -> Html FormMsg
 lotSizeRow errors index selectedType enteredAmount =
     let
         fieldErrors =
@@ -793,6 +851,8 @@ lotSizeRow errors index selectedType enteredAmount =
 -- UTILS
 
 
+{-| Update the item at the given array index
+-}
 updateArray : Int -> (a -> a) -> Array a -> Array a
 updateArray index updater arr =
     Array.get index arr
@@ -800,6 +860,8 @@ updateArray index updater arr =
         |> Maybe.withDefault arr
 
 
+{-| Remove the item at the index of the given array.
+-}
 removeIndex : Int -> Array a -> Array a
 removeIndex index arr =
     Array.append
