@@ -21,7 +21,7 @@ import Html.Attributes as A exposing (checked, class, for, id, name, required, s
 import Html.Events exposing (on, onCheck, onClick, onInput, onSubmit, targetValue)
 import Json.Decode as Decode
 import Json.Encode as Encode exposing (Value)
-import Models.Fields exposing (Cents(..), LotSize(..), centsEncoder, centsFromString, lotSizeEncoder, milligramsFromString)
+import Models.Fields exposing (Cents(..), LotSize(..), centsEncoder, lotSizeEncoder)
 import Models.Utils exposing (slugify)
 import PageData
 import Ports
@@ -29,6 +29,7 @@ import Product exposing (ProductId)
 import RemoteData exposing (WebData)
 import Routing exposing (AdminRoute(..), Route(..))
 import Update.Utils exposing (noCommand)
+import Validation
 import Views.Admin as Admin
 import Views.HorizontalForm as Form
 import Views.Utils exposing (icon, routeLinkAttributes, selectImageFile)
@@ -481,128 +482,60 @@ variants or an error set.
 validateForm : Form -> Result Api.FormErrors (List ValidVariant)
 validateForm model =
     let
-        validateVariant index variant =
-            validate index
-                variant
-                (fromMaybe "Enter a valid dollar amount." <| centsFromString variant.price)
-                (validateInt identity variant.quantity)
-                (validateLotSize variant)
-
-        validateLotSize { lotSizeSelector, lotSizeAmount } =
-            case lotSizeSelector of
-                LSCustom ->
-                    Ok <| Just <| CustomLotSize lotSizeAmount
-
-                LSMass ->
-                    milligramsFromString lotSizeAmount
-                        |> Maybe.map (Ok << Just << Mass)
-                        |> Maybe.withDefault (Err "Enter a valid decimal number.")
-
-                LSBulbs ->
-                    validateInt (Just << Bulbs) lotSizeAmount
-
-                LSSlips ->
-                    validateInt (Just << Slips) lotSizeAmount
-
-                LSPlugs ->
-                    validateInt (Just << Plugs) lotSizeAmount
-
-                LSNone ->
-                    Ok Nothing
-
-        -- Move to Validation module.
-        validateInt wrapper v =
-            fromMaybe "Enter a whole number." <| Maybe.map wrapper <| String.toInt v
-
-        -- Move to Validation module.
-        fromMaybe msg v =
-            Maybe.map Ok v
-                |> Maybe.withDefault (Err msg)
-
+        categoryValidation : Validation.FormValidation ()
         categoryValidation =
             if model.category == CategoryId 0 then
-                Array.repeat 1 <| Err <| Api.addError "category" "Select a Category" Api.initialErrors
+                Err <| Api.addError "category" "Select a Category" Api.initialErrors
 
             else
-                Array.empty
+                Ok ()
     in
-    Array.indexedMap validateVariant model.variants
-        |> Array.append categoryValidation
-        |> mergeValidations
+    Array.toList model.variants
+        |> Validation.indexedValidation "variant" validateVariant
+        |> Validation.addFormError categoryValidation
 
 
-{-| After moving `apply` to a new Validation module, can we merge this back into 'validateForm'?
--}
-validate : Int -> Variant -> Result String Cents -> Result String Int -> Result String (Maybe LotSize) -> Result Api.FormErrors ValidVariant
-validate index variant rPrice rQuantity rSize =
+validateVariant : Variant -> Validation.FormValidation ValidVariant
+validateVariant ({ lotSizeAmount } as variant) =
     let
-        -- TODO: Add Validation module?
-        apply : String -> Result String a -> Result Api.FormErrors (a -> b) -> Result Api.FormErrors b
-        apply fieldName validation result =
-            let
-                errorField =
-                    "variant-" ++ String.fromInt index ++ "-" ++ fieldName
-            in
-            case ( validation, result ) of
-                ( Err msg, Err r ) ->
-                    Err <|
-                        Api.addError errorField msg r
+        validateLotSize : Validation.Validation (Maybe LotSize)
+        validateLotSize =
+            case variant.lotSizeSelector of
+                LSCustom ->
+                    Validation.succeed <| Just <| CustomLotSize lotSizeAmount
 
-                ( Err msg, Ok _ ) ->
-                    Err <| Api.addError errorField msg Api.initialErrors
+                LSMass ->
+                    Validation.milligrams lotSizeAmount
+                        |> Validation.map (Just << Mass)
 
-                ( Ok _, Err r ) ->
-                    Err r
+                LSBulbs ->
+                    validateInt Bulbs lotSizeAmount
 
-                ( Ok a, Ok aToB ) ->
-                    Ok <| aToB a
+                LSSlips ->
+                    validateInt Slips lotSizeAmount
 
-        constructor c q l =
+                LSPlugs ->
+                    validateInt Plugs lotSizeAmount
+
+                LSNone ->
+                    Validation.succeed Nothing
+
+        validateInt mapper =
+            Validation.int >> Validation.map (Just << mapper)
+    in
+    Validation.formValidation
+        (\price quantity lotSize ->
             { skuSuffix = variant.skuSuffix
             , isActive = variant.isActive
             , id = variant.id
-            , price = c
-            , quantity = q
-            , lotSize = l
+            , price = price
+            , quantity = quantity
+            , lotSize = lotSize
             }
-    in
-    Result.Ok constructor
-        |> apply "price" rPrice
-        |> apply "quantity" rQuantity
-        |> apply "lotSize" rSize
-
-
-{-| This could go into a Validations module
--}
-mergeValidations : Array (Result Api.FormErrors a) -> Result Api.FormErrors (List a)
-mergeValidations =
-    let
-        merge :
-            Result Api.FormErrors a
-            -> Result Api.FormErrors (List a)
-            -> Result Api.FormErrors (List a)
-        merge validation currentResult =
-            case ( validation, currentResult ) of
-                ( Err e1, Err e2 ) ->
-                    Err <|
-                        Dict.merge
-                            Dict.insert
-                            (\f l r errs -> Dict.insert f (l ++ r) errs)
-                            Dict.insert
-                            e1
-                            e2
-                            Dict.empty
-
-                ( Ok _, Err _ ) ->
-                    currentResult
-
-                ( Err e, Ok _ ) ->
-                    Err e
-
-                ( Ok v1, Ok vs ) ->
-                    Ok <| v1 :: vs
-    in
-    Array.foldr merge (Ok [])
+        )
+        |> Validation.apply "price" (Validation.cents variant.price)
+        |> Validation.apply "quantity" (Validation.int variant.quantity)
+        |> Validation.apply "lotSize" validateLotSize
 
 
 {-| Render the form for updating/creating Products.
