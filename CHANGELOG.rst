@@ -6,12 +6,14 @@ CHANGELOG
 v0.9.0
 ======
 
+* Add fields for setting a product's Organic, Heirloom, Regional, & Small
+  Grower statuses to the Add/Edit Product pages.
 * Add field for setting a customer's store credit balance to the Edit Customer
   page.
 * Show a live preview of the content on the Add Page & Edit Page admin pages.
-* Sanitize text fields in the Admin to prevent Cross-Site Scripting
+* Sanitize text fields in the Admin forms to prevent Cross-Site Scripting
   vulnerabilities.
-* Automatically scale & optimize new Category images.
+* Automatically scale & optimize new Category & Product images.
 
 
 v0.8.0
