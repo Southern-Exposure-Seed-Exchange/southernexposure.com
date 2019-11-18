@@ -1,6 +1,8 @@
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeOperators #-}
 module Routes.Admin.Products
     ( ProductAPI
@@ -8,26 +10,30 @@ module Routes.Admin.Products
     ) where
 
 import Control.Concurrent.STM (readTVarIO)
+import Control.Monad (forM_)
 import Control.Monad.Reader (asks, liftIO)
-import Data.Aeson ((.=), (.:), ToJSON(..), FromJSON(..), object, withObject)
+import Data.Aeson ((.=), (.:), ToJSON(..), FromJSON(..), Value(Object), object, withObject)
 import Data.Maybe (mapMaybe, listToMaybe)
 import Data.Monoid ((<>))
 import Data.Text.Encoding (encodeUtf8)
 import Data.Time (UTCTime, getCurrentTime)
-import Database.Persist (Entity(..), SelectOpt(Asc), selectList, insert, insertMany_, insert_)
-import Servant ((:<|>)(..), (:>), AuthProtect, ReqBody, Get, Post, JSON)
+import Database.Persist
+    ( (==.), (=.), Entity(..), SelectOpt(Asc), selectList, selectFirst, insert
+    , insertMany_, insert_, update, get, getBy
+    )
+import Servant ((:<|>)(..), (:>), AuthProtect, ReqBody, Capture, Get, Post, JSON, err404)
 import Text.HTML.SanitizeXSS (sanitize)
 
 import Auth (WrappedAuthToken, Cookied, withAdminCookie, validateAdminAndParameters)
 import Config (Config(getCaches))
 import Cache (Caches(getCategoryPredecessorCache), CategoryPredecessorCache, queryCategoryPredecessorCache)
 import Models
-    ( EntityField(..), Product(..), ProductId, ProductVariant(..)
+    ( EntityField(..), Product(..), ProductId, ProductVariant(..), ProductVariantId
     , SeedAttribute(..), Category(..), CategoryId, Unique(..), slugify
     )
 import Models.Fields (LotSize, Cents)
 import Routes.Utils (makeImageFromBase64)
-import Server (App, runDB)
+import Server (App, runDB, serverError)
 import Validation (Validation(validators))
 
 import qualified Data.ByteString as BS
@@ -41,17 +47,23 @@ type ProductAPI =
          "list" :> ProductListRoute
     :<|> "new" :> NewProductDataRoute
     :<|> "new" :> NewProductRoute
+    :<|> "edit" :> EditProductDataRoute
+    :<|> "edit" :> EditProductRoute
 
 type ProductRoutes =
          (WrappedAuthToken -> App (Cookied ProductListData))
     :<|> (WrappedAuthToken -> App (Cookied NewProductData))
     :<|> (WrappedAuthToken -> NewProductParameters -> App (Cookied ProductId))
+    :<|> (WrappedAuthToken -> ProductId -> App (Cookied EditProductData))
+    :<|> (WrappedAuthToken -> EditProductParameters -> App (Cookied ProductId))
 
 productRoutes :: ProductRoutes
 productRoutes =
          productListRoute
     :<|> newProductDataRoute
     :<|> newProductRoute
+    :<|> editProductDataRoute
+    :<|> editProductRoute
 
 
 -- LIST
@@ -180,7 +192,7 @@ data NewProductParameters =
         , nppImageName :: T.Text
         , nppVariantData :: [NewVariantData]
         , nppSeedAttribute :: Maybe NewSeedData
-        }
+        } deriving (Show)
 
 instance FromJSON NewProductParameters where
     parseJSON = withObject "NewProductParameters" $ \v -> do
@@ -201,12 +213,6 @@ instance Validation NewProductParameters where
         slugDoesntExist <- V.doesntExist $ UniqueProductSlug nppSlug
         skuDoesntExist <- V.doesntExist $ UniqueBaseSku nppBaseSku
         categoryExists <- V.exists nppCategory
-        let duplicateSuffixes =
-                mapMaybe (\l -> if length l > 1 then listToMaybe l else Nothing)
-                    $ L.group
-                    $ L.sort
-                    $ map nvdSkuSuffix nppVariantData
-            variantErrors = checkDuplicateSuffix duplicateSuffixes nppVariantData
         return $
             [ ( ""
               , [ ("At least one Variant is required.", null nppVariantData) ]
@@ -234,18 +240,7 @@ instance Validation NewProductParameters where
                 ]
               )
             ]
-            ++ variantErrors
-      where
-        checkDuplicateSuffix dupes variants =
-            let duplicateIndexes =
-                    L.findIndices ((`elem` dupes) . nvdSkuSuffix) variants
-            in
-                map (\i ->
-                        ( "variant-" <> T.pack (show i) <> "-skuSuffix"
-                        , [ ("SKU suffixes must be unique.", True) ]
-                        )
-                    )
-                    duplicateIndexes
+            ++ getDuplicateSuffixErrors nppVariantData
 
 data NewVariantData =
     NewVariantData
@@ -254,7 +249,9 @@ data NewVariantData =
         , nvdQuantity :: Int
         , nvdLotSize :: Maybe LotSize
         , nvdIsActive :: Bool
-        }
+        , nvdId :: Maybe ProductVariantId
+        -- ^ Only used in the EditProductRoute
+        } deriving (Show)
 
 instance FromJSON NewVariantData where
     parseJSON = withObject "NewVariantData" $ \v -> do
@@ -263,7 +260,19 @@ instance FromJSON NewVariantData where
         nvdQuantity <- v .: "quantity"
         nvdLotSize <- v .: "lotSize"
         nvdIsActive <- v .: "isActive"
+        nvdId <- v .: "id"
         return NewVariantData {..}
+
+instance ToJSON NewVariantData where
+    toJSON NewVariantData {..} =
+        object
+            [ "id" .= nvdId
+            , "skuSuffix" .= nvdSkuSuffix
+            , "price" .= nvdPrice
+            , "quantity" .= nvdQuantity
+            , "lotSize" .= nvdLotSize
+            , "isActive" .= nvdIsActive
+            ]
 
 data NewSeedData =
     NewSeedData
@@ -271,7 +280,7 @@ data NewSeedData =
         , nsdHeirloom :: Bool
         , nsdSmallGrower :: Bool
         , nsdRegional :: Bool
-        }
+        } deriving (Show)
 
 instance FromJSON NewSeedData where
     parseJSON = withObject "NewSeedData" $ \v -> do
@@ -280,6 +289,15 @@ instance FromJSON NewSeedData where
         nsdSmallGrower <- v .: "smallGrower"
         nsdRegional <- v .: "regional"
         return NewSeedData {..}
+
+instance ToJSON NewSeedData where
+    toJSON NewSeedData {..} =
+        object
+            [ "organic" .= nsdOrganic
+            , "heirloom" .= nsdHeirloom
+            , "smallGrower" .= nsdSmallGrower
+            , "regional" .= nsdRegional
+            ]
 
 newProductRoute :: WrappedAuthToken -> NewProductParameters -> App (Cookied ProductId)
 newProductRoute = validateAdminAndParameters $ \_ p@NewProductParameters {..} -> do
@@ -304,22 +322,215 @@ newProductRoute = validateAdminAndParameters $ \_ p@NewProductParameters {..} ->
             , productIsActive = nppIsActive
             , productCreatedAt = time
             }
-    makeVariant :: ProductId -> NewVariantData -> ProductVariant
-    makeVariant pId NewVariantData {..} =
-        ProductVariant
-            { productVariantProductId = pId
-            , productVariantSkuSuffix = nvdSkuSuffix
-            , productVariantPrice = nvdPrice
-            , productVariantQuantity = fromIntegral nvdQuantity
-            , productVariantLotSize = nvdLotSize
-            , productVariantIsActive = nvdIsActive
+
+
+-- EDIT
+
+
+type EditProductDataRoute =
+       AuthProtect "cookie-auth"
+    :> Capture "id" ProductId
+    :> Get '[JSON] (Cookied EditProductData)
+
+data EditProductData =
+    EditProductData
+        { epdId :: ProductId
+        , epdName :: T.Text
+        , epdSlug :: T.Text
+        , epdCategory :: Maybe CategoryId
+        , epdBaseSku :: T.Text
+        , epdLongDescription :: T.Text
+        , epdIsActive :: Bool
+        , epdImageUrl :: T.Text
+        , epdVariantData :: [NewVariantData]
+        , epdSeedAttribute :: Maybe NewSeedData
+        } deriving (Show)
+
+instance ToJSON EditProductData where
+    toJSON EditProductData {..} =
+        object
+            [ "id" .= epdId
+            , "name" .= epdName
+            , "slug" .= epdSlug
+            , "category" .= epdCategory
+            , "baseSku" .= epdBaseSku
+            , "longDescription" .= epdLongDescription
+            , "isActive" .= epdIsActive
+            , "imageUrl" .= epdImageUrl
+            , "variants" .= epdVariantData
+            , "seedAttributes" .= epdSeedAttribute
+            ]
+
+editProductDataRoute :: WrappedAuthToken -> ProductId -> App (Cookied EditProductData)
+editProductDataRoute t productId = withAdminCookie t $ \_ ->
+    runDB (get productId) >>= \case
+        Nothing ->
+            serverError err404
+        Just Product {..} -> runDB $ do
+            variants <- map makeVariantData <$> selectList [ProductVariantProductId ==. productId] []
+            seedAttr <- fmap makeAttributeData <$> getBy (UniqueAttribute productId)
+            return EditProductData
+                { epdId = productId
+                , epdName = productName
+                , epdSlug = productSlug
+                , epdCategory = listToMaybe productCategoryIds
+                , epdBaseSku = productBaseSku
+                , epdLongDescription = productLongDescription
+                , epdIsActive = productIsActive
+                , epdImageUrl = productImageUrl
+                , epdVariantData = variants
+                , epdSeedAttribute = seedAttr
+                }
+  where
+    makeVariantData :: Entity ProductVariant -> NewVariantData
+    makeVariantData (Entity variantId ProductVariant {..}) =
+        NewVariantData
+            { nvdId = Just variantId
+            , nvdSkuSuffix = productVariantSkuSuffix
+            , nvdPrice = productVariantPrice
+            , nvdQuantity = fromIntegral productVariantQuantity
+            , nvdLotSize = productVariantLotSize
+            , nvdIsActive = productVariantIsActive
             }
-    makeAttributes :: ProductId -> NewSeedData -> SeedAttribute
-    makeAttributes pId NewSeedData {..} =
-        SeedAttribute
-            { seedAttributeProductId = pId
-            , seedAttributeIsOrganic = nsdOrganic
-            , seedAttributeIsHeirloom = nsdHeirloom
-            , seedAttributeIsSmallGrower = nsdSmallGrower
-            , seedAttributeIsRegional = nsdRegional
+    makeAttributeData :: Entity SeedAttribute -> NewSeedData
+    makeAttributeData (Entity _ SeedAttribute {..}) =
+        NewSeedData
+            { nsdOrganic = seedAttributeIsOrganic
+            , nsdHeirloom = seedAttributeIsHeirloom
+            , nsdRegional = seedAttributeIsRegional
+            , nsdSmallGrower = seedAttributeIsSmallGrower
             }
+
+
+
+type EditProductRoute =
+       AuthProtect "cookie-auth"
+    :> ReqBody '[JSON] EditProductParameters
+    :> Post '[JSON] (Cookied ProductId)
+
+
+data EditProductParameters =
+    EditProductParameters
+        { eppId :: ProductId
+        , eppProduct :: NewProductParameters
+        }
+
+instance FromJSON EditProductParameters where
+    parseJSON = withObject "EditProductParameters" $ \v -> do
+        eppId <- v .: "id"
+        eppProduct <- parseJSON $ Object v
+        return EditProductParameters {..}
+
+instance Validation EditProductParameters where
+    validators EditProductParameters {..} = do
+        let NewProductParameters {..} = eppProduct
+        productExists <- V.exists eppId
+        categoryExists <- V.exists nppCategory
+        return $
+            [ ( ""
+              , [ ("Could not find this product in the database.", productExists)
+                , ("At least one Variant is required.", null nppVariantData)
+                ]
+              )
+            , ( "name", [ V.required nppName ] )
+            , ( "slug", [ V.required nppSlug ] )
+            , ( "category"
+              , [ ( "Could not find this Category in the database."
+                  , categoryExists)
+                ]
+              )
+            , ( "baseSku", [ V.required nppBaseSku ])
+            ]
+            ++ getDuplicateSuffixErrors nppVariantData
+
+
+editProductRoute :: WrappedAuthToken -> EditProductParameters -> App (Cookied ProductId)
+editProductRoute = validateAdminAndParameters $ \_ EditProductParameters {..} -> do
+    let NewProductParameters {..} = eppProduct
+    imageUpdate <-
+        if not (BS.null nppImageData) && not (T.null nppImageName) then do
+            imageFileName <- makeImageFromBase64 "products" nppImageName nppImageData
+            return [ ProductImageUrl =. imageFileName ]
+        else
+            return []
+    runDB $ do
+        update eppId $
+            [ ProductName =. sanitize nppName
+            , ProductSlug =. slugify nppSlug
+            , ProductCategoryIds =. [nppCategory]
+            , ProductBaseSku =. nppBaseSku
+            , ProductLongDescription =. sanitize nppLongDescription
+            , ProductIsActive =. nppIsActive
+            ] ++ imageUpdate
+        (nppSeedAttribute,) <$> selectFirst [SeedAttributeProductId ==. eppId] [] >>= \case
+            (Just seedData, Nothing) ->
+                insert_ $ makeAttributes eppId seedData
+            (Just NewSeedData {..}, Just (Entity attrId _)) ->
+                update attrId
+                    [ SeedAttributeProductId =. eppId
+                    , SeedAttributeIsOrganic =. nsdOrganic
+                    , SeedAttributeIsHeirloom =. nsdHeirloom
+                    , SeedAttributeIsRegional =. nsdRegional
+                    , SeedAttributeIsSmallGrower =. nsdSmallGrower
+                    ]
+            _ ->
+                return ()
+        forM_ nppVariantData $ \variant@NewVariantData {..} ->
+            case nvdId of
+                Nothing ->
+                    insert_ $ makeVariant eppId variant
+                Just variantId ->
+                    update variantId
+                        [ ProductVariantProductId =. eppId
+                        , ProductVariantSkuSuffix =. nvdSkuSuffix
+                        , ProductVariantPrice =. nvdPrice
+                        , ProductVariantQuantity =. fromIntegral nvdQuantity
+                        , ProductVariantLotSize =. nvdLotSize
+                        , ProductVariantIsActive =. nvdIsActive
+                        ]
+    return eppId
+
+
+-- UTILS
+
+
+makeVariant :: ProductId -> NewVariantData -> ProductVariant
+makeVariant pId NewVariantData {..} =
+    ProductVariant
+        { productVariantProductId = pId
+        , productVariantSkuSuffix = nvdSkuSuffix
+        , productVariantPrice = nvdPrice
+        , productVariantQuantity = fromIntegral nvdQuantity
+        , productVariantLotSize = nvdLotSize
+        , productVariantIsActive = nvdIsActive
+        }
+
+makeAttributes :: ProductId -> NewSeedData -> SeedAttribute
+makeAttributes pId NewSeedData {..} =
+    SeedAttribute
+        { seedAttributeProductId = pId
+        , seedAttributeIsOrganic = nsdOrganic
+        , seedAttributeIsHeirloom = nsdHeirloom
+        , seedAttributeIsSmallGrower = nsdSmallGrower
+        , seedAttributeIsRegional = nsdRegional
+        }
+
+getDuplicateSuffixErrors :: [NewVariantData] -> [(T.Text, [(T.Text, Bool)])]
+getDuplicateSuffixErrors variants =
+        let duplicateSuffixes =
+                mapMaybe (\l -> if length l > 1 then listToMaybe l else Nothing)
+                    $ L.group
+                    $ L.sort
+                    $ map nvdSkuSuffix variants
+        in checkDuplicateSuffix duplicateSuffixes
+  where
+    checkDuplicateSuffix dupes =
+        let duplicateIndexes =
+                L.findIndices ((`elem` dupes) . nvdSkuSuffix) variants
+        in
+            map (\i ->
+                    ( "variant-" <> T.pack (show i) <> "-skuSuffix"
+                    , [ ("SKU suffixes must be unique.", True) ]
+                    )
+                )
+                duplicateIndexes
