@@ -2,6 +2,7 @@ module Category exposing
     ( Category
     , CategoryId(..)
     , decoder
+    , idDecoder
     , idEncoder
     , idParser
     , initial
@@ -46,6 +47,11 @@ idEncoder (CategoryId c) =
     Encode.int c
 
 
+idDecoder : Decoder CategoryId
+idDecoder =
+    Decode.map CategoryId Decode.int
+
+
 type alias Category =
     { id : CategoryId
     , name : String
@@ -65,7 +71,7 @@ initial =
 decoder : Decoder Category
 decoder =
     Decode.map7 Category
-        (Decode.field "id" <| Decode.map CategoryId Decode.int)
+        (Decode.field "id" idDecoder)
         (Decode.field "name" Decode.string)
         (Decode.field "slug" Decode.string)
         (Decode.field "parentId" << Decode.nullable <| Decode.map CategoryId Decode.int)

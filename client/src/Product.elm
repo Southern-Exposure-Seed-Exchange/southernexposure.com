@@ -5,6 +5,7 @@ module Product exposing
     , ProductVariantId(..)
     , decoder
     , idDecoder
+    , idEncoder
     , isLimitedAvailablity
     , isOutOfStock
     , nameWithLotSize
@@ -17,6 +18,7 @@ import Dict exposing (Dict)
 import Html exposing (Html, span)
 import Html.Attributes exposing (class)
 import Json.Decode as Decode exposing (Decoder)
+import Json.Encode as Encode exposing (Value)
 import Markdown exposing (defaultOptions)
 import Models.Fields exposing (Cents(..), ImageData, LotSize, imageDecoder, lotSizeDecoder, lotSizeToString)
 
@@ -28,6 +30,11 @@ type ProductId
 idDecoder : Decoder ProductId
 idDecoder =
     Decode.map ProductId Decode.int
+
+
+idEncoder : ProductId -> Value
+idEncoder (ProductId i) =
+    Encode.int i
 
 
 type alias Product =
