@@ -88,6 +88,7 @@ type Endpoint
     | AdminEditCustomerData Int
     | AdminEditCustomer
     | AdminProductList
+    | AdminProductSharedData
     | AdminNewProduct
     | AdminEditProductData ProductId
     | AdminEditProduct
@@ -258,6 +259,9 @@ toUrl endpoint =
 
                 AdminProductList ->
                     joinPath [ "admin", "products", "list" ]
+
+                AdminProductSharedData ->
+                    joinPath [ "admin", "products", "data" ]
 
                 AdminNewProduct ->
                     joinPath [ "admin", "products", "new" ]

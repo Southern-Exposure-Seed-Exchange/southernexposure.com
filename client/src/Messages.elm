@@ -95,5 +95,5 @@ type Msg
     | AdminCustomerPaginationMsg (Paginate.Msg CustomerData ())
     | GetAdminEditCustomerData (WebData PageData.AdminEditCustomerData)
     | GetAdminProductList (WebData PageData.AdminProductListData)
-    | GetAdminNewProductData (WebData PageData.AdminNewProductData)
+    | GetAdminSharedProductData (WebData PageData.AdminSharedProductData)
     | GetAdminEditProductData (WebData ( ProductAdmin.Form, ProductId ))

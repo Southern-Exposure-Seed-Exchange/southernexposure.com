@@ -45,14 +45,14 @@ import qualified Validation as V
 
 type ProductAPI =
          "list" :> ProductListRoute
-    :<|> "new" :> NewProductDataRoute
+    :<|> "data" :> SharedProductDataRoute
     :<|> "new" :> NewProductRoute
     :<|> "edit" :> EditProductDataRoute
     :<|> "edit" :> EditProductRoute
 
 type ProductRoutes =
          (WrappedAuthToken -> App (Cookied ProductListData))
-    :<|> (WrappedAuthToken -> App (Cookied NewProductData))
+    :<|> (WrappedAuthToken -> App (Cookied SharedProductData))
     :<|> (WrappedAuthToken -> ProductParameters -> App (Cookied ProductId))
     :<|> (WrappedAuthToken -> ProductId -> App (Cookied EditProductData))
     :<|> (WrappedAuthToken -> EditProductParameters -> App (Cookied ProductId))
@@ -60,7 +60,7 @@ type ProductRoutes =
 productRoutes :: ProductRoutes
 productRoutes =
          productListRoute
-    :<|> newProductDataRoute
+    :<|> sharedProductDataRoute
     :<|> newProductRoute
     :<|> editProductDataRoute
     :<|> editProductRoute
@@ -123,6 +123,55 @@ productListRoute t = withAdminCookie t $ \_ -> runDB $ do
 
 
 -- NEW / EDIT COMMON DATA
+
+
+type SharedProductDataRoute =
+       AuthProtect "cookie-auth"
+    :> Get '[JSON] (Cookied SharedProductData)
+
+newtype SharedProductData =
+    SharedProductData
+        { spdCategories :: [ProductCategory]
+        } deriving (Show)
+
+instance ToJSON SharedProductData where
+    toJSON SharedProductData {..} =
+        object [ "categories" .= spdCategories ]
+
+data ProductCategory =
+    ProductCategory
+        { pcId :: CategoryId
+        , pcName :: T.Text
+        } deriving (Show)
+
+instance ToJSON ProductCategory where
+    toJSON ProductCategory {..} =
+        object
+            [ "id" .= pcId
+            , "name" .= pcName
+            ]
+
+sharedProductDataRoute :: WrappedAuthToken -> App (Cookied SharedProductData)
+sharedProductDataRoute t = withAdminCookie t $ \_ -> do
+    categories <- fmap (map makeProductCategory) . runDB $ selectList [] []
+    categoryCache <- asks getCaches >>= fmap getCategoryPredecessorCache . liftIO . readTVarIO
+    return . SharedProductData . L.sortOn pcName $ map (prependParentNames categoryCache) categories
+  where
+    makeProductCategory :: Entity Category -> ProductCategory
+    makeProductCategory (Entity cId cat) =
+        ProductCategory
+            { pcId = cId
+            , pcName = categoryName cat
+            }
+    prependParentNames :: CategoryPredecessorCache -> ProductCategory -> ProductCategory
+    prependParentNames cache pc =
+        let predecessors = queryCategoryPredecessorCache (pcId pc) cache
+            newName =
+                T.intercalate " > "
+                    $ (++ [pcName pc])
+                    $ map (categoryName . entityVal)
+                    $ reverse predecessors
+        in pc { pcName = newName}
 
 
 data ProductParameters =
@@ -249,61 +298,10 @@ instance ToJSON SeedData where
 -- NEW
 
 
-type NewProductDataRoute =
-       AuthProtect "cookie-auth"
-    :> Get '[JSON] (Cookied NewProductData)
-
-newtype NewProductData =
-    NewProductData
-        { npdCategories :: [ProductCategory]
-        } deriving (Show)
-
-instance ToJSON NewProductData where
-    toJSON NewProductData {..} =
-        object [ "categories" .= npdCategories ]
-
-data ProductCategory =
-    ProductCategory
-        { pcId :: CategoryId
-        , pcName :: T.Text
-        } deriving (Show)
-
-instance ToJSON ProductCategory where
-    toJSON ProductCategory {..} =
-        object
-            [ "id" .= pcId
-            , "name" .= pcName
-            ]
-
-newProductDataRoute :: WrappedAuthToken -> App (Cookied NewProductData)
-newProductDataRoute t = withAdminCookie t $ \_ -> do
-    categories <- fmap (map makeProductCategory) . runDB $ selectList [] []
-    categoryCache <- asks getCaches >>= fmap getCategoryPredecessorCache . liftIO . readTVarIO
-    return . NewProductData . L.sortOn pcName $ map (prependParentNames categoryCache) categories
-  where
-    makeProductCategory :: Entity Category -> ProductCategory
-    makeProductCategory (Entity cId cat) =
-        ProductCategory
-            { pcId = cId
-            , pcName = categoryName cat
-            }
-    prependParentNames :: CategoryPredecessorCache -> ProductCategory -> ProductCategory
-    prependParentNames cache pc =
-        let predecessors = queryCategoryPredecessorCache (pcId pc) cache
-            newName =
-                T.intercalate " > "
-                    $ (++ [pcName pc])
-                    $ map (categoryName . entityVal)
-                    $ reverse predecessors
-        in pc { pcName = newName}
-
-
 type NewProductRoute =
        AuthProtect "cookie-auth"
     :> ReqBody '[JSON] ProductParameters
     :> Post '[JSON] (Cookied ProductId)
-
--- | TODO: Following types are used in both New & Edit Routes, rename them!
 
 newProductRoute :: WrappedAuthToken -> ProductParameters -> App (Cookied ProductId)
 newProductRoute = validateAdminAndParameters $ \_ p@ProductParameters {..} -> do

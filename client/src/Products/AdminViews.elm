@@ -229,7 +229,7 @@ updateNewForm key msg model =
                     noCommand { model | isSaving = False }
 
 
-new : NewForm -> PageData.AdminNewProductData -> List (Html NewMsg)
+new : NewForm -> PageData.AdminSharedProductData -> List (Html NewMsg)
 new model data =
     [ formView "Add Product" NewSubmit NewFormMsg model data
     ]
@@ -329,7 +329,7 @@ updateEditForm key msg model =
             noCommand model
 
 
-editForm : EditForm -> PageData.AdminNewProductData -> List (Html EditMsg)
+editForm : EditForm -> PageData.AdminSharedProductData -> List (Html EditMsg)
 editForm model productData =
     case model.productData of
         RemoteData.Success productForm ->
@@ -754,7 +754,7 @@ validateVariant ({ lotSizeAmount } as variant) =
 
 {-| Render the form for updating/creating Products.
 -}
-formView : String -> msg -> (FormMsg -> msg) -> Form -> PageData.AdminNewProductData -> Html msg
+formView : String -> msg -> (FormMsg -> msg) -> Form -> PageData.AdminSharedProductData -> Html msg
 formView buttonText submitMsg msgWrapper model { categories } =
     let
         inputRow s =

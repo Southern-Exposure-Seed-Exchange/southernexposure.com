@@ -321,13 +321,16 @@ fetchDataForRoute ({ route, pageData, key } as model) =
                     )
 
                 Admin ProductNew ->
-                    ( { pageData | adminNewProduct = RemoteData.Loading }
-                    , getAdminNewProductData
+                    ( { pageData | adminSharedProduct = RemoteData.Loading }
+                    , getAdminSharedProductData
                     )
 
                 Admin (ProductEdit productId) ->
-                    ( pageData
-                    , Cmd.batch [ getAdminNewProductData, getAdminEditProductData productId ]
+                    ( { pageData | adminSharedProduct = RemoteData.Loading }
+                    , Cmd.batch
+                        [ getAdminSharedProductData
+                        , getAdminEditProductData productId
+                        ]
                     )
 
                 NotFound ->
@@ -582,11 +585,11 @@ getAdminProductList =
         |> Api.sendRequest GetAdminProductList
 
 
-getAdminNewProductData : Cmd Msg
-getAdminNewProductData =
-    Api.get Api.AdminNewProduct
+getAdminSharedProductData : Cmd Msg
+getAdminSharedProductData =
+    Api.get Api.AdminProductSharedData
         |> Api.withJsonResponse PageData.adminNewProductDataDecoder
-        |> Api.sendRequest GetAdminNewProductData
+        |> Api.sendRequest GetAdminSharedProductData
 
 
 getAdminEditProductData : ProductId -> Cmd Msg
@@ -1202,10 +1205,10 @@ update msg ({ pageData, key } as model) =
             in
             ( { model | pageData = updatedPageData }, Cmd.none )
 
-        GetAdminNewProductData response ->
+        GetAdminSharedProductData response ->
             let
                 updatedPageData =
-                    { pageData | adminNewProduct = response }
+                    { pageData | adminSharedProduct = response }
             in
             ( { model | pageData = updatedPageData }, Cmd.none )
 

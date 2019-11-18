@@ -9,11 +9,11 @@ module PageData exposing
     , AdminListPage
     , AdminListProduct
     , AdminNewCategoryData
-    , AdminNewProductData
     , AdminOrderDetails
     , AdminPageListData
     , AdminProductCategory
     , AdminProductListData
+    , AdminSharedProductData
     , AdvancedSearch
     , CartDetails
     , CartItem
@@ -107,7 +107,7 @@ type alias PageData =
     , adminCustomerList : Paginated CustomerData String ()
     , adminEditCustomer : WebData AdminEditCustomerData
     , adminProductList : WebData AdminProductListData
-    , adminNewProduct : WebData AdminNewProductData
+    , adminSharedProduct : WebData AdminSharedProductData
     }
 
 
@@ -157,7 +157,7 @@ initial =
     , adminCustomerList = customersPaginate
     , adminEditCustomer = RemoteData.NotAsked
     , adminProductList = RemoteData.NotAsked
-    , adminNewProduct = RemoteData.NotAsked
+    , adminSharedProduct = RemoteData.NotAsked
     }
 
 
@@ -924,14 +924,14 @@ adminListProductDecoder =
         (Decode.field "isActive" Decode.bool)
 
 
-type alias AdminNewProductData =
+type alias AdminSharedProductData =
     { categories : List AdminProductCategory
     }
 
 
-adminNewProductDataDecoder : Decoder AdminNewProductData
+adminNewProductDataDecoder : Decoder AdminSharedProductData
 adminNewProductDataDecoder =
-    Decode.map AdminNewProductData <|
+    Decode.map AdminSharedProductData <|
         Decode.field "categories" <|
             Decode.list adminProductCategoryDecoder
 

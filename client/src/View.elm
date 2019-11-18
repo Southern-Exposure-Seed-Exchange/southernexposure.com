@@ -217,11 +217,11 @@ view ({ route, pageData, navigationData, zone } as model) =
                         |> List.map (Html.map ProductListMsg)
 
                 Admin ProductNew ->
-                    withIntermediateText (ProductAdmin.new model.newProductForm) pageData.adminNewProduct
+                    withIntermediateText (ProductAdmin.new model.newProductForm) pageData.adminSharedProduct
                         |> List.map (Html.map NewProductMsg)
 
                 Admin (ProductEdit _) ->
-                    withIntermediateText (ProductAdmin.editForm model.editProductForm) pageData.adminNewProduct
+                    withIntermediateText (ProductAdmin.editForm model.editProductForm) pageData.adminSharedProduct
                         |> List.map (Html.map EditProductMsg)
 
         apply : (a -> b -> c) -> ( a, b ) -> c
