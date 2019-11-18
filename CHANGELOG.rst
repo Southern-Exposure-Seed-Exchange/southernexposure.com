@@ -6,6 +6,9 @@ CHANGELOG
 v0.9.0
 ======
 
+* Implement ZenCart's password hashing scheme for a migrated Customer's first
+  login. This allows us to import passwords from ZenCart instead of requiring
+  password resets for all Customers.
 * Add fields for setting a product's Organic, Heirloom, Regional, & Small
   Grower statuses to the Add/Edit Product pages.
 * Add field for setting a customer's store credit balance to the Edit Customer

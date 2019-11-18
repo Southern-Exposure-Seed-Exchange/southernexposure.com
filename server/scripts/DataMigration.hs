@@ -446,7 +446,7 @@ makeCustomers mysql = do
     where
         customerQuery checkoutWithoutAccount = do
             queryString <- prepareStmt mysql . Query $
-                "SELECT customers_id, customers_email_address "
+                "SELECT customers_id, customers_email_address, customers_password "
                 <> "FROM customers WHERE COWOA_account=?"
             let cowoaVal = if checkoutWithoutAccount then 1 else 0
             (_, customerStream) <- queryStmt mysql queryString [MySQLInt8 cowoaVal]
@@ -463,7 +463,7 @@ makeCustomers mysql = do
                 }
             )
         makeCustomer :: IntMap.IntMap Cents -> [MySQLValue] -> IO ([Int], Customer)
-        makeCustomer creditMap [MySQLInt32 customerId, MySQLText email ] = do
+        makeCustomer creditMap [MySQLInt32 customerId, MySQLText email, MySQLText password] = do
             let storeCredit = fromMaybe 0
                     $ IntMap.lookup (fromIntegral customerId) creditMap
             token <- generateToken
@@ -472,7 +472,7 @@ makeCustomers mysql = do
                 , customerStoreCredit = storeCredit
                 -- TODO: Get an export of the latest member numbers from stonedge?
                 , customerMemberNumber = ""
-                , customerEncryptedPassword = ""
+                , customerEncryptedPassword = password
                 , customerAuthToken = token
                 , customerStripeId = Nothing
                 , customerIsAdmin = email == "gardens@southernexposure.com"
