@@ -10,6 +10,7 @@ module Models.Fields exposing
     , centsFromString
     , centsMap
     , centsMap2
+    , centsToString
     , imageDecoder
     , imageToSrcSet
     , imgSrcFallback
@@ -64,6 +65,13 @@ centsFromDecimal =
 centsFromString : String -> Maybe Cents
 centsFromString =
     Decimal.fromString >> Maybe.map centsFromDecimal
+
+
+centsToString : Cents -> String
+centsToString (Cents c) =
+    Decimal.fromInt c
+        |> Decimal.mul (Decimal.fromIntWithExponent 1 -2)
+        |> Decimal.toString
 
 
 type Milligrams
