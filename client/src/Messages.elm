@@ -68,6 +68,7 @@ type Msg
     | EditCustomerMsg CustomerAdmin.EditMsg
     | ProductListMsg ProductAdmin.ListMsg
     | NewProductMsg ProductAdmin.NewMsg
+    | EditProductMsg ProductAdmin.EditMsg
       -- API Requests
     | ReAuthorize (WebData User.AuthStatus)
     | LogOutResponse (WebData ())
@@ -95,3 +96,4 @@ type Msg
     | GetAdminEditCustomerData (WebData PageData.AdminEditCustomerData)
     | GetAdminProductList (WebData PageData.AdminProductListData)
     | GetAdminNewProductData (WebData PageData.AdminNewProductData)
+    | GetAdminEditProductData (WebData ( ProductAdmin.Form, ProductId ))

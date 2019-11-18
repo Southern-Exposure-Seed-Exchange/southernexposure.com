@@ -1,12 +1,19 @@
 module Products.AdminViews exposing
-    ( ListForm
+    ( EditForm
+    , EditMsg
+    , Form
+    , ListForm
     , ListMsg
     , NewForm
     , NewMsg
+    , editForm
+    , formDecoder
+    , initialEditForm
     , initialListForm
     , initialNewForm
     , list
     , new
+    , updateEditForm
     , updateListForm
     , updateNewForm
     )
@@ -16,22 +23,24 @@ import Array exposing (Array)
 import Category exposing (CategoryId(..))
 import Dict
 import File exposing (File)
-import Html exposing (Html, a, br, button, div, fieldset, form, h3, hr, input, label, option, select, span, table, tbody, td, text, th, thead, tr)
-import Html.Attributes as A exposing (checked, class, for, id, name, required, selected, step, type_, value)
+import Html exposing (Html, a, br, button, div, fieldset, form, h3, hr, img, input, label, option, select, span, table, tbody, td, text, th, thead, tr)
+import Html.Attributes as A exposing (checked, class, for, id, name, required, selected, src, step, type_, value)
 import Html.Events exposing (on, onCheck, onClick, onInput, onSubmit, targetValue)
-import Json.Decode as Decode
+import Json.Decode as Decode exposing (Decoder)
+import Json.Decode.Pipeline as Decode
 import Json.Encode as Encode exposing (Value)
-import Models.Fields exposing (Cents(..), LotSize(..), centsEncoder, lotSizeEncoder)
+import Models.Fields exposing (Cents(..), LotSize(..), centsDecoder, centsEncoder, centsToString, lotSizeDecoder, lotSizeEncoder, milligramsToString)
 import Models.Utils exposing (slugify)
 import PageData
 import Ports
-import Product exposing (ProductId)
+import Product exposing (ProductId(..))
 import RemoteData exposing (WebData)
 import Routing exposing (AdminRoute(..), Route(..))
 import Update.Utils exposing (noCommand)
 import Validation
 import Views.Admin as Admin
 import Views.HorizontalForm as Form
+import Views.Images exposing (media)
 import Views.Utils exposing (icon, routeLinkAttributes, selectImageFile)
 
 
@@ -67,8 +76,6 @@ updateListForm msg model =
             { model | onlyActive = val }
 
 
-{-| TODO: Add edit links to table rows
--}
 list : ListForm -> PageData.AdminProductListData -> List (Html ListMsg)
 list listForm { products } =
     let
@@ -81,12 +88,15 @@ list listForm { products } =
 
         renderProduct { id, name, baseSku, categories, isActive } =
             tr []
-                [ td [] [ text <| String.fromInt id ]
+                [ td [] [ text <| (\(ProductId i) -> String.fromInt i) id ]
                 , td [] [ text baseSku ]
                 , td [] [ text name ]
                 , td [] [ text <| String.join ", " categories ]
                 , td [ class "text-center" ] [ activeIcon isActive ]
-                , td [] [ text "Edit" ]
+                , td []
+                    [ a (routeLinkAttributes <| Admin <| ProductEdit id)
+                        [ text "Edit" ]
+                    ]
                 ]
 
         searchInput =
@@ -122,7 +132,7 @@ list listForm { products } =
                     b
                         && (iContains t p.name
                                 || iContains t p.baseSku
-                                || iContains t (String.fromInt p.id)
+                                || iContains t ((\(ProductId i) -> String.fromInt i) p.id)
                                 || List.any (iContains t) p.categories
                            )
                         && (p.isActive || not listForm.onlyActive)
@@ -172,25 +182,25 @@ initialNewForm =
 
 type NewMsg
     = NewFormMsg FormMsg
-    | Submit
-    | SubmitResponse (WebData (Result Api.FormErrors ProductId))
+    | NewSubmit
+    | NewSubmitResponse (WebData (Result Api.FormErrors ProductId))
 
 
-updateNewForm : NewMsg -> NewForm -> ( NewForm, Cmd NewMsg )
-updateNewForm msg model =
+updateNewForm : Routing.Key -> NewMsg -> NewForm -> ( NewForm, Cmd NewMsg )
+updateNewForm key msg model =
     case msg of
         NewFormMsg subMsg ->
             updateForm subMsg model
                 |> Tuple.mapSecond (Cmd.map NewFormMsg)
 
-        Submit ->
+        NewSubmit ->
             case validateForm model of
                 Ok validVariants ->
                     ( { model | isSaving = True }
                     , Api.post Api.AdminNewProduct
-                        |> Api.withJsonBody (encodeForm model validVariants)
+                        |> Api.withJsonBody (encodeForm model validVariants Nothing)
                         |> Api.withErrorHandler Product.idDecoder
-                        |> Api.sendRequest SubmitResponse
+                        |> Api.sendRequest NewSubmitResponse
                     )
 
                 Err errors ->
@@ -198,11 +208,12 @@ updateNewForm msg model =
                     , Ports.scrollToErrorMessage
                     )
 
-        SubmitResponse response ->
+        NewSubmitResponse response ->
             case response of
-                RemoteData.Success (Ok _) ->
-                    -- TODO: Redirect to ProductEdit page
-                    ( { model | isSaving = False }, Cmd.none )
+                RemoteData.Success (Ok productId) ->
+                    ( { model | isSaving = False }
+                    , Routing.newUrl key <| Admin <| ProductEdit productId
+                    )
 
                 RemoteData.Success (Err errors) ->
                     ( { model | errors = errors, isSaving = False }
@@ -220,8 +231,121 @@ updateNewForm msg model =
 
 new : NewForm -> PageData.AdminNewProductData -> List (Html NewMsg)
 new model data =
-    [ formView Submit NewFormMsg model data
+    [ formView "Add Product" NewSubmit NewFormMsg model data
     ]
+
+
+
+-- EDIT
+
+
+{-| Note: The productData & id fields are loaded in Main.update by the
+GetAdminEditProductData message.
+-}
+type alias EditForm =
+    { productData : WebData Form
+    , id : Maybe ProductId
+    }
+
+
+initialEditForm : EditForm
+initialEditForm =
+    { productData = RemoteData.NotAsked
+    , id = Nothing
+    }
+
+
+type EditMsg
+    = EditFormMsg FormMsg
+    | EditSubmit
+    | EditSubmitResponse (WebData (Result Api.FormErrors ProductId))
+
+
+updateEditForm : Routing.Key -> EditMsg -> EditForm -> ( EditForm, Cmd EditMsg )
+updateEditForm key msg model =
+    case ( msg, model.productData ) of
+        ( EditFormMsg subMsg, RemoteData.Success formData ) ->
+            updateForm subMsg formData
+                |> Tuple.mapFirst (\f -> { model | productData = RemoteData.Success f })
+                |> Tuple.mapSecond (Cmd.map EditFormMsg)
+
+        ( EditFormMsg _, _ ) ->
+            noCommand model
+
+        ( EditSubmit, RemoteData.Success formData ) ->
+            case validateForm formData of
+                Ok validVariants ->
+                    let
+                        newData =
+                            { formData | isSaving = True }
+                    in
+                    ( { model | productData = RemoteData.Success newData }
+                    , Api.post Api.AdminEditProduct
+                        |> Api.withJsonBody (encodeForm formData validVariants model.id)
+                        |> Api.withErrorHandler Product.idDecoder
+                        |> Api.sendRequest EditSubmitResponse
+                    )
+
+                Err errors ->
+                    let
+                        newData =
+                            { formData | errors = errors }
+                    in
+                    ( { model | productData = RemoteData.Success newData }
+                    , Ports.scrollToErrorMessage
+                    )
+
+        ( EditSubmit, _ ) ->
+            noCommand model
+
+        ( EditSubmitResponse response, RemoteData.Success formData ) ->
+            let
+                stoppedSaving =
+                    { formData | isSaving = False }
+
+                ( newData, cmd ) =
+                    case response of
+                        RemoteData.Success (Ok productId) ->
+                            ( stoppedSaving
+                            , Routing.newUrl key <| Admin <| ProductEdit productId
+                            )
+
+                        RemoteData.Success (Err errors) ->
+                            ( { stoppedSaving | errors = errors }
+                            , Ports.scrollToErrorMessage
+                            )
+
+                        RemoteData.Failure error ->
+                            ( { stoppedSaving | errors = Api.apiFailureToError error }
+                            , Ports.scrollToErrorMessage
+                            )
+
+                        _ ->
+                            noCommand stoppedSaving
+            in
+            ( { model | productData = RemoteData.Success newData }, cmd )
+
+        ( EditSubmitResponse _, _ ) ->
+            noCommand model
+
+
+editForm : EditForm -> PageData.AdminNewProductData -> List (Html EditMsg)
+editForm model productData =
+    case model.productData of
+        RemoteData.Success productForm ->
+            [ formView "Update Product" EditSubmit EditFormMsg productForm productData
+            ]
+
+        RemoteData.Failure error ->
+            [ text "There was an error loading this Product's data. Please refresh the page or contact a developer."
+            , Api.getErrorHtml "" <| Api.apiFailureToError error
+            ]
+
+        RemoteData.Loading ->
+            [ text "Loading Product Data..." ]
+
+        RemoteData.NotAsked ->
+            [ text "You found a bug! Please inform the developer that the Edit Product form reached a 'NotAsked' state." ]
 
 
 
@@ -244,6 +368,9 @@ type alias Form =
     , isRegional : Bool
     , errors : Api.FormErrors
     , isSaving : Bool
+
+    -- ImageUrl is used for the Edit Form
+    , imageUrl : String
     }
 
 
@@ -254,21 +381,22 @@ initialForm =
     , category = CategoryId 0
     , baseSku = ""
     , description = ""
+    , variants = Array.repeat 1 initialVariant
     , isActive = True
     , imageName = ""
     , imageData = ""
-    , variants = Array.repeat 1 initialVariant
     , isOrganic = False
     , isHeirloom = False
     , isSmallGrower = False
     , isRegional = False
     , errors = Api.initialErrors
     , isSaving = False
+    , imageUrl = ""
     }
 
 
-encodeForm : Form -> List ValidVariant -> Value
-encodeForm model validVariants =
+encodeForm : Form -> List ValidVariant -> Maybe ProductId -> Value
+encodeForm model validVariants maybeProductId =
     let
         seedAttributeValues =
             [ model.isOrganic, model.isHeirloom, model.isRegional, model.isSmallGrower ]
@@ -296,7 +424,36 @@ encodeForm model validVariants =
         , ( "imageData", Encode.string model.imageData )
         , ( "seedAttributes", encodedSeedAttribues )
         , ( "variants", Encode.list variantEncoder validVariants )
+        , ( "id", Maybe.withDefault Encode.null <| Maybe.map Product.idEncoder maybeProductId )
         ]
+
+
+formDecoder : Decoder Form
+formDecoder =
+    let
+        fromAttribute field =
+            Decode.required "seedAttributes" <|
+                Decode.map (Maybe.withDefault False) <|
+                    Decode.nullable <|
+                        Decode.field field Decode.bool
+    in
+    Decode.succeed Form
+        |> Decode.required "name" Decode.string
+        |> Decode.required "slug" Decode.string
+        |> Decode.required "category" Category.idDecoder
+        |> Decode.required "baseSku" Decode.string
+        |> Decode.required "longDescription" Decode.string
+        |> Decode.required "variants" (Decode.array variantDecoder)
+        |> Decode.required "isActive" Decode.bool
+        |> Decode.hardcoded ""
+        |> Decode.hardcoded ""
+        |> fromAttribute "organic"
+        |> fromAttribute "heirloom"
+        |> fromAttribute "smallGrower"
+        |> fromAttribute "regional"
+        |> Decode.hardcoded Api.initialErrors
+        |> Decode.hardcoded False
+        |> Decode.required "imageUrl" Decode.string
 
 
 type alias Variant =
@@ -320,6 +477,59 @@ initialVariant =
     , isActive = True
     , id = Nothing
     }
+
+
+variantDecoder : Decoder Variant
+variantDecoder =
+    let
+        sizeToAmount lotSize =
+            case lotSize of
+                Just (CustomLotSize s) ->
+                    s
+
+                Just (Mass mg) ->
+                    String.dropRight 2 <| milligramsToString mg
+
+                Just (Bulbs i) ->
+                    String.fromInt i
+
+                Just (Slips i) ->
+                    String.fromInt i
+
+                Just (Plugs i) ->
+                    String.fromInt i
+
+                Nothing ->
+                    ""
+
+        sizeToSelector lotSize =
+            case lotSize of
+                Nothing ->
+                    LSNone
+
+                Just (CustomLotSize _) ->
+                    LSCustom
+
+                Just (Mass _) ->
+                    LSMass
+
+                Just (Bulbs _) ->
+                    LSBulbs
+
+                Just (Slips _) ->
+                    LSSlips
+
+                Just (Plugs _) ->
+                    LSPlugs
+    in
+    Decode.map7 Variant
+        (Decode.field "skuSuffix" Decode.string)
+        (Decode.field "price" <| Decode.map centsToString centsDecoder)
+        (Decode.field "quantity" <| Decode.map String.fromInt Decode.int)
+        (Decode.field "lotSize" <| Decode.map sizeToAmount <| Decode.nullable lotSizeDecoder)
+        (Decode.field "lotSize" <| Decode.map sizeToSelector <| Decode.nullable lotSizeDecoder)
+        (Decode.field "isActive" Decode.bool)
+        (Decode.field "id" <| Decode.nullable Decode.int)
 
 
 type LotSizeSelector
@@ -473,6 +683,10 @@ variantEncoder variant =
                 |> Maybe.withDefault Encode.null
           )
         , ( "isActive", Encode.bool variant.isActive )
+        , ( "id"
+          , Maybe.map Encode.int variant.id
+                |> Maybe.withDefault Encode.null
+          )
         ]
 
 
@@ -540,8 +754,8 @@ validateVariant ({ lotSizeAmount } as variant) =
 
 {-| Render the form for updating/creating Products.
 -}
-formView : msg -> (FormMsg -> msg) -> Form -> PageData.AdminNewProductData -> Html msg
-formView submitMsg msgWrapper model { categories } =
+formView : String -> msg -> (FormMsg -> msg) -> Form -> PageData.AdminNewProductData -> Html msg
+formView buttonText submitMsg msgWrapper model { categories } =
     let
         inputRow s =
             Form.inputRow model.errors (s model)
@@ -559,6 +773,21 @@ formView submitMsg msgWrapper model { categories } =
 
             else
                 []
+
+        existingImage =
+            if not <| String.isEmpty model.imageUrl then
+                Form.withLabel "Current Image" True <|
+                    [ div [ class "image-preview mb-3" ]
+                        [ img
+                            [ class "img-fluid"
+                            , src <| media <| "products/originals/" ++ model.imageUrl
+                            ]
+                            []
+                        ]
+                    ]
+
+            else
+                text ""
     in
     form [ class <| Admin.formSavingClass model, onSubmit submitMsg ] <|
         List.map (Html.map msgWrapper)
@@ -577,6 +806,7 @@ formView submitMsg msgWrapper model { categories } =
             , Form.checkboxRow model.isHeirloom ToggleHeirloom "Is Heirloom" "isHeirloom"
             , Form.checkboxRow model.isSmallGrower ToggleSmallGrower "Is Small Grower" "isSmallGrower"
             , Form.checkboxRow model.isRegional ToggleRegional "Is SouthEast" "isSouthEast"
+            , existingImage
             , Admin.imageSelectRow model.imageName model.imageData SelectImage "Image"
             , h3 [] [ text "Variants" ]
             , div [] <|
@@ -584,7 +814,7 @@ formView submitMsg msgWrapper model { categories } =
                     Array.toList <|
                         Array.indexedMap (variantForm model.errors) model.variants
             , div [ class "form-group mb-4" ]
-                [ Admin.submitOrSavingButton model "Add Product"
+                [ Admin.submitOrSavingButton model buttonText
                 , button
                     [ class "ml-3 btn btn-secondary"
                     , type_ "button"

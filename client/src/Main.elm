@@ -325,13 +325,31 @@ fetchDataForRoute ({ route, pageData, key } as model) =
                     , getAdminNewProductData
                     )
 
+                Admin (ProductEdit productId) ->
+                    ( pageData
+                    , Cmd.batch [ getAdminNewProductData, getAdminEditProductData productId ]
+                    )
+
                 NotFound ->
                     doNothing
 
         doNothing =
             ( pageData, Cmd.none )
+
+        -- For routes whose data fetching escapes the scope of `pageData`.
+        updatedModel =
+            case route of
+                Admin (ProductEdit _) ->
+                    let
+                        newEditForm =
+                            { productData = RemoteData.Loading, id = Nothing }
+                    in
+                    { model | editProductForm = newEditForm }
+
+                _ ->
+                    model
     in
-    ( { model | pageData = data }, cmd )
+    ( { updatedModel | pageData = data }, cmd )
 
 
 fetchLocationsOnce : PageData -> ( PageData, Cmd Msg )
@@ -569,6 +587,19 @@ getAdminNewProductData =
     Api.get Api.AdminNewProduct
         |> Api.withJsonResponse PageData.adminNewProductDataDecoder
         |> Api.sendRequest GetAdminNewProductData
+
+
+getAdminEditProductData : ProductId -> Cmd Msg
+getAdminEditProductData productId =
+    let
+        decoder =
+            Decode.map2 Tuple.pair
+                ProductAdmin.formDecoder
+                (Decode.field "id" Product.idDecoder)
+    in
+    Api.get (Api.AdminEditProductData productId)
+        |> Api.withJsonResponse decoder
+        |> Api.sendRequest GetAdminEditProductData
 
 
 
@@ -893,9 +924,14 @@ update msg ({ pageData, key } as model) =
                 |> noCommand
 
         NewProductMsg subMsg ->
-            ProductAdmin.updateNewForm subMsg model.newProductForm
+            ProductAdmin.updateNewForm key subMsg model.newProductForm
                 |> Tuple.mapFirst (\form -> { model | newProductForm = form })
                 |> Tuple.mapSecond (Cmd.map NewProductMsg)
+
+        EditProductMsg subMsg ->
+            ProductAdmin.updateEditForm key subMsg model.editProductForm
+                |> Tuple.mapFirst (\form -> { model | editProductForm = form })
+                |> Tuple.mapSecond (Cmd.map EditProductMsg)
 
         ReAuthorize response ->
             case response of
@@ -1173,6 +1209,24 @@ update msg ({ pageData, key } as model) =
             in
             ( { model | pageData = updatedPageData }, Cmd.none )
 
+        GetAdminEditProductData response ->
+            let
+                newEditForm =
+                    case response of
+                        RemoteData.Success ( productData, productId ) ->
+                            { productData = RemoteData.Success productData
+                            , id = Just productId
+                            }
+
+                        _ ->
+                            { productData = RemoteData.map Tuple.first response
+                            , id = Nothing
+                            }
+            in
+            ( { model | editProductForm = newEditForm }
+            , Cmd.none
+            )
+
 
 {-| Update the current page number using the Paginated data.
 
@@ -1278,6 +1332,9 @@ resetForm oldRoute model =
 
                 ProductNew ->
                     { model | newProductForm = ProductAdmin.initialNewForm }
+
+                ProductEdit _ ->
+                    { model | editProductForm = ProductAdmin.initialEditForm }
     in
     case oldRoute of
         ProductDetails _ ->

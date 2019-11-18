@@ -220,6 +220,10 @@ view ({ route, pageData, navigationData, zone } as model) =
                     withIntermediateText (ProductAdmin.new model.newProductForm) pageData.adminNewProduct
                         |> List.map (Html.map NewProductMsg)
 
+                Admin (ProductEdit _) ->
+                    withIntermediateText (ProductAdmin.editForm model.editProductForm) pageData.adminNewProduct
+                        |> List.map (Html.map EditProductMsg)
+
         apply : (a -> b -> c) -> ( a, b ) -> c
         apply f ( a, b ) =
             f a b
@@ -361,6 +365,13 @@ view ({ route, pageData, navigationData, zone } as model) =
 
                 ProductNew ->
                     "New Product"
+
+                ProductEdit _ ->
+                    model.editProductForm.productData
+                        |> RemoteData.map (\p -> " - " ++ p.name)
+                        |> RemoteData.toMaybe
+                        |> Maybe.withDefault ""
+                        |> (\name -> "Edit Product" ++ name)
 
         -- TODO: Have "Error" & "Loading" titles?
         getFromPageData :

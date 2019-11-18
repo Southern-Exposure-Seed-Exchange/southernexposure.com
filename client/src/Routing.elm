@@ -11,6 +11,7 @@ module Routing exposing
 
 import Browser.Navigation
 import Category exposing (CategoryId(..))
+import Product exposing (ProductId(..))
 import Products.Pagination as Pagination
 import Routing.Utils exposing (fromStringParam, joinPath, optionalIntParam, parseFlag, queryFlag, queryParameter, withQueryStrings)
 import Search exposing (UniqueSearch(..))
@@ -69,6 +70,7 @@ type AdminRoute
     | CustomerEdit Int
     | ProductList
     | ProductNew
+    | ProductEdit ProductId
 
 
 parseRoute : Url -> Route
@@ -121,6 +123,7 @@ parseRoute =
                 , Url.map CustomerEdit (Url.s "customers" </> Url.s "edit" </> Url.int)
                 , Url.map ProductList (Url.s "products")
                 , Url.map ProductNew (Url.s "products" </> Url.s "new")
+                , Url.map ProductEdit (Url.s "products" </> Url.s "edit" </> Url.map ProductId Url.int)
                 ]
 
         adminPaginationQueryParser =
@@ -305,6 +308,9 @@ reverseAdmin route =
                 ProductNew ->
                     [ "products", "new" ]
 
+                ProductEdit (ProductId pId) ->
+                    [ "products", "edit", String.fromInt pId ]
+
         queryStrings =
             case route of
                 Dashboard ->
@@ -344,6 +350,9 @@ reverseAdmin route =
                     []
 
                 ProductNew ->
+                    []
+
+                ProductEdit _ ->
                     []
 
         recordToQueryParams { page, perPage, query } =

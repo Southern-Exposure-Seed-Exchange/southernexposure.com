@@ -28,6 +28,7 @@ import Html.Attributes exposing (class)
 import Http
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode exposing (Value)
+import Product exposing (ProductId(..))
 import Products.Pagination as Pagination
 import RemoteData exposing (WebData)
 import Routing.Utils exposing (joinPath, queryParameter, withQueryStrings)
@@ -88,6 +89,8 @@ type Endpoint
     | AdminEditCustomer
     | AdminProductList
     | AdminNewProduct
+    | AdminEditProductData ProductId
+    | AdminEditProduct
 
 
 toUrl : Endpoint -> String
@@ -258,6 +261,12 @@ toUrl endpoint =
 
                 AdminNewProduct ->
                     joinPath [ "admin", "products", "new" ]
+
+                AdminEditProductData (ProductId pId) ->
+                    joinPath [ "admin", "products", "edit", String.fromInt pId ]
+
+                AdminEditProduct ->
+                    joinPath [ "admin", "products", "edit" ]
     in
     "/api" ++ endpointUrl
 

@@ -71,7 +71,7 @@ import Json.Decode as Decode exposing (Decoder)
 import Locations exposing (AddressLocations)
 import Models.Fields exposing (Cents(..), ImageData, LotSize, centsDecoder, centsMap, centsMap2, imageDecoder, lotSizeDecoder)
 import Paginate exposing (Paginated)
-import Product exposing (Product, ProductVariant, ProductVariantId(..), variantPrice)
+import Product exposing (Product, ProductId, ProductVariant, ProductVariantId(..), variantPrice)
 import Products.Pagination as Pagination
 import Products.Sorting as Sorting
 import RemoteData exposing (WebData)
@@ -906,7 +906,7 @@ adminProductListDataDecoder =
 
 
 type alias AdminListProduct =
-    { id : Int
+    { id : ProductId
     , name : String
     , baseSku : String
     , categories : List String
@@ -917,7 +917,7 @@ type alias AdminListProduct =
 adminListProductDecoder : Decoder AdminListProduct
 adminListProductDecoder =
     Decode.map5 AdminListProduct
-        (Decode.field "id" Decode.int)
+        (Decode.field "id" Product.idDecoder)
         (Decode.field "name" Decode.string)
         (Decode.field "baseSKU" Decode.string)
         (Decode.field "categories" <| Decode.list Decode.string)
