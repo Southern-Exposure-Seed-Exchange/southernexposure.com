@@ -83,6 +83,9 @@ init flags url key =
         route =
             parseRoute url
 
+        waitForAuthorization =
+            Routing.authRequired route || (route == Checkout && flags.authUserId /= Nothing)
+
         ( model, cmd ) =
             Model.initial key route
                 |> (\m ->
@@ -91,15 +94,13 @@ init flags url key =
                             , cartItemCount = Maybe.withDefault 0 flags.cartItemCount
                         }
                    )
-                |> fetchDataForRoute
-                |> Tuple.mapSecond
-                    (\cmd_ ->
-                        if route == Checkout && flags.authUserId /= Nothing then
-                            Cmd.none
+                |> (\m ->
+                        if waitForAuthorization then
+                            ( m, Cmd.none )
 
                         else
-                            cmd_
-                    )
+                            fetchDataForRoute m
+                   )
 
         authorizationCmd =
             Maybe.map reAuthorize flags.authUserId
