@@ -8,7 +8,6 @@ Calculation API. It is a minimal implementation that supports the features
 we use, which is essentially Transaction Creation & Refunding.
 
 TODO: RefundTransaction API
-TODO: CommitTransaction API
 TODO: src/Config.hs - add env, id, key values - parse/set in app/Main.hs
 TODO: src/Server.hs - add runner function: (ReaderT Config m SpecificResponseType -> App SpecificResponseType)
 
@@ -22,6 +21,7 @@ module Avalara
       -- * Requests
     , ping
     , createTransaction
+    , commitTransaction
     , createCustomers
       -- * Types
       -- ** Errors
@@ -29,7 +29,8 @@ module Avalara
     , ErrorInfo(..)
     , ErrorDetail(..)
       -- ** Requests
-    , CreateTransactonRequest(..)
+    , CreateTransactionRequest(..)
+    , CommitTransactionRequest(..)
     , CreateCustomersRequest(..)
       -- ** Responses
     , PingResponse(..)
@@ -40,6 +41,7 @@ module Avalara
     , TransactionStatus(..)
     , TaxCode(..)
     , shippingAndHandlingTaxCode
+    , TransactionCode(..)
       -- ** Customer
     , Customer(..)
     , CustomerCode(..)
@@ -48,6 +50,7 @@ module Avalara
     , AddressInfo(..)
       -- ** Miscellaneous
     , CompanyId(..)
+    , CompanyCode(..)
     , AuthenticationType(..)
     ) where
 
@@ -172,9 +175,20 @@ ping =
 --
 -- API Docs:
 -- https://developer.avalara.com/api-reference/avatax/rest/v2/methods/Transactions/CreateTransaction/
-createTransaction :: MonadIO m => CreateTransactonRequest -> ReaderT Config m (WithError Transaction)
+createTransaction :: MonadIO m => CreateTransactionRequest -> ReaderT Config m (WithError Transaction)
 createTransaction =
     makePostRequest CreateTransaction
+
+-- | A commitTransaction request lets you mark an existing Transaction
+-- as committed.
+--
+-- API Docs:
+-- https://developer.avalara.com/api-reference/avatax/rest/v2/methods/Transactions/CommitTransaction/
+commitTransaction :: MonadIO m => CompanyCode -> TransactionCode -> CommitTransactionRequest
+    -> ReaderT Config m (WithError Transaction)
+commitTransaction companyCode transactionCode =
+    makePostRequest $ CommitTransaction companyCode transactionCode
+
 
 -- | A createCustomers request lets you create new Customers for a Company.
 --
@@ -194,6 +208,7 @@ data Endpoint
     = Ping
     | CreateTransaction
     | CreateCustomers CompanyId
+    | CommitTransaction CompanyCode TransactionCode
     deriving (Show, Read, Eq)
 
 endpointPath :: Monad m => Endpoint -> ReaderT Config m (Url 'Https)
@@ -206,6 +221,8 @@ endpointPath endpoint = do
             ["transactions", "create"]
         CreateCustomers (CompanyId companyId) ->
             ["companies", T.pack (show companyId), "customers"]
+        CommitTransaction (CompanyCode companyCode) (TransactionCode transCode) ->
+            ["companies", companyCode, "transactions", transCode, "commit"]
   where
     joinPaths :: Url 'Https -> [T.Text] -> Url 'Https
     joinPaths =
@@ -279,9 +296,9 @@ instance FromJSON a => FromJSON (WithError a) where
 --
 -- API Docs:
 -- https://developer.avalara.com/api-reference/avatax/rest/v2/models/CreateTransactionModel/
-data CreateTransactonRequest =
-    CreateTransactonRequest
-        { ctrCode :: Maybe T.Text
+data CreateTransactionRequest =
+    CreateTransactionRequest
+        { ctrCode :: Maybe TransactionCode
         -- ^ Your internal reference for the Transaction. AvaTax will
         -- generate GUID if left blank.
         , ctrLines :: [LineItem]
@@ -289,7 +306,7 @@ data CreateTransactonRequest =
         , ctrType :: Maybe DocumentType
         -- ^ The type of Transction to create. Defaults to 'SalesOrder' if
         -- not present.
-        , ctrCompanyCode :: Maybe T.Text
+        , ctrCompanyCode :: Maybe CompanyCode
         -- ^ The company creating the transaction. 'Nothing' will cause
         -- AvaTax to use the account's default company.
         , ctrDate :: UTCTime
@@ -306,8 +323,8 @@ data CreateTransactonRequest =
         -- Invoice document types, not Orders.
         } deriving (Show, Read, Eq)
 
-instance ToJSON CreateTransactonRequest where
-    toJSON CreateTransactonRequest {..} =
+instance ToJSON CreateTransactionRequest where
+    toJSON CreateTransactionRequest {..} =
         object
             [ "code" .= ctrCode
             , "lines" .= ctrLines
@@ -329,6 +346,18 @@ newtype CreateCustomersRequest =
 instance ToJSON CreateCustomersRequest where
     toJSON CreateCustomersRequest {..} =
         toJSONList ccrCustomers
+
+
+newtype CommitTransactionRequest =
+    CommitTransactionRequest
+        { ctsrCommit :: Bool
+        } deriving (Show, Read, Eq)
+
+instance ToJSON CommitTransactionRequest where
+    toJSON CommitTransactionRequest {..} =
+        object
+            [ "commit" .= ctsrCommit
+            ]
 
 
 -- RESPONSES
@@ -373,7 +402,7 @@ instance FromJSON PingResponse where
 data Transaction =
     Transaction
         { tId :: Maybe Integer
-        , tCode :: Maybe T.Text
+        , tCode :: Maybe TransactionCode
         , tCompanyId :: Maybe CompanyId
         , tDate :: Maybe UTCTime
         , tStatus :: Maybe TransactionStatus
@@ -537,6 +566,17 @@ instance FromJSON DocumentType where
             fail $ "Unexpected DocumentType: " <> T.unpack str
 
 
+newtype TransactionCode =
+    TransactionCode { fromTransctionCode :: T.Text }
+    deriving (Show, Read, Eq)
+
+instance ToJSON TransactionCode where
+    toJSON = String . fromTransctionCode
+
+instance FromJSON TransactionCode where
+    parseJSON = withText "TransactionCode" (return . TransactionCode)
+
+
 newtype CustomerCode =
     CustomerCode { fromCustomerCode :: T.Text }
     deriving (Show, Read, Eq)
@@ -557,6 +597,17 @@ instance ToJSON CompanyId where
 
 instance FromJSON CompanyId where
     parseJSON = withScientific "CompanyId" (return . CompanyId . floor)
+
+
+newtype CompanyCode =
+    CompanyCode { fromCompanyCode :: T.Text }
+    deriving (Show, Read, Eq)
+
+instance ToJSON CompanyCode where
+    toJSON = toJSON . fromCompanyCode
+
+instance FromJSON CompanyCode where
+    parseJSON = withText "CompanyCode" (return . CompanyCode)
 
 
 data TransactionStatus
@@ -660,7 +711,7 @@ data Customer =
         -- the 'createCustomers' request.
         , cCompanyId :: CompanyId
         -- ^ The Company the customer belongs to.
-        , cCustomerCode :: T.Text
+        , cCustomerCode :: CustomerCode
         -- ^ The unique code identifying the Customer in other API calls.
         , cAlternateId :: Maybe T.Text
         -- ^ A configurable alternate ID for interfacing with other systems
