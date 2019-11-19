@@ -743,8 +743,8 @@ makeOrders mysql = do
     getAdminComments orderId = do
         commentsQuery <- prepareStmt mysql . Query $
             "SELECT comments, date_added FROM orders_status_history "
-            <> "WHERE cusomter_notified='-1' AND comments != '' AND orders_id=?"
-        queryStmt mysql commentsQuery [MySQLInt32 orderId]
+            <> "WHERE customer_notified='-1' AND comments != '' AND orders_id=?"
+        comments <- queryStmt mysql commentsQuery [MySQLInt32 orderId]
             >>= Streams.toList . snd
             >>= mapM (\case
                         [MySQLText comment, MySQLDateTime localTime] -> do
@@ -757,6 +757,8 @@ makeOrders mysql = do
                             error $ "Invalid arguments to getAdminComments:\n\t"
                                 <> concatMap (\a -> show a <> "\n\t") args
                      )
+        closeStmt mysql commentsQuery
+        return comments
     getOrderStatus :: Int32 -> OrderStatus
     getOrderStatus status =
         case status of
@@ -852,6 +854,7 @@ makeOrders mysql = do
             <> "WHERE a.customers_id=?"
         maybeAddress <- fmap listToMaybe $ queryStmt mysql query [MySQLInt32 customerId]
             >>= Streams.toList . snd
+        closeStmt mysql query
         case maybeAddress of
             Nothing ->
                 error $ "makeAddressFromCustomer: No address_book entries for customer " <> show customerId
