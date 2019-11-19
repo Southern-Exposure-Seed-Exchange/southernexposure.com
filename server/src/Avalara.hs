@@ -7,8 +7,9 @@
 Calculation API. It is a minimal implementation that supports the features
 we use, which is essentially Transaction Creation & Refunding.
 
-TODO: CreateTransaction API
 TODO: RefundTransaction API
+TODO: CreateCustomer API
+TODO: CommitTransaction API
 TODO: src/Config.hs - add env, id, key values - parse/set in app/Main.hs
 TODO: src/Server.hs - add runner function: (ReaderT Config m SpecificResponseType -> App SpecificResponseType)
 
@@ -21,27 +22,45 @@ module Avalara
     , Config(..)
       -- * Requests
     , ping
+    , createTransaction
       -- * Types
       -- ** Errors
     , WithError(..)
     , ErrorInfo(..)
     , ErrorDetail(..)
+      -- ** Requests
+    , CreateTransactonRequest(..)
       -- ** Responses
     , PingResponse(..)
+    , Transaction(..)
       -- ** Miscellaneous
     , AuthenticationType(..)
+    , LineItem(..)
+    , DocumentType(..)
+    , TransactionStatus(..)
+    , Address(..)
+    , AddressInfo(..)
+    , CustomerCode(..)
+    , TaxCode(..)
+    , shippingAndHandlingTaxCode
     ) where
 
 import Control.Monad.Reader (MonadIO, ReaderT, asks, ask, liftIO)
-import Data.Aeson ((.:), (.:?), FromJSON(..), withObject, withText)
+import Data.Aeson
+    ((.:), (.:?), (.=), FromJSON(..), ToJSON(..), Value(..), object, withObject
+    , withText
+    )
 import Data.Default (def)
 import Data.Foldable (asum)
 import Data.Monoid ((<>))
+import Data.Scientific (Scientific)
 import Data.Text.Encoding (encodeUtf8)
+import Data.Time (UTCTime, defaultTimeLocale, formatTime)
 import Data.Version (showVersion)
 import Network.HTTP.Req
     ( (/:), Option, Scheme(Https), Url, runReq, req, header, https, GET(..)
-    , responseBody, jsonResponse, NoReqBody(..)
+    , POST(..), responseBody, jsonResponse, NoReqBody(..), ReqBodyJson(..)
+    , HttpMethod, HttpBody, HttpBodyAllowed, AllowsBody, ProvidesBody
     )
 import Network.HostName (getHostName)
 
@@ -135,9 +154,21 @@ generateClientHeader = do
 
 -- | A ping request lets you check your connectivity with the AvaTax API
 -- server & verify your authenticaton credentials.
+--
+-- API Docs:
+-- https://developer.avalara.com/api-reference/avatax/rest/v2/methods/Utilities/Ping/
 ping :: MonadIO m => ReaderT Config m (WithError PingResponse)
 ping =
     makeGetRequest Ping
+
+-- | A createTransaction request lets you get a sales tax quote for an
+-- order or record a completed order.
+--
+-- API Docs:
+-- https://developer.avalara.com/api-reference/avatax/rest/v2/methods/Transactions/CreateTransaction/
+createTransaction :: MonadIO m => CreateTransactonRequest -> ReaderT Config m (WithError Transaction)
+createTransaction =
+    makePostRequest CreateTransaction
 
 
 
@@ -148,6 +179,7 @@ ping =
 
 data Endpoint
     = Ping
+    | CreateTransaction
     deriving (Show, Read, Eq)
 
 endpointPath :: Monad m => Endpoint -> ReaderT Config m (Url 'Https)
@@ -156,6 +188,8 @@ endpointPath endpoint = do
     return . joinPaths (https baseUrl /: "api" /: "v2") $ case endpoint of
         Ping ->
             ["utilities", "ping"]
+        CreateTransaction ->
+            ["transactions", "create"]
   where
     joinPaths :: Url 'Https -> [T.Text] -> Url 'Https
     joinPaths =
@@ -223,6 +257,54 @@ instance FromJSON a => FromJSON (WithError a) where
             ]
 
 
+-- REQUESTS
+
+-- | Request data for the @CreateTransacton@ endpoint.
+--
+-- API Docs:
+-- https://developer.avalara.com/api-reference/avatax/rest/v2/models/CreateTransactionModel/
+data CreateTransactonRequest =
+    CreateTransactonRequest
+        { ctrCode :: Maybe T.Text
+        -- ^ Your internal reference for the Transaction. AvaTax will
+        -- generate GUID if left blank.
+        , ctrLines :: [LineItem]
+        -- ^ Line items for the Transaction
+        , ctrType :: Maybe DocumentType
+        -- ^ The type of Transction to create. Defaults to 'SalesOrder' if
+        -- not present.
+        , ctrCompanyCode :: Maybe T.Text
+        -- ^ The company creating the transaction. 'Nothing' will cause
+        -- AvaTax to use the account's default company.
+        , ctrDate :: UTCTime
+        -- ^ The date of the invoice or purchase.
+        , ctrCustomerCode :: CustomerCode
+        -- ^ A unique identifier for the Customer in your application.
+        , ctrDiscount :: Maybe Scientific
+        -- ^ A discount amount to apply to all 'LineItem' with
+        -- 'liDiscounted' set to 'True'.
+        , ctrAddresses :: Maybe Address
+        -- ^ Default addresses for all lines in the document.
+        , ctrCommit :: Maybe Bool
+        -- ^ Commit the transaction after creation. Only applicable to
+        -- Invoice document types, not Orders.
+        } deriving (Show, Read, Eq)
+
+instance ToJSON CreateTransactonRequest where
+    toJSON CreateTransactonRequest {..} =
+        object
+            [ "code" .= ctrCode
+            , "lines" .= ctrLines
+            , "type" .= ctrType
+            , "companyCode" .= ctrCompanyCode
+            , "discount" .= ctrDiscount
+            , "date" .= formatTime defaultTimeLocale "%FT%T+00:00" ctrDate
+            , "customerCode" .= ctrCustomerCode
+            , "addresses" .= ctrAddresses
+            , "commit" .= ctrCommit
+            ]
+
+
 -- RESPONSES
 
 -- | Response body of the 'Ping' endpoint.
@@ -256,6 +338,53 @@ instance FromJSON PingResponse where
         return PingResponse {..}
 
 
+-- | Response body of the @CreateTransaction@ & @RefundTransaction@ endpoints.
+--
+-- There are many more fields available, but we only pull a useful subset.
+--
+-- API Docs:
+-- https://developer.avalara.com/api-reference/avatax/rest/v2/models/TransactionModel/
+data Transaction =
+    Transaction
+        { tId :: Maybe Integer
+        , tCode :: Maybe T.Text
+        , tCompanyId :: Maybe Integer
+        , tDate :: Maybe UTCTime
+        , tStatus :: Maybe TransactionStatus
+        , tType :: Maybe DocumentType
+        , tCustomerCode :: Maybe CustomerCode
+        , tReconciled :: Maybe Bool
+        , tTotalAmount :: Maybe Scientific
+        , tTotalExempt :: Maybe Scientific
+        , tTotalTax :: Maybe Scientific
+        , tTotalTaxable :: Maybe Scientific
+        , tTotalTaxCalculated :: Maybe Scientific
+        , tLocked :: Maybe Bool
+        , tRegion :: Maybe T.Text
+        , tCountry :: Maybe T.Text
+        }
+
+instance FromJSON Transaction where
+    parseJSON = withObject "Transaction" $ \o -> do
+        tId <- o .: "id"
+        tCode <- o .: "code"
+        tCompanyId <- o .: "companyId"
+        tDate <- o .: "date"
+        tStatus <- o .: "status"
+        tType <- o .: "type"
+        tCustomerCode <- o .: "customerCode"
+        tReconciled <- o .: "reconciled"
+        tTotalAmount <- o .: "totalAmount"
+        tTotalExempt <- o .: "totalExempt"
+        tTotalTax <- o .: "totalTax"
+        tTotalTaxable <- o .: "totalTaxable"
+        tTotalTaxCalculated <- o .: "tTotalTaxCalculated"
+        tLocked <- o .: "locked"
+        tRegion <- o .: "region"
+        tCountry <- o .: "country"
+        return Transaction {..}
+
+
 -- MISCELLANEOUS
 
 -- | The type of authentication given to the 'Ping' endpoint.
@@ -284,13 +413,224 @@ instance FromJSON AuthenticationType where
             fail $ "Unexpected AuthenticationType Model: " <> T.unpack str
 
 
+-- | A single line in a Transaction.
+--
+-- API Docs:
+-- https://developer.avalara.com/api-reference/avatax/rest/v2/models/LineItemModel/
+data LineItem =
+    LineItem
+        { liNumber :: Maybe T.Text
+        -- ^ The line number within the document. Can be any useful text.
+        , liQuantity :: Maybe Scientific
+        -- ^ Should always be positive. 'Nothing' defaults to @1@.
+        , liTotalAmount :: Maybe Scientific
+        -- ^ The total amount for the line. Must be positive for sale
+        -- transactions & negative for refund & return transactions.
+        , liAddresses :: Maybe Address
+        -- ^ Address overrides for this specific line. 'Nothing' will
+        -- default to the @addreses@ field from the Document.
+        , liTaxCode :: Maybe TaxCode
+        -- ^ The tax code for the line. Maybe be a standard AvaTax code or
+        -- a custom tax code.
+        , liItemCode :: Maybe T.Text
+        -- ^ Your SKU for the line.
+        , liDiscounted :: Maybe Bool
+        -- ^ Apply the Document's 'ctrDiscount' to this line.
+        , liDescription :: Maybe T.Text
+        -- ^ A description of the line item. Required for SST customers
+        -- with an unmapped 'liItemCode'.
+        }
+    deriving (Show, Read, Eq)
+
+instance ToJSON LineItem where
+    toJSON LineItem {..} =
+        object
+            [ "number" .= liNumber
+            , "quantity" .= liQuantity
+            , "amount" .= liTotalAmount
+            , "addresses" .= liAddresses
+            , "taxCode" .= liTaxCode
+            , "itemCode" .= liItemCode
+            , "discounted" .= liDiscounted
+            , "description" .= liDescription
+            ]
+
+
+-- | A custom Tax Code or a standard AvaTax Tax Code for classifying
+-- the tax class of a 'LineItem'.
+newtype TaxCode =
+    TaxCode { fromTaxCode :: T.Text }
+    deriving (Show, Read, Eq)
+
+instance ToJSON TaxCode where
+    toJSON = String . fromTaxCode
+
+-- | Standard Avalara Tax Code for combined Shipping & Handling charges.
+shippingAndHandlingTaxCode :: TaxCode
+shippingAndHandlingTaxCode =
+    TaxCode "FR030000"
+
+
+-- | A subset of the Transction Document Types - only the ones that we
+-- require.
+data DocumentType
+    = SalesOrder
+    -- ^ An estimate of the tax to be paid.
+    | SalesInvoice
+    -- ^ A sale that has been finalized. Records the transction and
+    -- calculates the final tax amount.
+    | ReturnOrder
+    -- ^ An estimate of the tax to be refunded.
+    | ReturnInvoice
+    -- ^ A return that has been finalized. Records the transaction and
+    -- calculates the final amount of tax to be refunded.
+    deriving (Show, Read, Eq)
+
+instance ToJSON DocumentType where
+    toJSON = String . \case
+        SalesOrder ->
+            "SalesOrder"
+        SalesInvoice ->
+            "SalesInvoice"
+        ReturnOrder ->
+            "ReturnOrder"
+        ReturnInvoice ->
+            "ReturnInvoice"
+
+instance FromJSON DocumentType where
+    parseJSON = withText "DocumentType" $ \case
+        "SalesOrder" ->
+            return SalesOrder
+        "SalesInvoice" ->
+            return SalesInvoice
+        "ReturnOrder" ->
+            return ReturnOrder
+        "ReturnInvoice" ->
+            return ReturnInvoice
+        str ->
+            fail $ "Unexpected DocumentType: " <> T.unpack str
+
+
+newtype CustomerCode =
+    CustomerCode { fromCustomerCode :: T.Text }
+    deriving (Show, Read, Eq)
+
+instance ToJSON CustomerCode where
+    toJSON = String . fromCustomerCode
+
+instance FromJSON CustomerCode where
+    parseJSON = withText "CustomerCode" (return . CustomerCode)
+
+
+data TransactionStatus
+    = Temporary
+    | Saved
+    | Posted
+    | Committed
+    | Cancelled
+    | Adjusted
+    | PendingApproval
+    deriving (Show, Read, Eq)
+
+instance FromJSON TransactionStatus where
+    parseJSON = withText "TransactionStatus" $ \case
+        "Temporary" ->
+            return Temporary
+        "Saved" ->
+            return Saved
+        "Posted" ->
+            return Posted
+        "Committed" ->
+            return Committed
+        "Cancelled" ->
+            return Cancelled
+        "Adjusted" ->
+            return Adjusted
+        "PendingApproval" ->
+            return PendingApproval
+        str ->
+            fail $ "Unexpected value for TransactionStatus: " <> T.unpack str
+
+
+-- | Information on all Addresses involved in a Transaction.
+--
+-- API Docs:
+-- https://developer.avalara.com/api-reference/avatax/rest/v2/models/AddressesModel/
+data Address
+    = Address
+        { addrSingleLocation :: Maybe AddressInfo
+        , addrShipFrom :: Maybe AddressInfo
+        , addrShipTo :: Maybe AddressInfo
+        , addrPointOfOrderOrigin :: Maybe AddressInfo
+        , addrPointOfOrderAcceptance :: Maybe AddressInfo
+        } deriving (Show, Read, Eq)
+
+instance ToJSON Address where
+    toJSON Address {..} =
+        object
+            [ "singleLocation" .= addrSingleLocation
+            , "shipFrom" .= addrShipFrom
+            , "shipTo" .= addrShipTo
+            , "pointOfOrderOrigin" .= addrPointOfOrderOrigin
+            , "pointOfOrderAcceptance" .= addrPointOfOrderAcceptance
+            ]
+
+
+-- | Represents a single address to resolve.
+--
+-- API Docs:
+-- https://developer.avalara.com/api-reference/avatax/rest/v2/models/AddressLocationInfo/
+data AddressInfo =
+    AddressInfo
+        { aiLocationCode :: Maybe T.Text
+        -- ^ Use a pre-existing Location with the given code.
+        , aiLineOne :: Maybe T.Text
+        , aiLineTwo :: Maybe T.Text
+        , aiLineThree :: Maybe T.Text
+        , aiCity :: Maybe T.Text
+        , aiRegion :: Maybe T.Text
+        , aiCountry :: Maybe T.Text
+        , aiPostalCode :: Maybe T.Text
+        , aiLatitude :: Maybe Scientific
+        , aiLongitude :: Maybe Scientific
+        } deriving (Show, Read, Eq)
+
+instance ToJSON AddressInfo where
+    toJSON AddressInfo {..} =
+        object
+            [ "locationCode" .= aiLocationCode
+            , "line1" .= aiLineOne
+            , "line2" .= aiLineTwo
+            , "line3" .= aiLineThree
+            , "city" .= aiCity
+            , "region" .= aiRegion
+            , "country" .= aiCountry
+            , "postalCode" .= aiPostalCode
+            , "latitude" .= aiLatitude
+            , "longitude" .= aiLongitude
+            ]
+
+
 
 -- HELPERS
 
 makeGetRequest :: (FromJSON a, MonadIO m) => Endpoint -> ReaderT Config m (WithError a)
-makeGetRequest endpoint = do
+makeGetRequest endpoint =
+    makeRequest endpoint GET NoReqBody
+
+makePostRequest :: (ToJSON a, FromJSON b, MonadIO m) => Endpoint -> a -> ReaderT Config m (WithError b)
+makePostRequest endpoint body =
+    makeRequest endpoint POST $ ReqBodyJson body
+
+makeRequest
+    :: ( FromJSON a, HttpMethod method, HttpBody body, MonadIO m
+       , HttpBodyAllowed (AllowsBody method) (ProvidesBody body)
+       )
+    => Endpoint -> method -> body
+    -> ReaderT Config m (WithError a)
+makeRequest endpoint method reqBody = do
     path <- endpointPath endpoint
     authHeader <- generateAuthorizationHeader
     clientHeader <- generateClientHeader
-    runReq def $ responseBody
-        <$> req GET path NoReqBody jsonResponse (authHeader <> clientHeader)
+    let headers = authHeader <> clientHeader
+    runReq def $ responseBody <$> req method path reqBody jsonResponse headers
