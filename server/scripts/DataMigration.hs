@@ -742,7 +742,7 @@ makeOrders mysql = do
     getAdminComments :: Int32 -> IO [AdminOrderComment]
     getAdminComments orderId = do
         commentsQuery <- prepareStmt mysql . Query $
-            "SELECT comments, date_added FROM order_status_history "
+            "SELECT comments, date_added FROM orders_status_history "
             <> "WHERE cusomter_notified='-1' AND comments != '' AND orders_id=?"
         queryStmt mysql commentsQuery [MySQLInt32 orderId]
             >>= Streams.toList . snd
