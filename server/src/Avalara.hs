@@ -34,18 +34,21 @@ module Avalara
       -- ** Responses
     , PingResponse(..)
     , Transaction(..)
-      -- ** Miscellaneous
-    , AuthenticationType(..)
-    , CompanyId(..)
+      -- ** Transactions
     , LineItem(..)
     , DocumentType(..)
     , TransactionStatus(..)
-    , Address(..)
-    , AddressInfo(..)
-    , Customer(..)
-    , CustomerCode(..)
     , TaxCode(..)
     , shippingAndHandlingTaxCode
+      -- ** Customer
+    , Customer(..)
+    , CustomerCode(..)
+      -- ** Address
+    , Address(..)
+    , AddressInfo(..)
+      -- ** Miscellaneous
+    , CompanyId(..)
+    , AuthenticationType(..)
     ) where
 
 import Control.Monad.Reader (MonadIO, ReaderT, asks, ask, liftIO)
