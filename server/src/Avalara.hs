@@ -8,7 +8,6 @@ Calculation API. It is a minimal implementation that supports the features
 we use, which is essentially Transaction Creation & Refunding.
 
 TODO: RefundTransaction API
-TODO: CreateCustomer API
 TODO: CommitTransaction API
 TODO: src/Config.hs - add env, id, key values - parse/set in app/Main.hs
 TODO: src/Server.hs - add runner function: (ReaderT Config m SpecificResponseType -> App SpecificResponseType)
@@ -23,6 +22,7 @@ module Avalara
       -- * Requests
     , ping
     , createTransaction
+    , createCustomers
       -- * Types
       -- ** Errors
     , WithError(..)
@@ -30,16 +30,19 @@ module Avalara
     , ErrorDetail(..)
       -- ** Requests
     , CreateTransactonRequest(..)
+    , CreateCustomersRequest(..)
       -- ** Responses
     , PingResponse(..)
     , Transaction(..)
       -- ** Miscellaneous
     , AuthenticationType(..)
+    , CompanyId(..)
     , LineItem(..)
     , DocumentType(..)
     , TransactionStatus(..)
     , Address(..)
     , AddressInfo(..)
+    , Customer(..)
     , CustomerCode(..)
     , TaxCode(..)
     , shippingAndHandlingTaxCode
@@ -48,7 +51,7 @@ module Avalara
 import Control.Monad.Reader (MonadIO, ReaderT, asks, ask, liftIO)
 import Data.Aeson
     ((.:), (.:?), (.=), FromJSON(..), ToJSON(..), Value(..), object, withObject
-    , withText
+    , withText, withScientific, toJSONList
     )
 import Data.Default (def)
 import Data.Foldable (asum)
@@ -170,6 +173,13 @@ createTransaction :: MonadIO m => CreateTransactonRequest -> ReaderT Config m (W
 createTransaction =
     makePostRequest CreateTransaction
 
+-- | A createCustomers request lets you create new Customers for a Company.
+--
+-- API Docs:
+-- https://developer.avalara.com/api-reference/avatax/rest/v2/methods/Customers/CreateCustomers/
+createCustomers :: MonadIO m => CompanyId -> CreateCustomersRequest -> ReaderT Config m (WithError [Customer])
+createCustomers companyId =
+    makePostRequest $ CreateCustomers companyId
 
 
 -- TYPES
@@ -180,6 +190,7 @@ createTransaction =
 data Endpoint
     = Ping
     | CreateTransaction
+    | CreateCustomers CompanyId
     deriving (Show, Read, Eq)
 
 endpointPath :: Monad m => Endpoint -> ReaderT Config m (Url 'Https)
@@ -190,6 +201,8 @@ endpointPath endpoint = do
             ["utilities", "ping"]
         CreateTransaction ->
             ["transactions", "create"]
+        CreateCustomers (CompanyId companyId) ->
+            ["companies", T.pack (show companyId), "customers"]
   where
     joinPaths :: Url 'Https -> [T.Text] -> Url 'Https
     joinPaths =
@@ -305,6 +318,16 @@ instance ToJSON CreateTransactonRequest where
             ]
 
 
+-- | The list of Customers to create for the @CreateCustomers@ endpoint.
+newtype CreateCustomersRequest =
+    CreateCustomersRequest { ccrCustomers :: [Customer] }
+    deriving (Read, Show, Eq)
+
+instance ToJSON CreateCustomersRequest where
+    toJSON CreateCustomersRequest {..} =
+        toJSONList ccrCustomers
+
+
 -- RESPONSES
 
 -- | Response body of the 'Ping' endpoint.
@@ -348,7 +371,7 @@ data Transaction =
     Transaction
         { tId :: Maybe Integer
         , tCode :: Maybe T.Text
-        , tCompanyId :: Maybe Integer
+        , tCompanyId :: Maybe CompanyId
         , tDate :: Maybe UTCTime
         , tStatus :: Maybe TransactionStatus
         , tType :: Maybe DocumentType
@@ -522,6 +545,17 @@ instance FromJSON CustomerCode where
     parseJSON = withText "CustomerCode" (return . CustomerCode)
 
 
+newtype CompanyId =
+    CompanyId { fromCompanyId :: Integer }
+    deriving (Show, Read, Eq)
+
+instance ToJSON CompanyId where
+    toJSON = toJSON . fromCompanyId
+
+instance FromJSON CompanyId where
+    parseJSON = withScientific "CompanyId" (return . CompanyId . floor)
+
+
 data TransactionStatus
     = Temporary
     | Saved
@@ -610,6 +644,69 @@ instance ToJSON AddressInfo where
             , "longitude" .= aiLongitude
             ]
 
+
+-- | A Customer for the Request & Response data of the @CreateCustomers@
+-- endpoint.
+--
+-- API Docs:
+-- https://developer.avalara.com/api-reference/avatax/rest/v2/models/CustomerModel/
+data Customer =
+    Customer
+        { cId :: Maybe Integer
+        -- ^ The Customer ID. This is read-only so do not specify it for
+        -- the 'createCustomers' request.
+        , cCompanyId :: CompanyId
+        -- ^ The Company the customer belongs to.
+        , cCustomerCode :: T.Text
+        -- ^ The unique code identifying the Customer in other API calls.
+        , cAlternateId :: Maybe T.Text
+        -- ^ A configurable alternate ID for interfacing with other systems
+        -- that want to reference the Customer.
+        , cName :: T.Text
+        -- ^ A friendly name that identifies the Customer.
+        , cLineOne :: T.Text
+        , cLineTwo :: Maybe T.Text
+        , cCity :: T.Text
+        , cPostalCode :: T.Text
+        , cRegion :: T.Text
+        , cCountry :: T.Text
+        , cPhoneNumber :: Maybe T.Text
+        , cEmailAddress :: Maybe T.Text
+        } deriving (Show, Read, Eq)
+
+instance ToJSON Customer where
+    toJSON Customer {..} =
+        object
+            [ "companyId" .= cCompanyId
+            , "customerCode" .= cCustomerCode
+            , "alternateId" .= cAlternateId
+            , "name" .= cName
+            , "line1" .= cLineOne
+            , "line2" .= cLineTwo
+            , "city" .= cCity
+            , "postalCode" .= cPostalCode
+            , "region" .= cRegion
+            , "country" .= cCountry
+            , "phoneNumber" .= cPhoneNumber
+            , "emailAddress" .= cEmailAddress
+            ]
+
+instance FromJSON Customer where
+    parseJSON = withObject "Customer" $ \o -> do
+        cId <- o .: "id"
+        cCompanyId <- o .: "companyId"
+        cCustomerCode <- o .: "customerCode"
+        cAlternateId <- o .: "alternateId"
+        cName <- o .: "name"
+        cLineOne <- o .: "line1"
+        cLineTwo <- o .: "line2"
+        cCity <- o .: "city"
+        cPostalCode <- o .: "postalCode"
+        cRegion <- o .: "region"
+        cCountry <- o .: "country"
+        cPhoneNumber <- o .: "phoneNumber"
+        cEmailAddress <- o .: "emailAddress"
+        return Customer {..}
 
 
 -- HELPERS
