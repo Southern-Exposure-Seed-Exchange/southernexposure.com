@@ -2,7 +2,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeApplications #-}
 -- TODO: Split into ModuleNameSpec.hs files & Gen.hs file.
-import Data.Aeson (Result(Success), fromJSON, toJSON)
+import Data.Aeson (Result(Success), FromJSON, fromJSON, toJSON, eitherDecode)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LBS
 import Data.Monoid ((<>))
@@ -24,6 +24,7 @@ import Test.Tasty.HUnit hiding (assert)
 import Text.XML.Generator (Xml, Elem, doc, defaultDocInfo, xrender)
 import Web.FormUrlEncoded (FromForm(..), urlDecodeForm, fromEntriesByKey)
 
+import Avalara
 import Models
 import Models.Fields
 import Routes.CommonData
@@ -31,6 +32,7 @@ import Routes.StoneEdge
 import StoneEdge
 
 import qualified StoneEdgeFixtures as SEF
+import qualified AvalaraFixtures as AF
 
 main :: IO ()
 main =
@@ -44,6 +46,7 @@ tests =
          , commonData
          , stoneEdge
          , routesStoneEdge
+         , avalara
          ]
 
 
@@ -617,6 +620,81 @@ routesStoneEdge = testGroup "Routes.StoneEdge Module"
     nullSqlKey = toSqlKey 0
 
 
+-- AVALARA
+avalara :: TestTree
+avalara = testGroup "Avalara Module"
+    [ errorTests
+    , pingTests
+    ]
+  where
+    errorTests :: TestTree
+    errorTests = testGroup "Errors"
+        [ testCase "ErrorInfo Parsing" errorInfoParsing
+        , testCase "WithError Parsing - ErrorResponse" withErrorParsing
+        , testCase "WithError Parsing - SuccessfulResponse" withErrorParsingSuccess
+        ]
+    errorInfoParsing :: Assertion
+    errorInfoParsing =
+        testJsonParsing AF.errorInfoJson errorInfoFixture
+    withErrorParsing :: Assertion
+    withErrorParsing =
+        testJsonParsing AF.errorInfoJson $
+            ErrorResponse @PingResponse errorInfoFixture
+    withErrorParsingSuccess :: Assertion
+    withErrorParsingSuccess =
+        testJsonParsing AF.unauthenticatedPingResponse $
+            SuccessfulResponse unauthorizedPingFixture
+    errorInfoFixture :: ErrorInfo
+    errorInfoFixture =
+        ErrorInfo
+            { eiCode = "AuthenticationIncomplete"
+            , eiMessage = "Authentication Incomplete."
+            , eiTarget = "HttpRequestHeaders"
+            , eiDetails =
+                [ ErrorDetail
+                    { edCode = "AuthenticationIncomplete"
+                    , edNumber = 34
+                    , edMessage = "Authentication Incomplete."
+                    , edDescription = "You must provide an Authorization header of the type Basic or Bearer to authenticate correctly."
+                    , edFaultCode = "Client"
+                    , edHelpLink = "/avatax/errors/AuthenticationIncomplete"
+                    , edSeverity = "Exception"
+                    }
+                ]
+            }
+    pingTests :: TestTree
+    pingTests = testGroup "Ping"
+        [ testCase "Response Parsing - Unauthorized" unauthorizedPing
+        , testCase "Response Parsing - Authorized" authorizedPing
+        ]
+    unauthorizedPing :: Assertion
+    unauthorizedPing =
+        testJsonParsing AF.unauthenticatedPingResponse unauthorizedPingFixture
+    unauthorizedPingFixture :: PingResponse
+    unauthorizedPingFixture =
+        PingResponse
+            { prVersion = "19.11.0"
+            , prAuthenticated = False
+            , prAuthenticationType = NoAuthentication
+            , prUserName = Nothing
+            , prUserId = Nothing
+            , prAccountId = Nothing
+            , prCrmId = Nothing
+            }
+    authorizedPing :: Assertion
+    authorizedPing =
+        testJsonParsing AF.authenticatedPingResponse $
+            PingResponse
+                { prVersion = "1.0.0.0"
+                , prAuthenticated = True
+                , prAuthenticationType = UsernamePassword
+                , prUserName = Just "TestUser"
+                , prUserId = Just 98765
+                , prAccountId = Just 123456789
+                , prCrmId = Just "1111"
+                }
+
+
 
 -- UTILITIES
 
@@ -625,6 +703,11 @@ routesStoneEdge = testGroup "Routes.StoneEdge Module"
 testFormParsing :: (FromForm a, Eq a, Show a) => LBS.ByteString -> a -> Assertion
 testFormParsing urlData expected =
     (urlDecodeForm urlData >>= fromForm) @?= Right expected
+
+-- | Assert parsing of a JSON vlaue decodes to the proper value.
+testJsonParsing :: (FromJSON a, Eq a, Show a) => LBS.ByteString -> a -> Assertion
+testJsonParsing json expected =
+    eitherDecode json @?= Right expected
 
 
 
