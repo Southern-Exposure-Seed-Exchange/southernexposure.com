@@ -128,10 +128,10 @@ activeVariantExists p =  E.exists $ E.from $ \v -> E.where_ $
 
 
 generateUniqueToken :: (PersistEntityBackend r ~ SqlBackend, PersistEntity r)
-                    => (T.Text -> Unique r) -> App T.Text
+                    => (T.Text -> Unique r) -> AppSQL T.Text
 generateUniqueToken uniqueConstraint = do
     token <- UUID.toText <$> liftIO UUID4.nextRandom
-    maybeCustomer <- runDB . getBy $ uniqueConstraint token
+    maybeCustomer <- getBy $ uniqueConstraint token
     case maybeCustomer of
         Just _ ->
             generateUniqueToken uniqueConstraint

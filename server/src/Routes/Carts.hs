@@ -532,13 +532,15 @@ getOrCreateAnonymousCart maybeToken =
                     runDB $ update cartId [CartExpirationTime =. Just expirationTime]
                     return (token, cart)
     where createAnonymousCart = do
-            token <- generateUniqueToken (UniqueAnonymousCart . Just)
             expiration <- getExpirationTime
-            (,) token <$> runDB (insertEntity Cart
-                { cartCustomerId = Nothing
-                , cartSessionToken = Just token
-                , cartExpirationTime = Just expiration
-                })
+            runDB $ do
+                token <- generateUniqueToken (UniqueAnonymousCart . Just)
+                cart <- insertEntity Cart
+                    { cartCustomerId = Nothing
+                    , cartSessionToken = Just token
+                    , cartExpirationTime = Just expiration
+                    }
+                return (token, cart)
           getExpirationTime =
             let
                 sixteenWeeksInSeconds = 16 * 7 * 24 * 60 * 60

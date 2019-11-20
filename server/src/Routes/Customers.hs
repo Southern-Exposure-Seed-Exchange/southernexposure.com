@@ -5,6 +5,7 @@
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 module Routes.Customers
@@ -211,17 +212,19 @@ type RegisterRoute =
 registrationRoute :: RegistrationParameters -> App (Cookied AuthorizationData)
 registrationRoute = validate >=> \parameters -> do
     encryptedPass <- hashPassword $ rpPassword parameters
-    authToken <- generateUniqueToken UniqueToken
-    let customer = Customer
-            { customerEmail = rpEmail parameters
-            , customerStoreCredit = Cents 0
-            , customerMemberNumber = ""
-            , customerEncryptedPassword = encryptedPass
-            , customerAuthToken = authToken
-            , customerStripeId = Nothing
-            , customerIsAdmin = False
-            }
-    maybeCustomerId <- runDB $ insertUnique customer
+    (authToken, customer, maybeCustomerId) <- runDB $ do
+        authToken <- generateUniqueToken UniqueToken
+        let customer = Customer
+                { customerEmail = rpEmail parameters
+                , customerStoreCredit = Cents 0
+                , customerMemberNumber = ""
+                , customerEncryptedPassword = encryptedPass
+                , customerAuthToken = authToken
+                , customerStripeId = Nothing
+                , customerAvalaraCode = Nothing
+                , customerIsAdmin = False
+                }
+        (authToken, customer,) <$> insertUnique customer
     case maybeCustomerId of
         Nothing ->
             serverError err500
@@ -470,15 +473,17 @@ resetPasswordRoute = validate >=> \parameters ->
             Just (Entity resetId passwordReset) -> do
                 currentTime <- liftIO getCurrentTime
                 if currentTime < passwordResetExpirationTime passwordReset then do
-                    token <- generateUniqueToken UniqueToken
                     newHash <- hashPassword $ rppPassword parameters
                     let customerId = passwordResetCustomerId passwordReset
-                    runDB $ update customerId
-                        [ CustomerAuthToken =. token
-                        , CustomerEncryptedPassword =. newHash
-                        ]
-                        >> delete resetId
-                        >> maybeMergeCarts customerId (rppCartToken parameters)
+                    token <- runDB $ do
+                        token <- generateUniqueToken UniqueToken
+                        update customerId
+                            [ CustomerAuthToken =. token
+                            , CustomerEncryptedPassword =. newHash
+                            ]
+                        delete resetId
+                        maybeMergeCarts customerId (rppCartToken parameters)
+                        return token
                     maybeCustomer <- runDB $ get customerId
                     -- TODO: Something more relevant than invalidCodeError
                     flip (maybe invalidCodeError) maybeCustomer $ \customer -> do

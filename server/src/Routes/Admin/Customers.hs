@@ -273,7 +273,7 @@ customerEditRoute = validateAdminAndParameters $ \_ parameters -> do
         Just (password, confirm) ->
             if password == confirm then do
                 passwordHash <- hashPassword password
-                newToken <- generateUniqueToken UniqueToken
+                newToken <- runDB $ generateUniqueToken UniqueToken
                 return
                     [ CustomerEncryptedPassword =. passwordHash
                     , CustomerAuthToken =. newToken

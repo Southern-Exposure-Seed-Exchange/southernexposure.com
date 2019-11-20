@@ -694,7 +694,7 @@ type AnonymousPlaceOrderRoute =
 anonymousPlaceOrderRoute :: AnonymousPlaceOrderParameters -> App (Cookied AnonymousPlaceOrderData)
 anonymousPlaceOrderRoute = validate >=> \parameters -> do
     encryptedPass <- hashPassword $ apopPassword parameters
-    authToken <- generateUniqueToken UniqueToken
+    authToken <- runDB $ generateUniqueToken UniqueToken
     currentTime <- liftIO getCurrentTime
     let memberNumber = apopMemberNumber parameters
         shippingParameter = NewAddress $ apopShippingAddress parameters
