@@ -983,7 +983,11 @@ lotSizeRow errors index selectedType enteredAmount =
             [ LSMass, LSBulbs, LSSlips, LSPlugs, LSCustom, LSNone ]
                 |> List.map
                     (\t ->
-                        option [ value <| sizeToValue t ] [ text <| sizeToString t ]
+                        option
+                            [ value <| sizeToValue t
+                            , selected <| t == selectedType
+                            ]
+                            [ text <| sizeToString t ]
                     )
     in
     Form.withLabel "Lot Size"
