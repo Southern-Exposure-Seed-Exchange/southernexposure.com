@@ -7,7 +7,6 @@
 Calculation API. It is a minimal implementation that supports the features
 we use, which is essentially Transaction Creation & Refunding.
 
-TODO: RefundTransaction API
 TODO: src/Config.hs - add env, id, key values - parse/set in app/Main.hs
 TODO: src/Server.hs - add runner function: (ReaderT Config m SpecificResponseType -> App SpecificResponseType)
 
@@ -22,6 +21,7 @@ module Avalara
     , ping
     , createTransaction
     , commitTransaction
+    , refundTransaction
     , createCustomers
       -- * Types
       -- ** Errors
@@ -31,6 +31,7 @@ module Avalara
       -- ** Requests
     , CreateTransactionRequest(..)
     , CommitTransactionRequest(..)
+    , RefundTransactionRequest(..)
     , CreateCustomersRequest(..)
       -- ** Responses
     , PingResponse(..)
@@ -51,6 +52,7 @@ module Avalara
       -- ** Miscellaneous
     , CompanyId(..)
     , CompanyCode(..)
+    , RefundType(..)
     , AuthenticationType(..)
     ) where
 
@@ -189,6 +191,17 @@ commitTransaction :: MonadIO m => CompanyCode -> TransactionCode -> CommitTransa
 commitTransaction companyCode transactionCode =
     makePostRequest $ CommitTransaction companyCode transactionCode
 
+-- | A refundTransaction request lets you make simple refunds for
+-- Transactions. For more complex ones, you should use the
+-- createTransaction request with a refund 'DocumentType'.
+--
+-- API Docs:
+-- https://developer.avalara.com/api-reference/avatax/rest/v2/methods/Transactions/RefundTransaction/
+refundTransaction :: MonadIO m => CompanyCode -> TransactionCode -> RefundTransactionRequest
+    -> ReaderT Config m (WithError Transaction)
+refundTransaction companyCode transactionCode =
+    makePostRequest $ RefundTransaction companyCode transactionCode
+
 
 -- | A createCustomers request lets you create new Customers for a Company.
 --
@@ -209,6 +222,7 @@ data Endpoint
     | CreateTransaction
     | CreateCustomers CompanyId
     | CommitTransaction CompanyCode TransactionCode
+    | RefundTransaction CompanyCode TransactionCode
     deriving (Show, Read, Eq)
 
 endpointPath :: Monad m => Endpoint -> ReaderT Config m (Url 'Https)
@@ -223,6 +237,8 @@ endpointPath endpoint = do
             ["companies", T.pack (show companyId), "customers"]
         CommitTransaction (CompanyCode companyCode) (TransactionCode transCode) ->
             ["companies", companyCode, "transactions", transCode, "commit"]
+        RefundTransaction (CompanyCode companyCode) (TransactionCode transCode) ->
+            ["companies", companyCode, "transactions", transCode, "refund"]
   where
     joinPaths :: Url 'Https -> [T.Text] -> Url 'Https
     joinPaths =
@@ -331,7 +347,7 @@ instance ToJSON CreateTransactionRequest where
             , "type" .= ctrType
             , "companyCode" .= ctrCompanyCode
             , "discount" .= ctrDiscount
-            , "date" .= formatTime defaultTimeLocale "%FT%T+00:00" ctrDate
+            , "date" .= formatAvalaraTime ctrDate
             , "customerCode" .= ctrCustomerCode
             , "addresses" .= ctrAddresses
             , "commit" .= ctrCommit
@@ -358,6 +374,29 @@ instance ToJSON CommitTransactionRequest where
         object
             [ "commit" .= ctsrCommit
             ]
+
+
+data RefundTransactionRequest =
+    RefundTransactionRequest
+        { rtrTransctionCode :: Maybe TransactionCode
+        , rtrDate :: UTCTime
+        , rtrType :: RefundType
+        , rtrPercentage :: Maybe Scientific
+        , rtrLines :: [T.Text]
+        , rtrRefernceCode :: Maybe T.Text
+        } deriving (Show, Read, Eq)
+
+instance ToJSON RefundTransactionRequest where
+    toJSON RefundTransactionRequest {..} =
+        object
+            [ "refundTransactionCode" .= rtrTransctionCode
+            , "refundDate" .= formatAvalaraTime rtrDate
+            , "refundType" .= rtrType
+            , "refundPercentage" .= rtrPercentage
+            , "refundLines" .= rtrLines
+            , "referenceCode" .= rtrRefernceCode
+            ]
+
 
 
 -- RESPONSES
@@ -763,7 +802,36 @@ instance FromJSON Customer where
         return Customer {..}
 
 
+-- | The type of refund to apply to a Transaction.
+data RefundType
+    = FullRefund
+    -- ^ Entire Transaction
+    | PartialRefund
+    -- ^ Only specific lines from the Transaction
+    | RefundTaxOnly
+    -- ^ Only the tax part of the Transaction
+    | RefundPercentage
+    -- ^ Refund a percentage of the value of the Transaction
+    deriving (Show, Read, Eq)
+
+instance ToJSON RefundType where
+    toJSON = String . \case
+        FullRefund ->
+            "Full"
+        PartialRefund ->
+            "Partial"
+        RefundTaxOnly ->
+            "TaxOnly"
+        RefundPercentage ->
+            "Percentage"
+
+
+
 -- HELPERS
+
+formatAvalaraTime :: UTCTime -> T.Text
+formatAvalaraTime =
+    T.pack . formatTime defaultTimeLocale "%FT%T+00:00"
 
 makeGetRequest :: (FromJSON a, MonadIO m) => Endpoint -> ReaderT Config m (WithError a)
 makeGetRequest endpoint =
