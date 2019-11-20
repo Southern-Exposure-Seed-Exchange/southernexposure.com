@@ -5,6 +5,7 @@ module Main where
 import Control.Concurrent.STM.TVar (newTVarIO)
 import Control.Monad.Logger (runStderrLoggingT)
 import Data.Maybe (fromMaybe)
+import Data.Version (showVersion)
 import Database.Persist.Postgresql
 import Network.Wai.Middleware.RequestLogger (logStdoutDev, logStdout)
 import System.Directory (getCurrentDirectory, createDirectoryIfMissing)
@@ -16,8 +17,10 @@ import Auth (sessionEntropy, mkPersistentServerKey)
 import Cache (initializeCaches)
 import Config
 import Models
+import Paths_sese_website (version)
 import StoneEdge (StoneEdgeCredentials(..))
 
+import qualified Avalara
 import qualified Data.ByteString.Char8 as C
 import qualified Data.Text as T
 import qualified Network.Wai.Handler.Warp as Warp
@@ -38,6 +41,7 @@ main = do
         <$> lookupEnv "COOKIE_SECRET"
     entropySource <- sessionEntropy
     stoneEdgeAuth <- makeStoneEdgeAuth
+    avalaraConfig <- makeAvalaraConfig
     dbPool <- makePool env
     cache <- runSqlPool initializeCaches dbPool >>= newTVarIO
     let cfg = defaultConfig
@@ -52,10 +56,15 @@ main = do
             , getStoneEdgeAuth = stoneEdgeAuth
             , getCookieSecret = cookieSecret
             , getCookieEntropySource = entropySource
+            , getAvalaraConfig = avalaraConfig
             }
     Warp.runSettings (warpSettings port) . httpLogger env $ app cfg
     where lookupSetting env def =
             maybe def read <$> lookupEnv env
+          requireSetting :: String -> IO String
+          requireSetting env =
+            lookupEnv env
+                >>= maybe (error $ "Could not find required env variable: " ++ env) return
           makePool :: Environment -> IO ConnectionPool
           makePool env =
             runStderrLoggingT $ do
@@ -82,3 +91,21 @@ main = do
             secPassword <- T.pack . fromMaybe "" <$> lookupEnv "STONE_EDGE_PASS"
             secStoreCode <- T.pack . fromMaybe "" <$> lookupEnv "STONE_EDGE_CODE"
             return StoneEdgeCredentials {..}
+          makeAvalaraConfig :: IO Avalara.Config
+          makeAvalaraConfig = do
+            let cAppName = "SESE Retail Website"
+                cAppVersion = T.pack $ showVersion version
+            cAccountId <- Avalara.AccountId . T.pack
+                <$> requireSetting "AVATAX_ACCOUNT_ID"
+            cLicenseKey <- Avalara.LicenseKey . T.pack
+                <$> requireSetting "AVATAX_LICENSE_KEY"
+            rawEnvironment <- T.pack <$> requireSetting "AVATAX_ENVIRONMENT"
+            cServiceEnvironment <- case T.toLower rawEnvironment of
+                "sandbox" ->
+                    return Avalara.SandboxEnvironment
+                "production" ->
+                    return Avalara.ProductionEnvironment
+                _ ->
+                    error $ "Invalid AVATAX_ENVIRONMENT: " ++ T.unpack rawEnvironment
+                        ++ "\n\n\tValid value are `Production` or `Sandbox`"
+            return Avalara.Config {..}

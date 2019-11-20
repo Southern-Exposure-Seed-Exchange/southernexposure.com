@@ -7,8 +7,7 @@
 Calculation API. It is a minimal implementation that supports the features
 we use, which is essentially Transaction Creation & Refunding.
 
-TODO: src/Config.hs - add env, id, key values - parse/set in app/Main.hs
-TODO: src/Server.hs - add runner function: (ReaderT Config m SpecificResponseType -> App SpecificResponseType)
+TODO: Integrate into DB Model & Checkout/Refund Routes
 
 -}
 module Avalara
@@ -120,7 +119,7 @@ data Config =
         , cServiceEnvironment :: ServiceEnvironment
         , cAppName :: T.Text
         -- ^ The name of your Application to report to Avalara
-        , cAppVerson :: T.Text
+        , cAppVersion :: T.Text
         -- ^ The version of your Appliation to report to Avalara
         } deriving (Show, Read)
 
@@ -144,14 +143,14 @@ generateAuthorizationHeader = do
 -- machine's hostname(determined by 'getHostName'.
 generateClientHeader :: MonadIO m => ReaderT Config m (Option 'Https)
 generateClientHeader = do
-    Config { cAppName, cAppVerson } <- ask
+    Config { cAppName, cAppVersion } <- ask
     hostname <- T.pack <$> liftIO getHostName
     let libraryVersion =
             T.pack $ showVersion version
         clientHeader =
             encodeUtf8 $ T.intercalate "; "
                 [ cAppName
-                , cAppVerson
+                , cAppVersion
                 , "AvaTax-Haskell-SESE"
                 , libraryVersion
                 , hostname

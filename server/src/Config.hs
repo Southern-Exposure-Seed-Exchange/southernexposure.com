@@ -15,6 +15,8 @@ import Web.Stripe.Client (StripeConfig)
 import Cache (Caches)
 import StoneEdge (StoneEdgeCredentials)
 
+import qualified Avalara
+
 
 data Environment
     = Production
@@ -34,6 +36,7 @@ data Config
     , getStoneEdgeAuth :: StoneEdgeCredentials
     , getCookieSecret :: PersistentServerKey
     , getCookieEntropySource :: RandomSource
+    , getAvalaraConfig :: Avalara.Config
     }
 
 defaultConfig :: Config
@@ -50,6 +53,7 @@ defaultConfig =
         , getStoneEdgeAuth = undefined
         , getCookieSecret = undefined
         , getCookieEntropySource = undefined
+        , getAvalaraConfig = undefined
         }
 
 

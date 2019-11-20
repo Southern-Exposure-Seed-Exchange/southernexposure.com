@@ -5,6 +5,7 @@ module Server
     , AppSQL
     , runDB
     , stripeRequest
+    , avalaraRequest
     , serverError
     , readCache
     , writeCache
@@ -12,7 +13,7 @@ module Server
 
 import Control.Concurrent.STM (atomically, readTVarIO, modifyTVar)
 import Control.Monad.IO.Class (liftIO)
-import Control.Monad.Reader (ReaderT, asks, lift)
+import Control.Monad.Reader (ReaderT, asks, lift, runReaderT)
 import Control.Monad.Except (MonadError)
 import Data.Aeson (FromJSON)
 import Database.Persist.Sql (SqlPersistT, runSqlPool)
@@ -20,7 +21,9 @@ import Servant (Handler, throwError)
 import Web.Stripe
 
 import Cache (Caches)
-import Config (Config(getPool, getCaches, getStripeConfig))
+import Config (Config(getPool, getCaches, getStripeConfig, getAvalaraConfig))
+
+import qualified Avalara
 
 
 -- | `App` is the monad stack used in the Servant Handlers. It wraps
@@ -46,6 +49,14 @@ stripeRequest req = do
     stripeConfig <- asks getStripeConfig
     liftIO $ stripe stripeConfig req
 
+
+-- | Perform a request to Avalara's AvaTax API.
+--
+-- TODO: Add a setting allowing us to skip Avalara calls, since
+-- eventaully our Sandbox account will expire.
+avalaraRequest :: ReaderT Avalara.Config IO a -> App a
+avalaraRequest req =
+    asks getAvalaraConfig >>= liftIO . runReaderT req
 
 -- | Throw an HTTP error.
 serverError :: MonadError e Handler => e -> App a
