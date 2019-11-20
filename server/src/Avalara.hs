@@ -21,6 +21,7 @@ module Avalara
     , createTransaction
     , commitTransaction
     , refundTransaction
+    , voidTransaction
     , createCustomers
       -- * Types
       -- ** Errors
@@ -31,6 +32,7 @@ module Avalara
     , CreateTransactionRequest(..)
     , CommitTransactionRequest(..)
     , RefundTransactionRequest(..)
+    , VoidTransactionRequest(..)
     , CreateCustomersRequest(..)
       -- ** Responses
     , PingResponse(..)
@@ -52,6 +54,7 @@ module Avalara
     , CompanyId(..)
     , CompanyCode(..)
     , RefundType(..)
+    , VoidReason(..)
     , AuthenticationType(..)
     ) where
 
@@ -201,6 +204,17 @@ refundTransaction :: MonadIO m => CompanyCode -> TransactionCode -> RefundTransa
 refundTransaction companyCode transactionCode =
     makePostRequest $ RefundTransaction companyCode transactionCode
 
+-- | A voidTransaction request can mark a commited transaction as void or
+-- cancelled, or delete an uncommited transaction.
+--
+-- API Docs:
+-- https://developer.avalara.com/api-reference/avatax/rest/v2/methods/Transactions/VoidTransaction/
+-- https://developer.avalara.com/avatax/voiding-documents/
+voidTransaction :: MonadIO m => CompanyCode -> TransactionCode -> VoidTransactionRequest
+    -> ReaderT Config m (WithError Transaction)
+voidTransaction companyCode transactionCode =
+    makePostRequest $ VoidTransaction companyCode transactionCode
+
 
 -- | A createCustomers request lets you create new Customers for a Company.
 --
@@ -222,6 +236,7 @@ data Endpoint
     | CreateCustomers CompanyId
     | CommitTransaction CompanyCode TransactionCode
     | RefundTransaction CompanyCode TransactionCode
+    | VoidTransaction CompanyCode TransactionCode
     deriving (Show, Read, Eq)
 
 endpointPath :: Monad m => Endpoint -> ReaderT Config m (Url 'Https)
@@ -238,6 +253,8 @@ endpointPath endpoint = do
             ["companies", companyCode, "transactions", transCode, "commit"]
         RefundTransaction (CompanyCode companyCode) (TransactionCode transCode) ->
             ["companies", companyCode, "transactions", transCode, "refund"]
+        VoidTransaction (CompanyCode companyCode) (TransactionCode transCode) ->
+            ["companies", companyCode, "transactions", transCode, "void"]
   where
     joinPaths :: Url 'Https -> [T.Text] -> Url 'Https
     joinPaths =
@@ -394,6 +411,18 @@ instance ToJSON RefundTransactionRequest where
             , "refundPercentage" .= rtrPercentage
             , "refundLines" .= rtrLines
             , "referenceCode" .= rtrRefernceCode
+            ]
+
+
+newtype VoidTransactionRequest =
+    VoidTransactionRequest
+        { vtrCode :: VoidReason
+        } deriving (Show, Read, Eq)
+
+instance ToJSON VoidTransactionRequest where
+    toJSON VoidTransactionRequest {..} =
+        object
+            [ "code" .= vtrCode
             ]
 
 
@@ -823,6 +852,29 @@ instance ToJSON RefundType where
             "TaxOnly"
         RefundPercentage ->
             "Percentage"
+
+
+-- | The reason for voiding a Transaction.
+data VoidReason
+    = VoidReasonUnspecified
+    | PostFailed
+    | DocDeleted
+    | DocVoided
+    | AdjustmentCancelled
+    deriving (Show, Read, Eq)
+
+instance ToJSON VoidReason where
+    toJSON = String . \case
+        VoidReasonUnspecified ->
+            "Unspecified"
+        PostFailed ->
+            "PostFailed"
+        DocDeleted ->
+            "DocDeleted"
+        DocVoided ->
+            "DocVoided"
+        AdjustmentCancelled ->
+            "AdjustmentCancelled"
 
 
 
