@@ -5,8 +5,6 @@ module Models.Utils
     , truncateHtml
     , getChildCategoryIds
     , getParentCategories
-    , getTaxRate
-    , applyTaxRate
     , mergeCarts
     , insertOrActivateAddress
     , getOrderTax
@@ -143,32 +141,6 @@ getParentCategories categoryId =
         <$> readCache getCategoryPredecessorCache
 
 
--- | Return a TaxRate for a potential Country & Region. On failure, it will
--- fallback to a TaxRate for just the Country if one exists.
-getTaxRate :: Maybe Country -> Maybe Region -> AppSQL (Maybe TaxRate)
-getTaxRate maybeCountry maybeRegion =
-    fmap (\(Entity _ e) -> e) <$> case (maybeCountry, maybeRegion) of
-        (Just country, Nothing) ->
-            getBy $ UniqueTaxRate country maybeRegion
-        (Just country, Just _) ->
-            getBy (UniqueTaxRate country maybeRegion)
-            >>= maybe (getBy $ UniqueTaxRate country Nothing) (return . Just)
-        _ ->
-            return Nothing
-
--- | Apply a Tax Rate to an Amount for a Product, returning 0 if the
--- Product is excluded from the Tax Rate.
-applyTaxRate :: Cents -> ProductId -> TaxRate -> Cents
-applyTaxRate amount productId taxRate =
-    if productId `notElem` taxRateExcludedProductIds taxRate then
-        Cents . round
-            $ (toRational . toInteger $ taxRateRate taxRate)
-            / 1000
-            * toRational (fromCents amount)
-    else
-        Cents 0
-
-
 -- | Merge an Anonymous Cart into a Customer's Cart, removing the Anonymous
 -- Cart.
 mergeCarts :: T.Text -> CustomerId -> AppSQL ()
@@ -233,8 +205,8 @@ insertOrActivateAddress newAddress = do
 
 
 -- | Calculate the total tax from all of an Order's Products.
-getOrderTax :: [OrderProduct] -> Cents
-getOrderTax = sum . map orderProductTax
+getOrderTax :: [OrderLineItem] -> Cents
+getOrderTax = sum . map orderLineItemAmount . filter ((==) TaxLine . orderLineItemType)
 
 -- | Calculate the total price from all of an Order's Products.
 getOrderSubtotal :: [OrderProduct] -> Cents
@@ -259,7 +231,7 @@ getLineItemTotal = sum . map
 getOrderTotal :: [OrderLineItem] -> [OrderProduct] -> Cents
 getOrderTotal lineItems products = Cents . fromIntegral $
     integerCents (getOrderSubtotal products)
-        + integerCents (getOrderTax products)
+        + integerCents (getOrderTax lineItems)
         + getLineItemTotal lineItems
 
 -- | Convert a Cents value into it's integer equivalent.

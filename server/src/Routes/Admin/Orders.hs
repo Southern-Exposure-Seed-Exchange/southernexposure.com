@@ -442,7 +442,7 @@ getOrderTotal orderId = do
     -- | Caclulate the total price + tax for a Product.
     finalProductPrice :: Entity OrderProduct -> Cents
     finalProductPrice (Entity _ p) =
-        (fromIntegral (orderProductQuantity p) * orderProductPrice p) + orderProductTax p
+        fromIntegral (orderProductQuantity p) * orderProductPrice p
     -- | Convert Cents to an Integer so it can handle negative numbers.
     centsInt :: Cents -> Integer
     centsInt (Cents c) =

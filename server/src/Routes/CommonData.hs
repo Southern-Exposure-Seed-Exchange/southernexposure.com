@@ -350,7 +350,6 @@ data CartItemData =
         , cidProduct :: BaseProductData
         , cidVariant :: VariantData
         , cidQuantity :: Natural
-        , cidTax :: Cents
         }
 
 instance ToJSON CartItemData where
@@ -359,7 +358,6 @@ instance ToJSON CartItemData where
                , "product" .= cidProduct item
                , "variant" .= cidVariant item
                , "quantity" .= cidQuantity item
-               , "tax" .= cidTax item
                ]
 
 
@@ -417,10 +415,9 @@ instance ToJSON CartCharge where
 
 -}
 getCartItems
-    :: Maybe TaxRate                                                -- ^ The tax to apply
-    -> (E.SqlExpr (Entity Cart) -> E.SqlExpr (E.Value Bool))        -- ^ The `E.where_` query
+    :: (E.SqlExpr (Entity Cart) -> E.SqlExpr (E.Value Bool))        -- ^ The `E.where_` query
     -> AppSQL [CartItemData]
-getCartItems maybeTaxRate whereQuery = do
+getCartItems whereQuery = do
     items <- E.select $ E.from
         $ \(ci `E.InnerJoin` c `E.InnerJoin` v `E.InnerJoin` p) -> do
             E.on (p E.^. ProductId E.==. v E.^. ProductVariantProductId)
@@ -434,14 +431,6 @@ getCartItems maybeTaxRate whereQuery = do
             let
                 quantity =
                     E.unValue q
-                productTotal vd =
-                    Cents $ fromCents (getFinalPrice vd) * quantity
-                tax vd =
-                    case maybeTaxRate of
-                        Nothing ->
-                            Cents 0
-                        Just taxRate ->
-                            applyTaxRate (productTotal vd) (entityKey p) taxRate
             in do
                 maybeCategorySale <- listToMaybe <$> getCategorySales (entityVal p)
                 productData <- lift $ makeBaseProductData p
@@ -452,16 +441,13 @@ getCartItems maybeTaxRate whereQuery = do
                     , cidProduct = productData
                     , cidVariant = variantData
                     , cidQuantity = quantity
-                    , cidTax = tax variantData
                     }
-          getFinalPrice variant =
-              fromMaybe (vdPrice variant) $ vdSalePrice variant
 
 
 
 {-| Calculate the Charges for a set of Cart Items.
 
-Tax, Shipping, & the Membership/Coupon Discounts are all based off of the
+Shipping, & the Membership/Coupon Discounts are all based off of the
 Product subtotal.
 
 If the product subtotal does not meet the minimum order amount for
@@ -470,21 +456,20 @@ to properly return an error for the user.
 
 -}
 getCharges
-    :: Maybe TaxRate            -- ^ Applies tax to the Products if specified.
-    -> Maybe Country            -- ^ Used to calculate the Shipping charge.
+    :: Maybe Country            -- ^ Used to calculate the Shipping charge.
     -> [CartItemData]           -- ^ The cart items (see `getCartItems`)
     -> Bool                     -- ^ Include the 5% Member Discount?
     -> Maybe (Entity Coupon)    -- ^ A Coupon to apply.
     -> Bool                     -- ^ Include Priority S&H
     -> AppSQL CartCharges
-getCharges maybeTaxRate maybeCountry items includeMemberDiscount maybeCoupon priorityShipping =
+getCharges maybeCountry items includeMemberDiscount maybeCoupon priorityShipping =
     let
         subTotal =
             foldl (\acc item -> acc + itemTotal item) 0 items
         itemTotal item =
             fromIntegral (cidQuantity item) * fromCents (getVariantPrice $ cidVariant item)
         taxTotal =
-            foldl (\acc item -> acc + fromCents (cidTax item)) 0 items
+            0
         memberDiscount =
             if includeMemberDiscount && calculatedMemberDiscount > 0 then
                 Just CartCharge
@@ -526,7 +511,7 @@ getCharges maybeTaxRate maybeCountry items includeMemberDiscount maybeCoupon pri
         surcharges <- getSurcharges items
         shippingMethods <- getShippingMethods maybeCountry items subTotal
         return $ sumGrandTotal CartCharges
-            { ccTax = CartCharge (maybe "" taxRateDescription maybeTaxRate) $ Cents taxTotal
+            { ccTax = CartCharge "" $ Cents taxTotal
             , ccSurcharges = surcharges
             , ccShippingMethods = shippingMethods
             , ccPriorityShippingFee = priorityCharge shippingMethods
@@ -794,7 +779,6 @@ data CheckoutOrder =
         { coId :: OrderId
         , coStatus :: OrderStatus
         , coComment :: T.Text
-        , coTaxDescription :: T.Text
         , coCreatedAt :: UTCTime
         } deriving (Show)
 
@@ -804,7 +788,6 @@ instance ToJSON CheckoutOrder where
             [ "id" .= coId order
             , "status" .= coStatus order
             , "comment" .= coComment order
-            , "taxDescription" .= coTaxDescription order
             , "createdAt" .= coCreatedAt order
             ]
 
@@ -814,7 +797,6 @@ toCheckoutOrder (Entity orderId order) =
         { coId = orderId
         , coStatus = orderStatus order
         , coComment = orderCustomerComment order
-        , coTaxDescription = orderTaxDescription order
         , coCreatedAt = orderCreatedAt order
         }
 
@@ -824,7 +806,6 @@ data CheckoutProduct =
         , cpLotSize :: Maybe LotSize
         , cpQuantity :: Natural
         , cpPrice :: Cents
-        , cpTax :: Cents
         } deriving (Show)
 
 instance ToJSON CheckoutProduct where
@@ -834,7 +815,6 @@ instance ToJSON CheckoutProduct where
             , "lotSize" .= cpLotSize prod
             , "quantity" .= cpQuantity prod
             , "price" .= cpPrice prod
-            , "tax" .= cpTax prod
             ]
 
 getCheckoutProducts :: OrderId -> AppSQL [CheckoutProduct]
@@ -852,5 +832,4 @@ getCheckoutProducts orderId = do
                 , cpLotSize = E.unValue variantLotSize
                 , cpQuantity = orderProductQuantity orderProd
                 , cpPrice = orderProductPrice orderProd
-                , cpTax = orderProductTax orderProd
                 }

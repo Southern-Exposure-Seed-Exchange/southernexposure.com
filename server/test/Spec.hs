@@ -558,7 +558,6 @@ routesStoneEdge = testGroup "Routes.StoneEdge Module"
         , testCase "Store Credit to Nothing" storeCreditTransformNothing
         , testCase "Tax" taxTransform
         , testCase "Tax with Rate" taxTransformRate
-        , testCase "No Tax" taxTransformNothing
         , testCase "Discount" discountTransform
         , testCase "Surcharge" surchargeTransform
         , testCase "Shipping Total" shippingTotalTransform
@@ -587,14 +586,11 @@ routesStoneEdge = testGroup "Routes.StoneEdge Module"
     taxTransform :: Assertion
     taxTransform =
         let st = StoneEdgeTax (StoneEdgeCents 9001) Nothing (Just False) (Just False) Nothing
-        in Just st @=? transformTax "Tax Description" (Cents 9001)
+        in st @=? transformTax (makeTaxLine "Tax Description" (Cents 9001))
     taxTransformRate :: Assertion
     taxTransformRate =
         let st = StoneEdgeTax (StoneEdgeCents 9001) (Just 0.053) (Just False) (Just False) Nothing
-        in Just st @=? transformTax "VA Tax (5.3%)" (Cents 9001)
-    taxTransformNothing :: Assertion
-    taxTransformNothing =
-        Nothing @=? transformTax "No Tax Due" 0
+        in st @=? transformTax (makeTaxLine "VA Tax (5.3%)" (Cents 9001))
     discountTransform :: Assertion
     discountTransform =
         let dc = StoneEdgeDiscount (Just SEFlatDiscount) (Just "description")
@@ -611,6 +607,9 @@ routesStoneEdge = testGroup "Routes.StoneEdge Module"
         let st = StoneEdgeShippingTotal (StoneEdgeCents 200) (Just "Shipping")
             ol = Entity nullSqlKey $ OrderLineItem nullSqlKey ShippingLine "Shipping" (Cents 200)
         in st @=? transformShippingTotal ol
+    makeTaxLine :: Text -> Cents -> OrderLineItem
+    makeTaxLine =
+        OrderLineItem nullSqlKey TaxLine
     fillerTime :: UTCTime
     fillerTime =
         UTCTime

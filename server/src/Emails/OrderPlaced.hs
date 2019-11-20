@@ -116,7 +116,7 @@ render shippingAddress billingAddress (Entity orderId order) productData lineIte
                     "Order Number " <> orderNumber <> ", placed at " <> orderDate
                 customerComments
                 addressTable shippingAddress billingAddress
-                orderTable order productData lineItems
+                orderTable productData lineItems
                 H.br
                 H.p "Thank You,"
                 H.p "Southern Exposure Seed Exchange"
@@ -160,14 +160,16 @@ addressName addr =
 
 
 -- TODO: Pandoc doesn't convert the colspan to markdown nicely. Find a workaround.
-orderTable :: Order -> [(OrderProduct, Product, ProductVariant)] -> [OrderLineItem] -> H.Html
-orderTable order productData lineItems =
+orderTable :: [(OrderProduct, Product, ProductVariant)] -> [OrderLineItem] -> H.Html
+orderTable productData lineItems =
     let
         subTotal =
             sum $ map (\(op, _, _) -> orderProductPrice op * Cents (orderProductQuantity op))
                 productData
         tax =
-            sum $ map (\(op, _, _) -> orderProductTax op) productData
+            getOrderTax lineItems
+        maybeTaxLine =
+            listToMaybe $ filter ((== TaxLine) . orderLineItemType) lineItems
         -- TODO: turn this tuple into a type, & do this in a separate
         -- function in the Models.Utils module. Use that function & type in
         -- the OrderDetails route so we don't have to do the same exact
@@ -189,8 +191,8 @@ orderTable order productData lineItems =
                         (shippingLine, priorityLine, creditLine, memberLine, Just lineItem, refundLines, surchargeLines)
                     RefundLine ->
                         (shippingLine, priorityLine, creditLine, memberLine, couponLine, lineItem : refundLines, surchargeLines)
-
-
+                    TaxLine ->
+                        (shippingLine, priorityLine, creditLine, memberLine, couponLine, refundLines, surchargeLines)
 
             ) (Nothing, Nothing, Nothing, Nothing, Nothing, [], []) lineItems
         total =
@@ -211,9 +213,7 @@ orderTable order productData lineItems =
                 maybe (return ()) lineRow maybeShippingLine
                 maybe (return ()) lineRow maybePriorityCharge
                 mapM_ lineRow surcharges
-                when (tax > 0) $ H.tr $ do
-                    H.th H.! A.colspan "4" H.! alignRight $ H.text $ orderTaxDescription order
-                    H.th H.! alignLeft $ H.text $ formatCents tax
+                maybe (return ()) lineRow maybeTaxLine
                 discountRow maybeStoreCredit
                 discountRow maybeMemberDiscount
                 discountRow maybeCouponDiscount

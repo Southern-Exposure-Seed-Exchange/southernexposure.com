@@ -147,8 +147,7 @@ withCheckoutDetailsErrors =
 
 data CustomerDetailsParameters =
     CustomerDetailsParameters
-        { cdpShippingRegion :: Maybe Region
-        , cdpShippingCountry :: Maybe Country
+        { cdpShippingCountry :: Maybe Country
         , cdpExistingAddress :: Maybe AddressId
         , cdpMemberNumber :: Maybe T.Text
         , cdpCouponCode :: Maybe T.Text
@@ -158,8 +157,7 @@ data CustomerDetailsParameters =
 instance FromJSON CustomerDetailsParameters where
     parseJSON = withObject "CustomerDetailsParameters" $ \v ->
         CustomerDetailsParameters
-            <$> v .:? "region"
-            <*> v .:? "country"
+            <$> v .:? "country"
             <*> v .:? "addressId"
             <*> v .:? "memberNumber"
             <*> v .:? "couponCode"
@@ -205,15 +203,14 @@ customerDetailsRoute token parameters = withValidatedCookie token $ \(Entity cus
         let (shippingAddresses, billingAddresses) =
                 partition (\a -> addressType (entityVal a) == Shipping)
                     customerAddresses
-            (maybeCountry, maybeRegion) =
-                getShippingArea parameters shippingAddresses
-        maybeTaxRate <- getTaxRate maybeCountry maybeRegion
+            maybeCountry =
+                getShippingCountry parameters shippingAddresses
         maybeCoupon <- mapException DetailsCouponError $ sequence
             $ getCoupon currentTime (Just customerId) <$> cdpCouponCode parameters
-        items <- getCartItems maybeTaxRate $ \c ->
+        items <- getCartItems $ \c ->
             c E.^. CartCustomerId E.==. E.just (E.val customerId)
-        charges <- getCharges maybeTaxRate maybeCountry items
-            hasValidMemberNumber maybeCoupon priorityShipping
+        charges <- getCharges maybeCountry items hasValidMemberNumber
+            maybeCoupon priorityShipping
         mapException DetailsCouponError
             $ checkCouponMeetsMinimum maybeCoupon charges
         mapException DetailsPriorityError
@@ -226,31 +223,32 @@ customerDetailsRoute token parameters = withValidatedCookie token $ \(Entity cus
             , cddStoreCredit = customerStoreCredit customer
             , cddMemberNumber = customerMemberNumber customer
             }
-    where getShippingArea ps addrs =
+    where
+        getShippingCountry :: CustomerDetailsParameters -> [Entity Address] -> Maybe Country
+        getShippingCountry ps addrs =
             let
                 maybeFromAddress =
                     fmap fromAddress
                     $ (\a -> find (\(Entity addrId _) -> addrId == a) addrs)
                     =<< cdpExistingAddress ps
                 maybeFromParams =
-                    case (cdpShippingCountry ps, cdpShippingRegion ps) of
-                        (Nothing, Nothing) ->
+                    case cdpShippingCountry ps of
+                        Nothing ->
                             Nothing
-                        (c, r) ->
-                            Just (c, r)
+                        Just c ->
+                            Just $ Just c
                 maybeFromDefault =
                     fromAddress <$> find (addressIsDefault . entityVal) addrs
                 fromAddress (Entity _ addr) =
-                    (Just $ addressCountry addr, Just $ addressState addr)
+                    Just $ addressCountry addr
             in
-                fromMaybe (Nothing, Nothing)
+                fromMaybe Nothing
                     $ asum [maybeFromAddress, maybeFromParams, maybeFromDefault]
 
 
 data AnonymousDetailsParameters =
     AnonymousDetailsParameters
         { adpShippingCountry :: Maybe Country
-        , adpShippingRegion :: Maybe Region
         , adpMemberNumber :: Maybe T.Text
         , adpCouponCode :: Maybe T.Text
         , adpPriorityShipping :: Bool
@@ -261,7 +259,6 @@ instance FromJSON AnonymousDetailsParameters where
     parseJSON = withObject "AnonymousDetailsParameters" $ \v ->
         AnonymousDetailsParameters
             <$> v .:? "country"
-            <*> v .:? "region"
             <*> v .:? "memberNumber"
             <*> v .:? "couponCode"
             <*> v .:  "priorityShipping"
@@ -283,13 +280,12 @@ anonymousDetailsRoute parameters =
     in
         withCheckoutDetailsErrors . runDB $ do
             currentTime <- liftIO getCurrentTime
-            maybeTaxRate <- getTaxRate maybeCountry $ adpShippingRegion parameters
             maybeCoupon <- mapException DetailsCouponError $ sequence
                 $ getCoupon currentTime Nothing <$> adpCouponCode parameters
-            items <- getCartItems maybeTaxRate $ \c ->
+            items <- getCartItems $ \c ->
                 c E.^. CartSessionToken E.==. E.just (E.val $ adpCartToken parameters)
-            charges <- getCharges maybeTaxRate maybeCountry items
-                isValidMemberNumber maybeCoupon priorityShipping
+            charges <- getCharges maybeCountry items isValidMemberNumber
+                maybeCoupon priorityShipping
             mapException DetailsCouponError
                 $ checkCouponMeetsMinimum maybeCoupon charges
             mapException DetailsPriorityError
@@ -834,9 +830,7 @@ createOrder
     -> AppSQL (OrderId, Cents, Cents)
 createOrder (Entity customerId customer) cartId shippingEntity billingId maybeStoreCredit memberNumber priorityShipping maybeCouponCode comment currentTime = do
     let (Entity shippingId shippingAddress) = shippingEntity
-    maybeTaxRate <- getTaxRate (Just $ addressCountry shippingAddress)
-        (Just $ addressState shippingAddress)
-    items <- getCartItems maybeTaxRate $ \c -> c E.^. CartId E.==. E.val cartId
+    items <- getCartItems $ \c -> c E.^. CartId E.==. E.val cartId
     orderId <- insert Order
         { orderCustomerId = customerId
         , orderStatus = OrderReceived
@@ -844,7 +838,6 @@ createOrder (Entity customerId customer) cartId shippingEntity billingId maybeSt
         , orderShippingAddressId = shippingId
         , orderCustomerComment = comment
         , orderAdminComments = []
-        , orderTaxDescription = maybe "" taxRateDescription maybeTaxRate
         , orderStripeChargeId = Nothing
         , orderStripeLastFour = Nothing
         , orderStripeIssuer = Nothing
@@ -852,11 +845,10 @@ createOrder (Entity customerId customer) cartId shippingEntity billingId maybeSt
         , orderCreatedAt = currentTime
         }
     (lineTotal, maybeCouponId) <- createLineItems currentTime customerId
-        maybeTaxRate shippingAddress items orderId memberNumber
-        priorityShipping maybeCouponCode
+        shippingAddress items orderId memberNumber priorityShipping maybeCouponCode
     when (isJust maybeCouponId) $
         update orderId [OrderCouponId =. maybeCouponId]
-    productTotals <- createProducts maybeTaxRate items orderId
+    productTotals <- createProducts items orderId
     let totalCharges = lineTotal + fromIntegral (fromCents $ sum productTotals)
     if totalCharges < 0 then
         -- TODO: Throw an error? This means credits > charges which shouldn't happen...
@@ -898,8 +890,6 @@ createLineItems
     -- ^ Current Time
     -> CustomerId
     -- ^ Customer Id
-    -> Maybe TaxRate
-    -- ^ Tax to Apply
     -> Address
     -- ^ Shipping Address
     -> [CartItemData]
@@ -913,11 +903,11 @@ createLineItems
     -> Maybe T.Text
     -- ^ Coupon Code
     -> AppSQL (Integer, Maybe CouponId)
-createLineItems currentTime customerId maybeTaxRate shippingAddress items orderId memberNumber priorityShipping maybeCouponCode = do
+createLineItems currentTime customerId shippingAddress items orderId memberNumber priorityShipping maybeCouponCode = do
     maybeCoupon <- mapException PlaceOrderCouponError $ sequence
         $ getCoupon currentTime (Just customerId) <$> maybeCouponCode
     -- TODO priority S&H
-    charges <- getCharges maybeTaxRate
+    charges <- getCharges
         (Just $ addressCountry shippingAddress) items
         (T.length memberNumber >= 4) maybeCoupon priorityShipping
     mapException PlaceOrderCouponError $ checkCouponMeetsMinimum maybeCoupon charges
@@ -962,27 +952,18 @@ createLineItems currentTime customerId maybeTaxRate shippingAddress items orderI
         maybeLineAmount =
             maybe 0 (centsToInteger . orderLineItemAmount . entityVal)
 
-createProducts :: Maybe TaxRate -> [CartItemData] -> OrderId -> AppSQL [Cents]
-createProducts maybeTaxRate items orderId =
+createProducts :: [CartItemData] -> OrderId -> AppSQL [Cents]
+createProducts items orderId =
     mapM (fmap calculateTotal <$> insertEntity . makeProduct) items
     where calculateTotal (Entity _ prod) =
             orderProductPrice prod * (Cents $ orderProductQuantity prod)
-                + orderProductTax prod
           makeProduct CartItemData { cidVariant, cidQuantity } =
-            let
-                price = getVariantPrice cidVariant
-                productTotal = Cents $ fromCents price * cidQuantity
-                tax = applyTax productTotal (vdProductId cidVariant)
-            in
-                OrderProduct
-                    { orderProductOrderId = orderId
-                    , orderProductProductVariantId = vdId cidVariant
-                    , orderProductQuantity = cidQuantity
-                    , orderProductPrice = price
-                    , orderProductTax = tax
-                    }
-          applyTax productTotal productId =
-              maybe (Cents 0) (applyTaxRate productTotal productId) maybeTaxRate
+            OrderProduct
+                { orderProductOrderId = orderId
+                , orderProductProductVariantId = vdId cidVariant
+                , orderProductQuantity = cidQuantity
+                , orderProductPrice = getVariantPrice cidVariant
+                }
 
 
 -- SUCCESS DETAILS

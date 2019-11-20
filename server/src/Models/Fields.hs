@@ -411,6 +411,7 @@ data LineItemType
     | MemberDiscountLine
     | CouponDiscountLine
     | RefundLine
+    | TaxLine
     deriving (Show, Eq, Read, Generic, Enum, Bounded)
 
 instance ToJSON LineItemType
@@ -437,6 +438,8 @@ creditLineItemTypes =
         PriorityShippingLine ->
             False
         SurchargeLine ->
+            False
+        TaxLine ->
             False
 
 

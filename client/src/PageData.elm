@@ -361,9 +361,6 @@ cartTotals { items, charges } =
         surchargeAmount =
             charges.surcharges |> List.foldl (\i -> addCents i.amount) (Cents 0)
 
-        taxAmount =
-            List.foldl (\item acc -> item.tax |> addCents acc) (Cents 0) items
-
         itemTotal { variant, quantity } =
             variantPrice variant
                 |> (centsMap <| (*) quantity)
@@ -373,7 +370,7 @@ cartTotals { items, charges } =
                 |> addCents surchargeAmount
                 |> addCents shippingAmount
                 |> addCents priorityAmount
-                |> addCents taxAmount
+                |> addCents charges.tax.amount
                 |> subtractCents memberDiscount
                 |> subtractCents couponDiscount
 
@@ -443,18 +440,16 @@ orderDetailsDecoder =
         (Decode.field "billingAddress" <| Decode.nullable Address.decoder)
 
 
-orderTotals : OrderDetails -> { subTotal : Cents, tax : Cents, total : Cents }
+orderTotals : OrderDetails -> { subTotal : Cents, total : Cents }
 orderTotals { lineItems, products } =
     let
-        ( subTotal, tax ) =
+        subTotal =
             List.foldl
-                (\item ( runningTotal, runningTax ) ->
-                    ( centsMap ((*) item.quantity) item.price
+                (\item runningTotal ->
+                    centsMap ((*) item.quantity) item.price
                         |> centsMap2 (+) runningTotal
-                    , centsMap2 (+) item.tax runningTax
-                    )
                 )
-                ( Cents 0, Cents 0 )
+                (Cents 0)
                 products
 
         ( credits, debits ) =
@@ -468,6 +463,9 @@ orderTotals { lineItems, products } =
                             ( cs, centsMap2 (+) charge.amount ds )
 
                         PriorityShipping ->
+                            ( cs, centsMap2 (+) charge.amount ds )
+
+                        Tax ->
                             ( cs, centsMap2 (+) charge.amount ds )
 
                         StoreCredit ->
@@ -488,11 +486,9 @@ orderTotals { lineItems, products } =
         total =
             subTotal
                 |> centsMap2 (+) debits
-                |> centsMap2 (+) tax
                 |> centsMap2 (\c t -> t - c) credits
     in
     { subTotal = subTotal
-    , tax = tax
     , total = total
     }
 
@@ -501,18 +497,16 @@ type alias Order =
     { id : Int
     , status : OrderStatus
     , comment : String
-    , taxDescription : String
     , createdAt : Posix
     }
 
 
 orderDecoder : Decoder Order
 orderDecoder =
-    Decode.map5 Order
+    Decode.map4 Order
         (Decode.field "id" Decode.int)
         (Decode.field "status" orderStatusDecoder)
         (Decode.field "comment" Decode.string)
-        (Decode.field "taxDescription" Decode.string)
         (Decode.field "createdAt" Iso8601.decoder)
 
 
@@ -597,6 +591,7 @@ type LineItemType
     | PriorityShipping
     | CouponDiscount
     | Refund
+    | Tax
 
 
 lineItemTypeDecoder : Decoder LineItemType
@@ -625,6 +620,9 @@ lineItemTypeDecoder =
                 "RefundLine" ->
                     Decode.succeed Refund
 
+                "TaxLine" ->
+                    Decode.succeed Tax
+
                 _ ->
                     Decode.fail <| "Invalid LineItemType: " ++ str
 
@@ -639,18 +637,16 @@ type alias OrderProduct =
     , lotSize : Maybe LotSize
     , quantity : Int
     , price : Cents
-    , tax : Cents
     }
 
 
 orderProductDecoder : Decoder OrderProduct
 orderProductDecoder =
-    Decode.map5 OrderProduct
+    Decode.map4 OrderProduct
         (Decode.field "name" Decode.string)
         (Decode.field "lotSize" <| Decode.nullable lotSizeDecoder)
         (Decode.field "quantity" Decode.int)
         (Decode.field "price" centsDecoder)
-        (Decode.field "tax" centsDecoder)
 
 
 
@@ -1018,18 +1014,16 @@ type alias CartItem =
     , product : Product
     , variant : ProductVariant
     , quantity : Int
-    , tax : Cents
     }
 
 
 cartItemDecoder : Decoder CartItem
 cartItemDecoder =
-    Decode.map5 CartItem
+    Decode.map4 CartItem
         (Decode.field "id" <| Decode.map CartItemId Decode.int)
         (Decode.field "product" Product.decoder)
         (Decode.field "variant" Product.variantDecoder)
         (Decode.field "quantity" Decode.int)
-        (Decode.field "tax" centsDecoder)
 
 
 type alias CartCharge =

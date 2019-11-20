@@ -566,14 +566,12 @@ myAccountRoute token maybeLimit = withValidatedCookie token $ \(Entity customerI
             return $ map makeDetails orderData
           calculateTotal orderProduct lineTotal creditTotal =
             let
-                productTax =
-                    orderProduct E.^. OrderProductTax
                 productQuantity =
                     orderProduct E.^. OrderProductQuantity
                 productPrice =
                     orderProduct E.^. OrderProductPrice
                 subTotal =
-                    sum0_ $ productTax E.+. (E.castNum productQuantity E.*. productPrice)
+                    sum0_ $ E.castNum productQuantity E.*. productPrice
             in
                 subTotal E.+. lineTotal E.-. creditTotal
           makeDetails (orderId, shippingAddress, status, total, createdAt) =

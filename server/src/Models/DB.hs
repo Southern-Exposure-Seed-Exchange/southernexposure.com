@@ -103,15 +103,6 @@ CartItem
     UniqueCartItem cartId productVariantId
 
 
-TaxRate
-    description T.Text
-    rate Natural
-    country Country
-    state Region Maybe
-    excludedProductIds [ProductId]
-    isActive Bool
-    UniqueTaxRate country state !force
-
 Surcharge
     description T.Text
     singleFee Cents
@@ -168,7 +159,6 @@ Order
     status OrderStatus
     billingAddressId AddressId Maybe
     shippingAddressId AddressId
-    taxDescription T.Text
     customerComment T.Text
     adminComments [AdminOrderComment]
     couponId CouponId Maybe
@@ -190,7 +180,6 @@ OrderProduct
     productVariantId ProductVariantId
     quantity Natural
     price Cents
-    tax Cents
     UniqueOrderProduct orderId productVariantId
     deriving Show
 

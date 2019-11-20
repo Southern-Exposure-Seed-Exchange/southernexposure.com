@@ -230,14 +230,14 @@ customerDetailsRoute token = withValidatedCookie token getCustomerCartDetails
 getCustomerCartDetails :: Entity Customer -> App CartDetailsData
 getCustomerCartDetails (Entity customerId customer) =
     runDB $ do
-        (taxRate, shippingCountry) <- getTaxAndShippingCountry
-        items <- getCartItems taxRate $ \c ->
+        shippingCountry <- getShippingCountry
+        items <- getCartItems $ \c ->
             c E.^. CartCustomerId E.==. E.just (E.val customerId)
-        charges <- getCharges taxRate shippingCountry items
+        charges <- getCharges shippingCountry items
             (not . T.null $ customerMemberNumber customer)
             Nothing False
         return $ CartDetailsData items charges
-    where getTaxAndShippingCountry = do
+    where getShippingCountry = do
             maybeShippingAddress <-
                 listToMaybe . map P.entityVal
                     <$> P.selectList
@@ -247,10 +247,7 @@ getCustomerCartDetails (Entity customerId customer) =
                         ]
                         [ P.LimitTo 1
                         ]
-            let shippingCountry = addressCountry <$> maybeShippingAddress
-                shippingState = addressState <$> maybeShippingAddress
-            taxRate <- getTaxRate shippingCountry shippingState
-            return (taxRate, shippingCountry)
+            return $ addressCountry <$> maybeShippingAddress
 
 
 newtype AnonymousDetailsParameters =
@@ -270,9 +267,9 @@ type AnonymousDetailsRoute =
 anonymousDetailsRoute :: AnonymousDetailsParameters -> App CartDetailsData
 anonymousDetailsRoute parameters =
     runDB $ do
-        items <- getCartItems Nothing $ \c ->
+        items <- getCartItems $ \c ->
             c E.^. CartSessionToken E.==. E.just (E.val $ adpCartToken parameters)
-        charges <- getCharges Nothing Nothing items False Nothing False
+        charges <- getCharges Nothing items False Nothing False
         return $ CartDetailsData items charges
 
 

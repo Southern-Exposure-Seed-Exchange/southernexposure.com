@@ -336,30 +336,30 @@ transformOrder (order, createdAt, customer, shipping, maybeBilling, maybeCoupon,
                         Cents $ fromIntegral (orderProductQuantity op) * fromCents (orderProductPrice op)
                     )
                     products
-            taxTotal =
-                sum $ map (\(Entity _ op, _, _) -> orderProductTax op) products
-            (discounts, surcharges, maybeShipping, maybeCouponLine) = foldl
-                (\(ds, ss, mShip, mCoupon) item ->
+            (discounts, surcharges, maybeShipping, maybeCouponLine, maybeTaxLine) = foldl
+                (\(ds, ss, mShip, mCoupon, mTax) item ->
                     case orderLineItemType $ entityVal item of
                         SurchargeLine ->
-                            (ds, item : ss, mShip, mCoupon)
+                            (ds, item : ss, mShip, mCoupon, mTax)
                         PriorityShippingLine ->
-                            (ds, item : ss, mShip, mCoupon)
+                            (ds, item : ss, mShip, mCoupon, mTax)
                         ShippingLine ->
-                            (ds, ss, Just item, mCoupon)
+                            (ds, ss, Just item, mCoupon, mTax)
                         CouponDiscountLine ->
-                            (ds, ss, mShip, Just item)
+                            (ds, ss, mShip, Just item, mTax)
                         StoreCreditLine ->
-                            (ds, ss, mShip, mCoupon)
+                            (ds, ss, mShip, mCoupon, mTax)
                         MemberDiscountLine ->
-                            (item : ds, ss, mShip, mCoupon)
+                            (item : ds, ss, mShip, mCoupon, mTax)
                         RefundLine ->
-                            (ds, ss, mShip, mCoupon)
-                ) ([], [], Nothing, Nothing) items
+                            (ds, ss, mShip, mCoupon, mTax)
+                        TaxLine ->
+                            (ds, ss, mShip, mCoupon, Just item)
+                ) ([], [], Nothing, Nothing, Nothing) items
             subTotal = productTotal - sum (map (orderLineItemAmount . entityVal) discounts)
             grandTotal =
                 productTotal
-                    + taxTotal
+                    + maybe 0 (orderLineItemAmount . entityVal) maybeTaxLine
                     + maybe 0 (orderLineItemAmount . entityVal) maybeShipping
                     + sum (map (orderLineItemAmount . entityVal) surcharges)
                     - sum (map (orderLineItemAmount . entityVal) discounts)
@@ -368,7 +368,7 @@ transformOrder (order, createdAt, customer, shipping, maybeBilling, maybeCoupon,
             { setProductTotal = convertCents productTotal
             , setDiscount = map transformDiscount discounts
             , setSubTotal = convertCents subTotal
-            , setTax = transformTax (orderTaxDescription $ entityVal order) taxTotal
+            , setTax = transformTax . entityVal <$> maybeTaxLine
             , setSurcharge = map transformSurcharge surcharges
             , setShippingTotal = fmap transformShippingTotal maybeShipping
             , setGrandTotal = convertCents grandTotal
@@ -431,19 +431,16 @@ transformStoreCredit (Entity _ item) =
 
 -- | Build the StoneEdgeTax, attempting to pull a percentage out of the
 -- description.
-transformTax :: T.Text -> Cents -> Maybe StoneEdgeTax
-transformTax taxDescription taxTotal =
+transformTax :: OrderLineItem -> StoneEdgeTax
+transformTax OrderLineItem { orderLineItemAmount, orderLineItemDescription } =
     let maybeRate =
             (fmap (/ 100) . readMaybe . T.unpack) <=<
                 fmap (T.takeWhile (\c -> isDigit c || c == '.'))
                 . listToMaybe
                 . T.split (== '%')
-                $ T.dropWhile (not . isDigit) taxDescription
-    in if taxTotal == 0 then
-            Nothing
-        else
-            Just StoneEdgeTax
-                { setAmount = convertCents taxTotal
+                $ T.dropWhile (not . isDigit) orderLineItemDescription
+    in StoneEdgeTax
+                { setAmount = convertCents orderLineItemAmount
                 , setRate = maybeRate
                 , setShippingTaxed = Just False
                 , setTaxExempt = Just False
