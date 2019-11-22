@@ -31,6 +31,7 @@ module Routes.CommonData
     , AddressData(..)
     , fromAddressData
     , toAddressData
+    , addressToAvalara
     , OrderDetails(..)
     , CheckoutOrder(..)
     , toCheckoutOrder
@@ -52,6 +53,7 @@ import Data.Time (UTCTime, getCurrentTime)
 import Database.Persist ((==.), (>=.), (<=.), Entity(..), SelectOpt(Asc), selectList, getBy)
 import Numeric.Natural (Natural)
 
+import Avalara (AddressInfo(..))
 import Config
 import Images
 import Models
@@ -59,6 +61,7 @@ import Models.Fields
 import Server
 import Validation (Validation(..))
 
+import qualified Avalara
 import qualified Data.ISO3166_CountryCodes as CountryCodes
 import qualified Data.List as L
 import qualified Data.Map.Strict as M
@@ -749,6 +752,22 @@ toAddressData (Entity addressId address) =
         , adZipCode = addressZipCode address
         , adCountry = addressCountry address
         , adIsDefault = addressIsDefault address
+        }
+
+-- | Transform an 'AddressData' into an Avalara Address.
+addressToAvalara :: AddressData -> Avalara.AddressInfo
+addressToAvalara AddressData {..} =
+    AddressInfo
+        { aiLocationCode = Nothing
+        , aiLineOne = Just adAddressOne
+        , aiLineTwo = Just adAddressTwo
+        , aiLineThree = Nothing
+        , aiCity = Just adCity
+        , aiRegion = Just $ avalaraRegion adState
+        , aiCountry = Just . T.pack . show $ fromCountry adCountry
+        , aiPostalCode = Just adZipCode
+        , aiLatitude = Nothing
+        , aiLongitude = Nothing
         }
 
 

@@ -4,10 +4,18 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 {- | This module implements our integration with the Avalara Sales Tax
-Calculation API. It is a minimal implementation that supports the features
-we use, which is essentially Transaction Creation & Refunding.
+Calculation API.
 
-TODO: Integrate into DB Model & Checkout/Refund Routes
+It is a minimal implementation that supports the features we use, which is
+essentially Customer Creation and Transaction Creation, Commiting, Voiding,
+& Refunding.
+
+TODO: Modify place order & refund processing so that both can proceed if
+Avalara service is down. Use worker queue & liTaxIncluded field to handle
+processing after customer has been charged. See Issue #1157
+
+TODO: Ensure store credit can be used to pay tax(see comment on
+customerPlaceOrderRoute)
 
 -}
 module Avalara
@@ -51,6 +59,7 @@ module Avalara
       -- ** Address
     , Address(..)
     , AddressInfo(..)
+    , addressFromLocation
       -- ** Miscellaneous
     , CompanyId(..)
     , CompanyCode(..)
@@ -777,6 +786,21 @@ instance ToJSON AddressInfo where
             , "longitude" .= aiLongitude
             ]
 
+-- | Build an AddressInfo using a just a LocationCode.
+addressFromLocation :: T.Text -> AddressInfo
+addressFromLocation locationCode =
+    AddressInfo
+        { aiLocationCode = Just locationCode
+        , aiLineOne = Nothing
+        , aiLineTwo = Nothing
+        , aiLineThree = Nothing
+        , aiCity = Nothing
+        , aiRegion = Nothing
+        , aiCountry = Nothing
+        , aiPostalCode = Nothing
+        , aiLatitude = Nothing
+        , aiLongitude = Nothing
+        }
 
 -- | A Customer for the Request & Response data of the @CreateCustomers@
 -- endpoint.

@@ -12,6 +12,7 @@ import Data.Aeson (ToJSON(..), FromJSON(..), (.=), (.:), object, withObject, wit
 import Data.ISO3166_CountryCodes (CountryCode)
 import Data.Monoid ((<>))
 import Data.Ratio ((%), numerator, denominator)
+import Data.Scientific (Scientific, scientific)
 import Data.StateCodes (StateCode)
 import Data.Time (UTCTime)
 import Database.Persist (PersistField(..))
@@ -65,6 +66,17 @@ formatRational len rat =
 -- | Convert `Cents` into a Stripe `Amount`.
 toStripeAmount :: Cents -> Stripe.Amount
 toStripeAmount = Stripe.Amount . fromIntegral . fromCents
+
+-- | Convert 'Cents' into a Decimal-based Dollar amount.
+toDollars :: Cents -> Scientific
+toDollars (Cents c) =
+    scientific (fromIntegral c) (-2)
+
+-- | Convert a Decimal-based Dollar amount into a whole number of Cents.
+-- Truncates any amount past the 2nd decimal place.
+fromDollars :: Scientific -> Cents
+fromDollars dollars =
+    Cents $ floor $ abs $ dollars * 100
 
 
 -- | Milligrams are used to do any weight-related arithmetic & are

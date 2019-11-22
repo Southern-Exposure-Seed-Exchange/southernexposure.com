@@ -1,15 +1,23 @@
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 module Models.Utils
-    ( slugify
+    ( -- * Products
+      slugify
     , truncateDescription
     , truncateHtml
     , getChildCategoryIds
     , getParentCategories
+      -- * Carts
     , mergeCarts
+      -- * Addresses
     , insertOrActivateAddress
+      -- * Orders
     , getOrderTax
     , getLineItemTotal
     , getOrderTotal
+      -- * Avalara
+    , lineItemToTaxCode
+    , avalaraRegion
     ) where
 
 import Data.Char (isAlphaNum)
@@ -26,6 +34,7 @@ import Models.DB
 import Models.Fields
 import Server
 
+import qualified Avalara
 import qualified Data.Text as T
 
 
@@ -237,3 +246,49 @@ getOrderTotal lineItems products = Cents . fromIntegral $
 -- | Convert a Cents value into it's integer equivalent.
 integerCents :: Cents -> Integer
 integerCents = toInteger . fromCents
+
+
+-- AVALARA
+
+-- | Convert a LineItemType into the appropriate Tax Code. Credit
+-- lines will return Nothing since they are not reported as LineItems. Tax
+-- & StoreCredit lines will also return Nothing since they are not figured
+-- into tax calculations.
+lineItemToTaxCode :: LineItemType -> Maybe Avalara.TaxCode
+lineItemToTaxCode = \case
+    TaxLine ->
+        Nothing
+    ShippingLine ->
+        Just Avalara.shippingAndHandlingTaxCode
+    PriorityShippingLine ->
+        Just Avalara.shippingAndHandlingTaxCode
+    SurchargeLine ->
+        Just Avalara.handlingOnlyTaxCode
+    StoreCreditLine ->
+        Nothing
+    MemberDiscountLine ->
+        Nothing
+    CouponDiscountLine ->
+        Nothing
+    RefundLine ->
+        Nothing
+
+-- | Build an Avalara Address Region from a 'Region'. This transforms
+-- regions into their ISO codes, or a 3-letter prefix/initials for Custom
+-- regions.
+avalaraRegion :: Region -> T.Text
+avalaraRegion = \case
+    USState code ->
+        T.pack $ show code
+    USArmedForces code ->
+        T.pack $ show code
+    CAProvince code ->
+        T.pack $ show code
+    CustomRegion name ->
+        case T.words name of
+            [] ->
+                T.take 3 name
+            [_] ->
+                T.take 3 name
+            words_ ->
+                T.take 3 $ T.intercalate "" $ map (T.take 1) words_

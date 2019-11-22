@@ -13,6 +13,7 @@ module Routes.Utils
     , buildWhereQuery
     , mapUpdate
     , mapUpdateWith
+    , renderAvalaraError
     ) where
 
 import Control.Monad (void)
@@ -20,6 +21,7 @@ import Control.Monad.Reader (asks)
 import Control.Monad.Trans (liftIO)
 import Data.Int (Int64)
 import Data.Maybe (fromMaybe, listToMaybe)
+import Data.Monoid ((<>))
 import Data.Text.Encoding (encodeUtf8, decodeUtf8)
 import Database.Persist ((=.), Entity(..), getBy, PersistEntityBackend, PersistEntity, Update)
 import Database.Persist.Sql (SqlBackend)
@@ -32,6 +34,7 @@ import Models
 import Models.Fields (Cents(..))
 import Server
 
+import qualified Avalara
 import qualified Crypto.BCrypt as BCrypt
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Base64 as Base64
@@ -215,3 +218,14 @@ mapUpdate field =
 mapUpdateWith :: E.PersistField b => EntityField e b -> Maybe a -> (a -> b) -> Maybe (Update e)
 mapUpdateWith field param transform =
     mapUpdate field $ transform <$> param
+
+-- | Render a prettified version of an 'Avalara.ErrorInfo'.
+renderAvalaraError :: Avalara.ErrorInfo -> T.Text
+renderAvalaraError errorInfo =
+    let detailsMessage detail =
+            Avalara.edMessage detail <> "(" <> Avalara.edDescription detail <> ")"
+    in
+    "Error #" <> Avalara.eiCode errorInfo <> " - " <> Avalara.eiMessage errorInfo
+        <> ": "
+        <> T.intercalate ";\n\t " (map detailsMessage $ Avalara.eiDetails errorInfo)
+        <> "."
