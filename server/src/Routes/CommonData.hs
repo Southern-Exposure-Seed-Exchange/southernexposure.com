@@ -61,7 +61,6 @@ import Models.Fields
 import Server
 import Validation (Validation(..))
 
-import qualified Avalara
 import qualified Data.ISO3166_CountryCodes as CountryCodes
 import qualified Data.List as L
 import qualified Data.Map.Strict as M
