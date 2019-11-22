@@ -245,7 +245,6 @@ fetchDataForRoute ({ route, pageData, key } as model) =
                                     (Checkout.getCustomerDetails GetCheckoutDetails
                                         Nothing
                                         Nothing
-                                        Nothing
                                         ""
                                         False
                                     )
@@ -261,8 +260,7 @@ fetchDataForRoute ({ route, pageData, key } as model) =
                                             batchCommand
                                                 (Checkout.getAnonymousDetails GetCheckoutDetails
                                                     token
-                                                    (Just <| .country Address.initial)
-                                                    (Just <| .state Address.initial)
+                                                    (Just Address.initialForm)
                                                     ""
                                                     False
                                                 )

@@ -411,7 +411,10 @@ data AvalaraTransactionCode =
     AvalaraTransactionCode
         { avalaraCompanyCode :: Avalara.CompanyCode
         , avalaraTransactionCode :: Avalara.TransactionCode
-        } deriving (Show, Read, Eq)
+        } deriving (Show, Read, Eq, Generic)
+
+instance FromJSON AvalaraTransactionCode
+instance ToJSON AvalaraTransactionCode
 
 derivePersistField "AvalaraTransactionCode"
 

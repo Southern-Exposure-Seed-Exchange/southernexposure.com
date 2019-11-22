@@ -14,9 +14,9 @@ module Server
     ) where
 
 import Control.Concurrent.STM (atomically, readTVarIO, modifyTVar)
-import Control.Exception.Safe (tryAny, throwM)
-import Control.Monad.IO.Class (liftIO)
-import Control.Monad.Reader (ReaderT, asks, lift, runReaderT)
+import Control.Exception.Safe (MonadCatch, displayException, tryAny, throwM)
+import Control.Monad.IO.Class (MonadIO, liftIO)
+import Control.Monad.Reader (MonadReader, ReaderT, asks, lift, runReaderT)
 import Control.Monad.Except (MonadError)
 import Data.Aeson (FromJSON)
 import Data.Text (Text)
@@ -75,7 +75,10 @@ stripeRequest req = do
 --
 -- TODO: Log the request data as well! Maybe refactor to:
 --       @(a -> ReaderT .... b) -> a -> App b@
-avalaraRequest :: ReaderT Avalara.Config IO (Avalara.WithError a) -> App (Avalara.WithError a)
+avalaraRequest
+    :: (MonadReader Config m, MonadCatch m, MonadIO m)
+    => ReaderT Avalara.Config IO (Avalara.WithError a)
+    -> m (Avalara.WithError a)
 avalaraRequest req = do
     cfg <- asks getAvalaraConfig
     response <- tryAny $ liftIO $ runReaderT req cfg
@@ -88,6 +91,9 @@ avalaraRequest req = do
             return r
         Right r@(Avalara.ErrorResponse err) -> do
             liftIO . pushLogStrLn loggerSet . toLogStr $ show err
+            return r
+        Right r@(Avalara.HttpException err) -> do
+            liftIO . pushLogStrLn loggerSet . toLogStr $ displayException err
             return r
 
 

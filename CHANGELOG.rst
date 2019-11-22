@@ -6,6 +6,12 @@ CHANGELOG
 v1.03.00
 =========
 
+* Add an integration with the Avalara AvaTax API along with configuration
+  options for disabling the integration, only reporting orders for the testing
+  period, or using the integration for all tax functionality. This is
+  integrated with the asynchronous task queue, so that we can process Orders &
+  enqueue the submission of tax transactions when we cannot reach the Avalara
+  service.
 * Remove Product Variants from Carts when they are disabled.
 * Remove the Member Number form from the Checkout page & Checkout API routes.
 * Modify the StoneEdge integration so that Order exporting doesn't filter based

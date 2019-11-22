@@ -440,10 +440,9 @@ refreshDetails authStatus maybeSessionToken forceUpdate oldModel newModel =
 
                 User.Authorized _ ->
                     applyArguments
-                        (\( maybeCountry, maybeRegion, maybeAddressId ) ->
+                        (\( maybeAddressForm, maybeAddressId ) ->
                             getCustomerDetails RefreshDetails
-                                maybeCountry
-                                maybeRegion
+                                maybeAddressForm
                                 maybeAddressId
                                 newModel.couponCode
                                 newModel.priorityShipping
@@ -456,7 +455,7 @@ refreshDetails authStatus maybeSessionToken forceUpdate oldModel newModel =
             else
                 Cmd.none
 
-        anonymousCommand ( maybeCountry, maybeRegion, _ ) =
+        anonymousCommand ( maybeAddressForm, _ ) =
             case maybeSessionToken of
                 Nothing ->
                     Cmd.none
@@ -464,8 +463,7 @@ refreshDetails authStatus maybeSessionToken forceUpdate oldModel newModel =
                 Just token ->
                     getAnonymousDetails RefreshDetails
                         token
-                        maybeCountry
-                        maybeRegion
+                        maybeAddressForm
                         newModel.couponCode
                         newModel.priorityShipping
 
@@ -495,10 +493,10 @@ refreshDetails authStatus maybeSessionToken forceUpdate oldModel newModel =
         addressArguments =
             case newModel.shippingAddress of
                 ExistingAddress id ->
-                    ( Nothing, Nothing, Just id )
+                    ( Nothing, Just id )
 
                 NewAddress addrForm ->
-                    ( Just addrForm.model.country, Just addrForm.model.state, Nothing )
+                    ( Just addrForm, Nothing )
     in
     ( newModel, Nothing, refreshCommand )
 
@@ -554,18 +552,16 @@ limitStoreCredit checkoutDetails =
 
 getCustomerDetails :
     (WebData (Result Api.FormErrors PageData.CheckoutDetails) -> msg)
-    -> Maybe String
-    -> Maybe Region
+    -> Maybe Address.Form
     -> Maybe AddressId
     -> String
     -> Bool
     -> Cmd msg
-getCustomerDetails msg maybeCountry maybeRegion maybeAddressId couponCode priorityShipping =
+getCustomerDetails msg maybeAddress maybeAddressId couponCode priorityShipping =
     let
         data =
             Encode.object
-                [ ( "region", encodeMaybe Locations.regionEncoder maybeRegion )
-                , ( "country", encodeMaybe Encode.string maybeCountry )
+                [ ( "address", encodeMaybe Address.encode maybeAddress )
                 , ( "addressId", encodeMaybe (\(AddressId i) -> Encode.int i) maybeAddressId )
                 , ( "couponCode", encodeStringAsMaybe couponCode )
                 , ( "priorityShipping", Encode.bool priorityShipping )
@@ -580,17 +576,15 @@ getCustomerDetails msg maybeCountry maybeRegion maybeAddressId couponCode priori
 getAnonymousDetails :
     (WebData (Result Api.FormErrors PageData.CheckoutDetails) -> msg)
     -> String
-    -> Maybe String
-    -> Maybe Region
+    -> Maybe Address.Form
     -> String
     -> Bool
     -> Cmd msg
-getAnonymousDetails msg sessionToken maybeCountry maybeRegion couponCode priorityShipping =
+getAnonymousDetails msg sessionToken maybeAddress couponCode priorityShipping =
     let
         data =
             Encode.object
-                [ ( "region", encodeMaybe Locations.regionEncoder maybeRegion )
-                , ( "country", encodeMaybe Encode.string maybeCountry )
+                [ ( "address", encodeMaybe Address.encode maybeAddress )
                 , ( "sessionToken", Encode.string sessionToken )
                 , ( "couponCode", encodeStringAsMaybe couponCode )
                 , ( "priorityShipping", Encode.bool priorityShipping )

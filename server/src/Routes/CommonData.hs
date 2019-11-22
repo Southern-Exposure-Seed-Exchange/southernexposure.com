@@ -3,6 +3,7 @@
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 module Routes.CommonData
     ( ProductData
     , getProductData
@@ -42,18 +43,18 @@ module Routes.CommonData
 import Prelude hiding (product)
 
 import Control.Monad.IO.Class (MonadIO, liftIO)
-import Control.Monad.Reader (MonadReader, lift)
+import Control.Monad.Reader (MonadReader, lift, asks)
 import Data.Aeson ((.=), (.:), (.:?), ToJSON(..), FromJSON(..), object, withObject)
 import Data.Int (Int64)
 import Data.List (intersect)
-import Data.Maybe (mapMaybe, listToMaybe, fromMaybe)
+import Data.Maybe (mapMaybe, listToMaybe, fromMaybe, maybeToList)
 import Data.Monoid ((<>))
 import Data.Ratio ((%))
 import Data.Time (UTCTime, getCurrentTime)
 import Database.Persist ((==.), (>=.), (<=.), Entity(..), SelectOpt(Asc), selectList, getBy)
 import Numeric.Natural (Natural)
 
-import Avalara (AddressInfo(..))
+import Avalara (CreateTransactionRequest(..), AddressInfo(..))
 import Config
 import Images
 import Models
@@ -61,6 +62,7 @@ import Models.Fields
 import Server
 import Validation (Validation(..))
 
+import qualified Avalara
 import qualified Data.ISO3166_CountryCodes as CountryCodes
 import qualified Data.StateCodes as StateCodes
 import qualified Data.List as L
@@ -446,20 +448,24 @@ getCartItems whereQuery = do
 Shipping, & the Membership/Coupon Discounts are all based off of the
 Product subtotal.
 
+Tax is calculated using an Avalara 'SalesOrder'.
+
 If the product subtotal does not meet the minimum order amount for
 a coupon, no coupon discount will be applied. It is up to the calling code
 to properly return an error for the user.
 
 -}
 getCharges
-    :: Maybe Country            -- ^ Used to calculate the Shipping charge.
-    -> Maybe Region             -- ^ Used to calculate the Tax charge.
+    :: Maybe AddressData        -- ^ Used to calculate the Shipping & Tax charge.
     -> [CartItemData]           -- ^ The cart items (see `getCartItems`)
     -> Maybe (Entity Coupon)    -- ^ A Coupon to apply.
     -> Bool                     -- ^ Include Priority S&H
+    -> Bool                     -- ^ Include Avalara Tax Quote
     -> AppSQL CartCharges
-getCharges maybeCountry maybeRegion items maybeCoupon priorityShipping =
+getCharges maybeShipping items maybeCoupon priorityShipping includeAvalara =
     let
+        maybeCountry =
+            adCountry <$> maybeShipping
         subTotal =
             foldl (\acc item -> acc + itemTotal item) 0 items
         itemTotal item =
@@ -480,45 +486,137 @@ getCharges maybeCountry maybeRegion items maybeCoupon priorityShipping =
             else
                 Nothing
         taxLine preTaxTotal =
-            case maybeRegion of
+            case adState <$> maybeShipping of
                 Just (USState StateCodes.VA) ->
                     CartCharge
                         { ccDescription = "VA Sales Tax (5.3%)"
                         , ccAmount = applyVATax preTaxTotal
                         }
                 _ ->
-                    CartCharge
-                        { ccDescription = ""
-                        , ccAmount = 0
-                        }
-        sumGrandTotal cc =
+                    blankCharge
+        sumGrandTotal :: AvalaraStatus -> CartCharges -> AppSQL CartCharges
+        sumGrandTotal avalaraStatus cc =
             let preTaxTotal =
                     ccProductTotal cc
                         + sum (map ccAmount $ ccSurcharges cc)
-                        + amt ccTax
                         + mAmt (listToMaybe . map scCharge . ccShippingMethods)
                         + mAmt ccPriorityShippingFee
                         - mAmt ccCouponDiscount
-                tax =
-                    taxLine preTaxTotal
-            in
-            cc
-                { ccGrandTotal = preTaxTotal + ccAmount tax
-                , ccTax = tax
+            in do
+            taxCharge <- case avalaraStatus of
+                AvalaraEnabled ->
+                    if includeAvalara then
+                        getTaxQuote cc
+                    else
+                        return blankCharge
+                _ ->
+                    return (taxLine preTaxTotal)
+            return cc
+                { ccGrandTotal = preTaxTotal + ccAmount taxCharge
+                , ccTax = taxCharge
                 }
-            where amt f = ccAmount $ f cc
-                  mAmt f = maybe (Cents 0) ccAmount $ f cc
+            where mAmt f = maybe (Cents 0) ccAmount $ f cc
     in do
+        avalaraStatus <- lift $ asks getAvalaraStatus
         surcharges <- getSurcharges items
         shippingMethods <- getShippingMethods maybeCountry items subTotal
-        return $ sumGrandTotal CartCharges
-            { ccTax = CartCharge "" 0
+        sumGrandTotal avalaraStatus CartCharges
+            { ccTax = blankCharge
             , ccSurcharges = surcharges
             , ccShippingMethods = shippingMethods
             , ccPriorityShippingFee = priorityCharge shippingMethods
             , ccProductTotal = Cents subTotal
             , ccCouponDiscount = maybeCoupon >>= couponCredit shippingMethods
             , ccGrandTotal = 0
+            }
+  where
+    blankCharge =
+        CartCharge "" 0
+    getTaxQuote :: CartCharges -> AppSQL CartCharge
+    getTaxQuote cc = flip (maybe $ return blankCharge) maybeShipping $ \shippingAddress -> do
+        date <- liftIO getCurrentTime
+        sourceAddress <- fmap Avalara.addressFromLocation . lift
+            $ asks getAvalaraSourceLocationCode
+        let productLines =
+                map makeProductLine items
+            surchargeLines =
+                map (makeLineItem SurchargeLine) $ ccSurcharges cc
+            shippingLine =
+                take 1 $ map (makeLineItem ShippingLine . scCharge)
+                    $ ccShippingMethods cc
+            priorityLine =
+                take 1 $ map (makeLineItem PriorityShippingLine) $ maybeToList
+                    $ ccPriorityShippingFee cc
+            debitLines =
+                surchargeLines <> shippingLine <> priorityLine
+            discount =
+                toDollars $ sum $ map ccAmount $ maybeToList $ ccCouponDiscount cc
+            address =
+                Avalara.Address
+                    { Avalara.addrSingleLocation = Nothing
+                    , Avalara.addrShipFrom = Just sourceAddress
+                    , Avalara.addrShipTo = Just $ addressToAvalara shippingAddress
+                    , Avalara.addrPointOfOrderOrigin = Nothing
+                    , Avalara.addrPointOfOrderAcceptance = Nothing
+                    }
+            request =
+                CreateTransactionRequest
+                    { ctrCode = Nothing
+                    , ctrLines = productLines <> debitLines
+                    , ctrType = Just Avalara.SalesOrder
+                    , ctrCompanyCode = Nothing
+                    , ctrDate = date
+                    , ctrCustomerCode = Avalara.CustomerCode "SALES_ORDER"
+                    , ctrDiscount =
+                        if discount /= 0 then
+                            Just discount
+                        else
+                            Nothing
+                    , ctrAddresses = Just address
+                    , ctrCommit = Just False
+                    }
+        lift (avalaraRequest $ Avalara.createTransaction request) >>= \case
+            Avalara.ErrorResponse _ ->
+                return blankCharge
+            Avalara.HttpException _ ->
+                return blankCharge
+            Avalara.SuccessfulResponse quote ->
+                case fromDollars <$> Avalara.tTotalTax quote of
+                    Nothing ->
+                        return blankCharge
+                    Just tax ->
+                        return $ CartCharge "Sales Tax" tax
+    makeLineItem type_ charge =
+        Avalara.LineItem
+            { liNumber = Nothing
+            , liQuantity = Just 1
+            , liTotalAmount = Just $ toDollars $ ccAmount charge
+            , liAddresses = Nothing
+            , liTaxCode = lineItemToTaxCode type_
+            , liItemCode = Nothing
+            , liDiscounted = Just True
+            , liTaxIncluded = Just False
+            , liDescription = Just $ ccDescription charge
+            }
+    makeProductLine :: CartItemData -> Avalara.LineItem
+    makeProductLine CartItemData {..} =
+        let quantity =
+                fromIntegral cidQuantity
+            singlePrice =
+                toDollars $ getVariantPrice cidVariant
+            fullSku =
+                bpdBaseSku cidProduct <> vdSkuSuffix cidVariant
+        in
+        Avalara.LineItem
+            { liNumber = Nothing
+            , liQuantity = Just quantity
+            , liTotalAmount = Just $ quantity * singlePrice
+            , liAddresses = Nothing
+            , liTaxCode = Nothing
+            , liItemCode = Just fullSku
+            , liDiscounted = Just True
+            , liTaxIncluded = Just False
+            , liDescription = Just $ bpdName cidProduct
             }
 
 -- | Calculate the discount of a Coupon, given the Coupon, a list of

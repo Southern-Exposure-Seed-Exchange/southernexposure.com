@@ -10,13 +10,6 @@ It is a minimal implementation that supports the features we use, which is
 essentially Customer Creation and Transaction Creation, Commiting, Voiding,
 & Refunding.
 
-TODO: Modify place order & refund processing so that both can proceed if
-Avalara service is down. Use worker queue & liTaxIncluded field to handle
-processing after customer has been charged. See Issue #1157
-
-TODO: Ensure store credit can be used to pay tax(see comment on
-customerPlaceOrderRoute)
-
 -}
 module Avalara
     ( -- * Configuration
@@ -50,6 +43,7 @@ module Avalara
     , DocumentType(..)
     , TransactionStatus(..)
     , TaxCode(..)
+    , shippingTaxCode
     , shippingAndHandlingTaxCode
     , handlingOnlyTaxCode
     , TransactionCode(..)
@@ -68,6 +62,7 @@ module Avalara
     , AuthenticationType(..)
     ) where
 
+import Control.Exception.Safe (MonadCatch, SomeException, try)
 import Control.Monad.Reader (MonadIO, ReaderT, asks, ask, liftIO)
 import Data.Aeson
     ((.:), (.:?), (.=), FromJSON(..), ToJSON(..), Value(..), object, withObject
@@ -78,7 +73,7 @@ import Data.Foldable (asum)
 import Data.Monoid ((<>))
 import Data.Scientific (Scientific)
 import Data.Text.Encoding (encodeUtf8)
-import Data.Time (UTCTime, defaultTimeLocale, formatTime)
+import Data.Time (UTCTime, Day, defaultTimeLocale, formatTime)
 import Data.Version (showVersion)
 import Network.HTTP.Client (responseStatus)
 import Network.HTTP.Types.Status (Status(statusCode))
@@ -183,7 +178,7 @@ generateClientHeader = do
 --
 -- API Docs:
 -- https://developer.avalara.com/api-reference/avatax/rest/v2/methods/Utilities/Ping/
-ping :: MonadIO m => ReaderT Config m (WithError PingResponse)
+ping :: (MonadIO m, MonadCatch m) => ReaderT Config m (WithError PingResponse)
 ping =
     makeGetRequest Ping
 
@@ -192,7 +187,7 @@ ping =
 --
 -- API Docs:
 -- https://developer.avalara.com/api-reference/avatax/rest/v2/methods/Transactions/CreateTransaction/
-createTransaction :: MonadIO m => CreateTransactionRequest -> ReaderT Config m (WithError Transaction)
+createTransaction :: (MonadIO m, MonadCatch m) => CreateTransactionRequest -> ReaderT Config m (WithError Transaction)
 createTransaction =
     makePostRequest CreateTransaction
 
@@ -201,7 +196,7 @@ createTransaction =
 --
 -- API Docs:
 -- https://developer.avalara.com/api-reference/avatax/rest/v2/methods/Transactions/CommitTransaction/
-commitTransaction :: MonadIO m => CompanyCode -> TransactionCode -> CommitTransactionRequest
+commitTransaction :: (MonadIO m, MonadCatch m) => CompanyCode -> TransactionCode -> CommitTransactionRequest
     -> ReaderT Config m (WithError Transaction)
 commitTransaction companyCode transactionCode =
     makePostRequest $ CommitTransaction companyCode transactionCode
@@ -212,7 +207,7 @@ commitTransaction companyCode transactionCode =
 --
 -- API Docs:
 -- https://developer.avalara.com/api-reference/avatax/rest/v2/methods/Transactions/RefundTransaction/
-refundTransaction :: MonadIO m => CompanyCode -> TransactionCode -> RefundTransactionRequest
+refundTransaction :: (MonadIO m, MonadCatch m) => CompanyCode -> TransactionCode -> RefundTransactionRequest
     -> ReaderT Config m (WithError Transaction)
 refundTransaction companyCode transactionCode =
     makePostRequest $ RefundTransaction companyCode transactionCode
@@ -223,7 +218,7 @@ refundTransaction companyCode transactionCode =
 -- API Docs:
 -- https://developer.avalara.com/api-reference/avatax/rest/v2/methods/Transactions/VoidTransaction/
 -- https://developer.avalara.com/avatax/voiding-documents/
-voidTransaction :: MonadIO m => CompanyCode -> TransactionCode -> VoidTransactionRequest
+voidTransaction :: (MonadIO m, MonadCatch m) => CompanyCode -> TransactionCode -> VoidTransactionRequest
     -> ReaderT Config m (WithError Transaction)
 voidTransaction companyCode transactionCode =
     makePostRequest $ VoidTransaction companyCode transactionCode
@@ -233,7 +228,7 @@ voidTransaction companyCode transactionCode =
 --
 -- API Docs:
 -- https://developer.avalara.com/api-reference/avatax/rest/v2/methods/Customers/CreateCustomers/
-createCustomers :: MonadIO m => CompanyId -> CreateCustomersRequest -> ReaderT Config m (WithError [Customer])
+createCustomers :: (MonadIO m, MonadCatch m) => CompanyId -> CreateCustomersRequest -> ReaderT Config m (WithError [Customer])
 createCustomers companyId =
     makePostRequest $ CreateCustomers companyId
 
@@ -325,7 +320,8 @@ instance FromJSON ErrorDetail where
 data WithError a
     = SuccessfulResponse a
     | ErrorResponse ErrorInfo
-    deriving (Show, Read, Eq)
+    | HttpException SomeException
+    deriving (Show)
 
 instance FromJSON a => FromJSON (WithError a) where
     parseJSON v =
@@ -358,6 +354,8 @@ data CreateTransactionRequest =
         -- ^ The date of the invoice or purchase.
         , ctrCustomerCode :: CustomerCode
         -- ^ A unique identifier for the Customer in your application.
+        -- Note that a blank value is not allowed. For SalesOrders, use
+        -- a dummy value.
         , ctrDiscount :: Maybe Scientific
         -- ^ A discount amount to apply to all 'LineItem' with
         -- 'liDiscounted' set to 'True'.
@@ -484,7 +482,7 @@ data Transaction =
         { tId :: Maybe Integer
         , tCode :: Maybe TransactionCode
         , tCompanyId :: Maybe CompanyId
-        , tDate :: Maybe UTCTime
+        , tDate :: Maybe Day
         , tStatus :: Maybe TransactionStatus
         , tType :: Maybe DocumentType
         , tCustomerCode :: Maybe CustomerCode
@@ -497,27 +495,48 @@ data Transaction =
         , tLocked :: Maybe Bool
         , tRegion :: Maybe T.Text
         , tCountry :: Maybe T.Text
-        }
+        } deriving (Show, Eq)
 
 instance FromJSON Transaction where
     parseJSON = withObject "Transaction" $ \o -> do
-        tId <- o .: "id"
-        tCode <- o .: "code"
-        tCompanyId <- o .: "companyId"
-        tDate <- o .: "date"
-        tStatus <- o .: "status"
-        tType <- o .: "type"
-        tCustomerCode <- o .: "customerCode"
-        tReconciled <- o .: "reconciled"
-        tTotalAmount <- o .: "totalAmount"
-        tTotalExempt <- o .: "totalExempt"
-        tTotalTax <- o .: "totalTax"
-        tTotalTaxable <- o .: "totalTaxable"
-        tTotalTaxCalculated <- o .: "tTotalTaxCalculated"
-        tLocked <- o .: "locked"
-        tRegion <- o .: "region"
-        tCountry <- o .: "country"
+        tId <- o .:? "id"
+        tCode <- o .:? "code"
+        tCompanyId <- o .:? "companyId"
+        tDate <- o .:? "date"
+        tStatus <- o .:? "status"
+        tType <- o .:? "type"
+        tCustomerCode <- o .:? "customerCode"
+        tReconciled <- o .:? "reconciled"
+        tTotalAmount <- o .:? "totalAmount"
+        tTotalExempt <- o .:? "totalExempt"
+        tTotalTax <- o .:? "totalTax"
+        tTotalTaxable <- o .:? "totalTaxable"
+        tTotalTaxCalculated <- o .:? "totalTaxCalculated"
+        tLocked <- o .:? "locked"
+        tRegion <- o .:? "region"
+        tCountry <- o .:? "country"
         return Transaction {..}
+
+instance ToJSON Transaction where
+    toJSON Transaction {..} =
+        object
+            [ "id" .= tId
+            , "code" .= tCode
+            , "companyId" .= tCompanyId
+            , "date" .= tDate
+            , "status" .= tStatus
+            , "type" .= tType
+            , "customerCode" .= tCustomerCode
+            , "reconciled" .= tReconciled
+            , "totalAmount" .= tTotalAmount
+            , "totalExempt" .= tTotalExempt
+            , "totalTax" .= tTotalTax
+            , "totalTaxable" .= tTotalTaxable
+            , "totalTaxCalculated" .= tTotalTaxCalculated
+            , "locked" .= tLocked
+            , "region" .= tRegion
+            , "country" .= tCountry
+            ]
 
 
 -- MISCELLANEOUS
@@ -603,6 +622,11 @@ newtype TaxCode =
 instance ToJSON TaxCode where
     toJSON = String . fromTaxCode
 
+-- | Standard Avalara Tax Code for Shipping charges.
+shippingTaxCode :: TaxCode
+shippingTaxCode =
+    TaxCode "FR020800"
+
 -- | Standard Avalara Tax Code for combined Shipping & Handling charges.
 shippingAndHandlingTaxCode :: TaxCode
 shippingAndHandlingTaxCode =
@@ -627,7 +651,7 @@ data DocumentType
     | ReturnInvoice
     -- ^ A return that has been finalized. Records the transaction and
     -- calculates the final amount of tax to be refunded.
-    deriving (Show, Read, Eq)
+    deriving (Show, Read, Eq, Enum, Bounded)
 
 instance ToJSON DocumentType where
     toJSON = String . \case
@@ -706,7 +730,24 @@ data TransactionStatus
     | Cancelled
     | Adjusted
     | PendingApproval
-    deriving (Show, Read, Eq)
+    deriving (Show, Read, Eq, Enum, Bounded)
+
+instance ToJSON TransactionStatus where
+    toJSON = \case
+        Temporary ->
+            "Temporary"
+        Saved ->
+            "Saved"
+        Posted ->
+            "Posted"
+        Committed ->
+            "Committed"
+        Cancelled ->
+            "Cancelled"
+        Adjusted ->
+            "Adjusted"
+        PendingApproval ->
+            "PendingApproval"
 
 instance FromJSON TransactionStatus where
     parseJSON = withText "TransactionStatus" $ \case
@@ -850,19 +891,19 @@ instance ToJSON Customer where
 
 instance FromJSON Customer where
     parseJSON = withObject "Customer" $ \o -> do
-        cId <- o .: "id"
+        cId <- o .:? "id"
         cCompanyId <- o .: "companyId"
         cCustomerCode <- o .: "customerCode"
-        cAlternateId <- o .: "alternateId"
+        cAlternateId <- o .:? "alternateId"
         cName <- o .: "name"
         cLineOne <- o .: "line1"
-        cLineTwo <- o .: "line2"
+        cLineTwo <- o .:? "line2"
         cCity <- o .: "city"
         cPostalCode <- o .: "postalCode"
         cRegion <- o .: "region"
         cCountry <- o .: "country"
-        cPhoneNumber <- o .: "phoneNumber"
-        cEmailAddress <- o .: "emailAddress"
+        cPhoneNumber <- o .:? "phoneNumber"
+        cEmailAddress <- o .:? "emailAddress"
         return Customer {..}
 
 
@@ -876,7 +917,7 @@ data RefundType
     -- ^ Only the tax part of the Transaction
     | RefundPercentage
     -- ^ Refund a percentage of the value of the Transaction
-    deriving (Show, Read, Eq)
+    deriving (Show, Read, Eq, Enum, Bounded)
 
 instance ToJSON RefundType where
     toJSON = String . \case
@@ -888,6 +929,19 @@ instance ToJSON RefundType where
             "TaxOnly"
         RefundPercentage ->
             "Percentage"
+
+instance FromJSON RefundType where
+    parseJSON = withText "RefundType" $ \case
+        "Full" ->
+            return FullRefund
+        "Partial" ->
+            return PartialRefund
+        "TaxOnly" ->
+            return RefundTaxOnly
+        "Percentage" ->
+            return RefundPercentage
+        str ->
+            fail $ "Unexpected RefundType: " <> T.unpack str
 
 
 -- | The reason for voiding a Transaction.
@@ -920,16 +974,20 @@ formatAvalaraTime :: UTCTime -> T.Text
 formatAvalaraTime =
     T.pack . formatTime defaultTimeLocale "%FT%T+00:00"
 
-makeGetRequest :: (FromJSON a, MonadIO m) => Endpoint -> ReaderT Config m (WithError a)
+makeGetRequest
+    :: (FromJSON a, MonadIO m, MonadCatch m)
+    => Endpoint -> ReaderT Config m (WithError a)
 makeGetRequest endpoint =
     makeRequest endpoint GET NoReqBody
 
-makePostRequest :: (ToJSON a, FromJSON b, MonadIO m) => Endpoint -> a -> ReaderT Config m (WithError b)
+makePostRequest
+    :: (ToJSON a, FromJSON b, MonadIO m, MonadCatch m)
+    => Endpoint -> a -> ReaderT Config m (WithError b)
 makePostRequest endpoint body =
     makeRequest endpoint POST $ ReqBodyJson body
 
 makeRequest
-    :: ( FromJSON a, HttpMethod method, HttpBody body, MonadIO m
+    :: ( FromJSON a, HttpMethod method, HttpBody body, MonadIO m, MonadCatch m
        , HttpBodyAllowed (AllowsBody method) (ProvidesBody body)
        )
     => Endpoint -> method -> body
@@ -953,4 +1011,5 @@ makeRequest endpoint method reqBody = do
                     else
                         httpConfigCheckResponse def req_ resp body
                 }
-    runReq httpConfig $ responseBody <$> req method path reqBody jsonResponse headers
+    fmap (either HttpException id) . try $ runReq httpConfig $ responseBody
+        <$> req method path reqBody jsonResponse headers

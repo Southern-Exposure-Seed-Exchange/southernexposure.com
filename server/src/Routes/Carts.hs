@@ -26,7 +26,7 @@ import Servant ((:>), (:<|>)(..), AuthProtect, ReqBody, JSON, PlainText, Get, Po
 import Auth
 import Models
 import Models.Fields (AddressType(..))
-import Routes.CommonData (CartItemData(..), CartCharges(..), getCartItems, getCharges)
+import Routes.CommonData (CartItemData(..), CartCharges(..), getCartItems, getCharges, toAddressData)
 import Routes.Utils (generateUniqueToken)
 import Server
 import Validation (Validation(..))
@@ -248,15 +248,13 @@ customerDetailsRoute token = withValidatedCookie token getCustomerCartDetails
 getCustomerCartDetails :: Entity Customer -> App CartDetailsData
 getCustomerCartDetails (Entity customerId _) =
     runDB $ do
-        (shippingCountry, shippingRegion) <- getShippingCountry
+        shippingAddress <- getShipping
         items <- getCartItems $ \c ->
             c E.^. CartCustomerId E.==. E.just (E.val customerId)
-        charges <- getCharges shippingCountry shippingRegion items
-            Nothing False
+        charges <- getCharges shippingAddress items Nothing False False
         return $ CartDetailsData items charges
-    where getShippingCountry = do
-            maybeShippingAddress <-
-                listToMaybe . map P.entityVal
+    where getShipping =
+            fmap toAddressData . listToMaybe
                     <$> P.selectList
                         [ AddressType ==. Shipping
                         , AddressIsDefault ==. True
@@ -264,11 +262,6 @@ getCustomerCartDetails (Entity customerId _) =
                         ]
                         [ P.LimitTo 1
                         ]
-            return
-                ( addressCountry <$> maybeShippingAddress
-                , addressState <$> maybeShippingAddress
-                )
-
 
 
 newtype AnonymousDetailsParameters =
@@ -290,7 +283,7 @@ anonymousDetailsRoute parameters =
     runDB $ do
         items <- getCartItems $ \c ->
             c E.^. CartSessionToken E.==. E.just (E.val $ adpCartToken parameters)
-        charges <- getCharges Nothing Nothing items Nothing False
+        charges <- getCharges Nothing items Nothing False False
         return $ CartDetailsData items charges
 
 

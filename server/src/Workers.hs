@@ -17,33 +17,45 @@ a queue consumer with a pool of worker threads.
 module Workers
     ( taskQueueConfig
     , Task(..)
+    , AvalaraTask(..)
     , enqueueTask
     ) where
 
 import Control.Concurrent (threadDelay)
-import Control.Exception.Safe (Exception(..))
+import Control.Exception.Safe (Exception(..), throwM)
 import Control.Monad.IO.Class (MonadIO, liftIO)
-import Control.Monad.Trans (lift)
+import Control.Monad.Reader (runReaderT, asks, lift)
+import Control.Monad.Trans.Control (MonadBaseControl)
 import Data.Aeson (ToJSON(toJSON), FromJSON, Result(..), fromJSON)
 import Data.Foldable (asum)
+import Data.Maybe (listToMaybe)
 import Data.Monoid ((<>))
+import Data.Scientific (Scientific)
 import Data.Time (UTCTime, getCurrentTime, addUTCTime)
 import Database.Persist.Sql
-    ( (==.), (<=.), (<.), Entity(..), SelectOpt(..), ToBackendKey, SqlBackend
+    ( (=.), (==.), (<=.), (<.), Entity(..), SelectOpt(..), ToBackendKey, SqlBackend
     , SqlPersistT, runSqlPool, selectFirst, delete, insert_, fromSqlKey
-    , deleteWhere
+    , deleteWhere, update
     )
 import GHC.Generics (Generic)
 import Numeric.Natural (Natural)
 import System.Log.FastLogger (pushLogStrLn, toLogStr)
 
+import Avalara
+    ( RefundTransactionRequest(..), VoidTransactionRequest(..), VoidReason(..)
+    , CommitTransactionRequest(..)
+    )
 import Config (Config(..))
+import Emails (EmailType, getEmailData)
 import Images (makeImageConfig, scaleExistingImage, optimizeImage)
 import ImmortalQueue (ImmortalQueue(..))
 import Models
 import Models.PersistJSON (JSONValue(..))
-import Emails (EmailType, getEmailData)
+import Models.Fields (AvalaraTransactionCode(..))
+import Routes.AvalaraUtils (createAvalaraTransaction)
+import Server (avalaraRequest)
 
+import qualified Avalara
 import qualified Data.Text as T
 import qualified Database.Esqueleto as E
 import qualified Emails
@@ -58,10 +70,37 @@ data Task
         -- ^ Destination Directory
     | SendEmail EmailType
     | CleanDatabase
+    | Avalara AvalaraTask
     deriving (Show, Generic)
 
 instance FromJSON Task
 instance ToJSON Task
+
+data AvalaraTask
+    = RefundTransaction AvalaraTransactionCode Avalara.RefundType (Maybe Scientific)
+    -- ^ Refund the Transction with given RefundType and an optional
+    -- Percentage.
+    | CreateTransaction OrderId
+    -- ^ Create a Transaction for the Order, marking the Tax as included in
+    -- the order total.
+    | CommitTransaction Avalara.Transaction
+    -- ^ Commit an existing transaction.
+    | VoidTransaction Avalara.Transaction
+    -- ^ Void/delete a Transaction that was made but whose payment
+    -- processing failed.
+    deriving (Show, Generic)
+
+instance FromJSON AvalaraTask
+instance ToJSON AvalaraTask
+
+data AvalaraError
+    = RequestFailed (Avalara.WithError Avalara.Transaction)
+    | TransactionCreationFailed
+    | NoTransactionCode
+    | OrderNotFound
+    deriving (Show)
+
+instance Exception AvalaraError
 
 
 -- | Enqueue a Task to be run asynchronously. An optional run time can be
@@ -90,7 +129,7 @@ taskQueueConfig threadCount cfg@Config { getPool, getServerLogger } =
         , qFailure = handleError
         }
   where
-    runSql :: SqlPersistT IO a -> IO a
+    runSql :: MonadBaseControl IO m => SqlPersistT m a -> m a
     runSql = flip runSqlPool getPool
 
     -- Grab the next item from Job table, preferring the jobs that have
@@ -159,10 +198,20 @@ taskQueueConfig threadCount cfg@Config { getPool, getServerLogger } =
                 "Order #" <> showSqlKey oId <> " Placed Email"
         CleanDatabase ->
             "Clean Database"
+        Avalara (RefundTransaction code type_ amount) ->
+            "Refund Avalara Transaction ("
+                <> T.pack (show code) <> "; " <> T.pack (show type_) <> "; "
+                <> T.pack (show amount) <> ")"
+        Avalara (CreateTransaction orderId) ->
+            "Create Avalara Transaction for Order #" <> showSqlKey orderId
+        Avalara (CommitTransaction trans) ->
+            "Commit Avalara Transaction " <> T.pack (show $ Avalara.tCode trans)
+        Avalara (VoidTransaction trans) ->
+            "Void Avalara Transaction " <> T.pack (show $ Avalara.tCode trans)
 
     showSqlKey :: (ToBackendKey SqlBackend a) => Key a -> T.Text
     showSqlKey =
-        T.pack . show .fromSqlKey
+        T.pack . show . fromSqlKey
 
     -- Perform the action specified by the job, throwing an error if we
     -- cannot decode the Task.
@@ -183,6 +232,83 @@ taskQueueConfig threadCount cfg@Config { getPool, getServerLogger } =
                         Emails.send cfg emailData
             Success CleanDatabase ->
                 runSql cleanDatabase
+            Success (Avalara task) ->
+                performAvalaraTask task
+
+    -- Perform an Avalara-specific action.
+    --
+    -- TODO: Use an exception instead of `error`
+    performAvalaraTask :: AvalaraTask -> IO ()
+    performAvalaraTask = \case
+        RefundTransaction code refundType refundPercent -> do
+            date <- getCurrentTime
+            let request =
+                    RefundTransactionRequest
+                        { rtrTransctionCode = Nothing
+                        , rtrDate = date
+                        , rtrType = refundType
+                        , rtrPercentage = refundPercent
+                        , rtrLines = []
+                        , rtrReferenceCode = Nothing
+                        }
+                (AvalaraTransactionCode companyCode transctionCode) = code
+            runReaderT (avalaraRequest $ Avalara.refundTransaction companyCode transctionCode request) cfg >>= \case
+                Avalara.SuccessfulResponse _ ->
+                    return ()
+                e ->
+                    throwM $ RequestFailed e
+        CreateTransaction orderId -> flip runReaderT cfg $ do
+            result <- fmap listToMaybe . runSql $ E.select $ E.from
+                $ \(o `E.InnerJoin` sa `E.LeftOuterJoin` ba `E.InnerJoin` c) -> do
+                    E.on $ c E.^. CustomerId E.==. o E.^. OrderCustomerId
+                    E.on $ o E.^. OrderBillingAddressId E.==. ba E.?. AddressId
+                    E.on $ o E.^. OrderShippingAddressId E.==. sa E.^. AddressId
+                    E.where_ $ o E.^. OrderId E.==. E.val orderId
+                    return (o, sa, ba, c)
+            case result of
+                Nothing ->
+                    throwM OrderNotFound
+                Just (o, sa, ba, c) -> runSql $
+                    createAvalaraTransaction o sa ba c True >>= \case
+                        Nothing ->
+                            throwM TransactionCreationFailed
+                        Just transaction -> do
+                            companyCode <- lift $ asks getAvalaraCompanyCode
+                            update orderId
+                                [ OrderAvalaraTransactionCode =.
+                                    AvalaraTransactionCode companyCode
+                                        <$> Avalara.tCode transaction
+                                ]
+        CommitTransaction transaction -> do
+            let companyCode = getAvalaraCompanyCode cfg
+            transactionCode <- case Avalara.tCode transaction of
+                Nothing ->
+                    throwM NoTransactionCode
+                Just tCode ->
+                    return tCode
+            let request = Avalara.commitTransaction companyCode transactionCode
+                    $ CommitTransactionRequest { ctsrCommit = True }
+            runReaderT (avalaraRequest request) cfg >>= \case
+                Avalara.SuccessfulResponse _ ->
+                    return ()
+                e ->
+                    throwM $ RequestFailed e
+        VoidTransaction transaction -> do
+            let companyCode = getAvalaraCompanyCode cfg
+            transactionCode <- case Avalara.tCode transaction of
+                Nothing ->
+                    throwM NoTransactionCode
+                Just tCode ->
+                    return tCode
+            let request =
+                    Avalara.voidTransaction companyCode transactionCode
+                        $ VoidTransactionRequest { vtrCode = DocDeleted }
+            runReaderT (avalaraRequest request) cfg >>= \case
+                Avalara.SuccessfulResponse _ ->
+                    return ()
+                e ->
+                    throwM $ RequestFailed e
+
 
 -- | Remove Expired Carts & PasswordResets, Deactivate Expired Coupons.
 cleanDatabase :: SqlPersistT IO ()

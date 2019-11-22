@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Config
     ( Environment(..)
+    , AvalaraStatus(..)
     , Config(..)
     , defaultConfig
     , smtpPool
@@ -26,6 +27,12 @@ data Environment
     | Development
     deriving (Eq, Show, Read)
 
+data AvalaraStatus
+    = AvalaraDisabled
+    | AvalaraTesting
+    | AvalaraEnabled
+    deriving (Eq, Show, Read)
+
 data Config
     = Config
     { getPool :: ConnectionPool
@@ -39,6 +46,7 @@ data Config
     , getStoneEdgeAuth :: StoneEdgeCredentials
     , getCookieSecret :: PersistentServerKey
     , getCookieEntropySource :: RandomSource
+    , getAvalaraStatus :: AvalaraStatus
     , getAvalaraConfig :: Avalara.Config
     , getAvalaraCompanyId :: Avalara.CompanyId
     , getAvalaraCompanyCode :: Avalara.CompanyCode
@@ -62,6 +70,7 @@ defaultConfig =
         , getStoneEdgeAuth = undefined
         , getCookieSecret = undefined
         , getCookieEntropySource = undefined
+        , getAvalaraStatus = AvalaraDisabled
         , getAvalaraConfig = undefined
         , getAvalaraCompanyId = undefined
         , getAvalaraCompanyCode = undefined

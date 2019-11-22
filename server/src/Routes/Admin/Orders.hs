@@ -17,6 +17,8 @@ import Data.Aeson (ToJSON(..), FromJSON(..), (.=), (.:), object, withObject)
 import Data.List (sortOn)
 import Data.Maybe (fromMaybe)
 import Data.Monoid ((<>))
+import Data.Ratio ((%))
+import Data.Scientific (Scientific, fromRationalRepetend)
 import Data.Time
     ( UTCTime, LocalTime, getCurrentTimeZone, getCurrentTime, formatTime
     , defaultTimeLocale, utcToLocalTime
@@ -34,21 +36,26 @@ import Web.Stripe ((-&-), StripeError(..))
 import Web.Stripe.Refund (Amount(..), createRefund)
 
 import Auth (WrappedAuthToken, Cookied, withAdminCookie, validateAdminAndParameters)
+import Avalara (RefundTransactionRequest(..))
 import Models
     ( OrderId, Order(..), OrderProduct(..), OrderLineItem(..), Customer(customerEmail)
     , Address(..), EntityField(..)
     )
 import Models.Fields
     ( OrderStatus, Region, Cents(..), LineItemType(..), StripeChargeId(..)
-    , AdminOrderComment(..), creditLineItemTypes, formatCents
+    , AdminOrderComment(..), AvalaraTransactionCode(..), creditLineItemTypes
+    , formatCents
     )
+import Routes.AvalaraUtils (renderAvalaraError)
 import Routes.CommonData
     ( OrderDetails(..), toCheckoutOrder, getCheckoutProducts, toAddressData
     )
 import Routes.Utils (extractRowCount, buildWhereQuery)
-import Server (App, AppSQL, runDB, serverError, stripeRequest)
+import Server (App, AppSQL, runDB, serverError, stripeRequest, avalaraRequest)
 import Validation (Validation(..))
+import Workers (Task(Avalara), AvalaraTask(RefundTransaction), enqueueTask)
 
+import qualified Avalara
 import qualified Data.List as L
 import qualified Data.Text as T
 import qualified Database.Esqueleto as E
@@ -346,6 +353,7 @@ data OrderRefundError
     = OrderNotFound
     | NoStripeCharge
     | StripeRefundError StripeError
+    | AvalaraError Avalara.ErrorInfo
     deriving (Show)
 
 instance Exception OrderRefundError
@@ -366,6 +374,8 @@ handleOrderRefundErrors =
             , ":"
             , errorMsg stripeError
             ]
+        AvalaraError errInfo ->
+            renderAvalaraError errInfo
 
 
 orderRefundRoute :: WrappedAuthToken -> OrderRefundParameters -> App (Cookied OrderId)
@@ -380,9 +390,10 @@ orderRefundRoute = validateAdminAndParameters $ \_ parameters -> do
         case refundResult of
             Left stripeError ->
                 throwM $ StripeRefundError stripeError
-            Right _ ->
-                runDB (addRefundLineItem orderId refundAmount)
-                    >> return orderId
+            Right _ -> runDB $ do
+                addRefundLineItem orderId refundAmount
+                makeAvalaraRefund (Entity orderId order) refundAmount
+                return orderId
   where
     maybeM :: (MonadThrow m, Exception e) => Maybe a -> e -> (a -> m b) -> m b
     maybeM val exception justAction = maybe (throwM exception) justAction val
@@ -413,6 +424,52 @@ orderRefundRoute = validateAdminAndParameters $ \_ parameters -> do
     getRefundDateDescription :: MonadIO m => m T.Text
     getRefundDateDescription =
         T.pack . formatTime defaultTimeLocale "%m/%d/%y" <$> getCurrentLocalTime
+    -- | Make a partial or full Avalara Refund for the Order.
+    makeAvalaraRefund :: Entity Order -> Cents -> AppSQL ()
+    makeAvalaraRefund (Entity orderId order) refundAmount =
+        case orderAvalaraTransactionCode order of
+            Nothing ->
+                return ()
+            Just trans@(AvalaraTransactionCode companyCode transactionCode) -> do
+                orderTotal <- getOrderTotal orderId
+                refunds <- sum . map (orderLineItemAmount . entityVal)
+                    <$> selectList
+                        [ OrderLineItemOrderId ==. orderId
+                        , OrderLineItemType ==. RefundLine
+                        ]
+                        []
+                date <- liftIO getCurrentTime
+                let originalTotal =
+                        orderTotal + fromIntegral (fromCents refunds)
+                    (refundType, refundPercent) =
+                        if orderTotal == 0 then
+                            (Avalara.FullRefund, Nothing)
+                        else
+                            ( Avalara.RefundPercentage
+                            , Just $ makeScientific $
+                                toInteger (fromCents refundAmount) % originalTotal
+                            )
+                    request =
+                        RefundTransactionRequest
+                            { rtrTransctionCode = Nothing
+                            , rtrDate = date
+                            , rtrType = refundType
+                            , rtrPercentage = refundPercent
+                            , rtrLines = []
+                            , rtrReferenceCode = Nothing
+                            }
+                lift (avalaraRequest $ Avalara.refundTransaction companyCode transactionCode request)
+                    >>= \case
+                        Avalara.SuccessfulResponse _ ->
+                            return ()
+                        _ ->
+                            enqueueTask Nothing . Avalara
+                                $ RefundTransaction trans refundType refundPercent
+    -- | Turn a Rational Percentage into a Decimal, shifting it from
+    -- between 0 and 1 to 0 and 100.
+    makeScientific :: Rational -> Scientific
+    makeScientific num =
+        (* 100) $ either fst fst $ fromRationalRepetend (Just 4) num
 
 
 

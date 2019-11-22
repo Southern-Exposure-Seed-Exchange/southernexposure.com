@@ -316,7 +316,7 @@ lineItemToTaxCode = \case
     TaxLine ->
         Nothing
     ShippingLine ->
-        Just Avalara.shippingAndHandlingTaxCode
+        Just Avalara.shippingTaxCode
     PriorityShippingLine ->
         Just Avalara.shippingAndHandlingTaxCode
     SurchargeLine ->

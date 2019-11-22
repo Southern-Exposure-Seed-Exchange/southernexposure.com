@@ -75,6 +75,7 @@ dependencies:
     - iso3166-country-codes
     - markdown
     - mime-mail
+    - monad-control
     - mtl
     - pandoc
     - persistent

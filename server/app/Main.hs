@@ -68,6 +68,7 @@ main = do
         <$> lookupEnv "COOKIE_SECRET"
     entropySource <- sessionEntropy
     stoneEdgeAuth <- makeStoneEdgeAuth
+    avalaraStatus <- lookupSetting "AVATAX_STATUS" AvalaraTesting
     avalaraConfig <- makeAvalaraConfig
     avalaraCompanyId <- Avalara.CompanyId <$> lookupSetting "AVATAX_COMPANY_ID" 0
     avalaraCompanyCode <- Avalara.CompanyCode . T.pack <$> requireSetting "AVATAX_COMPANY_CODE"
@@ -88,6 +89,7 @@ main = do
             , getStoneEdgeAuth = stoneEdgeAuth
             , getCookieSecret = cookieSecret
             , getCookieEntropySource = entropySource
+            , getAvalaraStatus = avalaraStatus
             , getAvalaraConfig = avalaraConfig
             , getAvalaraCompanyId = avalaraCompanyId
             , getAvalaraCompanyCode = avalaraCompanyCode

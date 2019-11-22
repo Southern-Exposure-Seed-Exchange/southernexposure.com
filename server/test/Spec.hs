@@ -2,7 +2,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeApplications #-}
 -- TODO: Split into ModuleNameSpec.hs files & Gen.hs file.
-import Data.Aeson (Result(Success), FromJSON, fromJSON, toJSON, eitherDecode)
+import Data.Aeson (Result(Success), FromJSON, fromJSON, ToJSON(..), eitherDecode)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LBS
 import Data.Monoid ((<>))
@@ -56,10 +56,6 @@ modelsFields =
         [ testProperty "LotSize Aeson Instances" $ testJSON genLotSize
         , testProperty "CouponType Aeson Instances" $ testJSON genCouponType
         ]
-  where
-      testJSON gen = property $ do
-          val <- forAll gen
-          Success val === fromJSON (toJSON val)
 
 modelsUtils :: TestTree
 modelsUtils =
@@ -637,6 +633,7 @@ avalara :: TestTree
 avalara = testGroup "Avalara Module"
     [ errorTests
     , pingTests
+    , typeTests
     ]
   where
     errorTests :: TestTree
@@ -650,12 +647,10 @@ avalara = testGroup "Avalara Module"
         testJsonParsing AF.errorInfoJson errorInfoFixture
     withErrorParsing :: Assertion
     withErrorParsing =
-        testJsonParsing AF.errorInfoJson $
-            ErrorResponse @PingResponse errorInfoFixture
+        testJsonParsing AF.errorInfoJson errorInfoFixture
     withErrorParsingSuccess :: Assertion
     withErrorParsingSuccess =
-        testJsonParsing AF.unauthenticatedPingResponse $
-            SuccessfulResponse unauthorizedPingFixture
+        testJsonParsing AF.unauthenticatedPingResponse unauthorizedPingFixture
     errorInfoFixture :: ErrorInfo
     errorInfoFixture =
         ErrorInfo
@@ -705,6 +700,16 @@ avalara = testGroup "Avalara Module"
                 , prAccountId = Just 123456789
                 , prCrmId = Just "1111"
                 }
+    typeTests :: TestTree
+    typeTests =
+        testGroup "Types"
+            [ testProperty "RefundType Aeson Instances"
+                $ testJSON (Gen.enumBounded @Gen @RefundType)
+            , testProperty "TransactionStatus Aeson Instances"
+                $ testJSON (Gen.enumBounded @Gen @TransactionStatus)
+            , testProperty "Transaction Aeson Instances"
+                $ testJSON genTransaction
+            ]
 
 
 
@@ -721,6 +726,11 @@ testJsonParsing :: (FromJSON a, Eq a, Show a) => LBS.ByteString -> a -> Assertio
 testJsonParsing json expected =
     eitherDecode json @?= Right expected
 
+-- | Test that the ToJSON & FromJSON instances are mirrors of each other.
+testJSON :: (FromJSON a, ToJSON a, Show a, Eq a) => Gen a -> Property
+testJSON gen = property $ do
+    val <- forAll gen
+    Success val === fromJSON (toJSON val)
 
 
 -- GENERATORS
@@ -781,6 +791,26 @@ genCategorySale saleType =
         <*> genUTCTime
         <*> Gen.list (Range.linear 1 10) genEntityKey
 
+genTransaction :: Gen Transaction
+genTransaction =
+    Transaction
+        <$> Gen.maybe (Gen.integral $ Range.linear 1 1000)
+        <*> Gen.maybe (TransactionCode <$> genText)
+        <*> Gen.maybe (fmap CompanyId . Gen.integral $ Range.linear 1 1000)
+        <*> Gen.maybe genDay
+        <*> Gen.maybe Gen.enumBounded
+        <*> Gen.maybe Gen.enumBounded
+        <*> Gen.maybe (CustomerCode <$> genText)
+        <*> Gen.maybe Gen.bool
+        <*> Gen.maybe (return 3.14)
+        <*> Gen.maybe (return 4.20)
+        <*> Gen.maybe (return 9000.01)
+        <*> Gen.maybe (return 2.71)
+        <*> Gen.maybe (return 6.66)
+        <*> Gen.maybe Gen.bool
+        <*> Gen.maybe genText
+        <*> Gen.maybe genText
+
 
 genEntity :: (ToBackendKey SqlBackend a) => Gen a -> Gen (Entity a)
 genEntity genModel =
@@ -826,7 +856,8 @@ genUTCTime =
         <$> genDay
         <*> genTime
   where
-    genDay :: Gen Day
-    genDay = ModifiedJulianDay <$> Gen.integral (Range.linear 0 999999)
     genTime :: Gen DiffTime
     genTime = secondsToDiffTime <$> Gen.integral (Range.linear 0 86400)
+
+genDay :: Gen Day
+genDay = ModifiedJulianDay <$> Gen.integral (Range.linear 0 999999)

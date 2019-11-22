@@ -2,6 +2,7 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeOperators #-}
 module Routes.Checkout
     ( CheckoutAPI
@@ -10,20 +11,21 @@ module Routes.Checkout
 
 import Control.Applicative ((<|>))
 import Control.Arrow (first)
-import Control.Exception.Safe (MonadThrow, MonadCatch, throwM, Exception, try)
+import Control.Exception.Safe (MonadThrow, MonadCatch, Exception, throwM, try)
 import Control.Monad ((>=>), (<=<), when, unless, void)
-import Control.Monad.Reader (lift, liftIO)
+import Control.Monad.Reader (asks, lift, liftIO)
 import Data.Aeson ((.:), (.:?), (.=), FromJSON(..), ToJSON(..), withObject, object)
 import Data.Foldable (asum)
 import Data.Int (Int64)
 import Data.List (partition, find)
-import Data.Maybe (listToMaybe, isJust)
+import Data.Maybe (listToMaybe, isJust, isNothing, fromMaybe)
 import Data.Monoid ((<>))
 import Data.Time.Clock (getCurrentTime, UTCTime)
 import Data.Typeable (Typeable)
 import Database.Persist
-    ( (==.), (=.), (-=.), Entity(..), insert, insert_, insertEntity, get, getBy
-    , selectList, update, updateWhere, delete, deleteWhere, count
+    ( (==.), (=.), (-=.), (+=.), Entity(..), insert, insert_, insertEntity, get
+    , getBy, selectList, update, updateWhere, delete, deleteWhere, count
+    , getEntity, selectFirst
     )
 import Servant ((:<|>)(..), (:>), AuthProtect, JSON, Post, ReqBody, err404)
 import Web.Stripe ((-&-))
@@ -32,6 +34,10 @@ import Web.Stripe.Charge (createCharge)
 import Web.Stripe.Customer (Email(..), createCustomer, updateCustomer)
 
 import Auth
+import Avalara
+    ( CommitTransactionRequest(..), VoidTransactionRequest(..), VoidReason(..)
+    )
+import Config
 import Models
 import Models.Fields
 import Server
@@ -41,10 +47,12 @@ import Routes.CommonData
     , fromAddressData, ShippingCharge(..), VariantData(..), getVariantPrice
     , OrderDetails(..), toCheckoutOrder, getCheckoutProducts, CheckoutProduct
     )
+import Routes.AvalaraUtils (createAvalaraTransaction, createAvalaraCustomer)
 import Routes.Utils (hashPassword, generateUniqueToken)
 import Validation (Validation(..))
-import Workers (Task(SendEmail), enqueueTask)
+import Workers (Task(SendEmail, Avalara), AvalaraTask(..), enqueueTask)
 
+import qualified Avalara
 import qualified Data.Text as T
 import qualified Database.Esqueleto as E
 import qualified Emails
@@ -145,8 +153,7 @@ withCheckoutDetailsErrors =
 
 data CustomerDetailsParameters =
     CustomerDetailsParameters
-        { cdpShippingCountry :: Maybe Country
-        , cdpShippingRegion :: Maybe Region
+        { cdpShipping :: Maybe CustomerAddress
         , cdpExistingAddress :: Maybe AddressId
         , cdpCouponCode :: Maybe T.Text
         , cdpPriorityShipping :: Bool
@@ -155,8 +162,7 @@ data CustomerDetailsParameters =
 instance FromJSON CustomerDetailsParameters where
     parseJSON = withObject "CustomerDetailsParameters" $ \v ->
         CustomerDetailsParameters
-            <$> v .:? "country"
-            <*> v .:? "region"
+            <$> v .:? "address"
             <*> v .:? "addressId"
             <*> v .:? "couponCode"
             <*> v .:  "priorityShipping"
@@ -196,13 +202,12 @@ customerDetailsRoute token parameters = withValidatedCookie token $ \(Entity cus
         let (shippingAddresses, billingAddresses) =
                 partition (\a -> addressType (entityVal a) == Shipping)
                     customerAddresses
-            (maybeCountry, maybeRegion) =
-                getShippingAddress parameters shippingAddresses
+        maybeShipping <- getShippingAddress parameters shippingAddresses
         maybeCoupon <- mapException DetailsCouponError $ sequence
             $ getCoupon currentTime (Just customerId) <$> cdpCouponCode parameters
         items <- getCartItems $ \c ->
             c E.^. CartCustomerId E.==. E.just (E.val customerId)
-        charges <- detailsCharges maybeCountry maybeRegion items maybeCoupon priorityShipping
+        charges <- detailsCharges maybeShipping items maybeCoupon priorityShipping
         return CheckoutDetailsData
             { cddShippingAddresses = map toAddressData shippingAddresses
             , cddBillingAddresses = map toAddressData billingAddresses
@@ -211,30 +216,33 @@ customerDetailsRoute token parameters = withValidatedCookie token $ \(Entity cus
             , cddStoreCredit = customerStoreCredit customer
             }
     where
-        getShippingAddress :: CustomerDetailsParameters -> [Entity Address] -> (Maybe Country, Maybe Region)
+        getShippingAddress :: CustomerDetailsParameters -> [Entity Address] -> AppSQL (Maybe AddressData)
         getShippingAddress ps addrs =
             let
                 maybeFromAddress =
-                    cdpExistingAddress ps
-                        >>= (\a -> find (\(Entity addrId _) -> addrId == a) addrs)
+                    fmap toAddressData
+                    $ (\a -> find (\(Entity addrId _) -> addrId == a) addrs)
+                    =<< cdpExistingAddress ps
                 maybeFromDefault =
-                    find (addressIsDefault . entityVal) addrs
-                apply addrSelector paramSelector =
-                    asum
-                        [ addrSelector . entityVal <$> maybeFromAddress
-                        , paramSelector ps
-                        , addrSelector . entityVal <$> maybeFromDefault
-                        ]
-            in
-                ( apply addressCountry cdpShippingCountry
-                , apply addressState cdpShippingRegion
-                )
+                    toAddressData <$> find (addressIsDefault . entityVal) addrs
+            in do
+            maybeFromParams <- case cdpShipping ps of
+                Nothing ->
+                    return Nothing
+                Just c ->
+                    getCustomerAddressData c
+            return $ asum [maybeFromAddress, maybeFromParams, maybeFromDefault]
+        getCustomerAddressData :: CustomerAddress -> AppSQL (Maybe AddressData)
+        getCustomerAddressData = \case
+            NewAddress addr ->
+                return $ Just addr
+            ExistingAddress addrId _ ->
+                fmap toAddressData <$> getEntity addrId
 
 
 data AnonymousDetailsParameters =
     AnonymousDetailsParameters
-        { adpShippingCountry :: Maybe Country
-        , adpShippingRegion :: Maybe Region
+        { adpShipping :: Maybe AddressData
         , adpCouponCode :: Maybe T.Text
         , adpPriorityShipping :: Bool
         , adpCartToken :: T.Text
@@ -243,8 +251,7 @@ data AnonymousDetailsParameters =
 instance FromJSON AnonymousDetailsParameters where
     parseJSON = withObject "AnonymousDetailsParameters" $ \v ->
         AnonymousDetailsParameters
-            <$> v .:? "country"
-            <*> v .:? "region"
+            <$> v .:? "address"
             <*> v .:? "couponCode"
             <*> v .:  "priorityShipping"
             <*> v .:  "sessionToken"
@@ -256,10 +263,8 @@ type AnonymousDetailsRoute =
 anonymousDetailsRoute :: AnonymousDetailsParameters -> App CheckoutDetailsData
 anonymousDetailsRoute parameters =
     let
-        maybeCountry =
-            adpShippingCountry parameters
-        maybeRegion =
-            adpShippingRegion parameters
+        maybeAddress =
+            adpShipping parameters
         priorityShipping =
             adpPriorityShipping parameters
     in
@@ -269,7 +274,7 @@ anonymousDetailsRoute parameters =
                 $ getCoupon currentTime Nothing <$> adpCouponCode parameters
             items <- getCartItems $ \c ->
                 c E.^. CartSessionToken E.==. E.just (E.val $ adpCartToken parameters)
-            charges <- detailsCharges maybeCountry maybeRegion items maybeCoupon priorityShipping
+            charges <- detailsCharges maybeAddress items maybeCoupon priorityShipping
             return CheckoutDetailsData
                 { cddShippingAddresses = []
                 , cddBillingAddresses = []
@@ -315,9 +320,9 @@ getCoupon currentTime maybeCustomerId couponCode = do
 
 -- | Get the CartCharges for the details routes & check the coupon minimum
 -- & priority shipping availability. Throws 'CheckoutDetailsError'.
-detailsCharges :: Maybe Country -> Maybe Region -> [CartItemData] -> Maybe (Entity Coupon) -> Bool -> AppSQL CartCharges
-detailsCharges maybeCountry maybeRegion items maybeCoupon priorityShipping = do
-    charges <- getCharges maybeCountry maybeRegion items maybeCoupon priorityShipping
+detailsCharges :: Maybe AddressData -> [CartItemData] -> Maybe (Entity Coupon) -> Bool -> AppSQL CartCharges
+detailsCharges maybeShipping items maybeCoupon priorityShipping = do
+    charges <- getCharges maybeShipping items maybeCoupon priorityShipping True
     mapException DetailsCouponError
         $ checkCouponMeetsMinimum maybeCoupon charges
     mapException DetailsPriorityError
@@ -363,6 +368,7 @@ data PlaceOrderError
     | StripeError Stripe.StripeError
     | CardChargeError
     | PlaceOrderCouponError CouponError
+    | AvalaraNoTransactionCode
     deriving (Show, Typeable)
 
 instance Exception PlaceOrderError
@@ -405,6 +411,10 @@ withPlaceOrderErrors shippingAddress =
                     <> "contact us for help."
             PlaceOrderCouponError couponError ->
                 handleCouponErrors couponError
+            AvalaraNoTransactionCode ->
+                V.singleError
+                    $ "An error occured while calculating the sales tax due. Please try again or "
+                    <> "contact us for help. (Error ANTC: No Transction Code Returned)"
 
 
 
@@ -508,23 +518,26 @@ customerPlaceOrderRoute = validateCookieAndParameters $ \ce@(Entity customerId c
         maybeStripeToken = cpopStripeToken parameters
     currentTime <- liftIO getCurrentTime
     orderId <- withPlaceOrderErrors shippingParameter . runDB $ do
-        (maybeBillingAddress, orderId, orderTotal, cartId, appliedCredit) <-
+        (maybeBillingAddress, shippingAddress, order@(Entity orderId _), preTaxTotal, cartId, appliedCredit) <-
             createAddressesAndOrder ce shippingParameter (cpopBillingAddress parameters)
                 (cpopStoreCredit parameters) (cpopPriorityShipping parameters)
                 (cpopCouponCode parameters) (cpopComment parameters) currentTime
-        when (orderTotal > 0) $ case (maybeBillingAddress, maybeStripeToken) of
-            (Just billingAddress, Just stripeToken) -> do
-                stripeCustomerId <- getOrCreateStripeCustomer ce stripeToken
-                setCustomerCard customer stripeCustomerId billingAddress stripeToken
-                chargeCustomer stripeCustomerId orderId orderTotal
-            (Nothing, _) ->
-                throwM BillingAddressRequired
-            (_, Nothing) ->
-                throwM StripeTokenRequired
         when (appliedCredit > customerStoreCredit customer) $
             throwM NotEnoughStoreCredit
         when (appliedCredit > 0) $
             update customerId [CustomerStoreCredit -=. appliedCredit]
+        let remainingCredit = maybe 0 (\c -> c - appliedCredit) $ cpopStoreCredit parameters
+        when (preTaxTotal > 0 || preTaxTotal + appliedCredit > 0 ) $
+            withAvalaraTransaction order preTaxTotal remainingCredit ce shippingAddress maybeBillingAddress $ \orderTotal ->
+                when (orderTotal >= 50) $ case (maybeBillingAddress, maybeStripeToken) of
+                    (Just (Entity _ billingAddress), Just stripeToken) -> do
+                        stripeCustomerId <- getOrCreateStripeCustomer ce stripeToken
+                        setCustomerCard customer stripeCustomerId billingAddress stripeToken
+                        chargeCustomer stripeCustomerId orderId orderTotal
+                    (Nothing, _) ->
+                        throwM BillingAddressRequired
+                    (_, Nothing) ->
+                        throwM StripeTokenRequired
         deleteCart cartId
         return orderId
     runDB $ enqueueTask Nothing $ SendEmail $ Emails.OrderPlaced orderId
@@ -549,16 +562,16 @@ customerPlaceOrderRoute = validateCookieAndParameters $ \ce@(Entity customerId c
           createAddressesAndOrder
             :: Entity Customer -> CustomerAddress -> Maybe CustomerAddress
             -> Maybe Cents -> Bool -> Maybe T.Text -> T.Text -> UTCTime
-            -> AppSQL (Maybe Address, OrderId, Cents, CartId, Cents)
+            -> AppSQL (Maybe (Entity Address), Entity Address, Entity Order, Cents, CartId, Cents)
           createAddressesAndOrder customer@(Entity customerId _) shippingParam billingParam maybeStoreCredit priorityShipping maybeCouponCode comment currentTime = do
             shippingAddress <- getOrInsertAddress Shipping customerId shippingParam
             billingAddress <- sequence $ getOrInsertAddress Billing customerId <$> billingParam
             (Entity cartId _) <- getBy (UniqueCustomerCart $ Just customerId)
                 >>= maybe (throwM CartNotFound) return
-            (orderId, orderTotal, appliedCredit) <- createOrder
+            (order, orderTotal, appliedCredit) <- createOrder
                 customer cartId shippingAddress (entityKey <$> billingAddress)
                 maybeStoreCredit priorityShipping maybeCouponCode comment currentTime
-            return (entityVal <$> billingAddress, orderId, orderTotal, cartId, appliedCredit)
+            return (billingAddress, shippingAddress, order, orderTotal, cartId, appliedCredit)
           getOrInsertAddress :: AddressType -> CustomerId -> CustomerAddress -> AppSQL (Entity Address)
           getOrInsertAddress addrType customerId = \case
             ExistingAddress addrId makeDefault -> do
@@ -678,6 +691,9 @@ anonymousPlaceOrderRoute = validate >=> \parameters -> do
     currentTime <- liftIO getCurrentTime
     let shippingParameter = NewAddress $ apopShippingAddress parameters
     (orderId, orderData) <- withPlaceOrderErrors shippingParameter . runDB $ do
+        avalaraCustomerCode <- createAvalaraCustomer (apopEmail parameters)
+            $ fromMaybe (apopShippingAddress parameters)
+            $ apopBillingAddress parameters
         let customer = Customer
                 { customerEmail = apopEmail parameters
                 , customerStoreCredit = Cents 0
@@ -685,7 +701,7 @@ anonymousPlaceOrderRoute = validate >=> \parameters -> do
                 , customerEncryptedPassword = encryptedPass
                 , customerAuthToken = authToken
                 , customerStripeId = Nothing
-                , customerAvalaraCode = Nothing
+                , customerAvalaraCode = avalaraCustomerCode
                 , customerIsAdmin = False
                 }
         customerId <- insert customer
@@ -698,22 +714,28 @@ anonymousPlaceOrderRoute = validate >=> \parameters -> do
                 <$> apopBillingAddress parameters
         shippingId <- insert shippingAddress
         billingId <- sequence $ insert <$> maybeBillingAddress
-        (orderId, orderTotal, _) <- createOrder (Entity customerId customer)
-            cartId (Entity shippingId shippingAddress) billingId Nothing
+        let shippingEntity = Entity shippingId shippingAddress
+            billingEntity = Entity <$> billingId <*> maybeBillingAddress
+            customerEntity = Entity customerId customer
+        (order@(Entity orderId _), preTaxTotal, _) <- createOrder
+            (Entity customerId customer) cartId shippingEntity billingId Nothing
             (apopPriorityShipping parameters) (apopCouponCode parameters)
             (apopComment parameters) currentTime
-        when (orderTotal > 0) $ case (maybeBillingAddress, apopStripeToken parameters) of
-            (Just billingAddress, Just stripeToken) -> do
-                stripeCustomerId <- createStripeCustomer (apopEmail parameters)
-                    stripeToken
-                update customerId [CustomerStripeId =. Just stripeCustomerId]
-                stripeCardId <- getFirstStripeCard stripeCustomerId
-                updateCardAddress stripeCustomerId stripeCardId billingAddress
-                chargeCustomer stripeCustomerId orderId orderTotal
-            (Nothing, _) ->
-                throwM BillingAddressRequired
-            (_, Nothing) ->
-                throwM StripeTokenRequired
+        when (preTaxTotal > 0)
+            $ withAvalaraTransaction order preTaxTotal 0 customerEntity shippingEntity billingEntity
+            $ \orderTotal ->
+                case (maybeBillingAddress, apopStripeToken parameters) of
+                    (Just billingAddress, Just stripeToken) -> do
+                        stripeCustomerId <- createStripeCustomer (apopEmail parameters)
+                            stripeToken
+                        update customerId [CustomerStripeId =. Just stripeCustomerId]
+                        stripeCardId <- getFirstStripeCard stripeCustomerId
+                        updateCardAddress stripeCustomerId stripeCardId billingAddress
+                        chargeCustomer stripeCustomerId orderId orderTotal
+                    (Nothing, _) ->
+                        throwM BillingAddressRequired
+                    (_, Nothing) ->
+                        throwM StripeTokenRequired
         deleteCart cartId
         orderLines <- selectList [OrderLineItemOrderId ==. orderId] []
         products <- getCheckoutProducts orderId
@@ -748,6 +770,138 @@ updateCardAddress stripeCustomerId stripeCardId billingAddress =
             -&- Stripe.AddressLine2 (addressAddressTwo billingAddress)
             -&- Stripe.AddressCity (addressCity billingAddress)
             -&- Stripe.AddressState (regionName $ addressState billingAddress)
+
+
+-- | Commit an uncommited Avalara Sales Tax Transaction. Throws
+-- a 'PlaceOrderError' on failure.
+commitAvalaraTransaction :: Avalara.Transaction -> AppSQL (Maybe ())
+commitAvalaraTransaction transaction = do
+    companyCode <- lift $ asks getAvalaraCompanyCode
+    transactionCode <- case Avalara.tCode transaction of
+        Just tCode ->
+            return tCode
+        Nothing ->
+            throwM AvalaraNoTransactionCode
+    let request =
+            Avalara.commitTransaction companyCode transactionCode
+                $ CommitTransactionRequest { ctsrCommit = True }
+    lift (avalaraRequest request) >>= \case
+        Avalara.SuccessfulResponse _ ->
+            return $ Just ()
+        _ ->
+            return Nothing
+
+
+-- | Void the Transaction by marking it as 'DocDeleted'. Throws
+-- a 'PlaceOrderError' on failure.
+voidAvalaraTransaction :: Avalara.Transaction -> AppSQL (Maybe ())
+voidAvalaraTransaction transction = do
+    companyCode <- lift $ asks getAvalaraCompanyCode
+    transactionCode <- case Avalara.tCode transction of
+        Just tCode ->
+            return tCode
+        Nothing ->
+            throwM AvalaraNoTransactionCode
+    let request =
+            Avalara.voidTransaction companyCode transactionCode
+                $ VoidTransactionRequest { vtrCode = DocDeleted }
+    lift (avalaraRequest request) >>= \case
+        Avalara.SuccessfulResponse _ ->
+            return $ Just ()
+        _ ->
+            return Nothing
+
+
+-- | Create an uncommitted Transaction for the Order, then run an action
+-- that requires the OrderTotal.
+--
+-- If the action completes successfully, commit the Transction, set the
+-- Order's TransactionCode and add a TaxLine for the Order.
+--
+-- If the action throws a 'PlaceOrderError', void the created Transction
+-- and re-throw the error.
+--
+-- Note that the Avalara API is only hit when the Config's 'AvalaraStatus'
+-- is set to 'AvalaraEnabled' or 'AvalaraTesting'. The TaxLine is only
+-- created if the 'AvalaraStatus' is 'AvalaraEnabled'.
+withAvalaraTransaction
+    :: Entity Order
+    -> Cents
+    -> Cents
+    -> Entity Customer
+    -> Entity Address
+    -> Maybe (Entity Address)
+    -> (Cents -> AppSQL ())
+    -> AppSQL ()
+withAvalaraTransaction order@(Entity orderId _) preTaxTotal storeCredit c@(Entity customerId customer) shipping billing innerAction =
+    lift (asks getAvalaraStatus) >>= \case
+        AvalaraDisabled ->
+            innerAction preTaxTotal
+        status ->
+            createAvalaraTransaction order shipping billing c False >>= \case
+                Nothing ->
+                    try (innerAction preTaxTotal) >>= \case
+                        Right () ->
+                            enqueueTask Nothing . Avalara $ CreateTransaction orderId
+                        Left (err :: PlaceOrderError) ->
+                            throwM err
+                Just taxTransaction -> do
+                    let taxTotal = maybe 0 fromDollars (Avalara.tTotalTax taxTransaction)
+                        appliedCredit = min storeCredit taxTotal
+                        orderTotal = taxTotal + preTaxTotal - appliedCredit
+                    when (appliedCredit > customerStoreCredit customer) $
+                        throwM NotEnoughStoreCredit
+                    when (appliedCredit > 0) $
+                            update customerId [CustomerStoreCredit -=. appliedCredit]
+                    try (innerAction orderTotal) >>= \case
+                        Right () -> do
+                            commitResult <- commitAvalaraTransaction taxTransaction
+                            when (isNothing commitResult) $
+                                enqueueTask Nothing . Avalara $ CommitTransaction taxTransaction
+                            companyCode <- lift $ asks getAvalaraCompanyCode
+                            let transactionCode = AvalaraTransactionCode companyCode
+                                    <$> Avalara.tCode taxTransaction
+                            update orderId [OrderAvalaraTransactionCode =. transactionCode]
+                            when (status == AvalaraEnabled) $
+                                insert_ OrderLineItem
+                                    { orderLineItemOrderId = orderId
+                                    , orderLineItemType = TaxLine
+                                    , orderLineItemAmount = taxTotal
+                                    , orderLineItemDescription = "Sales Tax"
+                                    }
+                            when (status == AvalaraTesting) $
+                                voidOrEnqueueTransaction taxTransaction
+                            when (appliedCredit > 0) $
+                                updateStoreCredit appliedCredit
+                        Left (err :: PlaceOrderError) -> do
+                            voidOrEnqueueTransaction taxTransaction
+                            throwM err
+  where
+    -- Void a transaction, enqueueing a VoidTransaction task if the request
+    -- fails.
+    voidOrEnqueueTransaction :: Avalara.Transaction -> AppSQL ()
+    voidOrEnqueueTransaction taxTransaction = do
+        voidResult <- voidAvalaraTransaction taxTransaction
+        when (isNothing voidResult) $
+            enqueueTask Nothing . Avalara
+                $ VoidTransaction taxTransaction
+    -- Add the amount to an existing StoreCreditLine or create one if one
+    -- doesn't exist.
+    updateStoreCredit :: Cents -> AppSQL ()
+    updateStoreCredit appliedCredit =
+        selectFirst [OrderLineItemOrderId ==. orderId, OrderLineItemType ==. StoreCreditLine] []
+            >>= \case
+            Nothing ->
+                insert_ OrderLineItem
+                    { orderLineItemOrderId = orderId
+                    , orderLineItemType = StoreCreditLine
+                    , orderLineItemAmount = appliedCredit
+                    , orderLineItemDescription = "Store Credit"
+                    }
+            Just (Entity creditId _) ->
+                update creditId
+                    [ OrderLineItemAmount +=. appliedCredit ]
+
 
 
 -- | Charge a Stripe Customer for an Order or throw a validation error.
@@ -813,38 +967,39 @@ createOrder
     -- ^ Order Comment
     -> UTCTime
     -- ^ Current Time
-    -> AppSQL (OrderId, Cents, Cents)
+    -> AppSQL (Entity Order, Cents, Cents)
 createOrder (Entity customerId customer) cartId shippingEntity billingId maybeStoreCredit priorityShipping maybeCouponCode comment currentTime = do
-    let (Entity shippingId shippingAddress) = shippingEntity
     items <- getCartItems $ \c -> c E.^. CartId E.==. E.val cartId
-    orderId <- insert Order
-        { orderCustomerId = customerId
-        , orderStatus = OrderReceived
-        , orderBillingAddressId = billingId
-        , orderShippingAddressId = shippingId
-        , orderCustomerComment = comment
-        , orderAdminComments = []
-        , orderAvalaraTransactionCode = Nothing
-        , orderStripeChargeId = Nothing
-        , orderStripeLastFour = Nothing
-        , orderStripeIssuer = Nothing
-        , orderCouponId = Nothing
-        , orderCreatedAt = currentTime
-        }
+    let order = Order
+            { orderCustomerId = customerId
+            , orderStatus = OrderReceived
+            , orderBillingAddressId = billingId
+            , orderShippingAddressId = entityKey shippingEntity
+            , orderCustomerComment = comment
+            , orderAdminComments = []
+            , orderAvalaraTransactionCode = Nothing
+            , orderStripeChargeId = Nothing
+            , orderStripeLastFour = Nothing
+            , orderStripeIssuer = Nothing
+            , orderCouponId = Nothing
+            , orderCreatedAt = currentTime
+            }
+    orderId <- insert order
     (lineTotal, maybeCouponId) <- createLineItems currentTime customerId
-        shippingAddress items orderId priorityShipping maybeCouponCode
+        shippingEntity items orderId priorityShipping maybeCouponCode
     when (isJust maybeCouponId) $
         update orderId [OrderCouponId =. maybeCouponId]
     productTotals <- createProducts items orderId
     let totalCharges = lineTotal + fromIntegral (fromCents $ sum productTotals)
+        orderEntity = Entity orderId order
     if totalCharges < 0 then
         -- TODO: Throw an error? This means credits > charges which shouldn't happen...
-        return (orderId, 0, 0)
+        return (orderEntity, 0, 0)
     else
         let totalInCents = Cents $ fromIntegral totalCharges in
         case maybeStoreCredit of
             Nothing ->
-                return (orderId, totalInCents, 0)
+                return (orderEntity, totalInCents, 0)
             Just c ->
                 if c > 0 && totalInCents > 0 then do
                     let storeCredit = min (customerStoreCredit customer) $ min totalInCents c
@@ -854,9 +1009,9 @@ createOrder (Entity customerId customer) cartId shippingEntity billingId maybeSt
                         , orderLineItemDescription = "Store Credit"
                         , orderLineItemAmount = storeCredit
                         }
-                    return (orderId, totalInCents - storeCredit, storeCredit)
+                    return (orderEntity, totalInCents - storeCredit, storeCredit)
                 else
-                    return (orderId, totalInCents, 0)
+                    return (orderEntity, totalInCents, 0)
 
 
 -- | Delete a Cart & all it's Items.
@@ -877,7 +1032,7 @@ createLineItems
     -- ^ Current Time
     -> CustomerId
     -- ^ Customer Id
-    -> Address
+    -> Entity Address
     -- ^ Shipping Address
     -> [CartItemData]
     -- ^ Cart Items
@@ -891,9 +1046,8 @@ createLineItems
 createLineItems currentTime customerId shippingAddress items orderId priorityShipping maybeCouponCode = do
     maybeCoupon <- mapException PlaceOrderCouponError $ sequence
         $ getCoupon currentTime (Just customerId) <$> maybeCouponCode
-    charges <- getCharges
-        (Just $ addressCountry shippingAddress) (Just $ addressState shippingAddress) items
-         maybeCoupon priorityShipping
+    charges <- getCharges (Just $ toAddressData shippingAddress) items
+        maybeCoupon priorityShipping False
     mapException PlaceOrderCouponError $ checkCouponMeetsMinimum maybeCoupon charges
     shippingCharge <-
         case ccShippingMethods charges of
