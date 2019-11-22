@@ -1,3 +1,4 @@
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeFamilies #-}
 module Routes.Utils
@@ -8,6 +9,8 @@ module Routes.Utils
     , hashPassword
       -- * Images
     , makeImageFromBase64
+      -- * Servant
+    , XML
       -- * General
     , extractRowCount
     , buildWhereQuery
@@ -25,7 +28,7 @@ import Data.Monoid ((<>))
 import Data.Text.Encoding (encodeUtf8, decodeUtf8)
 import Database.Persist ((=.), Entity(..), getBy, PersistEntityBackend, PersistEntity, Update)
 import Database.Persist.Sql (SqlBackend)
-import Servant (errBody, err500)
+import Servant (Accept(..), MimeRender(..), errBody, err500)
 import System.FilePath ((</>), takeFileName)
 
 import Config (Config(getMediaDirectory))
@@ -38,10 +41,12 @@ import qualified Avalara
 import qualified Crypto.BCrypt as BCrypt
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Base64 as Base64
+import qualified Data.ByteString.Lazy as LBS
 import qualified Data.Text as T
 import qualified Data.UUID as UUID
 import qualified Data.UUID.V4 as UUID4
 import qualified Database.Esqueleto as E
+import qualified Network.HTTP.Media as Media
 
 
 -- PRODUCTS
@@ -168,6 +173,18 @@ makeImageFromBase64 basePath fileName imageData =
             mediaDirectory <- asks getMediaDirectory
             T.pack . takeFileName
                 <$> scaleImage imageConfig fileName (mediaDirectory </> basePath) rawImageData
+
+
+-- SERVANT
+
+-- | A Content-Type Allowing Serving of XML Responses
+data XML
+
+instance Accept XML where
+    contentType _ = "application" Media.// "xml" Media./: ("charset", "utf-8")
+
+instance MimeRender XML LBS.ByteString where
+    mimeRender _ = id
 
 
 -- GENERAL

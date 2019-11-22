@@ -4,6 +4,7 @@ module Routes
     , module Routes.Categories
     , module Routes.Checkout
     , module Routes.Customers
+    , module Routes.Feeds
     , module Routes.Products
     , module Routes.StaticPages
     , module Routes.StoneEdge
@@ -14,6 +15,7 @@ import Routes.Carts
 import Routes.Categories
 import Routes.Checkout
 import Routes.Customers
+import Routes.Feeds
 import Routes.Products
 import Routes.StaticPages
 import Routes.StoneEdge

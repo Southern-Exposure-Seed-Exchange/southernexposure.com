@@ -65,6 +65,7 @@ dependencies:
     - hostname
     - http-api-data
     - http-client
+    - http-media
     - http-types
     - iso3166-country-codes
     - markdown
