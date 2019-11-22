@@ -42,6 +42,9 @@ main = do
     entropySource <- sessionEntropy
     stoneEdgeAuth <- makeStoneEdgeAuth
     avalaraConfig <- makeAvalaraConfig
+    avalaraCompanyId <- Avalara.CompanyId <$> lookupSetting "AVATAX_COMPANY_ID" 0
+    avalaraCompanyCode <- Avalara.CompanyCode . T.pack <$> requireSetting "AVATAX_COMPANY_CODE"
+    avalaraSourceLocation <- lookupSetting "AVATAX_LOCATION_CODE" "DEFAULT"
     dbPool <- makePool env
     cache <- runSqlPool initializeCaches dbPool >>= newTVarIO
     let cfg = defaultConfig
@@ -57,6 +60,9 @@ main = do
             , getCookieSecret = cookieSecret
             , getCookieEntropySource = entropySource
             , getAvalaraConfig = avalaraConfig
+            , getAvalaraCompanyId = avalaraCompanyId
+            , getAvalaraCompanyCode = avalaraCompanyCode
+            , getAvalaraSourceLocationCode = avalaraSourceLocation
             }
     Warp.runSettings (warpSettings port) . httpLogger env $ app cfg
     where lookupSetting env def =

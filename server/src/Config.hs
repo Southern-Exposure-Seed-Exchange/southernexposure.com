@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 module Config
     ( Environment(..)
     , Config(..)
@@ -7,6 +8,7 @@ module Config
 
 import Control.Concurrent.STM (TVar)
 import Data.Pool (Pool, createPool)
+import Data.Text (Text)
 import Database.Persist.Sql (ConnectionPool)
 import Network.HaskellNet.SMTP.SSL (SMTPConnection, connectSMTPSTARTTLS, closeSMTP)
 import Servant.Server.Experimental.Auth.Cookie (PersistentServerKey, RandomSource)
@@ -37,6 +39,9 @@ data Config
     , getCookieSecret :: PersistentServerKey
     , getCookieEntropySource :: RandomSource
     , getAvalaraConfig :: Avalara.Config
+    , getAvalaraCompanyId :: Avalara.CompanyId
+    , getAvalaraCompanyCode :: Avalara.CompanyCode
+    , getAvalaraSourceLocationCode :: Text
     }
 
 defaultConfig :: Config
@@ -54,6 +59,9 @@ defaultConfig =
         , getCookieSecret = undefined
         , getCookieEntropySource = undefined
         , getAvalaraConfig = undefined
+        , getAvalaraCompanyId = undefined
+        , getAvalaraCompanyCode = undefined
+        , getAvalaraSourceLocationCode = "DEFAULT"
         }
 
 
