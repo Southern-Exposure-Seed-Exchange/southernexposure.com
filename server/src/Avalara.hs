@@ -43,6 +43,7 @@ module Avalara
     , TransactionStatus(..)
     , TaxCode(..)
     , shippingAndHandlingTaxCode
+    , handlingOnlyTaxCode
     , TransactionCode(..)
       -- ** Customer
     , Customer(..)
@@ -591,6 +592,11 @@ instance ToJSON TaxCode where
 shippingAndHandlingTaxCode :: TaxCode
 shippingAndHandlingTaxCode =
     TaxCode "FR030000"
+
+-- | Standard Avalara Tax Code for Handling-only charges.
+handlingOnlyTaxCode :: TaxCode
+handlingOnlyTaxCode =
+    TaxCode "OH010000"
 
 
 -- | A subset of the Transction Document Types - only the ones that we
