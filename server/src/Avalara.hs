@@ -400,7 +400,7 @@ data RefundTransactionRequest =
         , rtrType :: RefundType
         , rtrPercentage :: Maybe Scientific
         , rtrLines :: [T.Text]
-        , rtrRefernceCode :: Maybe T.Text
+        , rtrReferenceCode :: Maybe T.Text
         } deriving (Show, Read, Eq)
 
 instance ToJSON RefundTransactionRequest where
@@ -411,7 +411,7 @@ instance ToJSON RefundTransactionRequest where
             , "refundType" .= rtrType
             , "refundPercentage" .= rtrPercentage
             , "refundLines" .= rtrLines
-            , "referenceCode" .= rtrRefernceCode
+            , "referenceCode" .= rtrReferenceCode
             ]
 
 
@@ -558,7 +558,9 @@ data LineItem =
         , liItemCode :: Maybe T.Text
         -- ^ Your SKU for the line.
         , liDiscounted :: Maybe Bool
-        -- ^ Apply the Document's 'ctrDiscount' to this line.
+        -- ^ Apply the Document's 'ctrDiscount' to this line?
+        , liTaxIncluded :: Maybe Bool
+        -- ^ Is the tax amount included in the 'liTotalAmount' field?
         , liDescription :: Maybe T.Text
         -- ^ A description of the line item. Required for SST customers
         -- with an unmapped 'liItemCode'.
@@ -575,6 +577,7 @@ instance ToJSON LineItem where
             , "taxCode" .= liTaxCode
             , "itemCode" .= liItemCode
             , "discounted" .= liDiscounted
+            , "taxIncluded" .= liTaxIncluded
             , "description" .= liDescription
             ]
 
