@@ -64,6 +64,8 @@ dependencies:
     - HaskellNet-SSL
     - hostname
     - http-api-data
+    - http-client
+    - http-types
     - iso3166-country-codes
     - markdown
     - mtl

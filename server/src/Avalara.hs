@@ -71,10 +71,13 @@ import Data.Scientific (Scientific)
 import Data.Text.Encoding (encodeUtf8)
 import Data.Time (UTCTime, defaultTimeLocale, formatTime)
 import Data.Version (showVersion)
+import Network.HTTP.Client (responseStatus)
+import Network.HTTP.Types.Status (Status(statusCode))
 import Network.HTTP.Req
     ( (/:), Option, Scheme(Https), Url, runReq, req, header, https, GET(..)
     , POST(..), responseBody, jsonResponse, NoReqBody(..), ReqBodyJson(..)
     , HttpMethod, HttpBody, HttpBodyAllowed, AllowsBody, ProvidesBody
+    , HttpConfig(..)
     )
 import Network.HostName (getHostName)
 
@@ -912,4 +915,18 @@ makeRequest endpoint method reqBody = do
     authHeader <- generateAuthorizationHeader
     clientHeader <- generateClientHeader
     let headers = authHeader <> clientHeader
-    runReq def $ responseBody <$> req method path reqBody jsonResponse headers
+        httpConfig =
+            def
+                { httpConfigCheckResponse = \req_ resp body ->
+                    let code =
+                            statusCode $ responseStatus resp
+                        validCode =
+                            (code >= 200 && code < 300) ||
+                            (code >= 400 && code < 500)
+                    in
+                    if validCode then
+                        Nothing
+                    else
+                        httpConfigCheckResponse def req_ resp body
+                }
+    runReq httpConfig $ responseBody <$> req method path reqBody jsonResponse headers
