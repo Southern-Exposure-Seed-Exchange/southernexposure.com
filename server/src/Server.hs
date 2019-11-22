@@ -54,6 +54,8 @@ stripeRequest req = do
 --
 -- TODO: Add a setting allowing us to skip Avalara calls, since
 -- eventaully our Sandbox account will expire.
+--
+-- TODO: Use with `try`. When a request fails, log & return the error.
 avalaraRequest :: ReaderT Avalara.Config IO a -> App a
 avalaraRequest req =
     asks getAvalaraConfig >>= liftIO . runReaderT req

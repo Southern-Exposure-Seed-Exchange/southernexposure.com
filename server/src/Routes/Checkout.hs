@@ -703,6 +703,7 @@ anonymousPlaceOrderRoute = validate >=> \parameters -> do
                 , customerEncryptedPassword = encryptedPass
                 , customerAuthToken = authToken
                 , customerStripeId = Nothing
+                , customerAvalaraCode = Nothing
                 , customerIsAdmin = False
                 }
         customerId <- insert customer
@@ -838,6 +839,7 @@ createOrder (Entity customerId customer) cartId shippingEntity billingId maybeSt
         , orderShippingAddressId = shippingId
         , orderCustomerComment = comment
         , orderAdminComments = []
+        , orderAvalaraTransactionCode = Nothing
         , orderStripeChargeId = Nothing
         , orderStripeLastFour = Nothing
         , orderStripeIssuer = Nothing
@@ -906,7 +908,6 @@ createLineItems
 createLineItems currentTime customerId shippingAddress items orderId memberNumber priorityShipping maybeCouponCode = do
     maybeCoupon <- mapException PlaceOrderCouponError $ sequence
         $ getCoupon currentTime (Just customerId) <$> maybeCouponCode
-    -- TODO priority S&H
     charges <- getCharges
         (Just $ addressCountry shippingAddress) items
         (T.length memberNumber >= 4) maybeCoupon priorityShipping

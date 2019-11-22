@@ -77,8 +77,10 @@ Customer
     encryptedPassword T.Text
     authToken T.Text
     stripeId StripeCustomerId Maybe
+    avalaraCode AvalaraCustomerCode Maybe
     isAdmin Bool default=false
     UniqueToken authToken
+    UniqueAvalaraCustomer avalaraCode !force
     UniqueEmail email
 
 PasswordReset
@@ -165,6 +167,7 @@ Order
     stripeChargeId StripeChargeId Maybe
     stripeLastFour T.Text Maybe
     stripeIssuer T.Text Maybe
+    avalaraTransactionCode AvalaraTransactionCode Maybe
     createdAt UTCTime
     deriving Show
 

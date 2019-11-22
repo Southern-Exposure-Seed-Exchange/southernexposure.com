@@ -468,11 +468,11 @@ makeCustomers mysql = do
             return . ([fromIntegral customerId],) $ Customer
                 { customerEmail = email
                 , customerStoreCredit = storeCredit
-                -- TODO: Get an export of the latest member numbers from stonedge?
                 , customerMemberNumber = ""
                 , customerEncryptedPassword = password
                 , customerAuthToken = token
                 , customerStripeId = Nothing
+                , customerAvalaraCode = Nothing
                 , customerIsAdmin = email == "gardens@southernexposure.com"
                 }
         makeCustomer _ _ = error "Invalid arguments to makeCustomer."
@@ -715,6 +715,7 @@ makeOrders mysql = do
                     , orderStripeChargeId = Nothing
                     , orderStripeLastFour = Nothing
                     , orderStripeIssuer = Nothing
+                    , orderAvalaraTransactionCode = Nothing
                     , orderCreatedAt = createdAt
                     }
             (orderProducts, orderItems) <- adjustTotal orderTotal lineItems
@@ -730,6 +731,7 @@ makeOrders mysql = do
                     , customerEncryptedPassword = ""
                     , customerAuthToken = token
                     , customerStripeId = Nothing
+                    , customerAvalaraCode = Nothing
                     , customerIsAdmin = False
                     }
             return (order, orderProducts, orderItems, shippingAddress, billingAddress, couponCode, customer)

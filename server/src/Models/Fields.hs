@@ -21,6 +21,7 @@ import GHC.Generics (Generic)
 import Numeric.Natural (Natural)
 import Text.Read (readMaybe, readPrec)
 
+import qualified Avalara
 import qualified Data.CAProvinceCodes as CACodes
 import qualified Data.StateCodes as StateCodes
 import qualified Data.Text as T
@@ -371,6 +372,31 @@ instance ToJSON StripeChargeId where
 instance FromJSON StripeChargeId where
     parseJSON j =
         StripeChargeId . Stripe.ChargeId <$> parseJSON j
+
+
+-- AVALARA
+
+newtype AvalaraCustomerCode =
+    AvalaraCustomerCode { fromAvalaraCustomerCode :: Avalara.CustomerCode }
+    deriving (Show, Read, Eq)
+
+instance PersistField AvalaraCustomerCode where
+    toPersistValue (AvalaraCustomerCode (Avalara.CustomerCode customerCode)) =
+        toPersistValue customerCode
+    fromPersistValue =
+        fmap (AvalaraCustomerCode . Avalara.CustomerCode) <$> fromPersistValue
+
+instance PersistFieldSql AvalaraCustomerCode where
+    sqlType _ = SqlString
+
+
+data AvalaraTransactionCode =
+    AvalaraTransactionCode
+        { avalaraCompanyCode :: Avalara.CompanyCode
+        , avalaraTransactionCode :: Avalara.TransactionCode
+        } deriving (Show, Read, Eq)
+
+derivePersistField "AvalaraTransactionCode"
 
 
 -- COUPONS
