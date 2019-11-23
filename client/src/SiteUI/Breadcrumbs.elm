@@ -1,6 +1,6 @@
 module SiteUI.Breadcrumbs exposing (view)
 
-import Html exposing (Html, a, div, li, ol, text)
+import Html exposing (Html, a, div, li, ol, span, text)
 import Html.Attributes exposing (class, id)
 import Messages exposing (Msg(..))
 import PageData exposing (PageData)
@@ -8,6 +8,7 @@ import Paginate
 import Products.Pagination as Pagination
 import RemoteData
 import Routing exposing (AdminRoute(..), Route(..))
+import Views.Microdata as Microdata
 import Views.Utils exposing (routeLinkAttributes)
 
 
@@ -16,17 +17,25 @@ view route pageData =
     let
         items =
             if List.isEmpty childItems then
-                [ activeItem "Home" ]
+                [ activeItem "Home" 1 ]
 
             else
-                inactiveItem "Home" (PageDetails "home") :: childItems
+                List.indexedMap (\i f -> f <| i + 1) <|
+                    inactiveItem "Home" (PageDetails "home")
+                        :: childItems
 
-        activeItem content =
-            li [ class "breadcrumb-item active" ] [ text content ]
+        activeItem content position =
+            li (class "breadcrumb-item active" :: Microdata.itemListElement)
+                [ span [ Microdata.name ] [ text content ]
+                , Microdata.positionMeta position
+                ]
 
-        inactiveItem content itemRoute =
-            li [ class "breadcrumb-item" ]
-                [ a (routeLinkAttributes itemRoute) [ text content ]
+        inactiveItem content itemRoute position =
+            li (class "breadcrumb-item" :: Microdata.itemListElement)
+                [ a (Microdata.item :: routeLinkAttributes itemRoute)
+                    [ span [ Microdata.name ] [ text content ]
+                    ]
+                , Microdata.positionMeta position
                 ]
 
         childItems =
@@ -169,21 +178,21 @@ view route pageData =
                     singleItem "Page Not Found"
 
         categoryDetailsToBreadcrumbs { category, predecessors } =
-            List.map predecessorCategoryToInactiveItem predecessors
+            List.indexedMap predecessorCategoryToInactiveItem predecessors
                 ++ [ activeItem category.name ]
 
         productDetailsToBreadcrumbs { product, predecessors } =
-            List.map predecessorCategoryToInactiveItem predecessors
+            List.indexedMap predecessorCategoryToInactiveItem predecessors
                 ++ [ activeItem product.name ]
 
         singleItem content =
             [ activeItem content ]
 
-        predecessorCategoryToInactiveItem { name, slug } =
+        predecessorCategoryToInactiveItem index { name, slug } =
             inactiveItem name (CategoryDetails slug Pagination.default)
 
         maybeToList f =
             Maybe.map f >> Maybe.withDefault []
     in
     div [ id "breadcrumbs", class "container d-print-none" ]
-        [ ol [ class "breadcrumb mb-0" ] items ]
+        [ ol (class "breadcrumb mb-0" :: Microdata.breadcrumbList) items ]
