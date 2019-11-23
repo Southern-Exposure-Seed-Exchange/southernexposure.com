@@ -7,6 +7,7 @@ module Models.Utils
     , truncateHtml
     , getChildCategoryIds
     , getParentCategories
+    , categorySalePrice
       -- * Carts
     , mergeCarts
       -- * Addresses
@@ -23,6 +24,7 @@ module Models.Utils
 import Data.Char (isAlphaNum)
 import Data.Maybe (listToMaybe)
 import Data.Monoid ((<>))
+import Data.Ratio ((%))
 import Database.Persist
     ( (==.), (=.), (+=.), Entity(..), Key(..), getBy, update, upsert
     , delete, deleteWhere, selectList, selectKeysList, insertEntity
@@ -148,6 +150,22 @@ getParentCategories :: Key Category -> App [Entity Category]
 getParentCategories categoryId =
     queryCategoryPredecessorCache categoryId
         <$> readCache getCategoryPredecessorCache
+
+-- | Apply a CategorySale to the Variant's original price.
+categorySalePrice :: Cents -> CategorySale -> Cents
+categorySalePrice price categorySale =
+    case categorySaleType categorySale of
+        FlatSale amount ->
+            Cents $ fromInteger $ max 0
+                $ asInteger price - asInteger amount
+        PercentSale percent ->
+            Cents . max 0 . round $
+                toRational (fromCents price)
+                * (1 - min 1 (fromIntegral percent % 100))
+  where
+    asInteger :: Cents -> Integer
+    asInteger =
+        fromIntegral . fromCents
 
 
 -- | Merge an Anonymous Cart into a Customer's Cart, removing the Anonymous
