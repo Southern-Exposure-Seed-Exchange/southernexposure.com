@@ -225,7 +225,7 @@ categorySaleTests = testGroup "Category Sale Calculations"
         let variantData = makeVariantData variantEntity Nothing
         saleAmount <- forAll $ genCentRange $ Range.linear 1 (fromCents (getVariantPrice variantData) - 1)
         sale <- forAll $ genCategorySale $ FlatSale saleAmount
-        applyCategorySaleDiscount sale variantData
+        categorySalePrice (getVariantPrice variantData) sale
             === getVariantPrice variantData - saleAmount
     testFlatGreaterThanPrice :: Property
     testFlatGreaterThanPrice = property $ do
@@ -234,7 +234,7 @@ categorySaleTests = testGroup "Category Sale Calculations"
             price = fromCents $ getVariantPrice variantData
         saleAmount <- forAll $ genCentRange $ Range.linear price (price * 10)
         sale <- forAll $ genCategorySale $ FlatSale saleAmount
-        applyCategorySaleDiscount sale variantData === 0
+        categorySalePrice (getVariantPrice variantData) sale === 0
     testPercentageProperty :: Property
     testPercentageProperty = property $ do
         variantEntity <- forAll $ genEntity genProductVariant
@@ -242,14 +242,14 @@ categorySaleTests = testGroup "Category Sale Calculations"
         salePercent <- forAll genWholePercentage
         sale <- forAll $ genCategorySale $ PercentSale salePercent
         let discountPercent = 1 - (fromIntegral salePercent % 100)
-        applyCategorySaleDiscount sale variantData ===
+        categorySalePrice (getVariantPrice variantData) sale ===
             Cents (round $ toRational (fromCents $ getVariantPrice variantData) * discountPercent)
     testPercentageUnit :: Assertion
     testPercentageUnit = do
         time <- getCurrentTime
         let variantData = makeVariantData (makeVariant 1000) Nothing
             sale = CategorySale "" (PercentSale 13) time time []
-        applyCategorySaleDiscount sale variantData @?= 870
+        categorySalePrice (getVariantPrice variantData) sale @?= 870
     testOverridesSalePrice :: Property
     testOverridesSalePrice = property $ do
         (variantEntity, price) <- forAll
