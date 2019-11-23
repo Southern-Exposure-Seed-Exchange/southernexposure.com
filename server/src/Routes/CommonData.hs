@@ -805,6 +805,7 @@ toCheckoutOrder (Entity orderId order) =
 data CheckoutProduct =
     CheckoutProduct
         { cpName :: T.Text
+        , cpSku :: T.Text
         , cpLotSize :: Maybe LotSize
         , cpQuantity :: Natural
         , cpPrice :: Cents
@@ -814,6 +815,7 @@ instance ToJSON CheckoutProduct where
     toJSON prod =
         object
             [ "name" .= cpName prod
+            , "sku" .= cpSku prod
             , "lotSize" .= cpLotSize prod
             , "quantity" .= cpQuantity prod
             , "price" .= cpPrice prod
@@ -826,12 +828,13 @@ getCheckoutProducts orderId = do
             E.on $ p E.^. ProductId E.==. v E.^. ProductVariantProductId
             E.on $ v E.^. ProductVariantId E.==. op E.^. OrderProductProductVariantId
             E.where_ $ op E.^. OrderProductOrderId E.==. E.val orderId
-            return (op, v E.^. ProductVariantLotSize, p E.^. ProductName)
+            return (op, v , p)
     return $ map makeCheckoutProduct orderProducts
-    where makeCheckoutProduct (Entity _ orderProd, variantLotSize, productName) =
+    where makeCheckoutProduct (Entity _ orderProd, Entity _ variant, Entity _ product) =
             CheckoutProduct
-                { cpName = E.unValue productName
-                , cpLotSize = E.unValue variantLotSize
+                { cpName = productName product
+                , cpSku = productBaseSku product <> productVariantSkuSuffix variant
+                , cpLotSize = productVariantLotSize variant
                 , cpQuantity = orderProductQuantity orderProd
                 , cpPrice = orderProductPrice orderProd
                 }
