@@ -154,6 +154,11 @@ app.ports.logPageView.subscribe(function(portData) {
   gtag('config', GA_MEASUREMENT_ID, { 'page_path': url, 'page_title': title });
 });
 
+/* Log Purchases with Google Analytics */
+app.ports.logPurchase.subscribe(function(purchaseData) {
+  gtag('event', 'purchase', purchaseData);
+});
+
 
 /** UTILITIES **/
 

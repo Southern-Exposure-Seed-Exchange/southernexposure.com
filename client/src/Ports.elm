@@ -3,6 +3,7 @@ port module Ports exposing
     , collapseMobileMenus
     , collectStripeToken
     , logPageView
+    , logPurchase
     , loggedIn
     , loggedOut
     , newCartSessionToken
@@ -17,6 +18,10 @@ port module Ports exposing
     , storeCartSessionToken
     , stripeTokenReceived
     )
+
+import Json.Encode exposing (Value)
+
+
 
 -- Page Change
 
@@ -99,3 +104,6 @@ port stripeTokenReceived : (String -> msg) -> Sub msg
 
 
 port logPageView : ( String, String ) -> Cmd msg
+
+
+port logPurchase : Value -> Cmd msg

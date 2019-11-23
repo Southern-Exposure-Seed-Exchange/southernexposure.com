@@ -21,9 +21,9 @@ import Html.Events exposing (onCheck, onClick, onInput, onSubmit)
 import Json.Decode as Decode
 import Json.Encode as Encode exposing (Value)
 import Locations exposing (AddressLocations, Region)
-import Models.Fields exposing (Cents(..), centsFromString, centsMap, centsMap2, imageToSrcSet, imgSrcFallback)
+import Models.Fields exposing (Cents(..), centsFromString, centsMap, centsMap2, imageToSrcSet, imgSrcFallback, lotSizeToString)
 import OrderDetails
-import PageData
+import PageData exposing (LineItemType(..))
 import Ports
 import Product exposing (variantPrice)
 import RemoteData exposing (WebData)
@@ -144,8 +144,34 @@ type Msg
     | RemoveCoupon
     | Submit
     | TokenReceived String
-    | SubmitResponse (WebData (Result Api.FormErrors ( Int, AuthStatus )))
+    | SubmitResponse (WebData (Result Api.FormErrors CheckoutResponse))
     | RefreshDetails (WebData (Result Api.FormErrors PageData.CheckoutDetails))
+
+
+type alias CheckoutResponse =
+    { orderId : Int
+    , orderLines : List PageData.OrderLineItem
+    , orderProducts : List PageData.OrderProduct
+    , authStatus : AuthStatus
+    }
+
+
+anonymousResponseDecoder : Decode.Decoder CheckoutResponse
+anonymousResponseDecoder =
+    Decode.map4 CheckoutResponse
+        (Decode.field "orderId" Decode.int)
+        (Decode.field "lines" <| Decode.list PageData.lineItemDecoder)
+        (Decode.field "products" <| Decode.list PageData.orderProductDecoder)
+        (Decode.field "authStatus" User.decoder)
+
+
+customerResponseDecoder : AuthStatus -> Decode.Decoder CheckoutResponse
+customerResponseDecoder authStatus =
+    Decode.map4 CheckoutResponse
+        (Decode.field "orderId" Decode.int)
+        (Decode.field "lines" <| Decode.list PageData.lineItemDecoder)
+        (Decode.field "products" <| Decode.list PageData.orderProductDecoder)
+        (Decode.succeed authStatus)
 
 
 type OutMsg
@@ -276,16 +302,25 @@ update msg model authStatus maybeSessionToken checkoutDetails =
         TokenReceived stripeTokenId ->
             ( model, Nothing, placeOrder model authStatus maybeSessionToken (Just stripeTokenId) checkoutDetails )
 
-        SubmitResponse (RemoteData.Success (Ok ( orderId, newAuthStatus ))) ->
+        SubmitResponse (RemoteData.Success (Ok response)) ->
             let
+                orderId =
+                    response.orderId
+
+                newAuthStatus =
+                    response.authStatus
+
                 outMsg =
                     if authStatus == User.Anonymous && newAuthStatus /= authStatus then
                         AnonymousOrderCompleted orderId newAuthStatus
 
                     else
                         CustomerOrderCompleted orderId
+
+                analyticsData =
+                    encodeAnalyticsPurchase orderId response.orderLines response.orderProducts
             in
-            ( initial, Just outMsg, Cmd.none )
+            ( initial, Just outMsg, Ports.logPurchase analyticsData )
 
         SubmitResponse (RemoteData.Success (Err errors)) ->
             let
@@ -708,13 +743,10 @@ placeOrder model authStatus maybeSessionToken stripeTokenId checkoutDetails =
         decoder =
             case authStatus of
                 User.Anonymous ->
-                    Decode.map2 Tuple.pair
-                        (Decode.field "orderId" Decode.int)
-                        (Decode.field "authData" User.decoder)
+                    anonymousResponseDecoder
 
                 User.Authorized _ ->
-                    Decode.map (\orderId -> ( orderId, authStatus ))
-                        (Decode.field "orderId" Decode.int)
+                    customerResponseDecoder authStatus
     in
     case authStatus of
         User.Anonymous ->
@@ -735,6 +767,96 @@ placeOrder model authStatus maybeSessionToken stripeTokenId checkoutDetails =
 encodeMaybe : (a -> Value) -> Maybe a -> Value
 encodeMaybe encoder =
     Maybe.map encoder >> Maybe.withDefault Encode.null
+
+
+{-| Encode the completed order data into the JSON requires for the Google Analytics `purchase` event.
+-}
+encodeAnalyticsPurchase : Int -> List PageData.OrderLineItem -> List PageData.OrderProduct -> Value
+encodeAnalyticsPurchase orderId lines products =
+    let
+        sumCents =
+            List.foldr (centsMap2 (+)) (Cents 0)
+
+        taxTotal =
+            lines
+                |> List.filter (\l -> l.itemType == Tax)
+                |> List.map .amount
+                |> sumCents
+
+        shippingTotal =
+            lines
+                |> List.filter (\l -> List.member l.itemType [ PriorityShipping, Shipping ])
+                |> List.map .amount
+                |> sumCents
+
+        otherLineTotal =
+            List.foldr
+                (\line total ->
+                    case line.itemType of
+                        Shipping ->
+                            total
+
+                        PriorityShipping ->
+                            total
+
+                        Tax ->
+                            total
+
+                        Surcharge ->
+                            centsMap2 (+) total line.amount
+
+                        PageData.StoreCredit ->
+                            centsMap2 (-) total line.amount
+
+                        MemberDiscount ->
+                            centsMap2 (-) total line.amount
+
+                        CouponDiscount ->
+                            centsMap2 (-) total line.amount
+
+                        Refund ->
+                            centsMap2 (-) total line.amount
+                )
+                (Cents 0)
+                lines
+
+        productTotal =
+            products
+                |> List.map (\p -> centsMap2 (*) p.price (Cents p.quantity))
+                |> sumCents
+
+        orderTotal =
+            productTotal
+                |> centsMap2 (+) taxTotal
+                |> centsMap2 (+) shippingTotal
+                |> centsMap2 (+) otherLineTotal
+
+        encodeCentsAsDollars (Cents c) =
+            Encode.float <| toFloat c / 100
+
+        encodeProduct p =
+            Encode.object
+                [ ( "id", Encode.string p.sku )
+                , ( "name", Encode.string <| nameWithLotSize p )
+                , ( "quantity", Encode.int p.quantity )
+                , ( "price", encodeCentsAsDollars p.price )
+                ]
+
+        nameWithLotSize { name, lotSize } =
+            name
+                ++ (lotSize
+                        |> Maybe.map (\s -> ", " ++ lotSizeToString s)
+                        |> Maybe.withDefault ""
+                   )
+    in
+    Encode.object
+        [ ( "transaction_id", Encode.string <| String.fromInt orderId )
+        , ( "value", encodeCentsAsDollars orderTotal )
+        , ( "currency", Encode.string "USD" )
+        , ( "tax", encodeCentsAsDollars taxTotal )
+        , ( "shipping", encodeCentsAsDollars shippingTotal )
+        , ( "items", Encode.list encodeProduct products )
+        ]
 
 
 

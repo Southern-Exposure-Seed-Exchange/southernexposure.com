@@ -25,6 +25,8 @@ module PageData exposing
     , MyAccount
     , OrderData
     , OrderDetails
+    , OrderLineItem
+    , OrderProduct
     , OrderSummary
     , PageData
     , PredecessorCategory
@@ -52,8 +54,10 @@ module PageData exposing
     , customersConfig
     , initial
     , isFreeCheckout
+    , lineItemDecoder
     , myAccountDecoder
     , orderDetailsDecoder
+    , orderProductDecoder
     , orderTotals
     , ordersConfig
     , productDataDecoder
@@ -634,6 +638,7 @@ decodeStringWith f =
 
 type alias OrderProduct =
     { name : String
+    , sku : String
     , lotSize : Maybe LotSize
     , quantity : Int
     , price : Cents
@@ -642,8 +647,9 @@ type alias OrderProduct =
 
 orderProductDecoder : Decoder OrderProduct
 orderProductDecoder =
-    Decode.map4 OrderProduct
+    Decode.map5 OrderProduct
         (Decode.field "name" Decode.string)
+        (Decode.field "sku" Decode.string)
         (Decode.field "lotSize" <| Decode.nullable lotSizeDecoder)
         (Decode.field "quantity" Decode.int)
         (Decode.field "price" centsDecoder)
