@@ -1,9 +1,10 @@
 module SiteUI.Footer exposing (view)
 
-import Html exposing (Html, a, abbr, address, br, div, h4, li, node, strong, text, ul)
+import Html exposing (Html, a, abbr, address, br, div, h4, li, node, span, strong, text, ul)
 import Html.Attributes exposing (class, href, id, target, title)
 import Messages exposing (Msg)
 import Routing exposing (Route(..))
+import Views.Microdata as Microdata
 import Views.Utils exposing (routeLinkAttributes)
 
 
@@ -38,20 +39,39 @@ view =
 
         contactAddress =
             address []
-                [ strong [] [ text "Southern Exposure Seed Exchange" ]
+                [ strong [ Microdata.name ] [ text "Southern Exposure Seed Exchange" ]
                 , break
-                , text "P.O. Box 460"
+                , span (Microdata.address :: Microdata.postalAddress)
+                    [ span [ Microdata.streetAddress ] [ text "P.O. Box 460" ]
+                    , break
+                    , span [ Microdata.addressLocality ] [ text "Mineral" ]
+                    , text ", "
+                    , span [ Microdata.addressRegion ] [ text "Virginia" ]
+                    , text " "
+                    , span [ Microdata.postalCode ] [ text "23117" ]
+                    ]
                 , break
-                , text "Mineral, Virginia 23117"
-                , break
-                , a [ href "mailto:gardens@southernexposure.com?subject=SESE Website Contact", target "_blank" ]
+                , a
+                    [ Microdata.email
+                    , href "mailto:gardens@southernexposure.com?subject=SESE Website Contact"
+                    , target "_blank"
+                    ]
                     [ text "gardens@southernexposure.com" ]
                 , break
                 , abbr [ title "Phone" ] [ text "P:" ]
-                , text " (540) 894-9480"
+                , span [ Microdata.telephone ] [ text " (540) 894-9480" ]
                 , break
                 , abbr [ title "Fax" ] [ text "F:" ]
-                , text " (540) 266-1021"
+                , span [ Microdata.faxNumber ] [ text " (540) 266-1021" ]
+                ]
+
+        contactBlock =
+            div Microdata.organization
+                [ Microdata.urlLink "https://www.southernexposure.com"
+                , Microdata.logoLink "https://www.southernexposure.com/static/img/logos/sese.png"
+                , Microdata.sameAsLink "https://www.facebook.com/SouthernExposureSeeds/"
+                , Microdata.sameAsLink "https://www.instagram.com/southernexposureseed/"
+                , contactAddress
                 ]
 
         footerBlock title class_ content =
@@ -66,7 +86,7 @@ view =
             [ div [ class "row justify-content-around" ]
                 [ footerBlock "Information" "col-10 col-sm-auto d-print-none" informationLinks
                 , footerBlock "Important Links" "col-10 col-sm-auto d-print-none" importantLinks
-                , footerBlock "Contact Us" "col-10 col-md-5 col-lg-auto" contactAddress
+                , footerBlock "Contact Us" "col-10 col-md-5 col-lg-auto" contactBlock
                 , div [ class "col-12 text-center" ]
                     [ text "Copyright © 2019 Southern Exposure Seed Exchange" ]
                 ]
