@@ -41,7 +41,7 @@ import Routes.CommonData
     ( AuthorizationData, toAuthorizationData, CartItemData(..), CartCharges(..)
     , CartCharge(..), getCartItems, getCharges, AddressData(..), toAddressData
     , fromAddressData, ShippingCharge(..), VariantData(..), getVariantPrice
-    , OrderDetails(..), toCheckoutOrder, getCheckoutProducts
+    , OrderDetails(..), toCheckoutOrder, getCheckoutProducts, CheckoutProduct
     )
 import Routes.Utils (hashPassword, generateUniqueToken)
 import Validation (Validation(..))
@@ -494,14 +494,20 @@ instance Validation CustomerPlaceOrderParameters where
               whenJust =
                 maybe False
 
-newtype PlaceOrderData =
+data PlaceOrderData =
     PlaceOrderData
         { podOrderId :: OrderId
+        , podLines :: [Entity OrderLineItem]
+        , podProducts :: [CheckoutProduct]
         }
 
 instance ToJSON PlaceOrderData where
     toJSON order =
-        object [ "orderId" .= podOrderId order ]
+        object
+            [ "orderId" .= podOrderId order
+            , "lines" .= podLines order
+            , "products" .= podProducts order
+            ]
 
 type CustomerPlaceOrderRoute =
        AuthProtect "cookie-auth"
@@ -546,7 +552,14 @@ customerPlaceOrderRoute = validateCookieAndParameters $ \ce@(Entity customerId c
         return orderId
     runDB (OrderPlaced.fetchData orderId)
         >>= maybe (return ()) (void . Emails.send . Emails.OrderPlaced)
-    return $ PlaceOrderData orderId
+    (orderLines, products) <- runDB $ (,)
+        <$> selectList [OrderLineItemOrderId ==. orderId] []
+        <*> getCheckoutProducts orderId
+    return $ PlaceOrderData
+        { podOrderId = orderId
+        , podLines = orderLines
+        , podProducts = products
+        }
     where
           getOrCreateStripeCustomer :: StripeConfig -> Entity Customer -> T.Text -> AppSQL StripeCustomerId
           getOrCreateStripeCustomer stripeConfig (Entity customerId customer) stripeToken =
@@ -670,6 +683,8 @@ instance Validation AnonymousPlaceOrderParameters where
 data AnonymousPlaceOrderData =
     AnonymousPlaceOrderData
         { apodOrderId :: OrderId
+        , apodLines :: [Entity OrderLineItem]
+        , apodProducts :: [CheckoutProduct]
         , apodAuthorizationData :: AuthorizationData
         }
 
@@ -677,6 +692,8 @@ instance ToJSON AnonymousPlaceOrderData where
     toJSON orderData =
         object
             [ "orderId" .= apodOrderId orderData
+            , "lines" .= apodLines orderData
+            , "products" .= apodProducts orderData
             , "authData" .= apodAuthorizationData orderData
             ]
 
@@ -733,10 +750,16 @@ anonymousPlaceOrderRoute = validate >=> \parameters -> do
             (_, Nothing) ->
                 throwM StripeTokenRequired
         deleteCart cartId
+        orderLines <- selectList [OrderLineItemOrderId ==. orderId] []
+        products <- getCheckoutProducts orderId
         return
             ( orderId
-            , AnonymousPlaceOrderData orderId . toAuthorizationData
-                $ Entity customerId customer
+            , AnonymousPlaceOrderData
+                { apodOrderId = orderId
+                , apodLines = orderLines
+                , apodProducts = products
+                , apodAuthorizationData = toAuthorizationData $ Entity customerId customer
+                }
             )
     runDB (OrderPlaced.fetchData orderId)
         >>= maybe (return ()) (void . Emails.send . Emails.OrderPlaced)
