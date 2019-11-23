@@ -3,6 +3,14 @@ CHANGELOG
 =========
 
 
+v0.10.0
+=======
+
+* Expand the information in the Google Merchant Feed. Include sale information,
+  category hierarchy, bundle status, brand names, & lot sizes.
+* Include the Blog's Sitemap in the generate Sitemap Index.
+
+
 v0.9.0
 ======
 
