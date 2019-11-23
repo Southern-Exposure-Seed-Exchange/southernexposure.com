@@ -1,4 +1,4 @@
-module View exposing (view)
+module View exposing (pageTitle, view)
 
 import AdvancedSearch
 import Auth.CreateAccount as CreateAccount
@@ -83,7 +83,7 @@ view ({ route, pageData, navigationData, zone } as model) =
                     text ""
 
                 _ ->
-                    h2 [] [ text <| adminTitle adminRoute ]
+                    h2 [] [ text <| adminTitle model adminRoute ]
 
         pageContent =
             case route of
@@ -228,162 +228,6 @@ view ({ route, pageData, navigationData, zone } as model) =
         apply f ( a, b ) =
             f a b
 
-        pageTitle =
-            case route of
-                ProductDetails _ ->
-                    getFromPageData .productDetails (.product >> .name)
-
-                CategoryDetails _ _ ->
-                    pageData.categoryDetails
-                        |> Paginate.getResponseData
-                        |> Maybe.map (.category >> .name)
-                        |> Maybe.withDefault ""
-
-                AdvancedSearch ->
-                    "Advanced Search"
-
-                SearchResults data _ ->
-                    case Search.uniqueSearch data of
-                        Nothing ->
-                            "Search Results"
-
-                        Just searchType ->
-                            case searchType of
-                                AllProducts ->
-                                    "All Products"
-
-                                AttributeSearch SeedAttribute.Organic ->
-                                    "Organic Products"
-
-                                AttributeSearch SeedAttribute.Heirloom ->
-                                    "Heirloom Products"
-
-                                AttributeSearch SeedAttribute.Regional ->
-                                    "South-Eastern Products"
-
-                                AttributeSearch SeedAttribute.SmallGrower ->
-                                    "Products from Small Farms in our Grower Network"
-
-                PageDetails _ ->
-                    getFromPageData .pageDetails .name
-
-                CreateAccount ->
-                    "Create an Account"
-
-                CreateAccountSuccess ->
-                    "Account Creation Successful"
-
-                Login _ ->
-                    "Customer Login"
-
-                ResetPassword Nothing ->
-                    "Reset Password"
-
-                ResetPassword (Just _) ->
-                    "Change Password"
-
-                MyAccount ->
-                    "My Account"
-
-                EditLogin ->
-                    "Edit Login Details"
-
-                EditAddress ->
-                    "Edit Addresses"
-
-                OrderDetails orderId ->
-                    "Order #" ++ String.fromInt orderId
-
-                Cart ->
-                    "Shopping Cart"
-
-                QuickOrder ->
-                    "Quick Order"
-
-                Checkout ->
-                    "Checkout"
-
-                CheckoutSuccess _ _ ->
-                    "Order Complete"
-
-                Admin adminRoute ->
-                    adminTitle adminRoute ++ " - Admin"
-
-                NotFound ->
-                    "Page Not Found"
-
-        adminTitle : AdminRoute -> String
-        adminTitle adminRoute =
-            case adminRoute of
-                Dashboard ->
-                    "Dashboard"
-
-                CategoryList ->
-                    "Categories"
-
-                CategoryNew ->
-                    "New Category"
-
-                CategoryEdit _ ->
-                    pageData.adminEditCategory
-                        |> RemoteData.map (\c -> " - " ++ c.name)
-                        |> RemoteData.toMaybe
-                        |> Maybe.withDefault ""
-                        |> (\name -> "Edit Category" ++ name)
-
-                PageList ->
-                    "Pages"
-
-                PageNew ->
-                    "New Page"
-
-                PageEdit _ ->
-                    pageData.adminEditPage
-                        |> RemoteData.map (\p -> " - " ++ p.title)
-                        |> RemoteData.toMaybe
-                        |> Maybe.withDefault ""
-                        |> (\title -> "Edit Page" ++ title)
-
-                OrderList _ ->
-                    "Orders"
-
-                AdminOrderDetails orderId ->
-                    "Order #" ++ String.fromInt orderId
-
-                CustomerList _ ->
-                    "Customers"
-
-                CustomerEdit _ ->
-                    pageData.adminEditCustomer
-                        |> RemoteData.map (\c -> " - " ++ c.email)
-                        |> RemoteData.toMaybe
-                        |> Maybe.withDefault ""
-                        |> (\email -> "Edit Customer" ++ email)
-
-                ProductList ->
-                    "Products"
-
-                ProductNew ->
-                    "New Product"
-
-                ProductEdit _ ->
-                    model.editProductForm.productData
-                        |> RemoteData.map (\p -> " - " ++ p.name)
-                        |> RemoteData.toMaybe
-                        |> Maybe.withDefault ""
-                        |> (\name -> "Edit Product" ++ name)
-
-        -- TODO: Have "Error" & "Loading" titles?
-        getFromPageData :
-            (PageData.PageData -> RemoteData.WebData a)
-            -> (a -> String)
-            -> String
-        getFromPageData selector f =
-            selector pageData
-                |> RemoteData.toMaybe
-                |> Maybe.map f
-                |> Maybe.withDefault ""
-
         activeCategoryIds =
             case route of
                 CategoryDetails _ _ ->
@@ -402,7 +246,7 @@ view ({ route, pageData, navigationData, zone } as model) =
                 _ ->
                     []
     in
-    Document pageTitle <|
+    Document (pageTitle model) <|
         if isAdminRoute route && User.isAdmin model.currentUser then
             [ SiteHeader.adminView
             , SiteNavigation.adminView route
@@ -416,6 +260,165 @@ view ({ route, pageData, navigationData, zone } as model) =
             , middleContent
             , SiteFooter.view
             ]
+
+
+pageTitle : Model -> String
+pageTitle ({ route, pageData } as model) =
+    let
+        getFromPageData :
+            (PageData.PageData -> RemoteData.WebData a)
+            -> (a -> String)
+            -> String
+        getFromPageData selector f =
+            selector pageData
+                |> RemoteData.toMaybe
+                |> Maybe.map f
+                |> Maybe.withDefault ""
+    in
+    case route of
+        ProductDetails _ ->
+            getFromPageData .productDetails (.product >> .name)
+
+        CategoryDetails _ _ ->
+            pageData.categoryDetails
+                |> Paginate.getResponseData
+                |> Maybe.map (.category >> .name)
+                |> Maybe.withDefault ""
+
+        AdvancedSearch ->
+            "Advanced Search"
+
+        SearchResults data _ ->
+            case Search.uniqueSearch data of
+                Nothing ->
+                    "Search Results"
+
+                Just searchType ->
+                    case searchType of
+                        AllProducts ->
+                            "All Products"
+
+                        AttributeSearch SeedAttribute.Organic ->
+                            "Organic Products"
+
+                        AttributeSearch SeedAttribute.Heirloom ->
+                            "Heirloom Products"
+
+                        AttributeSearch SeedAttribute.Regional ->
+                            "South-Eastern Products"
+
+                        AttributeSearch SeedAttribute.SmallGrower ->
+                            "Products from Small Farms in our Grower Network"
+
+        PageDetails _ ->
+            getFromPageData .pageDetails .name
+
+        CreateAccount ->
+            "Create an Account"
+
+        CreateAccountSuccess ->
+            "Account Creation Successful"
+
+        Login _ ->
+            "Customer Login"
+
+        ResetPassword Nothing ->
+            "Reset Password"
+
+        ResetPassword (Just _) ->
+            "Change Password"
+
+        MyAccount ->
+            "My Account"
+
+        EditLogin ->
+            "Edit Login Details"
+
+        EditAddress ->
+            "Edit Addresses"
+
+        OrderDetails orderId ->
+            "Order #" ++ String.fromInt orderId
+
+        Cart ->
+            "Shopping Cart"
+
+        QuickOrder ->
+            "Quick Order"
+
+        Checkout ->
+            "Checkout"
+
+        CheckoutSuccess _ _ ->
+            "Order Complete"
+
+        Admin adminRoute ->
+            adminTitle model adminRoute ++ " - Admin"
+
+        NotFound ->
+            "Page Not Found"
+
+
+adminTitle : Model -> AdminRoute -> String
+adminTitle ({ pageData } as model) adminRoute =
+    case adminRoute of
+        Dashboard ->
+            "Dashboard"
+
+        CategoryList ->
+            "Categories"
+
+        CategoryNew ->
+            "New Category"
+
+        CategoryEdit _ ->
+            pageData.adminEditCategory
+                |> RemoteData.map (\c -> " - " ++ c.name)
+                |> RemoteData.toMaybe
+                |> Maybe.withDefault ""
+                |> (\name -> "Edit Category" ++ name)
+
+        PageList ->
+            "Pages"
+
+        PageNew ->
+            "New Page"
+
+        PageEdit _ ->
+            pageData.adminEditPage
+                |> RemoteData.map (\p -> " - " ++ p.title)
+                |> RemoteData.toMaybe
+                |> Maybe.withDefault ""
+                |> (\title -> "Edit Page" ++ title)
+
+        OrderList _ ->
+            "Orders"
+
+        AdminOrderDetails orderId ->
+            "Order #" ++ String.fromInt orderId
+
+        CustomerList _ ->
+            "Customers"
+
+        CustomerEdit _ ->
+            pageData.adminEditCustomer
+                |> RemoteData.map (\c -> " - " ++ c.email)
+                |> RemoteData.toMaybe
+                |> Maybe.withDefault ""
+                |> (\email -> "Edit Customer" ++ email)
+
+        ProductList ->
+            "Products"
+
+        ProductNew ->
+            "New Product"
+
+        ProductEdit _ ->
+            model.editProductForm.productData
+                |> RemoteData.map (\p -> " - " ++ p.name)
+                |> RemoteData.toMaybe
+                |> Maybe.withDefault ""
+                |> (\name -> "Edit Product" ++ name)
 
 
 withIntermediateText : (a -> List (Html msg)) -> WebData a -> List (Html msg)

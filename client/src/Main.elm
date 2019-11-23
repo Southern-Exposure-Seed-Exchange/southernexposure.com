@@ -49,7 +49,7 @@ main : Program Flags Model Msg
 main =
     Browser.application
         { init = init
-        , update = update
+        , update = updateWrapper
         , subscriptions =
             Sub.batch
                 [ Ports.loggedOut (always LogOut)
@@ -105,6 +105,13 @@ init flags url key =
         authorizationCmd =
             Maybe.map reAuthorize flags.authUserId
                 |> Maybe.withDefault (redirectIfAuthRequired key route)
+
+        analyticsCmd =
+            if pageLoadCompleted model then
+                Ports.logPageView ( Routing.reverse route, View.pageTitle model )
+
+            else
+                Cmd.none
     in
     ( model
     , Cmd.batch
@@ -112,6 +119,7 @@ init flags url key =
         , getNavigationData
         , authorizationCmd
         , Task.perform NewZone Time.here
+        , analyticsCmd
         ]
     )
 
@@ -1230,6 +1238,146 @@ update msg ({ pageData, key } as model) =
             ( { model | editProductForm = newEditForm }
             , Cmd.none
             )
+
+
+{-| Wrap the normal update function, checking to see if the page has finished
+loading all it's dependent data. If so, run the SEO ports. Otherwise do
+nothing.
+-}
+updateWrapper : Msg -> Model -> ( Model, Cmd Msg )
+updateWrapper msg model =
+    let
+        ( newModel, cmd ) =
+            update msg model
+
+        noLoadNeededOrLoadJustFinished =
+            (not (pageLoadCompleted model) && pageLoadCompleted newModel)
+                || (model.route /= newModel.route && pageLoadCompleted newModel)
+    in
+    if noLoadNeededOrLoadJustFinished then
+        ( newModel
+        , Cmd.batch
+            [ Ports.logPageView ( Routing.reverse newModel.route, View.pageTitle newModel )
+            , cmd
+            ]
+        )
+
+    else
+        ( newModel, cmd )
+
+
+pageLoadCompleted : Model -> Bool
+pageLoadCompleted { pageData, route } =
+    let
+        checkRemote =
+            RemoteData.isSuccess
+
+        checkPaginate =
+            Paginate.getRemoteData >> RemoteData.isSuccess
+    in
+    case route of
+        ProductDetails _ ->
+            checkRemote pageData.productDetails
+
+        CategoryDetails _ _ ->
+            checkPaginate pageData.categoryDetails
+
+        AdvancedSearch ->
+            checkRemote pageData.advancedSearch
+
+        SearchResults _ _ ->
+            checkPaginate pageData.searchResults
+
+        PageDetails _ ->
+            checkRemote pageData.pageDetails
+
+        CreateAccount ->
+            True
+
+        CreateAccountSuccess ->
+            True
+
+        Login _ ->
+            True
+
+        ResetPassword _ ->
+            True
+
+        MyAccount ->
+            RemoteData.map2 Tuple.pair pageData.locations pageData.myAccount
+                |> checkRemote
+
+        EditLogin ->
+            True
+
+        EditAddress ->
+            RemoteData.map2 Tuple.pair pageData.locations pageData.addressDetails
+                |> checkRemote
+
+        OrderDetails _ ->
+            RemoteData.map2 Tuple.pair pageData.locations pageData.orderDetails
+                |> checkRemote
+
+        Cart ->
+            checkRemote pageData.cartDetails
+
+        QuickOrder ->
+            True
+
+        Checkout ->
+            RemoteData.map2 Tuple.pair pageData.locations pageData.checkoutDetails
+                |> checkRemote
+
+        CheckoutSuccess _ _ ->
+            RemoteData.map2 Tuple.pair pageData.locations pageData.orderDetails
+                |> checkRemote
+
+        Admin Dashboard ->
+            True
+
+        Admin CategoryList ->
+            checkRemote pageData.adminCategoryList
+
+        Admin CategoryNew ->
+            checkRemote pageData.adminNewCategory
+
+        Admin (CategoryEdit _) ->
+            RemoteData.map2 Tuple.pair pageData.adminNewCategory pageData.adminEditCategory
+                |> checkRemote
+
+        Admin PageList ->
+            checkRemote pageData.adminPageList
+
+        Admin PageNew ->
+            True
+
+        Admin (PageEdit _) ->
+            checkRemote pageData.adminEditPage
+
+        Admin (OrderList _) ->
+            checkRemote pageData.locations
+
+        Admin (AdminOrderDetails _) ->
+            RemoteData.map2 Tuple.pair pageData.locations pageData.adminOrderDetails
+                |> checkRemote
+
+        NotFound ->
+            True
+
+        Admin (CustomerList _) ->
+            checkPaginate pageData.adminCustomerList
+
+        Admin (CustomerEdit _) ->
+            checkRemote pageData.adminEditCustomer
+
+        Admin ProductList ->
+            checkRemote pageData.adminProductList
+
+        Admin ProductNew ->
+            checkRemote pageData.adminSharedProduct
+
+        Admin (ProductEdit _) ->
+            checkRemote pageData.adminSharedProduct
 
 
 {-| Update the current page number using the Paginated data.

@@ -39,6 +39,16 @@ var stripeHandler = StripeCheckout.configure({
 });
 
 
+/** ANALYTICS **/
+// TODO: Reduce ID duplication - stated here & in webpack config
+const GA_MEASUREMENT_ID = 'UA-5070189-1';
+window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', GA_MEASUREMENT_ID, { 'send_page_view': false });
+
+
+
 /** SUBSCRIPTIONS **/
 
 /* Changes to Stored Auth Details */
@@ -136,6 +146,12 @@ app.ports.collectStripeToken.subscribe(function(portData) {
   window.addEventListener('popstate', function() {
     stripeHandler.close();
   });
+});
+
+/* Log Page Change with Google Analytics */
+app.ports.logPageView.subscribe(function(portData) {
+  var [url, title] = portData;
+  gtag('config', GA_MEASUREMENT_ID, { 'page_path': url, 'page_title': title });
 });
 
 

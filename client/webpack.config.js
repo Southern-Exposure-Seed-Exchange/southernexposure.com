@@ -9,6 +9,8 @@ var ImageminWebpackPlugin = require('imagemin-webpack-plugin').default;
 
 var isProduction = process.env.NODE_ENV === 'production';
 
+const GA_MEASUREMENT_ID = 'UA-5070189-1';
+
 
 module.exports = {
   mode: isProduction ? 'production' : 'development',
@@ -112,7 +114,12 @@ module.exports = {
 
       title: 'Southern Exposure Seed Exchange',
       links: ['https://fonts.googleapis.com/css?family=Crimson+Text|Glass+Antiqua'],
-      scripts: ['https://checkout.stripe.com/checkout.js'],
+      scripts:
+        [ 'https://checkout.stripe.com/checkout.js',
+          { "src": 'https://www.googletagmanager.com/gtag/js?id=' + GA_MEASUREMENT_ID,
+            "async": true
+          }
+        ],
       xhtml: true,
       hash: false,
       baseHref: '/',

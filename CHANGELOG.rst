@@ -6,6 +6,7 @@ CHANGELOG
 v0.10.0
 =======
 
+* Update to the latest Google Analytics tracking script.
 * Expand the information in the Google Merchant Feed. Include sale information,
   category hierarchy, bundle status, brand names, & lot sizes.
 * Include the Blog's Sitemap in the generate Sitemap Index.

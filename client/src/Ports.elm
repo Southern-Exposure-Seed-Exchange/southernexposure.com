@@ -2,6 +2,7 @@ port module Ports exposing
     ( cartItemCountChanged
     , collapseMobileMenus
     , collectStripeToken
+    , logPageView
     , loggedIn
     , loggedOut
     , newCartSessionToken
@@ -91,3 +92,10 @@ port collectStripeToken : ( String, Int ) -> Cmd msg
 
 
 port stripeTokenReceived : (String -> msg) -> Sub msg
+
+
+
+-- Analytics
+
+
+port logPageView : ( String, String ) -> Cmd msg
