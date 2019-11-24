@@ -71,6 +71,8 @@ view =
                 , Microdata.logoLink "https://www.southernexposure.com/static/img/logos/sese.png"
                 , Microdata.sameAsLink "https://www.facebook.com/SouthernExposureSeeds/"
                 , Microdata.sameAsLink "https://www.instagram.com/southernexposureseed/"
+                , Microdata.sameAsLink "https://github.com/Southern-Exposure-Seed-Exchange"
+                , Microdata.sameAsLink "https://www.linkedin.com/company/southern-exposure-seed-exchange"
                 , contactAddress
                 ]
 
