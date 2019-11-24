@@ -6,11 +6,12 @@ module SiteUI.Search exposing
     )
 
 import Html exposing (Html, button, div, input, text)
-import Html.Attributes exposing (class, type_, value)
+import Html.Attributes exposing (class, name, required, type_, value)
 import Html.Events exposing (onInput, onSubmit)
 import Products.Pagination as Pagination
 import Routing exposing (Route(..))
 import Search
+import Views.Microdata as Microdata
 
 
 type alias Data =
@@ -42,17 +43,24 @@ update key msg data =
 
 form : (Msg -> msg) -> String -> Search.Data -> Html msg
 form tagger buttonColor { query } =
-    Html.form [ onSubmit <| tagger Submit ]
-        [ div [ class "input-group input-group-sm" ]
-            [ input
-                [ class "form-control"
-                , value query
-                , type_ "search"
-                , onInput <| tagger << Update
-                ]
-                []
-            , div [ class "input-group-append" ]
-                [ button [ class <| "btn btn-" ++ buttonColor, type_ "submit" ] [ text "Search" ]
+    div Microdata.website
+        [ Microdata.urlMeta "https://www.southernexposure.com/"
+        , Html.form (onSubmit (tagger Submit) :: Microdata.potentialAction :: Microdata.searchAction)
+            [ Microdata.targetMeta "https://www.southernexposure.com/search/?q={header_search}"
+            , div [ class "input-group input-group-sm" ]
+                [ input
+                    [ class "form-control"
+                    , value query
+                    , type_ "search"
+                    , name "header_search"
+                    , onInput <| tagger << Update
+                    , required True
+                    , Microdata.queryInput
+                    ]
+                    []
+                , div [ class "input-group-append" ]
+                    [ button [ class <| "btn btn-" ++ buttonColor, type_ "submit" ] [ text "Search" ]
+                    ]
                 ]
             ]
         ]

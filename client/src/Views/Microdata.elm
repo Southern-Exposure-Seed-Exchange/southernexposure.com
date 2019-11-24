@@ -1,33 +1,36 @@
 module Views.Microdata exposing
-    ( breadcrumbList, itemListElement, organization, postalAddress
-    , item, name, description, position, logo, url, sameAs, itemscope
-    , email, telephone, faxNumber
+    ( breadcrumbList, itemListElement, organization, postalAddress, website, searchAction
+    , item, name, description, position, logo, url, sameAs
+    , legalName, email, telephone, faxNumber
     , address, streetAddress, addressLocality, addressRegion, postalCode
+    , potentialAction, target, queryInput
     , link, urlLink, sameAsLink, logoLink
-    , meta, positionMeta
-    , itemprop, ItemType(..), itemtype
+    , meta, positionMeta, urlMeta, targetMeta
+    , itemprop, itemscope, ItemType(..), itemtype
     )
 
 {-| Html attributes for applying Microdata Structured Data to elements.
 
-@docs breadcrumbList, itemListElement, organization, postalAddress
+@docs breadcrumbList, itemListElement, organization, postalAddress, website, searchAction
 
-@docs item, name, description, position, logo, url, sameAs, itemscope
+@docs item, name, description, position, logo, url, sameAs
 
-@docs email, telephone, faxNumber
+@docs legalName, email, telephone, faxNumber
 
 @docs address, streetAddress, addressLocality, addressRegion, postalCode
 
+@docs potentialAction, target, queryInput
+
 @docs link, urlLink, sameAsLink, logoLink
 
-@docs meta, positionMeta
+@docs meta, positionMeta, urlMeta, targetMeta
 
-@docs itemprop, ItemType, itemtype
+@docs itemprop, itemscope, ItemType, itemtype
 
 -}
 
-import Html exposing (..)
-import Html.Attributes exposing (..)
+import Html exposing (Attribute, Html, node)
+import Html.Attributes exposing (attribute, href)
 
 
 
@@ -60,6 +63,20 @@ postalAddress : List (Attribute msg)
 postalAddress =
     [ itemscope
     , itemtype PostalAddress
+    ]
+
+
+website : List (Attribute msg)
+website =
+    [ itemscope
+    , itemtype WebSite
+    ]
+
+
+searchAction : List (Attribute msg)
+searchAction =
+    [ itemscope
+    , itemtype SearchAction
     ]
 
 
@@ -147,6 +164,21 @@ sameAs =
     itemprop "sameAs"
 
 
+target : Attribute msg
+target =
+    itemprop "target"
+
+
+potentialAction : Attribute msg
+potentialAction =
+    itemprop "potentialAction"
+
+
+queryInput : Attribute msg
+queryInput =
+    itemprop "query-input"
+
+
 
 -- META
 
@@ -154,6 +186,16 @@ sameAs =
 positionMeta : Int -> Html msg
 positionMeta i =
     meta [ position ] <| String.fromInt i
+
+
+urlMeta : String -> Html msg
+urlMeta =
+    meta [ url ]
+
+
+targetMeta : String -> Html msg
+targetMeta =
+    meta [ target ]
 
 
 meta : List (Attribute msg) -> String -> Html msg
@@ -194,6 +236,7 @@ itemprop =
     attribute "itemprop"
 
 
+itemscope : Attribute msg
 itemscope =
     attribute "itemscope" ""
 
@@ -214,6 +257,12 @@ itemtype type_ =
 
                 PostalAddress ->
                     "PostalAddress"
+
+                WebSite ->
+                    "WebSite"
+
+                SearchAction ->
+                    "SearchAction"
     in
     attribute "itemtype" <| "https://schema.org/" ++ name_
 
@@ -223,3 +272,5 @@ type ItemType
     | ListItem
     | Organization
     | PostalAddress
+    | WebSite
+    | SearchAction
