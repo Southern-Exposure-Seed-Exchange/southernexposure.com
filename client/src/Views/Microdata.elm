@@ -1,11 +1,11 @@
 module Views.Microdata exposing
     ( breadcrumbList, itemListElement, organization, postalAddress, website, searchAction
-    , item, name, description, position, logo, url, sameAs
-    , legalName, email, telephone, faxNumber
+    , item, name, description, position, url
+    , legalName, slogan, logo, email, telephone, faxNumber, sameAs
     , address, streetAddress, addressLocality, addressRegion, postalCode
     , potentialAction, target, queryInput
     , link, urlLink, sameAsLink, logoLink
-    , meta, positionMeta, urlMeta, targetMeta
+    , meta, positionMeta, urlMeta, targetMeta, legalNameMeta, sloganMeta
     , itemprop, itemscope, ItemType(..), itemtype
     )
 
@@ -13,9 +13,9 @@ module Views.Microdata exposing
 
 @docs breadcrumbList, itemListElement, organization, postalAddress, website, searchAction
 
-@docs item, name, description, position, logo, url, sameAs
+@docs item, name, description, position, url
 
-@docs legalName, email, telephone, faxNumber
+@docs legalName, slogan, logo, email, telephone, faxNumber, sameAs
 
 @docs address, streetAddress, addressLocality, addressRegion, postalCode
 
@@ -23,7 +23,7 @@ module Views.Microdata exposing
 
 @docs link, urlLink, sameAsLink, logoLink
 
-@docs meta, positionMeta, urlMeta, targetMeta
+@docs meta, positionMeta, urlMeta, targetMeta, legalNameMeta, sloganMeta
 
 @docs itemprop, itemscope, ItemType, itemtype
 
@@ -164,6 +164,11 @@ sameAs =
     itemprop "sameAs"
 
 
+slogan : Attribute msg
+slogan =
+    itemprop "slogan"
+
+
 target : Attribute msg
 target =
     itemprop "target"
@@ -196,6 +201,16 @@ urlMeta =
 targetMeta : String -> Html msg
 targetMeta =
     meta [ target ]
+
+
+legalNameMeta : String -> Html msg
+legalNameMeta =
+    meta [ legalName ]
+
+
+sloganMeta : String -> Html msg
+sloganMeta =
+    meta [ slogan ]
 
 
 meta : List (Attribute msg) -> String -> Html msg

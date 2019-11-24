@@ -67,7 +67,9 @@ view =
 
         contactBlock =
             div Microdata.organization
-                [ Microdata.urlLink "https://www.southernexposure.com"
+                [ Microdata.legalNameMeta "Southern Exposure Seed Exchange"
+                , Microdata.sloganMeta "Saving the Past for the Future"
+                , Microdata.urlLink "https://www.southernexposure.com"
                 , Microdata.logoLink "https://www.southernexposure.com/static/img/logos/sese.png"
                 , Microdata.sameAsLink "https://www.facebook.com/SouthernExposureSeeds/"
                 , Microdata.sameAsLink "https://www.instagram.com/southernexposureseed/"
