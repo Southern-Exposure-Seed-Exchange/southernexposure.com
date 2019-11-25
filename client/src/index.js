@@ -148,10 +148,20 @@ app.ports.collectStripeToken.subscribe(function(portData) {
   });
 });
 
-/* Log Page Change with Google Analytics */
-app.ports.logPageView.subscribe(function(portData) {
-  var [url, title] = portData;
+/* Update the Page's Meta Elements & Send a Page Hit to Analytics */
+app.ports.updatePageMetadata.subscribe(function(portData) {
+  var [url, title, maybeImage] = portData;
   gtag('config', GA_MEASUREMENT_ID, { 'page_path': url, 'page_title': title });
+  setOgMeta('title', title);
+  setOgMeta('url', document.location.origin + url);
+  if (maybeImage === null) {
+    // TODO: Add ability to override the domain & reduce duplication of path
+    // here and in webpack.config.js
+    setOgMeta('image', 'https://www.southernexposure.com/static/img/logos/sese.png');
+  } else {
+    setOgMeta('image', document.location.origin + maybeImage);
+  }
+  updateCanonicalLink(url);
 });
 
 /* Log Purchases with Google Analytics */
@@ -175,4 +185,21 @@ function intOrNull(intString) {
 function getAuthData() {
   var userId = localStorage.getItem(authUserIdKey);
   return intOrNull(userId);
+}
+
+/* Set the content of an `og:<name>` meta tag. */
+function setOgMeta(name, content) {
+  var metaElement = document.querySelector('meta[property="og:' + name + '"]');
+  if (metaElement !== null) {
+    metaElement.setAttribute("content", content);
+  }
+}
+
+/* Set the Canonical URL of the page. */
+function updateCanonicalLink(path) {
+  var linkElement = document.querySelector('link[rel="canonical"]');
+  if (linkElement !== null) {
+    // TODO: Add ability to override the domain
+    linkElement.setAttribute("href", "https://www.southernexposure.com" + path);
+  }
 }

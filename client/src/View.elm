@@ -1,4 +1,4 @@
-module View exposing (pageTitle, view)
+module View exposing (pageImage, pageTitle, view)
 
 import AdvancedSearch
 import Auth.CreateAccount as CreateAccount
@@ -36,6 +36,7 @@ import SiteUI.Sidebar as SiteSidebar
 import StaticPage exposing (StaticPage)
 import User
 import Views.CustomerAdmin as CustomerAdmin
+import Views.Images exposing (media)
 import Views.OrderAdmin as OrderAdmin
 import Views.StaticPageAdmin as StaticPageAdmin
 import Views.Utils exposing (rawHtml)
@@ -419,6 +420,21 @@ adminTitle ({ pageData } as model) adminRoute =
                 |> RemoteData.toMaybe
                 |> Maybe.withDefault ""
                 |> (\name -> "Edit Product" ++ name)
+
+
+pageImage : Model -> Maybe String
+pageImage { route, pageData } =
+    case route of
+        ProductDetails _ ->
+            RemoteData.toMaybe pageData.productDetails
+                |> Maybe.map (.product >> .image >> .original >> media)
+
+        CategoryDetails _ _ ->
+            Paginate.getResponseData pageData.categoryDetails
+                |> Maybe.map (.category >> .image >> .original >> media)
+
+        _ ->
+            Nothing
 
 
 withIntermediateText : (a -> List (Html msg)) -> WebData a -> List (Html msg)

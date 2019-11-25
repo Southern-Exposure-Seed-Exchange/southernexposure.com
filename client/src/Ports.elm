@@ -2,7 +2,6 @@ port module Ports exposing
     ( cartItemCountChanged
     , collapseMobileMenus
     , collectStripeToken
-    , logPageView
     , logPurchase
     , loggedIn
     , loggedOut
@@ -17,6 +16,7 @@ port module Ports exposing
     , storeAuthDetails
     , storeCartSessionToken
     , stripeTokenReceived
+    , updatePageMetadata
     )
 
 import Json.Encode exposing (Value)
@@ -100,10 +100,12 @@ port stripeTokenReceived : (String -> msg) -> Sub msg
 
 
 
--- Analytics
-
-
-port logPageView : ( String, String ) -> Cmd msg
+-- SEO / Analytics
 
 
 port logPurchase : Value -> Cmd msg
+
+
+{-| Send the URL, Title, & an Optional Image for updating Analytics & SEO tags.
+-}
+port updatePageMetadata : ( String, String, Maybe String ) -> Cmd msg

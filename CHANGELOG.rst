@@ -6,10 +6,14 @@ CHANGELOG
 v0.10.0
 =======
 
+* Include additional meta tags for providing page information to social
+  networks and search engines.
+* Expand the Structured Data provided to search engines about SESE & our
+  products.
 * Update to the latest Google Analytics tracking script.
 * Expand the information in the Google Merchant Feed. Include sale information,
   category hierarchy, bundle status, brand names, & lot sizes.
-* Include the Blog's Sitemap in the generate Sitemap Index.
+* Include the Blog's Sitemap in the generated Sitemap Index.
 
 
 v0.9.0

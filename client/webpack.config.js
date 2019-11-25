@@ -113,13 +113,26 @@ module.exports = {
       lang: 'en-US',
 
       title: 'Southern Exposure Seed Exchange',
-      links: ['https://fonts.googleapis.com/css?family=Crimson+Text|Glass+Antiqua'],
+      links: [
+        'https://fonts.googleapis.com/css?family=Crimson+Text|Glass+Antiqua',
+        { rel: "canonical", href: "https://www.southernexposure.com" }
+
+      ],
       scripts:
         [ 'https://checkout.stripe.com/checkout.js',
           { "src": 'https://www.googletagmanager.com/gtag/js?id=' + GA_MEASUREMENT_ID,
             "async": true
           }
         ],
+      meta: [
+        // TODO: Add ability to override domains
+        { property: "og:site_name", content: "Southern Exposure Seed Exchange" },
+        { property: "og:type", content: "website" },
+        { property: "og:image", content: "https://www.southernexposure.com/static/img/logos/sese.png" },
+        { property: "og:title",
+          content: "Southern Exposure Seed Exchange, Saving the Past for the Future" },
+        { property: "og:url", content: "https://www.southernexposure.com/" },
+      ],
       xhtml: true,
       hash: false,
       baseHref: '/',

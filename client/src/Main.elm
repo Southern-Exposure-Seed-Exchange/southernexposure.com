@@ -106,9 +106,9 @@ init flags url key =
             Maybe.map reAuthorize flags.authUserId
                 |> Maybe.withDefault (redirectIfAuthRequired key route)
 
-        analyticsCmd =
+        metadataCmd =
             if pageLoadCompleted model then
-                Ports.logPageView ( Routing.reverse route, View.pageTitle model )
+                Ports.updatePageMetadata ( Routing.reverse route, View.pageTitle model, View.pageImage model )
 
             else
                 Cmd.none
@@ -119,7 +119,7 @@ init flags url key =
         , getNavigationData
         , authorizationCmd
         , Task.perform NewZone Time.here
-        , analyticsCmd
+        , metadataCmd
         ]
     )
 
@@ -1257,7 +1257,7 @@ updateWrapper msg model =
     if noLoadNeededOrLoadJustFinished then
         ( newModel
         , Cmd.batch
-            [ Ports.logPageView ( Routing.reverse newModel.route, View.pageTitle newModel )
+            [ Ports.updatePageMetadata ( Routing.reverse newModel.route, View.pageTitle newModel, View.pageImage newModel )
             , cmd
             ]
         )
