@@ -1,8 +1,11 @@
+{-# OPTIONS_GHC -fno-warn-orphans #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeFamilies #-}
 
@@ -17,6 +20,7 @@ import Control.Monad.Logger (runNoLoggingT)
 import Data.ByteString.Lazy (ByteString)
 import Data.Char (isAlpha)
 import Data.Int (Int32)
+import Data.Foldable (foldrM)
 import Data.List (nubBy, partition, intercalate)
 import Data.Maybe (maybeToList, fromMaybe, isJust, listToMaybe)
 import Data.Monoid ((<>))
@@ -48,9 +52,10 @@ import Models.Fields
 import Utils
 
 import qualified Data.CAProvinceCodes as CACodes
-import qualified Data.HashMap.Strict as M
+import qualified Data.HashMap.Strict as HM
 import qualified Data.ISO3166_CountryCodes as CountryCodes
 import qualified Data.IntMap as IntMap
+import qualified Data.Map.Strict as M
 import qualified Data.StateCodes as StateCodes
 import qualified Data.Text as T
 import qualified Data.UUID as UUID
@@ -170,7 +175,7 @@ main = do
         liftPutStrLn "Inserting Customers"
         customerMap <- insertCustomers customers
         liftPutStrLn "Inserting Addresses"
-        insertAddresses customerMap addresses
+        addressCache <- insertAddresses customerMap addresses
         liftPutStrLn "Inserting Charges"
         insertCharges
         liftPutStrLn "Inserting Carts"
@@ -179,7 +184,7 @@ main = do
         liftPutStrLn "Inserting Coupons"
         insertCoupons coupons
         liftPutStrLn "Inserting Orders"
-        insertOrders customerMap variantMap orders
+        void $ insertOrders customerMap variantMap addressCache orders
     close mysqlConn
     destroyAllResources psqlConn
   where
@@ -439,8 +444,8 @@ makeCustomers mysql = do
         <$> (customerQuery False >>= mapM (makeCustomer storeCreditMap))
     customersNoAccounts <- customersToMap
         <$> (customerQuery True >>= mapM (makeCustomer storeCreditMap))
-    let allCustomers = M.unionWith mergeCustomers customersWithAccounts customersNoAccounts
-    return $ M.elems allCustomers
+    let allCustomers = HM.unionWith mergeCustomers customersWithAccounts customersNoAccounts
+    return $ HM.elems allCustomers
     where
         customerQuery checkoutWithoutAccount = do
             queryString <- prepareStmt mysql . Query $
@@ -452,7 +457,7 @@ makeCustomers mysql = do
             closeStmt mysql queryString
             return cs
         customersToMap =
-            M.fromListWith mergeCustomers . map (\c@(_, cust) -> (customerEmail cust, c))
+            HM.fromListWith mergeCustomers . map (\c@(_, cust) -> (customerEmail cust, c))
         mergeCustomers (ids1, c1) (ids2, c2) =
             ( ids1 <> ids2
             , c1
@@ -1149,10 +1154,10 @@ insertCustomers =
 
 
 -- | Replace the CustomerIds & insert the Addresses.
-insertAddresses :: OldIdMap CustomerId -> [Address] -> SqlWriteT IO ()
+insertAddresses :: OldIdMap CustomerId -> [Address] -> SqlWriteT IO AddressCache
 insertAddresses customerMap =
-    mapM_ insertAddress
-    where insertAddress address@Address {..} =
+    foldrM insertAddress (M.empty, M.empty)
+    where insertAddress address@Address {..} addressCache =
             let
                 oldCustomerId =
                     fromIntegral $ fromSqlKey addressCustomerId
@@ -1162,7 +1167,8 @@ insertAddresses customerMap =
                         error $ "insertAddress: Could Not Find Customer "
                                 ++ show oldCustomerId
                     Just customerId ->
-                        insertUniqueAddress address { addressCustomerId = customerId }
+                        snd <$> insertUniqueAddress addressCache
+                            address { addressCustomerId = customerId }
 
 
 insertCharges :: SqlWriteT IO ()
@@ -1291,13 +1297,13 @@ insertCoupons :: [Coupon] -> SqlWriteT IO ()
 insertCoupons = insertMany_
 
 
-insertOrders :: OldIdMap CustomerId -> OldIdMap ProductVariantId
+insertOrders :: OldIdMap CustomerId -> OldIdMap ProductVariantId -> AddressCache
     -> [(Order, [OrderProduct], [OrderLineItem], Address, Maybe Address, T.Text, Customer)]
-    -> SqlWriteT IO ()
+    -> SqlWriteT IO AddressCache
 insertOrders customerMap variantMap =
-    mapM_ insertOrder
+    foldrM insertOrder
   where
-    insertOrder (order, products, lines, shippingAddr, maybeBillingAddr, couponCode, backupCustomer) = do
+    insertOrder (order, products, lines, shippingAddr, maybeBillingAddr, couponCode, backupCustomer) addrCache = do
         maybeCoupon <- fmap entityKey <$> selectFirst [ CouponCode ==. couponCode ] []
         let oldCustomerId = fromIntegral . fromSqlKey $ orderCustomerId order
         customerId <- case IntMap.lookup oldCustomerId customerMap of
@@ -1312,18 +1318,19 @@ insertOrders customerMap variantMap =
                         insert backupCustomer
             Just customerId ->
                 return customerId
-        let insertCustomerAddress addr =
-                insertUniqueAddress addr { addressCustomerId = customerId }
-        shippingId <- insertCustomerAddress shippingAddr
-        maybeBillingId <- sequence $ insertCustomerAddress <$> maybeBillingAddr
+        let insertCustomerAddress c addr =
+                insertUniqueAddress c addr { addressCustomerId = customerId }
+        (shippingId, addrCache_) <- insertCustomerAddress addrCache shippingAddr
+        maybeBillingId <- sequence $ insertCustomerAddress addrCache_ <$> maybeBillingAddr
         newOrderId <- insert order
             { orderCouponId = maybeCoupon
             , orderCustomerId = customerId
             , orderShippingAddressId = shippingId
-            , orderBillingAddressId = maybeBillingId
+            , orderBillingAddressId = fst <$> maybeBillingId
             }
         mapM_ (insertLineItem newOrderId) lines
         mapM_ (insertOrderProduct newOrderId) products
+        return $ maybe addrCache_ snd maybeBillingId
     insertLineItem orderId item =
         insert_ item { orderLineItemOrderId = orderId }
     insertOrderProduct orderId product =
@@ -1450,40 +1457,96 @@ makeRegion state country =
         _ ->
             CustomRegion state
 
--- TODO: This runs pretty slow, see if we can speed it up by reducing
--- queries. Maybe keep a map of Address -> ID as well as Customer->(Bool,Bool)
--- for defaults. Then we can just query the map for existence instead of
--- the database.
-insertUniqueAddress :: Address -> SqlWriteT IO AddressId
-insertUniqueAddress address@Address {..} = do
-    existingAddress <- selectFirst
-        [ AddressFirstName ==. addressFirstName
-        , AddressLastName ==. addressLastName
-        , AddressCompanyName ==. addressCompanyName
-        , AddressAddressOne ==. addressAddressOne
-        , AddressAddressTwo ==. addressAddressTwo
-        , AddressCity ==. addressCity
-        , AddressState ==. addressState
-        , AddressZipCode ==. addressZipCode
-        , AddressCountry ==. addressCountry
-        , AddressType ==. addressType
-        , AddressCustomerId ==. addressCustomerId
-        ]
-        []
+insertUniqueAddress :: AddressCache -> Address -> SqlWriteT IO (AddressId, AddressCache)
+insertUniqueAddress c@(addrCache, defaultCache) address@Address {..} = do
+    let existingAddress = M.lookup normalized addrCache
     case existingAddress of
         Just addr ->
-            return $ entityKey addr
+            return (addr, c)
         Nothing -> do
-            alreadyDefaultForType <- isJust <$> selectFirst
-                [ AddressType ==. addressType
-                , AddressCustomerId ==. addressCustomerId
-                , AddressIsDefault ==. True
-                ]
-                []
-            insert $ address
+            let hasDefault =
+                    hasDefaultAddress addressCustomerId addressType c
+                newDefaultCache =
+                    if not hasDefault && addressIsDefault then
+                        setDefault addressCustomerId addressType defaultCache
+                    else defaultCache
+            addressId <- insert $ address
                 { addressIsDefault =
-                    not alreadyDefaultForType && addressIsDefault
+                    not hasDefault && addressIsDefault
                 }
+            let newAddrCache = M.insert normalized addressId addrCache
+            return (addressId, (newAddrCache, newDefaultCache))
+  where
+    normalized :: Address
+    normalized =
+        Address
+            { addressFirstName = T.toLower addressFirstName
+            , addressLastName = T.toLower addressLastName
+            , addressCompanyName = T.toLower addressCompanyName
+            , addressAddressOne = T.toLower addressAddressOne
+            , addressAddressTwo = T.toLower addressAddressTwo
+            , addressCity = T.toLower addressCity
+            , addressState = addressState
+            , addressZipCode = T.toLower addressZipCode
+            , addressCountry = addressCountry
+            , addressIsDefault = addressIsDefault
+            , addressType = addressType
+            , addressCustomerId = addressCustomerId
+            , addressIsActive = addressIsActive
+            }
+
+-- | Caches of existing addresses & whether a Customer has a default. The
+-- first boolean is the Shipping address, the second is the Billing.
+type AddressCache =
+        ( M.Map Address AddressId, M.Map CustomerId (Bool, Bool) )
+
+-- Various orphan instances allowing us to use Address as a Map key.
+deriving instance Ord AddressType
+deriving instance Ord CACodes.Code
+deriving instance Ord ArmedForcesRegionCode
+deriving instance Ord Region
+deriving instance Eq Address
+deriving instance Ord Address
+
+-- | Does the Customer already have a default address for the given
+-- AddressType?
+hasDefaultAddress :: CustomerId -> AddressType -> AddressCache -> Bool
+hasDefaultAddress cId addrType (_, cache) =
+    let
+        selector = case addrType of
+            Shipping ->
+                fst
+            Billing ->
+                snd
+    in
+    maybe False selector $ M.lookup cId cache
+
+-- Mark the Customer as having a default address for the given AddressType.
+setDefault :: CustomerId -> AddressType -> M.Map CustomerId (Bool, Bool) -> M.Map CustomerId (Bool, Bool)
+setDefault cId addrType cache =
+    let
+        updater (ship, bill) =
+            Just $ case addrType of
+                Shipping ->
+                    (True, bill)
+                Billing ->
+                    (ship, True)
+        initialValue =
+            Just $ case addrType of
+                Shipping ->
+                    (True, False)
+                Billing ->
+                    (False, True)
+    in
+    M.alter
+        (\case
+            Nothing ->
+                initialValue
+            Just defaults ->
+                updater defaults
+        )
+        cId cache
+
 
 -- | Reduce duplicates in a list with a custom equality function
 -- & a function to merge duplicate items.
