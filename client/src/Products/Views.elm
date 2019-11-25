@@ -9,7 +9,7 @@ import Html.Keyed as Keyed
 import Json.Decode as Decode
 import Messages exposing (Msg(..))
 import Model exposing (CartForms)
-import Models.Fields exposing (Cents(..), imageToSrcSet, imgSrcFallback, lotSizeToString)
+import Models.Fields exposing (Cents(..), centsToString, imageToSrcSet, imgSrcFallback, lotSizeToString)
 import PageData exposing (ProductData)
 import Paginate exposing (Paginated)
 import Product exposing (Product, ProductId(..), ProductVariant, ProductVariantId(..), variantPrice)
@@ -18,6 +18,7 @@ import Products.Sorting as Sorting
 import Routing exposing (Route(..))
 import SeedAttribute exposing (SeedAttribute)
 import Views.Format as Format
+import Views.Microdata as Microdata
 import Views.Pager as Pager
 import Views.Utils exposing (htmlOrBlank, numericInput, onIntInput, rawHtml, routeLinkAttributes)
 
@@ -32,48 +33,57 @@ details addToCartForms { product, variants, maybeSeedAttribute, categories } =
                         div [ class "product-category" ]
                             [ h3 [ class "mt-3" ]
                                 [ a (routeLinkAttributes <| CategoryDetails category.slug Pagination.default)
-                                    [ text category.name ]
+                                    [ span [ Microdata.category ] [ text category.name ] ]
                                 ]
                             , rawHtml category.description
                             ]
                     )
     in
-    [ h1 [ class "product-details-title d-flex justify-content-between" ]
-        [ Product.singleVariantName product variants
-        , div [ class "d-none d-md-inline-flex" ]
-            [ htmlOrBlank SeedAttribute.icons maybeSeedAttribute ]
-        ]
-    , div [ class "d-md-none" ]
-        [ htmlOrBlank SeedAttribute.icons maybeSeedAttribute ]
-    , hr [] []
-    , div [ class "product-details" ]
-        [ div [ class "clearfix" ]
-            [ div [ class "product-image mr-md-3 mb-2" ]
-                [ div
-                    [ class "card" ]
-                    [ div [ class "card-body text-center p-1" ]
-                        [ img
-                            [ src <| imgSrcFallback product.image
-                            , imageToSrcSet product.image
-                            , class "img-fluid mb-2"
-                            , attribute "sizes" <|
-                                String.join ", "
-                                    [ "(max-width: 767px) 100vw"
-                                    , "(max-width: 991px) 125px"
-                                    , "(max-width: 1199px) 230px"
-                                    , "315px"
+    List.singleton <|
+        div Microdata.product
+            [ h1 [ class "product-details-title d-flex justify-content-between" ]
+                [ Product.singleVariantName product variants
+                , div [ class "d-none d-md-inline-flex" ]
+                    [ htmlOrBlank SeedAttribute.icons maybeSeedAttribute ]
+                ]
+            , div [ class "d-md-none" ]
+                [ htmlOrBlank SeedAttribute.icons maybeSeedAttribute ]
+            , hr [] []
+            , div [ class "product-details" ]
+                [ div [ class "clearfix" ]
+                    [ div [ class "product-image mr-md-3 mb-2" ]
+                        [ div
+                            [ class "card" ]
+                            [ div [ class "card-body text-center p-1" ]
+                                [ img
+                                    [ src <| imgSrcFallback product.image
+                                    , imageToSrcSet product.image
+                                    , class "img-fluid mb-2"
+                                    , Microdata.image
+                                    , attribute "sizes" <|
+                                        String.join ", "
+                                            [ "(max-width: 767px) 100vw"
+                                            , "(max-width: 991px) 125px"
+                                            , "(max-width: 1199px) 230px"
+                                            , "315px"
+                                            ]
                                     ]
+                                    []
+                                , cartForm (cartFormData addToCartForms ( product, variants )) product
+                                ]
                             ]
-                            []
-                        , cartForm (cartFormData addToCartForms ( product, variants )) product
                         ]
+                    , Microdata.mpnMeta product.baseSKU
+                    , Microdata.skuMeta product.baseSKU
+                    , Microdata.brandMeta "Southern Exposure Seed Exchange"
+                    , Microdata.urlMeta <|
+                        Routing.reverse <|
+                            ProductDetails product.slug
+                    , div [ Microdata.description ] [ rawHtml product.longDescription ]
+                    , div [] categoryBlocks
                     ]
                 ]
-            , rawHtml product.longDescription
-            , div [] categoryBlocks
             ]
-        ]
-    ]
 
 
 list : (Pagination.Data -> Route) -> Pagination.Data -> CartForms -> Paginated ProductData a c -> List (Html Msg)
@@ -155,7 +165,7 @@ list routeConstructor pagination addToCartForms products =
                 |> List.foldr (\( r, b ) ( rs, bs ) -> ( r :: rs, b :: bs )) ( [], [] )
 
         renderProduct cartData ( product, variants, maybeSeedAttribute ) =
-            tr []
+            tr Microdata.product
                 [ td [ class "row-product-image text-center align-middle" ]
                     [ Keyed.node "a"
                         (routeLinkAttributes <| ProductDetails product.slug)
@@ -164,6 +174,7 @@ list routeConstructor pagination addToCartForms products =
                                 [ src <| imgSrcFallback product.image
                                 , imageToSrcSet product.image
                                 , listImageSizes
+                                , Microdata.image
                                 ]
                                 []
                           )
@@ -171,11 +182,14 @@ list routeConstructor pagination addToCartForms products =
                     ]
                 , td [ class "row-product-description" ]
                     [ h3 [ class "mb-0 d-flex justify-content-between" ]
-                        [ a (routeLinkAttributes <| ProductDetails product.slug)
+                        [ a (Microdata.url :: routeLinkAttributes (ProductDetails product.slug))
                             [ Product.singleVariantName product variants ]
                         , htmlOrBlank SeedAttribute.icons maybeSeedAttribute
                         ]
-                    , rawHtml product.longDescription
+                    , div [ Microdata.description ] [ rawHtml product.longDescription ]
+                    , Microdata.mpnMeta product.baseSKU
+                    , Microdata.skuMeta product.baseSKU
+                    , Microdata.brandMeta "Southern Exposure Seed Exchange"
                     ]
                 , td [ class "text-center align-middle" ]
                     [ cartForm cartData product ]
@@ -315,7 +329,7 @@ limitedAvailabilityBadge =
 
 
 cartForm : CartFormData -> Product -> Html Msg
-cartForm { maybeSelectedVariant, maybeSelectedVariantId, quantity, isOutOfStock, isLimitedAvailablity, variantSelect, selectedItemNumber } product =
+cartForm { maybeSelectedVariant, maybeSelectedVariantId, quantity, isOutOfStock, isLimitedAvailablity, variantSelect, selectedItemNumber, offersMeta } product =
     let
         formAttributes =
             (::) (class "add-to-cart-form") <|
@@ -367,6 +381,7 @@ cartForm { maybeSelectedVariant, maybeSelectedVariantId, quantity, isOutOfStock,
         , availabilityBadge
         , small [ class "text-muted d-block" ]
             [ text <| "Item #" ++ selectedItemNumber ]
+        , Html.map never offersMeta
         ]
 
 
@@ -378,6 +393,7 @@ type alias CartFormData =
     , isLimitedAvailablity : Bool
     , variantSelect : Html Msg
     , selectedItemNumber : String
+    , offersMeta : Html Never
     }
 
 
@@ -489,6 +505,36 @@ cartFormData addToCartForms ( product, variants ) =
 
                 Nothing ->
                     valIfNothing
+
+        offers =
+            div [] <|
+                List.map
+                    renderOfferMeta
+                    variantList
+
+        renderOfferMeta variant =
+            let
+                availability =
+                    if variant.quantity > 0 then
+                        Microdata.InStock
+
+                    else
+                        Microdata.OutOfStock
+            in
+            div (Microdata.offers :: Microdata.offer)
+                [ Microdata.availabilityMeta availability
+                , Microdata.conditionMeta Microdata.NewCondition
+                , Microdata.mpnMeta (product.baseSKU ++ variant.skuSuffix)
+                , Microdata.skuMeta (product.baseSKU ++ variant.skuSuffix)
+                , Microdata.priceMeta (centsToString variant.price)
+                , Microdata.priceCurrencyMeta "USD"
+                , Microdata.descriptionMeta <|
+                    Maybe.withDefault "" <|
+                        Maybe.map lotSizeToString variant.lotSize
+                , Microdata.urlMeta <|
+                    Routing.reverse <|
+                        ProductDetails product.slug
+                ]
     in
     { maybeSelectedVariant = maybeSelectedVariant
     , maybeSelectedVariantId = maybeSelectedVariantId
@@ -497,4 +543,5 @@ cartFormData addToCartForms ( product, variants ) =
     , isLimitedAvailablity = Product.isLimitedAvailablity variantList
     , variantSelect = viewIfLazy showVariantSelect variantSelect
     , selectedItemNumber = selectedItemNumber
+    , offersMeta = offers
     }

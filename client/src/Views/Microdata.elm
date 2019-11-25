@@ -1,19 +1,22 @@
 module Views.Microdata exposing
-    ( breadcrumbList, itemListElement, organization, postalAddress, website, searchAction
-    , item, name, description, position, url
+    ( breadcrumbList, itemListElement, organization, postalAddress, website, searchAction, product, offer
+    , item, name, description, image, position, url, category, offers
     , legalName, slogan, logo, email, telephone, faxNumber, sameAs
     , address, streetAddress, addressLocality, addressRegion, postalCode
     , potentialAction, target, queryInput
+    , availability, condition, mpn, sku, price, priceCurrency, brand
     , link, urlLink, sameAsLink, logoLink
-    , meta, positionMeta, urlMeta, targetMeta, legalNameMeta, sloganMeta
+    , meta, descriptionMeta, positionMeta, urlMeta, targetMeta, legalNameMeta, sloganMeta, availabilityMeta, conditionMeta, mpnMeta, skuMeta, priceMeta, priceCurrencyMeta, brandMeta
     , itemprop, itemscope, ItemType(..), itemtype
+    , ItemAvailability(..), itemAvailability
+    , ItemCondition(..), itemCondition
     )
 
 {-| Html attributes for applying Microdata Structured Data to elements.
 
-@docs breadcrumbList, itemListElement, organization, postalAddress, website, searchAction
+@docs breadcrumbList, itemListElement, organization, postalAddress, website, searchAction, product, offer
 
-@docs item, name, description, position, url
+@docs item, name, description, image, position, url, category, offers
 
 @docs legalName, slogan, logo, email, telephone, faxNumber, sameAs
 
@@ -21,11 +24,15 @@ module Views.Microdata exposing
 
 @docs potentialAction, target, queryInput
 
+@docs availability, condition, mpn, sku, price, priceCurrency, brand
+
 @docs link, urlLink, sameAsLink, logoLink
 
-@docs meta, positionMeta, urlMeta, targetMeta, legalNameMeta, sloganMeta
+@docs meta, descriptionMeta, positionMeta, urlMeta, targetMeta, legalNameMeta, sloganMeta, availabilityMeta, conditionMeta, mpnMeta, skuMeta, priceMeta, priceCurrencyMeta, brandMeta
 
 @docs itemprop, itemscope, ItemType, itemtype
+
+@docs ItemAvailability, itemAvailability
 
 -}
 
@@ -77,6 +84,20 @@ searchAction : List (Attribute msg)
 searchAction =
     [ itemscope
     , itemtype SearchAction
+    ]
+
+
+product : List (Attribute msg)
+product =
+    [ itemscope
+    , itemtype Product
+    ]
+
+
+offer : List (Attribute msg)
+offer =
+    [ itemscope
+    , itemtype Offer
     ]
 
 
@@ -184,6 +205,56 @@ queryInput =
     itemprop "query-input"
 
 
+image : Attribute msg
+image =
+    itemprop "image"
+
+
+category : Attribute msg
+category =
+    itemprop "category"
+
+
+offers : Attribute msg
+offers =
+    itemprop "offers"
+
+
+availability : Attribute msg
+availability =
+    itemprop "availability"
+
+
+condition : Attribute msg
+condition =
+    itemprop "itemCondition"
+
+
+mpn : Attribute msg
+mpn =
+    itemprop "mpn"
+
+
+sku : Attribute msg
+sku =
+    itemprop "sku"
+
+
+price : Attribute msg
+price =
+    itemprop "price"
+
+
+priceCurrency : Attribute msg
+priceCurrency =
+    itemprop "priceCurrency"
+
+
+brand : Attribute msg
+brand =
+    itemprop "brand"
+
+
 
 -- META
 
@@ -211,6 +282,46 @@ legalNameMeta =
 sloganMeta : String -> Html msg
 sloganMeta =
     meta [ slogan ]
+
+
+availabilityMeta : ItemAvailability -> Html msg
+availabilityMeta val =
+    meta [ availability ] <| itemAvailability val
+
+
+conditionMeta : ItemCondition -> Html msg
+conditionMeta val =
+    meta [ condition ] <| itemCondition val
+
+
+mpnMeta : String -> Html msg
+mpnMeta =
+    meta [ mpn ]
+
+
+skuMeta : String -> Html msg
+skuMeta =
+    meta [ sku ]
+
+
+priceMeta : String -> Html msg
+priceMeta =
+    meta [ price ]
+
+
+priceCurrencyMeta : String -> Html msg
+priceCurrencyMeta =
+    meta [ priceCurrency ]
+
+
+descriptionMeta : String -> Html msg
+descriptionMeta =
+    meta [ description ]
+
+
+brandMeta : String -> Html msg
+brandMeta =
+    meta [ brand ]
 
 
 meta : List (Attribute msg) -> String -> Html msg
@@ -278,8 +389,14 @@ itemtype type_ =
 
                 SearchAction ->
                     "SearchAction"
+
+                Product ->
+                    "Product"
+
+                Offer ->
+                    "Offer"
     in
-    attribute "itemtype" <| "https://schema.org/" ++ name_
+    attribute "itemtype" <| schemaUrl ++ name_
 
 
 type ItemType
@@ -289,3 +406,42 @@ type ItemType
     | PostalAddress
     | WebSite
     | SearchAction
+    | Product
+    | Offer
+
+
+itemAvailability : ItemAvailability -> String
+itemAvailability val =
+    (\s -> schemaUrl ++ s) <|
+        case val of
+            InStock ->
+                "InStock"
+
+            OutOfStock ->
+                "OutOfStock"
+
+
+type ItemAvailability
+    = InStock
+    | OutOfStock
+
+
+type ItemCondition
+    = NewCondition
+    | UsedCondition
+
+
+itemCondition : ItemCondition -> String
+itemCondition val =
+    (\s -> schemaUrl ++ s) <|
+        case val of
+            NewCondition ->
+                "NewCondition"
+
+            UsedCondition ->
+                "UsedCondition"
+
+
+schemaUrl : String
+schemaUrl =
+    "https://schema.org/"

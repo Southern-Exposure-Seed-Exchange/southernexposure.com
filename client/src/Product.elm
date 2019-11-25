@@ -21,6 +21,7 @@ import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode exposing (Value)
 import Markdown exposing (defaultOptions)
 import Models.Fields exposing (Cents(..), ImageData, LotSize, imageDecoder, lotSizeDecoder, lotSizeToString)
+import Views.Microdata as Microdata
 
 
 type ProductId
@@ -57,7 +58,7 @@ nameWithLotSize { name } { lotSize } =
         lotSizeString =
             lotSize |> Maybe.map (\s -> ", " ++ lotSizeToString s) |> Maybe.withDefault ""
     in
-    span [ class "product-name-lotsize" ]
+    span [ class "product-name-lotsize", Microdata.name ]
         [ Markdown.toHtmlWith
             { defaultOptions | sanitize = False, smartypants = True }
             []
