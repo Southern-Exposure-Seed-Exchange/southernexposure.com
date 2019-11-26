@@ -1,12 +1,15 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
-{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 
 import Prelude hiding (lines, product)
@@ -21,8 +24,8 @@ import Data.ByteString.Lazy (ByteString)
 import Data.Char (isAlpha)
 import Data.Int (Int32)
 import Data.Foldable (foldrM)
-import Data.List (nubBy, partition, intercalate)
-import Data.Maybe (maybeToList, fromMaybe, isJust, listToMaybe)
+import Data.List (nubBy, partition, intercalate, find)
+import Data.Maybe (fromMaybe, isJust, listToMaybe)
 import Data.Monoid ((<>))
 import Data.Pool (destroyAllResources)
 import Data.Scientific (Scientific)
@@ -37,11 +40,13 @@ import Database.MySQL.Base
 import Database.Persist
     ( (<-.), (+=.), (=.), (==.), Entity(..), Filter, getBy, insert, insertMany_
     , upsert, deleteWhere, selectKeysList, insert_, selectList, update, upsertBy
-    , selectFirst
+    , selectFirst, insertKey, ToBackendKey, SelectOpt(Desc), PersistEntity, PersistValue(..)
+    , DBName(..), persistIdField
     )
 import Database.Persist.Postgresql
     ( ConnectionPool, SqlWriteT, createPostgresqlPool, toSqlKey, fromSqlKey
-    , runSqlPool, runMigration
+    , runSqlPool, runMigration, SqlBackend, rawSql , tableDBName
+    , fieldDBName, SqlPersistT, Single
     )
 import Numeric.Natural (Natural)
 import System.FilePath (takeFileName)
@@ -67,20 +72,20 @@ import qualified System.IO.Streams as Streams
 -- that were deleted in ZenCart and then recreated with the same SKU. These
 -- product IDs are still present in the orders_products table so we add an
 -- entry in the variant map after inserting all variants.
-recreatedProducts :: [(Int, T.Text, T.Text)]
+recreatedProducts :: [(ProductId, T.Text, T.Text)]
 recreatedProducts =
-    [ (1039, "92504", "")       -- Allium Mix
-    , (1641, "92506", "")       -- Asiatic & Turban Garlic Sampler
+    [ (toSqlKey 1039, "92504", "")       -- Allium Mix
+    , (toSqlKey 1641, "92506", "")       -- Asiatic & Turban Garlic Sampler
     ]
 
 -- | A list of old product ids, new Products, & new Variants for products
 -- that were deleted in ZenCart. These are necessary because the product
 -- IDs still exist in ZenCart's orders_products table. They are inserted
 -- and added to the variant map.
-deletedProducts :: [(Int, Product, ProductVariant)]
+deletedProducts :: [(ProductId, Product, ProductVariant)]
 deletedProducts =
     let createdAt = UTCTime (ModifiedJulianDay 0) 0 in
-    [ ( 1639
+    [ ( toSqlKey 1639
       , Product
             { productName = "Free 2013 Catalog & Garden Guide"
             , productSlug = slugify "Free 2013 Catalog & Garden Guide"
@@ -93,7 +98,7 @@ deletedProducts =
             , productCreatedAt = createdAt
             }
       , ProductVariant
-            { productVariantProductId = toSqlKey 0
+            { productVariantProductId = toSqlKey 1639
             , productVariantSkuSuffix = ""
             , productVariantPrice = 0
             , productVariantQuantity = 0
@@ -101,7 +106,7 @@ deletedProducts =
             , productVariantIsActive = False
             }
       )
-    , ( 1811
+    , ( toSqlKey 1811
       , Product
             { productName = "Lahontan White Softneck Garlic 8 oz."
             , productSlug = slugify "Lahontan White Softneck Garlic 8 oz."
@@ -114,7 +119,7 @@ deletedProducts =
             , productCreatedAt = createdAt
             }
       , ProductVariant
-            { productVariantProductId = toSqlKey 0
+            { productVariantProductId = toSqlKey 1811
             , productVariantSkuSuffix = ""
             , productVariantPrice = 1195
             , productVariantQuantity = 0
@@ -135,9 +140,8 @@ main = do
     putStrLn "Making Category Sales"
     categorySales <- makeCategorySales mysqlConn
     putStrLn "Making Products/Variants"
-    let products = mergeProducts
-            $ map (\(_, catId, _, _, _, _, _, p) -> (catId, p)) mysqlProducts
-        variants = makeVariants mysqlProducts
+    let products = mergeProducts $ map (\(pId, _, _, _, _, _, p) -> (pId, p)) mysqlProducts
+        variants = map (fixProductIds products) $ makeVariants mysqlProducts
     putStrLn "Making Products Sales"
     productSales <- makeProductSales mysqlConn
     putStrLn "Making Seed Attributes"
@@ -159,11 +163,11 @@ main = do
         liftPutStrLn "Clearing Database"
         dropNewDatabaseRows
         liftPutStrLn "Inserting Categories"
-        categoryMap <- insertCategories categories
+        insertCategories categories
         liftPutStrLn "Inserting Category Sales"
-        insertCategorySales categorySales categoryMap
+        insertCategorySales categorySales
         liftPutStrLn "Inserting Products"
-        insertProducts products categoryMap
+        insertProducts products
         liftPutStrLn "Inserting Variants"
         variantMap <- insertVariants variants
         liftPutStrLn "Inserting Seed Attributes"
@@ -185,26 +189,42 @@ main = do
         insertCoupons coupons
         liftPutStrLn "Inserting Orders"
         void $ insertOrders customerMap variantMap addressCache orders
+        liftPutStrLn "Fixing ID Sequences"
+        fixIdSequences
     close mysqlConn
     destroyAllResources psqlConn
   where
     liftPutStrLn = lift . putStrLn
     mergeProducts = nubByWith
         (\(_, p1) (_, p2) -> productBaseSku p1 == productBaseSku p2)
-        (\(cat, prod) (_, nextProd) ->
+        (\(pId, prod) (_, nextProd) ->
             let base = if productIsActive prod then prod else nextProd in
-            ( cat
+            ( pId
             , base
                 { productIsActive =
                     productIsActive prod || productIsActive nextProd
                 }
             )
         )
+    fixProductIds products (pId, baseSku, variant) =
+        case find ((== baseSku) . productBaseSku . snd) products of
+            Nothing ->
+                error $ "fixProductIds: No Product with SKU: " ++ T.unpack baseSku
+            Just (productId, _) ->
+                if productId == pId then
+                    (productId, Nothing, baseSku, variant)
+                else
+                    (productId, Just pId, baseSku, variant { productVariantProductId = productId })
+
+
 
 
 
 
 type OldIdMap a = IntMap.IntMap a
+
+makeMapKey :: ToBackendKey SqlBackend e => Key e -> Int
+makeMapKey = fromIntegral . fromSqlKey
 
 
 -- DB Utility Functions
@@ -219,7 +239,6 @@ dropNewDatabaseRows =
     deleteWhere ([] :: [Filter SeedAttribute])
         >> deleteWhere ([] :: [Filter ProductSale])
         >> deleteWhere ([] :: [Filter CategorySale])
-        >> deleteWhere ([] :: [Filter Coupon])
         >> deleteWhere ([] :: [Filter Surcharge])
         >> deleteWhere ([] :: [Filter ShippingMethod])
         >> deleteWhere ([] :: [Filter CartItem])
@@ -227,6 +246,7 @@ dropNewDatabaseRows =
         >> deleteWhere ([] :: [Filter OrderProduct])
         >> deleteWhere ([] :: [Filter OrderLineItem])
         >> deleteWhere ([] :: [Filter Order])
+        >> deleteWhere ([] :: [Filter Coupon])
         >> deleteWhere ([] :: [Filter Address])
         >> deleteWhere ([] :: [Filter ProductVariant])
         >> deleteWhere ([] :: [Filter Product])
@@ -234,10 +254,36 @@ dropNewDatabaseRows =
         >> deleteWhere ([] :: [Filter Page])
         >> deleteWhere ([] :: [Filter Customer])
 
+-- | Adjust the ID sequences for the tables that retain their MySQL ID
+-- values.
+fixIdSequences :: SqlPersistT IO ()
+fixIdSequences = void $
+    fixIdSequence @Category >>
+    fixIdSequence @Product >>
+    fixIdSequence @Page >>
+    fixIdSequence @Customer >>
+    fixIdSequence @Order
+  where
+    fixIdSequence :: forall e. (PersistEntity e) => SqlPersistT IO [Single Int]
+    fixIdSequence =
+        let
+            table =
+                unDBName $ tableDBName @e undefined
+            key =
+                unDBName $ fieldDBName $ persistIdField @e
+        in
+        rawSql
+            ( "SELECT setval("
+            <> "    pg_get_serial_sequence(?,?), "
+            <> "    COALESCE(MAX(" <> key <> "), 1), "
+            <> "    MAX(" <> key <> ") IS NOT null) "
+            <> "FROM \"" <> table <> "\"")
+            [PersistText table, PersistText key]
+
 
 -- MySQL -> Persistent Functions
 
-makeCategories :: MySQLConn -> IO [(Int, Int, Category)]
+makeCategories :: MySQLConn -> IO [(CategoryId, Category)]
 makeCategories mysql = do
     categories <- mysqlQuery mysql $
         "SELECT c.categories_id, categories_image, parent_id, sort_order,"
@@ -251,22 +297,34 @@ makeCategories mysql = do
                  , MySQLInt32 parentId, MySQLInt32 catOrder
                  , MySQLText name, MySQLText description
                  ] =
-            let imgUrl = fromNullableText "" nullableImageUrl in
+                let imgUrl = fromNullableText "" nullableImageUrl
+                    maybeParentId =
+                        if parentId == 0 then
+                            Nothing
+                        else
+                            Just $ makeSqlKey parentId
+                in
                 return
-                    ( fromIntegral catId
-                    , fromIntegral parentId
-                    , Category name (slugify name) Nothing description (T.pack . takeFileName $ T.unpack imgUrl) (fromIntegral catOrder)
+                    ( makeSqlKey catId
+                    , Category
+                        { categoryName = name
+                        , categorySlug = slugify name
+                        , categoryParentId = maybeParentId
+                        , categoryDescription = description
+                        , categoryImageUrl = T.pack . takeFileName $ T.unpack imgUrl
+                        , categoryOrder = fromIntegral catOrder
+                        }
                     )
           toData r = print r >> error "Category Lambda Did Not Match"
 
 
-makeCategorySales :: MySQLConn -> IO [([Int], CategorySale)]
+makeCategorySales :: MySQLConn -> IO [CategorySale]
 makeCategorySales mysql = do
     sales <- mysqlQuery mysql $
         "SELECT sale_name, sale_deduction_value, sale_deduction_type,"
         <> "    sale_categories_selected, sale_date_start, sale_date_end "
         <> "FROM salemaker_sales"
-    filter (\(_, cs) -> categorySaleName cs /= "" && categorySaleName cs /= "GuardN Inoculant")
+    filter (\cs -> categorySaleName cs `notElem` ["", "GuardN Inoculant"])
         <$> mapM makeCategorySale sales
     where
         makeCategorySale [ MySQLText name, MySQLDecimal deduction, MySQLInt8 deductionType
@@ -274,16 +332,13 @@ makeCategorySales mysql = do
                         ] = do
             utcStart <- dayToUTC startDay
             utcEnd <- dayToUTC endDay
-            return
-                ( fixCategories categoryIds
-                , CategorySale
+            return CategorySale
                     { categorySaleName = name
                     , categorySaleType = saleType deduction deductionType
                     , categorySaleStartDate = utcStart
                     , categorySaleEndDate = utcEnd
-                    , categorySaleCategoryIds = []
+                    , categorySaleCategoryIds = fixCategories categoryIds
                     }
-                )
         makeCategorySale _ = error "Invalid arguments to makeCategorySale"
         saleType amount type_ = case type_ of
             0 -> FlatSale . Cents $ floor amount
@@ -292,13 +347,14 @@ makeCategorySales mysql = do
         fixCategories str =
             map readCategory . filter (/= "") $ T.split (== ',') str
         readCategory str =
-            fromMaybe
+            maybe
                 (error $ "Could not read sale category ID: " <> T.unpack str)
+                makeSqlKey
                 (readMaybe $ T.unpack str)
 
 
 
-makeProducts :: MySQLConn -> IO [(Int32, Int, T.Text, Scientific, Float, Float, Bool, Product)]
+makeProducts :: MySQLConn -> IO [(ProductId, T.Text, Scientific, Float, Float, Bool, Product)]
 makeProducts mysql = do
     products <- mysqlQuery mysql $
         "SELECT products_id, master_categories_id, products_price,"
@@ -328,12 +384,12 @@ makeProducts mysql = do
             createdAt <- if show created == "0001-01-01 00:00:00"
                 then return blankDate
                 else convertLocalTimeToUTC created
-            return ( prodId, fromIntegral catId, skuSuffix
+            return ( makeSqlKey prodId, skuSuffix
                    , prodPrice, prodQty, prodWeight, isActive
                    , Product
                         { productName = name
                         , productSlug = slugify name
-                        , productCategoryIds = []
+                        , productCategoryIds = [makeSqlKey catId]
                         , productBaseSku = T.toUpper baseSku
                         , productShortDescription = ""
                         , productLongDescription = description
@@ -345,14 +401,14 @@ makeProducts mysql = do
         makeProduct _ = error "Invalid arguments to makeProduct."
 
 
-makeVariants :: [(Int32, Int, T.Text, Scientific, Float, Float, Bool, Product)] -> [(Int, T.Text, ProductVariant)]
+makeVariants :: [(ProductId, T.Text, Scientific, Float, Float, Bool, Product)] -> [(ProductId, T.Text, ProductVariant)]
 makeVariants =
     map makeVariant
     where
-        makeVariant (productId, _, suffix, price, qty, weight, isActive, prod) =
-            (fromIntegral productId, productBaseSku prod,) $
+        makeVariant (productId, suffix, price, qty, weight, isActive, prod) =
+            (productId, productBaseSku prod,) $
                 ProductVariant
-                    (toSqlKey 0)
+                    productId
                     (T.toUpper suffix)
                     (dollarsToCents price)
                     (floor qty)
@@ -425,19 +481,19 @@ makeProductSales mysql = do
         makeProductSale _ = error "Invalid arguemnts to makeProductSale."
 
 
-makePages :: MySQLConn -> IO [Page]
+makePages :: MySQLConn -> IO [(PageId, Page)]
 makePages mysql =
     (map makePage <$>) . Streams.toList . snd
         =<< (query_ mysql . Query
-            $ "SELECT pages_title, pages_html_text"
+            $ "SELECT pages_id, pages_title, pages_html_text"
             <> "    FROM ezpages WHERE pages_html_text <> \"\"")
     where
-        makePage [MySQLText name, MySQLText content] =
-            Page name (slugify name) content
+        makePage [MySQLInt32 pageId, MySQLText name, MySQLText content] =
+            (makeSqlKey pageId, Page name (slugify name) content)
         makePage _ = error "Invalid arguments to makePage."
 
 
-makeCustomers :: MySQLConn -> IO [([Int], Customer)]
+makeCustomers :: MySQLConn -> IO [([CustomerId], Customer)]
 makeCustomers mysql = do
     storeCreditMap <- getStoreCreditMap mysql
     customersWithAccounts <- customersToMap
@@ -465,12 +521,12 @@ makeCustomers mysql = do
                     customerStoreCredit c1 + customerStoreCredit c2
                 }
             )
-        makeCustomer :: IntMap.IntMap Cents -> [MySQLValue] -> IO ([Int], Customer)
+        makeCustomer :: IntMap.IntMap Cents -> [MySQLValue] -> IO ([CustomerId], Customer)
         makeCustomer creditMap [MySQLInt32 customerId, MySQLText email, MySQLText password] = do
             let storeCredit = fromMaybe 0
                     $ IntMap.lookup (fromIntegral customerId) creditMap
             token <- generateToken
-            return . ([fromIntegral customerId],) $ Customer
+            return . ([makeSqlKey customerId],) $ Customer
                 { customerEmail = email
                 , customerStoreCredit = storeCredit
                 , customerMemberNumber = ""
@@ -625,7 +681,7 @@ makeCoupons mysql = do
     makeCoupon _ = error "Invalid arguments to makeCoupon."
 
 
-makeOrders :: MySQLConn -> IO [(Order, [OrderProduct], [OrderLineItem], Address, Maybe Address, T.Text, Customer)]
+makeOrders :: MySQLConn -> IO [(OrderId, Order, [OrderProduct], [OrderLineItem], Address, Maybe Address, T.Text, Customer)]
 makeOrders mysql = do
     orders <- mysqlQuery mysql $
         "SELECT o.orders_id, customers_id, customers_email_address, " <>
@@ -650,13 +706,14 @@ makeOrders mysql = do
         "LEFT JOIN countries AS cc on cc.countries_name=customers_country " <>
         "LEFT JOIN countries AS dc on dc.countries_name=delivery_country " <>
         "LEFT JOIN countries AS bc on bc.countries_name=billing_country " <>
-        "LEFT JOIN (SELECT * FROM orders_status_history WHERE customer_notified != '-1') " <>
-        "   AS osh ON osh.orders_id=o.orders_id"
+        "LEFT JOIN (SELECT * FROM orders_status_history WHERE customer_notified != '-1' ORDER BY orders_status_history_id) " <>
+        "   AS osh ON osh.orders_id=o.orders_id " <>
+        "GROUP BY o.orders_id"
     mapM makeOrder orders
   where
-    makeOrder :: [MySQLValue] -> IO (Order, [OrderProduct], [OrderLineItem], Address, Maybe Address, T.Text, Customer)
+    makeOrder :: [MySQLValue] -> IO (OrderId, Order, [OrderProduct], [OrderLineItem], Address, Maybe Address, T.Text, Customer)
     makeOrder
-        [ MySQLInt32 orderId, MySQLInt32 customerId, MySQLText customerEmail
+        [ MySQLInt32 intOrderId, MySQLInt32 customerId, MySQLText customerEmail
         -- Customer Address
         , MySQLText customerName, nullableCustomerCompany
         , MySQLText customerStreet, nullableCustomerStreetTwo, MySQLText customerCity
@@ -675,8 +732,9 @@ makeOrders mysql = do
         , MySQLText couponCode, MySQLDateTime purchaseDate, MySQLInt32 rawOrderStatus
         , MySQLDecimal orderTotal, MySQLDecimal orderTax, nullableCustomerComment
         ] = do
+            let orderId = makeSqlKey intOrderId
             createdAt <- convertLocalTimeToUTC purchaseDate
-            adminComments <- getAdminComments orderId
+            adminComments <- getAdminComments intOrderId
             shippingAddress <-
                 if isAddressEmpty shippingName shippingStreet &&
                     isAddressEmpty customerName customerStreet then
@@ -723,11 +781,11 @@ makeOrders mysql = do
                     , orderAvalaraTransactionCode = Nothing
                     , orderCreatedAt = createdAt
                     }
-            (orderProducts, orderItems) <- adjustTotal orderTotal lineItems
+            (orderProducts, orderItems) <- adjustTotal orderId orderTotal lineItems
                 <$> makeOrderProducts orderId
             let taxLineTotal = getOrderTax lineItems
-            validateTaxAmounts orderId orderTax taxLineTotal
-            validateOrderTotal orderId orderTotal orderItems orderProducts
+            validateTaxAmounts intOrderId orderTax taxLineTotal
+            validateOrderTotal intOrderId orderTotal orderItems orderProducts
             token <- generateToken
             let customer = Customer
                     { customerEmail = customerEmail
@@ -739,7 +797,7 @@ makeOrders mysql = do
                     , customerAvalaraCode = Nothing
                     , customerIsAdmin = False
                     }
-            return (order, orderProducts, orderItems, shippingAddress, billingAddress, couponCode, customer)
+            return (orderId, order, orderProducts, orderItems, shippingAddress, billingAddress, couponCode, customer)
     makeOrder args = error
         $ "Invalid arguments to makeOrder:\n\t"
             <> concatMap (\a -> show a <> "\n\t") args
@@ -887,22 +945,23 @@ makeOrders mysql = do
                         }
             _ ->
                 error "makeAddressFromCustomer: Unexpected arguments from query."
-    makeLineItems :: Int32 -> IO [OrderLineItem]
+    makeLineItems :: OrderId -> IO [OrderLineItem]
     makeLineItems orderId = do
         lineQuery <- prepareStmt mysql $ Query
             "SELECT title, value, class FROM orders_total WHERE orders_id=?"
-        rawLineItems <- queryStmt mysql lineQuery [MySQLInt32 orderId]
+        rawLineItems <- queryStmt mysql lineQuery [MySQLInt32 $ fromIntegral $ fromSqlKey orderId]
             >>= Streams.toList . snd
         closeStmt mysql lineQuery
-        return $ foldl makeLineItem [] rawLineItems
+        return $ foldl (makeLineItem orderId) [] rawLineItems
     makeLineItem
-        :: [OrderLineItem]
+        :: OrderId
+        -> [OrderLineItem]
         -> [MySQLValue]
         -> [OrderLineItem]
-    makeLineItem items [MySQLText title, MySQLDecimal dollars, MySQLText lineType] =
+    makeLineItem orderId items [MySQLText title, MySQLDecimal dollars, MySQLText lineType] =
         let cents = dollarsToCents dollars
             cleanedTitle = T.replace ":" "" title
-            make type_ = OrderLineItem (toSqlKey 0) type_ cleanedTitle cents : items
+            make type_ = OrderLineItem orderId type_ cleanedTitle cents : items
             discard = items
         in  case lineType of
             "ot_total" ->
@@ -914,7 +973,7 @@ makeOrders mysql = do
             "ot_tax" ->
                 make TaxLine
             "ot_coupon" ->
-                OrderLineItem (toSqlKey 0) CouponDiscountLine
+                OrderLineItem orderId CouponDiscountLine
                     (getCouponCode title) cents : items
             "ot_fallspringfee" ->
                 make SurchargeLine
@@ -932,19 +991,19 @@ makeOrders mysql = do
                 make SurchargeLine
             _ -> error $
                 "Unexpected order_total class: " <> T.unpack lineType
-    makeLineItem _ _ = error "Invalid arguments to makeLineItem."
+    makeLineItem _ _ _ = error "Invalid arguments to makeLineItem."
     getCouponCode :: T.Text -> T.Text
     getCouponCode couponLineTitle =
         case T.split (== ':') couponLineTitle of
             [_, code, _] -> code
             _ -> error $ "getCouponCode: Unexpected coupon line title: "
                     <> T.unpack couponLineTitle
-    makeOrderProducts :: Int32 -> IO [OrderProduct]
+    makeOrderProducts :: OrderId -> IO [OrderProduct]
     makeOrderProducts orderId = do
         query <- prepareStmt mysql . Query $
             "SELECT products_id, final_price, products_quantity " <>
             "FROM orders_products WHERE orders_id=?"
-        rawProducts <- queryStmt mysql query [MySQLInt32 orderId]
+        rawProducts <- queryStmt mysql query [MySQLInt32 $ fromIntegral $ fromSqlKey orderId]
             >>= Streams.toList . snd
         closeStmt mysql query
         return $
@@ -959,19 +1018,19 @@ makeOrders mysql = do
                                 orderProductQuantity p1 + orderProductQuantity p2
                             }
                 )
-            $ map makeOrderProduct rawProducts
-    makeOrderProduct :: [MySQLValue] -> OrderProduct
-    makeOrderProduct [ MySQLInt32 productId, MySQLDecimal pricePerProduct
+            $ map (makeOrderProduct orderId) rawProducts
+    makeOrderProduct :: OrderId -> [MySQLValue] -> OrderProduct
+    makeOrderProduct orderId [ MySQLInt32 productId, MySQLDecimal pricePerProduct
                      , MySQLFloat quantity
                      ] =
         OrderProduct
-            (toSqlKey 0)
-            (toSqlKey $ fromIntegral productId)
+            orderId
+            (makeSqlKey productId)
             (round quantity)
             (dollarsToCents pricePerProduct)
-    makeOrderProduct _ = error "Invalid arguments to makeOrderProduct."
-    adjustTotal :: Scientific -> [OrderLineItem] -> [OrderProduct] -> ([OrderProduct], [OrderLineItem])
-    adjustTotal orderTotal lineItems products =
+    makeOrderProduct _ _ = error "Invalid arguments to makeOrderProduct."
+    adjustTotal :: OrderId -> Scientific -> [OrderLineItem] -> [OrderProduct] -> ([OrderProduct], [OrderLineItem])
+    adjustTotal orderId orderTotal lineItems products =
         let calculatedTotal =
                 getOrderTotal lineItems products
             intOrderTotal =
@@ -979,10 +1038,10 @@ makeOrders mysql = do
             adjustment =
                 intOrderTotal - integerCents calculatedTotal
             makeSurcharge adj =
-                OrderLineItem (toSqlKey 0) SurchargeLine "Order Adjustment"
+                OrderLineItem orderId SurchargeLine "Order Adjustment"
                     (Cents $ fromInteger adj)
             makeCredit adj =
-                OrderLineItem (toSqlKey 0) StoreCreditLine "Order Adjustment"
+                OrderLineItem orderId StoreCreditLine "Order Adjustment"
                     (Cents $ fromInteger $ abs adj)
         in
         if adjustment == 0 then
@@ -1020,99 +1079,65 @@ makeOrders mysql = do
 
 -- Persistent Model Saving Functions
 
-insertCategories :: [(Int, Int, Category)] -> SqlWriteT IO (OldIdMap CategoryId)
+insertCategories :: [(CategoryId, Category)] -> SqlWriteT IO ()
 insertCategories =
-    foldM insertCategory IntMap.empty
-    where insertCategory intMap (mysqlId, mysqlParentId, category) = do
-            let maybeParentId =
-                    IntMap.lookup mysqlParentId intMap
-                category' =
-                    category { categoryParentId = maybeParentId }
-            categoryId <- insert category'
-            return $ IntMap.insert mysqlId categoryId intMap
+    mapM_ $ uncurry insertKey
 
 
-insertCategorySales :: [([Int], CategorySale)] -> OldIdMap CategoryId -> SqlWriteT IO ()
-insertCategorySales sales categoryIdMap =
-    mapM_ insertSale sales
-    where
-        insertSale (categoryIds, sale) =
-            insert $ sale
-                { categorySaleCategoryIds = fixIds categoryIds
-                }
-        fixIds ids =
-            case ids of
-                [] ->
-                    []
-                oldId : rest ->
-                    case IntMap.lookup oldId categoryIdMap of
-                        Nothing ->
-                            error $ "Could not find old category ID: " <> show oldId
-                        Just newId ->
-                            newId : fixIds rest
+insertCategorySales :: [CategorySale] -> SqlWriteT IO ()
+insertCategorySales =
+    mapM_ insert
 
 
-
-insertProducts :: [(Int, Product)] -> OldIdMap CategoryId -> SqlWriteT IO ()
-insertProducts products categoryIdMap =
-    mapM_ insertProduct products
-    where insertProduct (mysqlCategoryId, prod) = do
-            let categoryIds =
-                    maybeToList $ IntMap.lookup mysqlCategoryId categoryIdMap
-                product' = prod { productCategoryIds = categoryIds }
-            insert product'
+insertProducts :: [(ProductId, Product)] -> SqlWriteT IO ()
+insertProducts =
+    mapM_ $ uncurry insertKey
 
 
-insertVariants :: [(Int, T.Text, ProductVariant)] -> SqlWriteT IO (OldIdMap ProductVariantId)
+insertVariants :: [(ProductId, Maybe ProductId, T.Text, ProductVariant)] -> SqlWriteT IO (OldIdMap ProductVariantId)
 insertVariants variantData = do
     existing <- foldM insertVariant IntMap.empty variantData
     withRecreated <- foldM insertRecreatedVariant existing recreatedProducts
     foldM insertDeletedVariants withRecreated deletedProducts
     where
-        insertVariant intMap (oldProductId, baseSku, variant) = do
-            maybeProduct <- getBy $ UniqueBaseSku baseSku
-            case maybeProduct of
+        insertVariant intMap (productId, oldProductId, _, variant) = do
+            existingVariant <- getBy (UniqueSku productId $ productVariantSkuSuffix variant)
+            (newId, intMap_) <- case existingVariant of
                 Nothing ->
-                    lift (putStrLn $ "No product for: " ++ show variant)
-                        >> return intMap
-                Just (Entity prodId _) -> do
-                    maybeExistingVariant <- getBy $ UniqueSku prodId $ productVariantSkuSuffix variant
-                    let variantWithProduct = variant { productVariantProductId = prodId }
-                    maybe
-                        (insertIntoIdMap intMap oldProductId <$> insert variantWithProduct)
-                        (handleExistingVariant intMap oldProductId variantWithProduct)
-                        maybeExistingVariant
-        handleExistingVariant intMap oldProductId variant (Entity variantId2 variant2)
+                    (\i -> (i, insertIntoIdMap intMap (makeMapKey productId) i)) <$> insert variant
+                Just e@(Entity existingId _) ->
+                    (existingId,) <$> handleExistingVariant intMap (makeMapKey productId) variant e
+            return $ maybe intMap_ (\oldId -> insertIntoIdMap intMap_ (makeMapKey oldId) newId) oldProductId
+        handleExistingVariant intMap productId variant (Entity variantId2 variant2)
             | not (productVariantIsActive variant) =
                 let variant_ = variant { productVariantSkuSuffix = "X" } in
-                insertIntoIdMap intMap oldProductId <$> insert variant_
+                insertIntoIdMap intMap productId <$> insert variant_
             | productVariantIsActive variant && not (productVariantIsActive variant2) = do
                 update variantId2 [ProductVariantSkuSuffix =. "X"]
-                insertIntoIdMap intMap oldProductId <$> insert variant
+                insertIntoIdMap intMap productId <$> insert variant
             | otherwise =
                 error $
                     "Two active variants with same SKU:\n\t"
                         <> show variant <> "\n\t" <> show variant2
-        insertRecreatedVariant intMap (oldProductId, baseSku, skuSuffix) = do
+        insertRecreatedVariant intMap (productId, baseSku, skuSuffix) = do
             maybeProduct <- getBy $ UniqueBaseSku baseSku
             case maybeProduct of
                 Nothing ->
                     lift (putStrLn $ "No product for recreated product: "
-                            <> show oldProductId)
+                            <> show productId)
                         >> return intMap
                 Just (Entity prodId _) -> do
                     maybeVariant <- getBy $ UniqueSku prodId skuSuffix
                     case maybeVariant of
                         Nothing ->
                             lift (putStrLn $ "No variant for recreated product: "
-                                    <> show oldProductId)
+                                    <> show productId)
                                 >> return intMap
                         Just (Entity varId _) ->
-                            return $ insertIntoIdMap intMap oldProductId varId
-        insertDeletedVariants intMap (oldProductId, newProduct, newVariant) = do
-            productId <- insert newProduct
-            let variant_ = newVariant { productVariantProductId = productId }
-            insertIntoIdMap intMap oldProductId <$> insert variant_
+                            return $ insertIntoIdMap intMap (makeMapKey productId) varId
+        insertDeletedVariants intMap (productId, newProduct, newVariant) = do
+            insertKey productId newProduct
+            insertIntoIdMap intMap (makeMapKey productId) <$> insert newVariant
 
 
 
@@ -1140,17 +1165,23 @@ insertProductSales sales variantIdMap =
                     insert_ $ sale { productSaleProductVariantId = variantId }
 
 
-insertPages :: [Page] -> SqlWriteT IO ()
-insertPages = insertMany_
+insertPages :: [(PageId, Page)] -> SqlWriteT IO ()
+insertPages =
+    mapM_ $ uncurry insertKey
 
 
-insertCustomers :: [([Int], Customer)] -> SqlWriteT IO (OldIdMap CustomerId)
+insertCustomers :: [([CustomerId], Customer)] -> SqlWriteT IO (OldIdMap CustomerId)
 insertCustomers =
     foldM insertCustomer IntMap.empty
-    where insertCustomer intMap (oldCustomerIds, customer) = do
-            newId <- insert customer
-            return $ foldl (\newMap oldId -> insertIntoIdMap newMap oldId newId)
-                intMap oldCustomerIds
+    where insertCustomer intMap (customerIds, customer) =
+            case listToMaybe customerIds of
+                Nothing ->
+                    error $ "Customer had no IDs: " ++ show (customerEmail customer)
+                Just customerId -> do
+                    insertKey customerId customer
+                    return
+                        $ foldl (\newMap oldId -> insertIntoIdMap newMap oldId customerId) intMap
+                        $ map makeMapKey customerIds
 
 
 -- | Replace the CustomerIds & insert the Addresses.
@@ -1298,12 +1329,12 @@ insertCoupons = insertMany_
 
 
 insertOrders :: OldIdMap CustomerId -> OldIdMap ProductVariantId -> AddressCache
-    -> [(Order, [OrderProduct], [OrderLineItem], Address, Maybe Address, T.Text, Customer)]
+    -> [(OrderId, Order, [OrderProduct], [OrderLineItem], Address, Maybe Address, T.Text, Customer)]
     -> SqlWriteT IO AddressCache
 insertOrders customerMap variantMap =
     foldrM insertOrder
   where
-    insertOrder (order, products, lines, shippingAddr, maybeBillingAddr, couponCode, backupCustomer) addrCache = do
+    insertOrder (orderId, order, products, lines, shippingAddr, maybeBillingAddr, couponCode, backupCustomer) addrCache = do
         maybeCoupon <- fmap entityKey <$> selectFirst [ CouponCode ==. couponCode ] []
         let oldCustomerId = fromIntegral . fromSqlKey $ orderCustomerId order
         customerId <- case IntMap.lookup oldCustomerId customerMap of
@@ -1315,24 +1346,24 @@ insertOrders customerMap variantMap =
                     Nothing -> do
                         lift . putStrLn
                             $ "Inserting Missing Customer using Orders Table data"
-                        insert backupCustomer
+                        cId <- getNextCustomerId
+                        insertKey cId backupCustomer
+                        return cId
             Just customerId ->
                 return customerId
         let insertCustomerAddress c addr =
                 insertUniqueAddress c addr { addressCustomerId = customerId }
         (shippingId, addrCache_) <- insertCustomerAddress addrCache shippingAddr
         maybeBillingId <- sequence $ insertCustomerAddress addrCache_ <$> maybeBillingAddr
-        newOrderId <- insert order
+        insertKey orderId order
             { orderCouponId = maybeCoupon
             , orderCustomerId = customerId
             , orderShippingAddressId = shippingId
             , orderBillingAddressId = fst <$> maybeBillingId
             }
-        mapM_ (insertLineItem newOrderId) lines
-        mapM_ (insertOrderProduct newOrderId) products
+        insertMany_ lines
+        mapM_ (insertOrderProduct orderId) products
         return $ maybe addrCache_ snd maybeBillingId
-    insertLineItem orderId item =
-        insert_ item { orderLineItemOrderId = orderId }
     insertOrderProduct orderId product =
         let oldVariantId = fromIntegral . fromSqlKey $ orderProductProductVariantId product
         in  case IntMap.lookup oldVariantId variantMap of
@@ -1343,11 +1374,16 @@ insertOrders customerMap variantMap =
                 Just variantId ->
                     void $ upsertBy (UniqueOrderProduct orderId variantId)
                         product
-                            { orderProductOrderId = orderId
-                            , orderProductProductVariantId = variantId
+                            { orderProductProductVariantId = variantId
                             }
                         [ OrderProductQuantity +=. orderProductQuantity product
                         ]
+    getNextCustomerId =
+        selectFirst [] [Desc CustomerId] >>= \case
+            Nothing ->
+                return $ toSqlKey 1
+            Just (Entity cId _) ->
+                return $ toSqlKey $ fromSqlKey cId + 1
 
 
 -- Utils
@@ -1380,6 +1416,9 @@ convertLocalTimeToUTC time = do
 generateToken :: IO T.Text
 generateToken =
     UUID.toText <$> UUID4.nextRandom
+
+makeSqlKey :: (ToBackendKey SqlBackend e) => Int32 -> Key e
+makeSqlKey = toSqlKey . fromIntegral
 
 -- | Convert a Scientific dollar amount to Cents.
 --
