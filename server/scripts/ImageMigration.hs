@@ -57,12 +57,14 @@ main = do
     cfg <- makeImageConfig
     createDirectories
     searchPaths <- getDirectoriesRecursive "old_media"
+    categorySearchPaths <- (<> searchPaths)
+        <$> getDirectoriesRecursive "old_media/categories"
     psqlConn <- connectToPostgres
     flip runSqlPool psqlConn $ do
         selectList [ProductImageUrl !=. ""] []
             >>= mapM_ (migrateProductImage cfg searchPaths)
         selectList [CategoryImageUrl !=. ""] []
-            >>= mapM_ (migrateCategoryImage cfg searchPaths)
+            >>= mapM_ (migrateCategoryImage cfg categorySearchPaths)
     destroyAllResources psqlConn
 
 
