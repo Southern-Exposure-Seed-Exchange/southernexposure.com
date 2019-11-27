@@ -26,7 +26,7 @@ import Html exposing (Attribute)
 import Html.Attributes exposing (attribute)
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode exposing (Value)
-import Views.Images exposing (media)
+import Views.Images exposing (media, noImagePath)
 
 
 type Cents
@@ -258,7 +258,10 @@ blankImage =
 imageDecoder : Decoder ImageData
 imageDecoder =
     Decode.map6 ImageData
-        (Decode.field "original" Decode.string)
+        (Decode.field "original" <|
+            Decode.map (Maybe.map media >> Maybe.withDefault noImagePath) <|
+                Decode.nullable Decode.string
+        )
         (Decode.field "xs" <| Decode.nullable scaledImageDecoder)
         (Decode.field "sm" <| Decode.nullable scaledImageDecoder)
         (Decode.field "md" <| Decode.nullable scaledImageDecoder)
@@ -290,9 +293,8 @@ imgSrcFallback i =
                     Nothing
     in
     asum [ i.md, i.lg, i.sm, i.xl, i.xs ]
-        |> Maybe.map .path
+        |> Maybe.map (.path >> media)
         |> Maybe.withDefault i.original
-        |> media
 
 
 type alias ScaledImage =

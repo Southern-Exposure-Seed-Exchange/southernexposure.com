@@ -74,7 +74,7 @@ makeImageConfig =
 -- images.
 data ImageSourceSet
     = ImageSourceSet
-        { issOriginal :: FilePath
+        { issOriginal :: Maybe FilePath
         , issExtraSmall :: Maybe ScaledImageData
         , issSmall :: Maybe ScaledImageData
         , issMedium :: Maybe ScaledImageData
@@ -114,13 +114,19 @@ instance ToJSON ScaledImageData where
 makeSourceSet :: (MonadReader Config m, MonadIO m) => FilePath -> String -> m ImageSourceSet
 makeSourceSet directory filename =
     ImageSourceSet
-        <$> pure (directory </> "originals" </> filename)
+        <$> pure getOriginal
         <*> getScaledData ExtraSmall
         <*> getScaledData Small
         <*> getScaledData Medium
         <*> getScaledData Large
         <*> getScaledData ExtraLarge
   where
+    getOriginal :: Maybe FilePath
+    getOriginal =
+        if null filename then
+            Nothing
+        else
+            Just $ directory </> "originals" </> filename
     getScaledData :: (MonadReader Config m, MonadIO m) => ImageSize -> m (Maybe ScaledImageData)
     getScaledData size = do
         mediaDirectory <- asks getMediaDirectory
