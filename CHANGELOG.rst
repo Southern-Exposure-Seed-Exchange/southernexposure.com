@@ -3,8 +3,15 @@ CHANGELOG
 =========
 
 
+v0.11.0
+========
+
+* Move the "special shipping requirements" text from the Checkout Success page
+  to below the Comments field on the Checkout page.
+
+
 v0.10.0
-=======
+========
 
 * Include additional meta tags for providing page information to social
   networks and search engines.
