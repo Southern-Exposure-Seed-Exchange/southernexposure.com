@@ -19,12 +19,10 @@ const GA_MEASUREMENT_ID = 'UA-5070189-1';
 module.exports = {
   mode: isProduction ? 'production' : 'development',
   entry: {
-    vendor: [
-      'bootstrap',
-      'font-awesome-sass-loader',
-    ],
     styles: [
       './src/styles.sass',
+      'bootstrap',
+      'font-awesome-sass-loader',
     ],
     app: [
       './src/index.js',
@@ -40,6 +38,10 @@ module.exports = {
   optimization: {
     runtimeChunk: 'single',
     minimizer: [new TerserJSPlugin({}), new OptimizeCSSAssetsPlugin({}),],
+    splitChunks: {
+      chunks: 'all',
+      automaticNameDelimiter: '.',
+    },
   },
 
   module: {
@@ -158,7 +160,6 @@ module.exports = {
     new webpack.ProvidePlugin({
       $: 'jquery',
       jQuery: 'jquery',
-      Popper: 'popper.js/dist/umd/popper.js',
     }),
     new SriWebpackPlugin({
       hashFuncNames: ['sha512'],
@@ -238,14 +239,4 @@ module.exports = {
     },
   },
 
-}
-
-/* Returns true if the module is an NPM dependency. */
-function isExternal(module) {
-  var context = module.context;
-
-  if (typeof context !== 'string') {
-    return false;
-  }
-  return context.indexOf('node_modules') !== -1;
 }
