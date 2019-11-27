@@ -31,7 +31,6 @@ import Time
 import Update.Utils exposing (nothingAndNoCommand)
 import User exposing (AuthStatus)
 import Views.Format as Format
-import Views.Images as Images
 import Views.Utils exposing (decimalInput, emailInput)
 
 
