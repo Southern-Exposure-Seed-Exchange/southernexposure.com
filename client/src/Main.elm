@@ -342,6 +342,11 @@ fetchDataForRoute ({ route, pageData, key } as model) =
                         ]
                     )
 
+                Redirect path ->
+                    ( pageData
+                    , Browser.Navigation.load path
+                    )
+
                 NotFound ->
                     doNothing
 
@@ -1361,6 +1366,9 @@ pageLoadCompleted { pageData, route } =
             RemoteData.map2 Tuple.pair pageData.locations pageData.adminOrderDetails
                 |> checkRemote
 
+        Redirect _ ->
+            True
+
         NotFound ->
             True
 
@@ -1542,6 +1550,9 @@ resetForm oldRoute model =
 
         Admin adminRoute ->
             resetAdminForm adminRoute
+
+        Redirect _ ->
+            model
 
         NotFound ->
             model

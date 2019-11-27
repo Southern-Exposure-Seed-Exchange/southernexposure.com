@@ -192,6 +192,14 @@ module.exports = {
       '/media/*': {
         target: 'http://localhost:3000',
         changeOrigin: true,
+      },
+      '/blog/*': {
+        target: 'https://vps.southernexposure.com/blog/',
+        changeOrigin: true,
+      },
+      '/newsletter/*': {
+        target: 'http://vps.southernexposure.com/newsletter/',
+        changeOrigin: true,
       }
     },
   },

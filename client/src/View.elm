@@ -205,6 +205,9 @@ view ({ route, pageData, navigationData, zone } as model) =
                 NotFound ->
                     notFoundView
 
+                Redirect path ->
+                    redirectView path
+
                 Admin (CustomerList { query }) ->
                     CustomerAdmin.list query model.customerSearchForm pageData.adminCustomerList
                         |> List.map (Html.map CustomerSearchMsg)
@@ -355,6 +358,9 @@ pageTitle ({ route, pageData } as model) =
 
         Admin adminRoute ->
             adminTitle model adminRoute ++ " - Admin"
+
+        Redirect _ ->
+            "Redirecting..."
 
         NotFound ->
             "Page Not Found"
@@ -518,6 +524,13 @@ notFoundView =
             "Sorry, we couldn't find the page your were looking for. "
                 ++ "If you got to this page from our site, please contact us so we can fix our links."
         ]
+    ]
+
+
+redirectView : String -> List (Html msg)
+redirectView path =
+    [ h1 [] [ text "Redirecting..." ]
+    , p [] [ text <| "Please wait while we redirect you to " ++ path ++ "." ]
     ]
 
 

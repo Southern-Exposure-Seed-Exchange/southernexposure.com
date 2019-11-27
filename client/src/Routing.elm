@@ -41,6 +41,7 @@ type Route
     | Checkout
     | CheckoutSuccess Int Bool
     | Admin AdminRoute
+    | Redirect String
     | NotFound
 
 
@@ -134,6 +135,23 @@ parseRoute =
                     <?> fromStringParam "query" identity
                 )
 
+        redirectParser =
+            Url.oneOf
+                [ Url.map (Redirect << prefixPaths "/blog")
+                    (Url.s "blog" </> parseRest 10)
+                , Url.map (Redirect << prefixPaths "/newsletter")
+                    (Url.s "newsletter" </> parseRest 10)
+                , Url.map (Redirect << prefixPaths "https://seedracks.southernexposure.com")
+                    (Url.s "seedracks" </> parseRest 10)
+                , Url.map (Redirect << always "https://heritageharvestfestival.com")
+                    (Url.s "hhf" </> parseRest 10)
+                , Url.map (Redirect << always "https://gardenplanner.southernexposure.com")
+                    (Url.s "gardenplanner" </> parseRest 10)
+                ]
+
+        prefixPaths prefix paths =
+            prefix ++ "/" ++ String.join "/" paths
+
         routeParser =
             Url.oneOf
                 [ Url.map (PageDetails "home") Url.top
@@ -151,11 +169,40 @@ parseRoute =
                 , Url.map Checkout (Url.s "checkout")
                 , Url.map CheckoutSuccess (Url.s "checkout" </> Url.s "success" </> Url.int <?> parseFlag "newAccount")
                 , Url.map Admin <| Url.s "admin" </> adminParser
+                , redirectParser
                 , Url.map PageDetails Url.string
                 ]
     in
     Url.parse routeParser
         >> Maybe.withDefault NotFound
+
+
+{-| Parse the remainder of the path
+-}
+parseRest : Int -> Url.Parser (List String -> a) a
+parseRest depth =
+    if depth < 1 then
+        Url.map [] Url.top
+
+    else
+        Url.oneOf
+            [ Url.map [] Url.top
+            , Url.map (\str list -> str :: list) (Url.string </> parseRestHelper (depth - 1))
+            ]
+
+
+{-| `parseRest` needs this helper function to typecheck properly for some reason...
+-}
+parseRestHelper : Int -> Url.Parser (List String -> a) a
+parseRestHelper depth =
+    if depth < 1 then
+        Url.map [] Url.top
+
+    else
+        Url.oneOf
+            [ Url.map [] Url.top
+            , Url.map (\str list -> str :: list) (Url.string </> parseRest (depth - 1))
+            ]
 
 
 reverse : Route -> String
@@ -259,6 +306,9 @@ reverse route =
 
         Admin adminRoute ->
             reverseAdmin adminRoute
+
+        Redirect path ->
+            path
 
         NotFound ->
             joinPath [ "page-not-found" ]
@@ -429,6 +479,9 @@ authRequired route =
 
         Admin _ ->
             True
+
+        Redirect _ ->
+            False
 
         NotFound ->
             False

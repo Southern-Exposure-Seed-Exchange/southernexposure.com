@@ -174,6 +174,9 @@ view route pageData =
                     , activeItem "Edit Product"
                     ]
 
+                Redirect _ ->
+                    singleItem "Redirecting..."
+
                 NotFound ->
                     singleItem "Page Not Found"
 
