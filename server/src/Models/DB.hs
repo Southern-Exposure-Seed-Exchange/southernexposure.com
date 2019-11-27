@@ -25,6 +25,7 @@ Category
     description T.Text
     imageUrl T.Text
     order Int
+    updatedAt UTCTime
     UniqueCategorySlug slug
     deriving Show
 
@@ -38,6 +39,7 @@ Product
     imageUrl T.Text
     isActive Bool
     createdAt UTCTime
+    updatedAt UTCTime
     UniqueProductSlug slug
     UniqueBaseSku baseSku
     deriving Show
@@ -66,6 +68,7 @@ Page json
     name T.Text
     slug T.Text
     content T.Text
+    updatedAt UTCTime
     UniquePageSlug slug
     deriving Show
 

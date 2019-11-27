@@ -325,6 +325,7 @@ newProductRoute = validateAdminAndParameters $ \_ p@ProductParameters {..} -> do
             , productImageUrl = imageUrl
             , productIsActive = ppIsActive
             , productCreatedAt = time
+            , productUpdatedAt = time
             }
 
 
@@ -457,6 +458,7 @@ editProductRoute = validateAdminAndParameters $ \_ EditProductParameters {..} ->
             return [ ProductImageUrl =. imageFileName ]
         else
             return []
+    time <- liftIO getCurrentTime
     runDB $ do
         update eppId $
             [ ProductName =. sanitize ppName
@@ -465,6 +467,7 @@ editProductRoute = validateAdminAndParameters $ \_ EditProductParameters {..} ->
             , ProductBaseSku =. ppBaseSku
             , ProductLongDescription =. sanitize ppLongDescription
             , ProductIsActive =. ppIsActive
+            , ProductUpdatedAt =. time
             ] ++ imageUpdate
         (ppSeedAttribute,) <$> selectFirst [SeedAttributeProductId ==. eppId] [] >>= \case
             (Just seedData, Nothing) ->

@@ -88,7 +88,7 @@ sitemapRoute = do
     makeCategoryUrl (Entity _ Category {..}) =
         SitemapUrl
             { sitemapLocation = "/categories/" <> categorySlug <> "/"
-            , sitemapLastModified = Nothing
+            , sitemapLastModified = Just categoryUpdatedAt
             , sitemapChangeFrequency = Just Monthly
             , sitemapPriority = Nothing
             }
@@ -96,7 +96,7 @@ sitemapRoute = do
     makeProductUrl (Entity _ Product {..}) =
         SitemapUrl
             { sitemapLocation = "/products/" <> productSlug <> "/"
-            , sitemapLastModified = Nothing
+            , sitemapLastModified = Just productUpdatedAt
             , sitemapChangeFrequency = Just Monthly
             , sitemapPriority = Just 0.75
             }
@@ -108,7 +108,7 @@ sitemapRoute = do
                     "/"
                 else
                     "/" <> pageSlug <> "/"
-            , sitemapLastModified = Nothing
+            , sitemapLastModified = Just pageUpdatedAt
             , sitemapChangeFrequency = Just Monthly
             , sitemapPriority = Just 0.7
             }

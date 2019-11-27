@@ -14,6 +14,7 @@ import Data.Aeson.Types (Parser)
 import Data.List (sortOn)
 import Data.Maybe (fromMaybe, catMaybes)
 import Data.Monoid ((<>))
+import Data.Time (getCurrentTime)
 import Data.Text.Encoding (encodeUtf8)
 import Database.Persist
     ( (=.), Entity(..), SelectOpt(Asc), Update, selectList, insert, get, update
@@ -204,6 +205,7 @@ instance Validation NewCategoryParameters where
 
 newCategoryRoute :: WrappedAuthToken -> NewCategoryParameters -> App (Cookied CategoryId)
 newCategoryRoute = validateAdminAndParameters $ \_ NewCategoryParameters {..} -> do
+    time <- liftIO getCurrentTime
     imageFileName <- makeImageFromBase64 "categories" ncpImageName ncpImageData
     let newCategory = Category
             { categoryName = sanitize ncpName
@@ -212,6 +214,7 @@ newCategoryRoute = validateAdminAndParameters $ \_ NewCategoryParameters {..} ->
             , categoryDescription = sanitize ncpDescription
             , categoryImageUrl = imageFileName
             , categoryOrder = ncpOrder
+            , categoryUpdatedAt = time
             }
     newCategoryId <- runDB $ insert newCategory
     updateCategoryCaches
@@ -376,8 +379,8 @@ editCategoryRoute = validateAdminAndParameters $ \_ parameters -> do
             Just (imageName, imageData) -> do
                 newImageName <- makeImageFromBase64 "categories" imageName imageData
                 return [CategoryImageUrl =. newImageName]
-
-    let updates = makeUpdates parameters ++ imageUpdate
+    time <- liftIO getCurrentTime
+    let updates = makeUpdates parameters ++ imageUpdate ++ [CategoryUpdatedAt =. time]
     unless (null updates) $ do
         runDB $ update (ecpId parameters) updates
         updateCategoryCaches

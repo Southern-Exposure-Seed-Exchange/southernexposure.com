@@ -31,7 +31,7 @@ import Data.Pool (destroyAllResources)
 import Data.Scientific (Scientific)
 import Data.Time
     ( LocalTime(..), Day(..), UTCTime(..), hoursToTimeZone, localTimeToUTC
-    , getCurrentTimeZone, midnight
+    , getCurrentTimeZone, midnight, getCurrentTime
     )
 import Database.MySQL.Base
     ( MySQLConn, Query(..), query_, close, MySQLValue(..), prepareStmt
@@ -96,6 +96,7 @@ deletedProducts =
             , productImageUrl = ""
             , productIsActive = False
             , productCreatedAt = createdAt
+            , productUpdatedAt = createdAt
             }
       , ProductVariant
             { productVariantProductId = toSqlKey 1639
@@ -117,6 +118,7 @@ deletedProducts =
             , productImageUrl = ""
             , productIsActive = False
             , productCreatedAt = createdAt
+            , productUpdatedAt = createdAt
             }
       , ProductVariant
             { productVariantProductId = toSqlKey 1811
@@ -291,7 +293,7 @@ makeCategories :: MySQLConn -> IO [(CategoryId, Category)]
 makeCategories mysql = do
     categories <- mysqlQuery mysql $
         "SELECT c.categories_id, categories_image, parent_id, sort_order,"
-        <> "    categories_name, categories_description "
+        <> "    categories_name, categories_description, last_modified "
         <> "FROM categories as c "
         <> "LEFT JOIN categories_description as cd ON c.categories_id=cd.categories_id "
         <> "WHERE categories_status=1 "
@@ -300,6 +302,7 @@ makeCategories mysql = do
     where toData [ MySQLInt32 catId, nullableImageUrl
                  , MySQLInt32 parentId, MySQLInt32 catOrder
                  , MySQLText name, MySQLText description
+                 , MySQLDateTime updated
                  ] =
                 let imgUrl = fromNullableText "" nullableImageUrl
                     maybeParentId =
@@ -317,6 +320,7 @@ makeCategories mysql = do
                         , categoryDescription = description
                         , categoryImageUrl = T.pack . takeFileName $ T.unpack imgUrl
                         , categoryOrder = fromIntegral catOrder
+                        , categoryUpdatedAt = estToUTC updated
                         }
                     )
           toData r = print r >> error "Category Lambda Did Not Match"
@@ -363,7 +367,8 @@ makeProducts mysql = do
     products <- mysqlQuery mysql $
         "SELECT products_id, master_categories_id, products_price,"
         <> "    products_quantity, products_weight, products_model,"
-        <> "    products_image, products_status, products_date_added "
+        <> "    products_image, products_status, products_date_added, "
+        <> "    products_last_modified "
         <> "FROM products"
     mapM makeProduct products
     where
@@ -371,6 +376,7 @@ makeProducts mysql = do
          [ MySQLInt32 prodId, MySQLInt32 catId, MySQLDecimal prodPrice
          , MySQLFloat prodQty, MySQLFloat prodWeight, MySQLText prodSKU
          , MySQLText prodImg, MySQLInt8 prodStatus, MySQLDateTime created
+         , nullableUpdateAt
          ] = do
              -- TODO: Just use join query?
             queryString <- prepareStmt mysql . Query $
@@ -388,6 +394,8 @@ makeProducts mysql = do
             createdAt <- if show created == "0001-01-01 00:00:00"
                 then return blankDate
                 else convertLocalTimeToUTC created
+            time <- getCurrentTime
+            let updatedAt = fromNullableDateTime time nullableUpdateAt
             return ( makeSqlKey prodId, skuSuffix
                    , prodPrice, prodQty, prodWeight, isActive
                    , Product
@@ -400,9 +408,10 @@ makeProducts mysql = do
                         , productImageUrl = T.pack . takeFileName $ T.unpack prodImg
                         , productIsActive = isActive
                         , productCreatedAt = createdAt
+                        , productUpdatedAt = updatedAt
                         }
                    )
-        makeProduct _ = error "Invalid arguments to makeProduct."
+        makeProduct args = error $ "Invalid arguments to makeProduct:\n\t" ++ show args
 
 
 makeVariants :: [(ProductId, T.Text, Scientific, Float, Float, Bool, Product)] -> [(ProductId, T.Text, ProductVariant)]
@@ -486,15 +495,16 @@ makeProductSales mysql = do
 
 
 makePages :: MySQLConn -> IO [(PageId, Page)]
-makePages mysql =
-    (map makePage <$>) . Streams.toList . snd
+makePages mysql = do
+    time <- getCurrentTime
+    (map (makePage time) <$>) . Streams.toList . snd
         =<< (query_ mysql . Query
             $ "SELECT pages_id, pages_title, pages_html_text"
             <> "    FROM ezpages WHERE pages_html_text <> \"\"")
     where
-        makePage [MySQLInt32 pageId, MySQLText name, MySQLText content] =
-            (makeSqlKey pageId, Page name (slugify name) content)
-        makePage _ = error "Invalid arguments to makePage."
+        makePage time [MySQLInt32 pageId, MySQLText name, MySQLText content] =
+            (makeSqlKey pageId, Page name (slugify name) content time)
+        makePage _ _ = error "Invalid arguments to makePage."
 
 
 makeCustomers :: MySQLConn -> IO [([CustomerId], Customer)]
@@ -1460,6 +1470,12 @@ fromNullableText :: T.Text -> MySQLValue -> T.Text
 fromNullableText def val =
     case val of
         MySQLText text -> text
+        _ -> def
+
+fromNullableDateTime :: UTCTime -> MySQLValue -> UTCTime
+fromNullableDateTime def val =
+    case val of
+        MySQLDateTime date -> estToUTC date
         _ -> def
 
 convertLocalTimeToUTC :: LocalTime -> IO UTCTime

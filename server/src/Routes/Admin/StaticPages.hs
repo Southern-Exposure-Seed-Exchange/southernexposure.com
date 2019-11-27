@@ -8,10 +8,12 @@ module Routes.Admin.StaticPages
     ) where
 
 import Control.Monad (unless)
+import Control.Monad.IO.Class (liftIO)
 import Data.Aeson (ToJSON(..), FromJSON(..), (.=), (.:), withObject, object)
 import Data.Maybe (catMaybes)
+import Data.Time (getCurrentTime)
 import Database.Persist
-    ( Entity(..), SelectOpt(Asc), Update, selectList, insert, get, update
+    ( (=.), Entity(..), SelectOpt(Asc), Update, selectList, insert, get, update
     )
 import Servant ((:<|>)(..), (:>), AuthProtect, ReqBody, Capture, Get, Post, Patch, JSON, err404)
 import Text.HTML.SanitizeXSS (sanitize)
@@ -133,11 +135,13 @@ instance Validation NewPageParameters where
 
 newPageRoute :: WrappedAuthToken -> NewPageParameters -> App (Cookied PageId)
 newPageRoute = validateAdminAndParameters $ \_ NewPageParameters {..} -> do
+    time <- liftIO getCurrentTime
     let newPage =
             Page
                 { pageName = sanitize nppTitle
                 , pageSlug = slugify nppSlug
                 , pageContent = sanitize nppContent
+                , pageUpdatedAt = time
                 }
     runDB $ insert newPage
 
@@ -229,9 +233,10 @@ instance Validation EditPageParameters where
 
 editPageRoute :: WrappedAuthToken -> EditPageParameters -> App (Cookied ())
 editPageRoute = validateAdminAndParameters $ \_ parameters -> do
+    time <- liftIO getCurrentTime
     let updates = makeUpdates parameters
     unless (null updates) $
-        runDB $ update (eppId parameters) updates
+        runDB $ update (eppId parameters) $ (PageUpdatedAt =. time) : updates
   where
     makeUpdates :: EditPageParameters -> [Update Page]
     makeUpdates EditPageParameters {..} =
