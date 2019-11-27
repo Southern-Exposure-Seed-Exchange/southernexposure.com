@@ -181,17 +181,17 @@ view route pageData =
                     singleItem "Page Not Found"
 
         categoryDetailsToBreadcrumbs { category, predecessors } =
-            List.indexedMap predecessorCategoryToInactiveItem predecessors
+            List.map predecessorCategoryToInactiveItem predecessors
                 ++ [ activeItem category.name ]
 
         productDetailsToBreadcrumbs { product, predecessors } =
-            List.indexedMap predecessorCategoryToInactiveItem predecessors
+            List.map predecessorCategoryToInactiveItem predecessors
                 ++ [ activeItem product.name ]
 
         singleItem content =
             [ activeItem content ]
 
-        predecessorCategoryToInactiveItem index { name, slug } =
+        predecessorCategoryToInactiveItem { name, slug } =
             inactiveItem name (CategoryDetails slug Pagination.default)
 
         maybeToList f =
