@@ -980,6 +980,24 @@ lotSizeRow errors index selectedType enteredAmount =
                             ]
                             [ text <| sizeToString t ]
                     )
+
+        lotSizePreview =
+            if selectedType == LSMass then
+                massPreview
+
+            else
+                text ""
+
+        massPreview =
+            case Validation.milligrams enteredAmount of
+                Ok mg ->
+                    div [ class "d-inline-block ml-4 text-muted" ]
+                        [ text "Will be shown as: "
+                        , text <| milligramsToString mg
+                        ]
+
+                Err _ ->
+                    text ""
     in
     Form.withLabel "Lot Size"
         True
@@ -1001,6 +1019,7 @@ lotSizeRow errors index selectedType enteredAmount =
             , class "form-control w-25 d-inline-block"
             ]
             options
+        , lotSizePreview
         , errorHtml
         ]
 
