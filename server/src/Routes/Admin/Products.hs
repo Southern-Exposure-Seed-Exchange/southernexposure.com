@@ -18,8 +18,8 @@ import Data.Monoid ((<>))
 import Data.Text.Encoding (encodeUtf8)
 import Data.Time (UTCTime, getCurrentTime)
 import Database.Persist
-    ( (==.), (=.), Entity(..), SelectOpt(Asc), selectList, selectFirst, insert
-    , insertMany_, insert_, update, get, getBy
+    ( (==.), (=.), Entity(..), selectList, selectFirst, insert, insertMany_
+    , insert_, update, get, getBy
     )
 import Servant ((:<|>)(..), (:>), AuthProtect, ReqBody, Capture, Get, Post, JSON, err404)
 import Text.HTML.SanitizeXSS (sanitize)
@@ -32,14 +32,15 @@ import Models
     , SeedAttribute(..), Category(..), CategoryId, Unique(..), slugify
     )
 import Models.Fields (LotSize, Cents)
-import Routes.Utils (makeImageFromBase64)
-import Server (App, runDB, serverError)
+import Routes.Utils (activeVariantExists, makeImageFromBase64)
+import Server (App, AppSQL, runDB, serverError)
 import Validation (Validation(validators))
 
 import qualified Data.ByteString as BS
 import qualified Data.Text as T
 import qualified Data.List as L
 import qualified Data.Map.Strict as M
+import qualified Database.Esqueleto as E
 import qualified Validation as V
 
 
@@ -106,19 +107,23 @@ instance ToJSON ListProduct where
 productListRoute :: WrappedAuthToken -> App (Cookied ProductListData)
 productListRoute t = withAdminCookie t $ \_ -> runDB $ do
     categoryNameMap <- makeNameMap <$> selectList [] []
-    ProductListData . map (makeProduct categoryNameMap) <$> selectList [] [Asc ProductBaseSku]
+    ProductListData . map (makeProduct categoryNameMap) <$> getProducts
   where
     makeNameMap :: [Entity Category] -> M.Map CategoryId T.Text
     makeNameMap =
         foldr (\(Entity cId c) m -> M.insert cId (categoryName c) m) M.empty
-    makeProduct :: M.Map CategoryId T.Text -> Entity Product -> ListProduct
-    makeProduct nameMap (Entity pId prod) =
+    getProducts :: AppSQL [(Entity Product, E.Value Bool)]
+    getProducts =
+        E.select $ E.from $ \p ->
+            return (p, activeVariantExists p )
+    makeProduct :: M.Map CategoryId T.Text -> (Entity Product, E.Value Bool) -> ListProduct
+    makeProduct nameMap (Entity pId prod, isActive) =
         ListProduct
             { lpId = pId
             , lpName = productName prod
             , lpBaseSku = productBaseSku prod
             , lpCategories = mapMaybe (`M.lookup` nameMap) $ productCategoryIds prod
-            , lpIsActive = productIsActive prod
+            , lpIsActive = E.unValue isActive
             }
 
 
@@ -181,7 +186,6 @@ data ProductParameters =
         , ppCategory :: CategoryId
         , ppBaseSku :: T.Text
         , ppLongDescription :: T.Text
-        , ppIsActive :: Bool
         , ppImageData :: BS.ByteString
         -- ^ Base64 Encoded
         , ppImageName :: T.Text
@@ -196,7 +200,6 @@ instance FromJSON ProductParameters where
         ppCategory <- v .: "category"
         ppBaseSku <- v .: "baseSku"
         ppLongDescription <- v .: "longDescription"
-        ppIsActive <- v .: "isActive"
         ppImageData <- encodeUtf8 <$> v .: "imageData"
         ppImageName <- v .: "imageName"
         ppVariantData <- v .: "variants"
@@ -323,7 +326,6 @@ newProductRoute = validateAdminAndParameters $ \_ p@ProductParameters {..} -> do
             , productShortDescription = ""
             , productLongDescription = sanitize ppLongDescription
             , productImageUrl = imageUrl
-            , productIsActive = ppIsActive
             , productCreatedAt = time
             , productUpdatedAt = time
             }
@@ -345,7 +347,6 @@ data EditProductData =
         , epdCategory :: Maybe CategoryId
         , epdBaseSku :: T.Text
         , epdLongDescription :: T.Text
-        , epdIsActive :: Bool
         , epdImageUrl :: T.Text
         , epdVariantData :: [VariantData]
         , epdSeedAttribute :: Maybe SeedData
@@ -360,7 +361,6 @@ instance ToJSON EditProductData where
             , "category" .= epdCategory
             , "baseSku" .= epdBaseSku
             , "longDescription" .= epdLongDescription
-            , "isActive" .= epdIsActive
             , "imageUrl" .= epdImageUrl
             , "variants" .= epdVariantData
             , "seedAttributes" .= epdSeedAttribute
@@ -381,7 +381,6 @@ editProductDataRoute t productId = withAdminCookie t $ \_ ->
                 , epdCategory = listToMaybe productCategoryIds
                 , epdBaseSku = productBaseSku
                 , epdLongDescription = productLongDescription
-                , epdIsActive = productIsActive
                 , epdImageUrl = productImageUrl
                 , epdVariantData = variants
                 , epdSeedAttribute = seedAttr
@@ -466,7 +465,6 @@ editProductRoute = validateAdminAndParameters $ \_ EditProductParameters {..} ->
             , ProductCategoryIds =. [ppCategory]
             , ProductBaseSku =. ppBaseSku
             , ProductLongDescription =. sanitize ppLongDescription
-            , ProductIsActive =. ppIsActive
             , ProductUpdatedAt =. time
             ] ++ imageUpdate
         (ppSeedAttribute,) <$> selectFirst [SeedAttributeProductId ==. eppId] [] >>= \case

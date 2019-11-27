@@ -37,7 +37,6 @@ Product
     shortDescription T.Text
     longDescription T.Text
     imageUrl T.Text
-    isActive Bool
     createdAt UTCTime
     updatedAt UTCTime
     UniqueProductSlug slug

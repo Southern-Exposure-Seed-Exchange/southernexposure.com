@@ -94,7 +94,6 @@ deletedProducts =
             , productShortDescription = ""
             , productLongDescription = ""
             , productImageUrl = ""
-            , productIsActive = False
             , productCreatedAt = createdAt
             , productUpdatedAt = createdAt
             }
@@ -116,7 +115,6 @@ deletedProducts =
             , productShortDescription = ""
             , productLongDescription = ""
             , productImageUrl = ""
-            , productIsActive = False
             , productCreatedAt = createdAt
             , productUpdatedAt = createdAt
             }
@@ -203,15 +201,7 @@ main = do
     liftPutStrLn = lift . putStrLn
     mergeProducts = nubByWith
         (\(_, p1) (_, p2) -> productBaseSku p1 == productBaseSku p2)
-        (\(pId, prod) (_, nextProd) ->
-            let base = if productIsActive prod then prod else nextProd in
-            ( pId
-            , base
-                { productIsActive =
-                    productIsActive prod || productIsActive nextProd
-                }
-            )
-        )
+        const
     fixProductIds products (pId, baseSku, variant) =
         case find ((== baseSku) . productBaseSku . snd) products of
             Nothing ->
@@ -406,7 +396,6 @@ makeProducts mysql = do
                         , productShortDescription = ""
                         , productLongDescription = description
                         , productImageUrl = T.pack . takeFileName $ T.unpack prodImg
-                        , productIsActive = isActive
                         , productCreatedAt = createdAt
                         , productUpdatedAt = updatedAt
                         }
@@ -1359,11 +1348,7 @@ insertCustomerCarts variantMap customerMap =
 
 deleteInactiveCartItems :: SqlWriteT IO ()
 deleteInactiveCartItems = do
-    inactiveVariants <- do
-        inactiveProducts <- selectKeysList [ProductIsActive ==. False] []
-        (<>)
-            <$> selectKeysList [ProductVariantProductId <-. inactiveProducts] []
-            <*> selectKeysList [ProductVariantIsActive ==. False] []
+    inactiveVariants <- selectKeysList [ProductVariantIsActive ==. False] []
     deleteWhere [CartItemProductVariantId <-. inactiveVariants]
 
 

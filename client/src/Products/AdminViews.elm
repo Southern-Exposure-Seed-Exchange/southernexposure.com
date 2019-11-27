@@ -359,7 +359,6 @@ type alias Form =
     , baseSku : String
     , description : String
     , variants : Array Variant
-    , isActive : Bool
     , imageName : String
     , imageData : String
     , isOrganic : Bool
@@ -382,7 +381,6 @@ initialForm =
     , baseSku = ""
     , description = ""
     , variants = Array.repeat 1 initialVariant
-    , isActive = True
     , imageName = ""
     , imageData = ""
     , isOrganic = False
@@ -419,7 +417,6 @@ encodeForm model validVariants maybeProductId =
         , ( "category", Category.idEncoder model.category )
         , ( "baseSku", Encode.string model.baseSku )
         , ( "longDescription", Encode.string model.description )
-        , ( "isActive", Encode.bool model.isActive )
         , ( "imageName", Encode.string model.imageName )
         , ( "imageData", Encode.string model.imageData )
         , ( "seedAttributes", encodedSeedAttribues )
@@ -444,7 +441,6 @@ formDecoder =
         |> Decode.required "baseSku" Decode.string
         |> Decode.required "longDescription" Decode.string
         |> Decode.required "variants" (Decode.array variantDecoder)
-        |> Decode.required "isActive" Decode.bool
         |> Decode.hardcoded ""
         |> Decode.hardcoded ""
         |> fromAttribute "organic"
@@ -547,7 +543,6 @@ type FormMsg
     | SelectCategory CategoryId
     | InputBaseSku String
     | InputDescription String
-    | ToggleIsActive Bool
     | ToggleOrganic Bool
     | ToggleHeirloom Bool
     | ToggleSmallGrower Bool
@@ -582,9 +577,6 @@ updateForm msg model =
 
         InputDescription val ->
             noCommand { model | description = val }
-
-        ToggleIsActive val ->
-            noCommand { model | isActive = val }
 
         ToggleOrganic val ->
             noCommand { model | isOrganic = val }
@@ -801,7 +793,6 @@ formView buttonText submitMsg msgWrapper model { categories } =
                     ++ List.map renderCategoryOption categories
             , inputRow .baseSku InputBaseSku True "Base SKU" "baseSku" "text" "off"
             , Form.textareaRow model.errors model.description InputDescription False "Description" "description" 10
-            , Form.checkboxRow model.isActive ToggleIsActive "Is Enabled" "isEnabled"
             , Form.checkboxRow model.isOrganic ToggleOrganic "Is Organic" "isOrganic"
             , Form.checkboxRow model.isHeirloom ToggleHeirloom "Is Heirloom" "isHeirloom"
             , Form.checkboxRow model.isSmallGrower ToggleSmallGrower "Is Small Grower" "isSmallGrower"

@@ -14,7 +14,7 @@ import Data.Maybe (listToMaybe)
 import Data.Monoid ((<>))
 import Data.Scientific (Scientific, scientific)
 import Data.Time (UTCTime, getCurrentTime)
-import Database.Persist ((==.), (>=.), (<=.), Entity(..), selectList)
+import Database.Persist ((>=.), (<=.), Entity(..), selectList)
 import Servant ((:<|>)(..), (:>), Get)
 
 import Cache (Caches(..), CategoryPredecessorCache, queryCategoryPredecessorCache)
@@ -25,8 +25,8 @@ import Sitemap
     )
 import Models
 import Models.Fields (Milligrams(..), LotSize(..), renderLotSize, toDollars)
-import Routes.Utils (XML)
-import Server (App, runDB)
+import Routes.Utils (XML, activeVariantExists)
+import Server (App, AppSQL, runDB)
 
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.Map.Strict as M
@@ -63,7 +63,7 @@ sitemapRoute = do
     (categories, products, pages) <- runDB $
         (,,)
             <$> selectList [] []
-            <*> selectList [ProductIsActive ==. True] []
+            <*> getActiveProducts
             <*> selectList [] []
     let staticPages =
             [ "all-products"
@@ -84,6 +84,10 @@ sitemapRoute = do
             <> map makePageUrl pages
             <> map makeUrl staticPages
   where
+    getActiveProducts :: AppSQL [Entity Product]
+    getActiveProducts = E.select $ E.from $ \p -> do
+        E.where_ $ activeVariantExists p
+        return p
     makeCategoryUrl :: Entity Category -> SitemapUrl
     makeCategoryUrl (Entity _ Category {..}) =
         SitemapUrl
@@ -155,7 +159,7 @@ merchantFeedRoute = do
             []
         ps <- E.select $ E.from $ \(p `E.InnerJoin` v) -> do
             E.on $ v E.^. ProductVariantProductId E.==. p E.^. ProductId
-            E.where_ $ p E.^. ProductIsActive E.||. v E.^. ProductVariantIsActive
+            E.where_ $ v E.^. ProductVariantIsActive
             return (p, v)
         cs <- selectList [] []
         return (vs, catSale, ps, cs)

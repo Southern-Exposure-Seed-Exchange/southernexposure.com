@@ -40,7 +40,7 @@ connectToPostgres =
 -- | Get Active Products join with any Active Variants.
 getMassVariants :: SqlWriteT IO [ProductAndVariants]
 getMassVariants = do
-    products <- selectList [ProductIsActive ==. True] [Asc ProductBaseSku]
+    products <- selectList [] [Asc ProductBaseSku]
     fmap catMaybes . forM products $ \e@(Entity pId _) -> do
         vs <- filter (isMass . productVariantLotSize . entityVal) <$> selectList
             [ ProductVariantProductId ==. pId

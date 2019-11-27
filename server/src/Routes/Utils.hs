@@ -4,6 +4,7 @@
 module Routes.Utils
     ( -- * Products
       paginatedSelect
+    , activeVariantExists
       -- * Customers
     , generateUniqueToken
     , hashPassword
@@ -83,10 +84,7 @@ paginatedSelect maybeSorting maybePage maybePerPage productFilters =
           productsSelect ordering = do
             products <- E.select $ E.from $ \(p `E.LeftOuterJoin` sa) -> do
                 E.on (E.just (p E.^. ProductId) E.==. sa E.?. SeedAttributeProductId)
-                E.where_ $
-                    productFilters p sa
-                    E.&&. p E.^. ProductIsActive E.==. E.val True
-                    E.&&. activeVariantExists p
+                E.where_ $ productFilters p sa E.&&. activeVariantExists p
                 void $ ordering p
                 E.limit perPage
                 E.offset offset
@@ -106,7 +104,7 @@ variantSorted ordering offset perPage filters = do
         E.on (p E.^. ProductId E.==. v E.^. ProductVariantProductId
                 E.&&. v E.^. ProductVariantIsActive E.==. E.val True)
         E.groupBy $ p E.^. ProductId
-        E.where_ $ filters p sa E.&&. p E.^. ProductIsActive E.==. E.val True
+        E.where_ $ filters p sa
         E.limit perPage
         E.offset offset
         return (p, minPrice)
@@ -121,8 +119,7 @@ countProducts
 countProducts filters =
     extractRowCount . E.select $ E.from $ \(p `E.LeftOuterJoin` sa) -> do
         E.on (E.just (p E.^. ProductId) E.==. sa E.?. SeedAttributeProductId)
-        E.where_ $ filters p sa E.&&. p E.^. ProductIsActive E.==. E.val True
-            E.&&. activeVariantExists p
+        E.where_ $ filters p sa E.&&. activeVariantExists p
         return (E.countRows :: E.SqlExpr (E.Value Int))
 
 -- | Determine if the Product has an active ProductVariant.

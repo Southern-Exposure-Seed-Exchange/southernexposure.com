@@ -6,7 +6,7 @@ module Routes.Products
     , productRoutes
     ) where
 
-import Control.Monad (unless, when)
+import Control.Monad (when)
 import Control.Monad.Trans (lift)
 import Data.Aeson ((.=), (.:), (.:?), ToJSON(..), FromJSON(..), object, withObject)
 import Data.Char (isAlpha)
@@ -69,7 +69,6 @@ productDetailsRoute slug = do
             Nothing ->
                 throwError err404
             Just e@(Entity productId prod) -> runDB $ do
-                unless (productIsActive prod) $ throwError err404
                 baseData <- lift $ makeBaseProductData e
                 (variants, maybeAttribute, categories) <-
                     (,,)
