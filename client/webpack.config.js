@@ -7,6 +7,9 @@ var SriWebpackPlugin = require('webpack-subresource-integrity');
 var FaviconsWebpackPlugin = require('favicons-webpack-plugin');
 var ImageminWebpackPlugin = require('imagemin-webpack-plugin').default;
 var CspHtmlWebpackPlugin = require('csp-html-webpack-plugin');
+var MiniCssExtractPlugin = require('mini-css-extract-plugin');
+var TerserJSPlugin = require('terser-webpack-plugin');
+var OptimizeCSSAssetsPlugin = require('optimize-css-assets-webpack-plugin');
 
 var isProduction = process.env.NODE_ENV === 'production';
 
@@ -35,7 +38,8 @@ module.exports = {
   },
 
   optimization: {
-    runtimeChunk: 'single'
+    runtimeChunk: 'single',
+    minimizer: [new TerserJSPlugin({}), new OptimizeCSSAssetsPlugin({}),],
   },
 
   module: {
@@ -73,7 +77,14 @@ module.exports = {
       {
         test: /\.sass$/,
         exclude: [/node_modules/,],
-        use: [ 'style-loader', 'css-loader', 'postcss-loader', 'sass-loader' ],
+        use: [
+          { loader: MiniCssExtractPlugin.loader,
+            options: {
+              hmr: !isProduction,
+              reloadAll: true,
+            },
+          }, 'css-loader', 'postcss-loader', 'sass-loader'
+        ],
       },
       {
         test: /\.woff(2)?(\?v=[0-9]\.[0-9]\.[0-9])?$/,
@@ -180,10 +191,20 @@ module.exports = {
       'img-src': ["'self'", "data:", "https://www.googletagmanager.com", "https://*.stripe.com"],
       'font-src': ["'self'", "https://fonts.gstatic.com"],
       'style-src': ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+    }, {
+      hashEnabled: {
+        'style-src': false,
+      },
+      nonceEnabled: {
+        'style-src': false,
+      },
     }),
     new ImageminWebpackPlugin({
       test: /^.*favicon.*\.png$/,
       disable: !isProduction,
+    }),
+    new MiniCssExtractPlugin({
+      filename: '[name].[contenthash].css',
     }),
   ],
 
