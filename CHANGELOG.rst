@@ -6,6 +6,8 @@ CHANGELOG
 v0.11.0
 ========
 
+* Show a preview of a Variant's grams, as rendered by the frontend, on the Add
+  & Edit Product pages.
 * Move the "special shipping requirements" text from the Checkout Success page
   to below the Comments field on the Checkout page.
 
