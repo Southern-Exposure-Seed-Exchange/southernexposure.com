@@ -52,6 +52,7 @@ type API =
     :<|> "checkout" :> CheckoutAPI
     :<|> "stone-edge" :> StoneEdgeAPI
     :<|> "admin" :> AdminAPI
+    :<|> "redirects" :> RedirectAPI
     :<|> FeedAPI
 
 -- | Return the Handler functions for the `API` type.
@@ -65,4 +66,5 @@ server =
     :<|> checkoutRoutes
     :<|> stoneEdgeRoutes
     :<|> adminRoutes
+    :<|> redirectRoutes
     :<|> feedRoutes

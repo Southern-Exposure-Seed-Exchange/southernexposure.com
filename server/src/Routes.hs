@@ -6,6 +6,7 @@ module Routes
     , module Routes.Customers
     , module Routes.Feeds
     , module Routes.Products
+    , module Routes.Redirects
     , module Routes.StaticPages
     , module Routes.StoneEdge
     ) where
@@ -17,5 +18,6 @@ import Routes.Checkout
 import Routes.Customers
 import Routes.Feeds
 import Routes.Products
+import Routes.Redirects
 import Routes.StaticPages
 import Routes.StoneEdge
