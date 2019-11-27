@@ -6,6 +6,7 @@ var CopyWebpackPlugin = require('copy-webpack-plugin');
 var SriWebpackPlugin = require('webpack-subresource-integrity');
 var FaviconsWebpackPlugin = require('favicons-webpack-plugin');
 var ImageminWebpackPlugin = require('imagemin-webpack-plugin').default;
+var CspHtmlWebpackPlugin = require('csp-html-webpack-plugin');
 
 var isProduction = process.env.NODE_ENV === 'production';
 
@@ -167,6 +168,18 @@ module.exports = {
         theme_color: "#158312",
         version: "v0.10.0",
       },
+    }),
+    new CspHtmlWebpackPlugin({
+      'base-uri': "'self'",
+      'upgrade-insecure-requests': [],
+      'default-src': ["'self'", "data:"],
+      'object-src': "'none'",
+      'connect-src': ["'self'", "https://checkout.stripe.com"],
+      'frame-src': ["'self'", "https://checkout.stripe.com"],
+      'script-src': ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://www.googletagmanager.com", "https://checkout.stripe.com"],
+      'img-src': ["'self'", "data:", "https://www.googletagmanager.com", "https://*.stripe.com"],
+      'font-src': ["'self'", "https://fonts.gstatic.com"],
+      'style-src': ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
     }),
     new ImageminWebpackPlugin({
       test: /^.*favicon.*\.png$/,
