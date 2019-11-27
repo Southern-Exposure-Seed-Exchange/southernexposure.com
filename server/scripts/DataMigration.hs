@@ -158,6 +158,8 @@ main = do
     coupons <- makeCoupons mysqlConn
     putStrLn "Making Orders"
     orders <- makeOrders mysqlConn
+    putStrLn "Making Reviews"
+    reviews <- makeReviews mysqlConn
     flip runSqlPool psqlConn $ do
         runMigration migrateAll
         liftPutStrLn "Clearing Database"
@@ -189,6 +191,8 @@ main = do
         insertCoupons coupons
         liftPutStrLn "Inserting Orders"
         void $ insertOrders customerMap variantMap addressCache orders
+        liftPutStrLn "Inserting Reviews"
+        insertReviews customerMap variantMap reviews
         liftPutStrLn "Fixing ID Sequences"
         fixIdSequences
     close mysqlConn
@@ -639,8 +643,6 @@ makeCoupons mysql = do
         "WHERE coupon_type <> \"G\""
     return $ map makeCoupon coupons
     where
-    toUTC =
-            localTimeToUTC $ hoursToTimeZone (-5)
     makeCoupon
          [ _, MySQLText type_, MySQLText code
          , MySQLDecimal amount, MySQLDecimal minOrder, MySQLDateTime expirationDate
@@ -670,13 +672,13 @@ makeCoupons mysql = do
                 , couponMinimumOrder =
                     Cents . floor $ 100 * minOrder
                 , couponExpirationDate =
-                    toUTC expirationDate
+                    estToUTC expirationDate
                 , couponTotalUses =
                     fromIntegral usesPerCoupon
                 , couponUsesPerCustomer =
                     fromIntegral usesPerCustomer
                 , couponCreatedAt =
-                    toUTC createdDate
+                    estToUTC createdDate
                 }
     makeCoupon _ = error "Invalid arguments to makeCoupon."
 
@@ -1075,6 +1077,38 @@ makeOrders mysql = do
                     <> "\n\t\t" <> intercalate "\n\t\t" (map show products)
 
 
+makeReviews :: MySQLConn -> IO [(ProductId, CustomerId, Review)]
+makeReviews mysql = do
+    reviews <- mysqlQuery mysql $
+        "SELECT r.reviews_id, r.products_id, r.customers_id, " <>
+        "       r.customers_name, r.reviews_rating, r.date_added, " <>
+        "       r.status, rd.reviews_text " <>
+        "FROM reviews AS r " <>
+        "RIGHT JOIN reviews_description AS rd ON rd.reviews_id=r.reviews_id AND rd.languages_id=1 " <>
+        "WHERE r.status=1"
+    return $ map makeReview reviews
+  where
+    makeReview
+        [ _, MySQLInt32 productId, MySQLInt32 customerId
+        , MySQLText name, MySQLInt32 rating, MySQLDateTime createdDate
+        , _, MySQLText content
+        ] =
+            ( makeSqlKey productId
+            , makeSqlKey customerId
+            , Review
+                { reviewCustomerId = makeSqlKey customerId
+                , reviewVariantId = toSqlKey 0
+                , reviewCustomerName = name
+                , reviewRating = fromIntegral $ min 5 $ max 0 rating
+                , reviewContent = content
+                , reviewCreatedAt = estToUTC createdDate
+                , reviewIsApproved = True
+                }
+            )
+    makeReview args =
+        error $ "Unexpected arguments to makeReview:\n\t" <> show args
+
+
 
 
 -- Persistent Model Saving Functions
@@ -1385,6 +1419,27 @@ insertOrders customerMap variantMap =
             Just (Entity cId _) ->
                 return $ toSqlKey $ fromSqlKey cId + 1
 
+insertReviews :: OldIdMap CustomerId -> OldIdMap ProductVariantId -> [(ProductId, CustomerId, Review)] -> SqlWriteT IO ()
+insertReviews customerMap variantMap =
+    mapM_ insertReview
+  where
+    insertReview :: (ProductId, CustomerId, Review) -> SqlWriteT IO ()
+    insertReview (oldProduct, oldCustomer, review) =
+        case IntMap.lookup (makeMapKey oldCustomer) customerMap of
+            Nothing ->
+                lift . putStrLn $
+                    "insertReview: Could not find Old Customer ID: " <> show oldCustomer
+            Just customerId ->
+                case IntMap.lookup (makeMapKey oldProduct) variantMap of
+                    Nothing ->
+                        lift . putStrLn $
+                            "insertReview: Could not find Old Product ID: " <> show oldProduct
+                    Just variantId ->
+                        insert_ review
+                            { reviewCustomerId = customerId
+                            , reviewVariantId = variantId
+                            }
+
 
 -- Utils
 
@@ -1411,6 +1466,11 @@ convertLocalTimeToUTC :: LocalTime -> IO UTCTime
 convertLocalTimeToUTC time = do
     timezone <- getCurrentTimeZone
     return $ localTimeToUTC timezone time
+
+
+estToUTC :: LocalTime -> UTCTime
+estToUTC =
+    localTimeToUTC $ hoursToTimeZone (-5)
 
 
 generateToken :: IO T.Text

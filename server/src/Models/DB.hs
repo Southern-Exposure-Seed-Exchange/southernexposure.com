@@ -90,6 +90,15 @@ PasswordReset
     UniquePasswordReset customerId
     UniqueResetCode code
 
+Review
+    customerId CustomerId
+    variantId ProductVariantId
+    customerName T.Text
+    rating Int
+    content T.Text
+    isApproved Bool
+    createdAt UTCTime
+
 
 Cart
     customerId CustomerId Maybe
