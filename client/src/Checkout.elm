@@ -16,7 +16,7 @@ import Address exposing (AddressId(..))
 import Api
 import Dict
 import Html exposing (..)
-import Html.Attributes as A exposing (attribute, checked, class, colspan, for, href, id, minlength, name, required, rows, src, step, target, type_, value)
+import Html.Attributes as A exposing (attribute, checked, class, colspan, for, id, minlength, name, required, rows, src, step, type_, value)
 import Html.Events exposing (onCheck, onClick, onInput, onSubmit)
 import Json.Decode as Decode
 import Json.Encode as Encode exposing (Value)
@@ -1140,6 +1140,9 @@ view model authStatus locations checkoutDetails =
                 , value model.comment
                 ]
                 []
+            , p [ class "text-muted" ]
+                [ small [] [ text "Please include any special shipping requirements you may have." ]
+                ]
             ]
         , div [ class "form-group text-right" ]
             [ button [ class "btn btn-primary", type_ "submit" ]
@@ -1629,17 +1632,6 @@ successView zone logoutMsg orderId newAccountCreated locations orderDetails =
                             ++ "please log out to keep your account details private."
                     ]
 
-        contactLink =
-            a
-                [ href <|
-                    "mailto:gardens@southernexposure.com"
-                        ++ "?subject=SESE+Website+Contact(Order+#"
-                        ++ String.fromInt orderId
-                        ++ ")"
-                , target "_blank"
-                ]
-                [ text "contact us" ]
-
         commentHtml =
             if not (String.isEmpty orderDetails.order.comment) then
                 p []
@@ -1658,11 +1650,6 @@ successView zone logoutMsg orderId newAccountCreated locations orderDetails =
     , h2 [] [ text "Thanks for your order!" ]
     , newAccountAlert
     , p [] [ text "We will review your order today & will get in touch with you if we need any clarifications." ]
-    , p []
-        [ text "Please "
-        , contactLink
-        , text " as soon as possible if you have special shipping requirements."
-        ]
     , p [ class "text-center font-weight-bold text-primary mb-2" ]
         [ text "We will email you a tracking number once your order has shipped."
         ]
