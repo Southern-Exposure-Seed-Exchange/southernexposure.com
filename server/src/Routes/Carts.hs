@@ -230,10 +230,10 @@ customerDetailsRoute token = withValidatedCookie token getCustomerCartDetails
 getCustomerCartDetails :: Entity Customer -> App CartDetailsData
 getCustomerCartDetails (Entity customerId customer) =
     runDB $ do
-        shippingCountry <- getShippingCountry
+        (shippingCountry, shippingRegion) <- getShippingCountry
         items <- getCartItems $ \c ->
             c E.^. CartCustomerId E.==. E.just (E.val customerId)
-        charges <- getCharges shippingCountry items
+        charges <- getCharges shippingCountry shippingRegion items
             (not . T.null $ customerMemberNumber customer)
             Nothing False
         return $ CartDetailsData items charges
@@ -247,7 +247,11 @@ getCustomerCartDetails (Entity customerId customer) =
                         ]
                         [ P.LimitTo 1
                         ]
-            return $ addressCountry <$> maybeShippingAddress
+            return
+                ( addressCountry <$> maybeShippingAddress
+                , addressState <$> maybeShippingAddress
+                )
+
 
 
 newtype AnonymousDetailsParameters =
@@ -269,7 +273,7 @@ anonymousDetailsRoute parameters =
     runDB $ do
         items <- getCartItems $ \c ->
             c E.^. CartSessionToken E.==. E.just (E.val $ adpCartToken parameters)
-        charges <- getCharges Nothing items False Nothing False
+        charges <- getCharges Nothing Nothing items False Nothing False
         return $ CartDetailsData items charges
 
 

@@ -61,6 +61,7 @@ import Server
 import Validation (Validation(..))
 
 import qualified Data.ISO3166_CountryCodes as CountryCodes
+import qualified Data.StateCodes as StateCodes
 import qualified Data.List as L
 import qualified Data.Map.Strict as M
 import qualified Data.Text as T
@@ -443,19 +444,18 @@ to properly return an error for the user.
 -}
 getCharges
     :: Maybe Country            -- ^ Used to calculate the Shipping charge.
+    -> Maybe Region             -- ^ Used to calculate the Tax charge.
     -> [CartItemData]           -- ^ The cart items (see `getCartItems`)
     -> Bool                     -- ^ Include the 5% Member Discount?
     -> Maybe (Entity Coupon)    -- ^ A Coupon to apply.
     -> Bool                     -- ^ Include Priority S&H
     -> AppSQL CartCharges
-getCharges maybeCountry items includeMemberDiscount maybeCoupon priorityShipping =
+getCharges maybeCountry maybeRegion items includeMemberDiscount maybeCoupon priorityShipping =
     let
         subTotal =
             foldl (\acc item -> acc + itemTotal item) 0 items
         itemTotal item =
             fromIntegral (cidQuantity item) * fromCents (getVariantPrice $ cidVariant item)
-        taxTotal =
-            0
         memberDiscount =
             if includeMemberDiscount && calculatedMemberDiscount > 0 then
                 Just CartCharge
@@ -480,9 +480,20 @@ getCharges maybeCountry items includeMemberDiscount maybeCoupon priorityShipping
                     <$> calculatePriorityFee ms subTotal
             else
                 Nothing
+        taxLine preTaxTotal =
+            case maybeRegion of
+                Just (USState StateCodes.VA) ->
+                    CartCharge
+                        { ccDescription = "VA Sales Tax (5.3%)"
+                        , ccAmount = applyVATax preTaxTotal
+                        }
+                _ ->
+                    CartCharge
+                        { ccDescription = ""
+                        , ccAmount = 0
+                        }
         sumGrandTotal cc =
-            cc {
-                ccGrandTotal =
+            let preTaxTotal =
                     ccProductTotal cc
                         + sum (map ccAmount $ ccSurcharges cc)
                         + amt ccTax
@@ -490,14 +501,20 @@ getCharges maybeCountry items includeMemberDiscount maybeCoupon priorityShipping
                         + mAmt ccPriorityShippingFee
                         - mAmt ccMemberDiscount
                         - mAmt ccCouponDiscount
-            }
+                tax =
+                    taxLine preTaxTotal
+            in
+            cc
+                { ccGrandTotal = preTaxTotal + ccAmount tax
+                , ccTax = tax
+                }
             where amt f = ccAmount $ f cc
                   mAmt f = maybe (Cents 0) ccAmount $ f cc
     in do
         surcharges <- getSurcharges items
         shippingMethods <- getShippingMethods maybeCountry items subTotal
         return $ sumGrandTotal CartCharges
-            { ccTax = CartCharge "" $ Cents taxTotal
+            { ccTax = CartCharge "" 0
             , ccSurcharges = surcharges
             , ccShippingMethods = shippingMethods
             , ccPriorityShippingFee = priorityCharge shippingMethods

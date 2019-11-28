@@ -148,6 +148,7 @@ withCheckoutDetailsErrors =
 data CustomerDetailsParameters =
     CustomerDetailsParameters
         { cdpShippingCountry :: Maybe Country
+        , cdpShippingRegion :: Maybe Region
         , cdpExistingAddress :: Maybe AddressId
         , cdpMemberNumber :: Maybe T.Text
         , cdpCouponCode :: Maybe T.Text
@@ -158,6 +159,7 @@ instance FromJSON CustomerDetailsParameters where
     parseJSON = withObject "CustomerDetailsParameters" $ \v ->
         CustomerDetailsParameters
             <$> v .:? "country"
+            <*> v .:? "region"
             <*> v .:? "addressId"
             <*> v .:? "memberNumber"
             <*> v .:? "couponCode"
@@ -203,13 +205,13 @@ customerDetailsRoute token parameters = withValidatedCookie token $ \(Entity cus
         let (shippingAddresses, billingAddresses) =
                 partition (\a -> addressType (entityVal a) == Shipping)
                     customerAddresses
-            maybeCountry =
-                getShippingCountry parameters shippingAddresses
+            (maybeCountry, maybeRegion) =
+                getShippingAddress parameters shippingAddresses
         maybeCoupon <- mapException DetailsCouponError $ sequence
             $ getCoupon currentTime (Just customerId) <$> cdpCouponCode parameters
         items <- getCartItems $ \c ->
             c E.^. CartCustomerId E.==. E.just (E.val customerId)
-        charges <- getCharges maybeCountry items hasValidMemberNumber
+        charges <- getCharges maybeCountry maybeRegion items hasValidMemberNumber
             maybeCoupon priorityShipping
         mapException DetailsCouponError
             $ checkCouponMeetsMinimum maybeCoupon charges
@@ -224,31 +226,30 @@ customerDetailsRoute token parameters = withValidatedCookie token $ \(Entity cus
             , cddMemberNumber = customerMemberNumber customer
             }
     where
-        getShippingCountry :: CustomerDetailsParameters -> [Entity Address] -> Maybe Country
-        getShippingCountry ps addrs =
+        getShippingAddress :: CustomerDetailsParameters -> [Entity Address] -> (Maybe Country, Maybe Region)
+        getShippingAddress ps addrs =
             let
                 maybeFromAddress =
-                    fmap fromAddress
-                    $ (\a -> find (\(Entity addrId _) -> addrId == a) addrs)
-                    =<< cdpExistingAddress ps
-                maybeFromParams =
-                    case cdpShippingCountry ps of
-                        Nothing ->
-                            Nothing
-                        Just c ->
-                            Just $ Just c
+                    cdpExistingAddress ps
+                        >>= (\a -> find (\(Entity addrId _) -> addrId == a) addrs)
                 maybeFromDefault =
-                    fromAddress <$> find (addressIsDefault . entityVal) addrs
-                fromAddress (Entity _ addr) =
-                    Just $ addressCountry addr
+                    find (addressIsDefault . entityVal) addrs
+                apply addrSelector paramSelector =
+                    asum
+                        [ addrSelector . entityVal <$> maybeFromAddress
+                        , paramSelector ps
+                        , addrSelector . entityVal <$> maybeFromDefault
+                        ]
             in
-                fromMaybe Nothing
-                    $ asum [maybeFromAddress, maybeFromParams, maybeFromDefault]
+                ( apply addressCountry cdpShippingCountry
+                , apply addressState cdpShippingRegion
+                )
 
 
 data AnonymousDetailsParameters =
     AnonymousDetailsParameters
         { adpShippingCountry :: Maybe Country
+        , adpShippingRegion :: Maybe Region
         , adpMemberNumber :: Maybe T.Text
         , adpCouponCode :: Maybe T.Text
         , adpPriorityShipping :: Bool
@@ -259,6 +260,7 @@ instance FromJSON AnonymousDetailsParameters where
     parseJSON = withObject "AnonymousDetailsParameters" $ \v ->
         AnonymousDetailsParameters
             <$> v .:? "country"
+            <*> v .:? "region"
             <*> v .:? "memberNumber"
             <*> v .:? "couponCode"
             <*> v .:  "priorityShipping"
@@ -273,6 +275,8 @@ anonymousDetailsRoute parameters =
     let
         maybeCountry =
             adpShippingCountry parameters
+        maybeRegion =
+            adpShippingRegion parameters
         priorityShipping =
             adpPriorityShipping parameters
         isValidMemberNumber =
@@ -284,7 +288,7 @@ anonymousDetailsRoute parameters =
                 $ getCoupon currentTime Nothing <$> adpCouponCode parameters
             items <- getCartItems $ \c ->
                 c E.^. CartSessionToken E.==. E.just (E.val $ adpCartToken parameters)
-            charges <- getCharges maybeCountry items isValidMemberNumber
+            charges <- getCharges maybeCountry maybeRegion items isValidMemberNumber
                 maybeCoupon priorityShipping
             mapException DetailsCouponError
                 $ checkCouponMeetsMinimum maybeCoupon charges
@@ -932,7 +936,7 @@ createLineItems currentTime customerId shippingAddress items orderId memberNumbe
     maybeCoupon <- mapException PlaceOrderCouponError $ sequence
         $ getCoupon currentTime (Just customerId) <$> maybeCouponCode
     charges <- getCharges
-        (Just $ addressCountry shippingAddress) items
+        (Just $ addressCountry shippingAddress) (Just $ addressState shippingAddress) items
         (T.length memberNumber >= 4) maybeCoupon priorityShipping
     mapException PlaceOrderCouponError $ checkCouponMeetsMinimum maybeCoupon charges
     shippingCharge <-

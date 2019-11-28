@@ -13,6 +13,7 @@ module Models.Utils
       -- * Addresses
     , insertOrActivateAddress
       -- * Orders
+    , applyVATax
     , getOrderTax
     , getLineItemTotal
     , getOrderTotal
@@ -230,6 +231,14 @@ insertOrActivateAddress newAddress = do
                     ]
                     []
 
+-- | Calculate VA's Sale Tax to an Order.
+--
+-- This is a temporary measure until Avalara integration is ready. This
+-- should be applied to the entire Order amount, minus any store credit.
+applyVATax :: Cents -> Cents
+applyVATax preTaxTotal =
+    Cents . round
+        $ (53 % 1000) * toRational (fromCents preTaxTotal)
 
 -- | Calculate the total tax from all of an Order's Products.
 getOrderTax :: [OrderLineItem] -> Cents
