@@ -24,7 +24,7 @@ import Data.ByteString.Lazy (ByteString)
 import Data.Char (isAlpha)
 import Data.Int (Int32)
 import Data.Foldable (foldrM)
-import Data.List (nubBy, partition, intercalate, find)
+import Data.List (nubBy, partition, intercalate, find, nub)
 import Data.Maybe (fromMaybe, isJust, listToMaybe)
 import Data.Monoid ((<>))
 import Data.Pool (destroyAllResources)
@@ -378,20 +378,21 @@ makeProducts mysql = do
             let name = if dbName == ""
                     then "Inactive Product - " <> T.pack (show prodId)
                     else dbName
-            let (baseSku, skuSuffix) = splitSku prodSKU
+                (baseSku, skuSuffix) = splitSku prodSKU
                 isActive = prodStatus == 1
-            let blankDate = UTCTime (ModifiedJulianDay 0) 0
+                blankDate = UTCTime (ModifiedJulianDay 0) 0
             createdAt <- if show created == "0001-01-01 00:00:00"
                 then return blankDate
                 else convertLocalTimeToUTC created
             time <- getCurrentTime
+            categories <- getCategories prodId
             let updatedAt = fromNullableDateTime time nullableUpdateAt
             return ( makeSqlKey prodId, skuSuffix
                    , prodPrice, prodQty, prodWeight, isActive
                    , Product
                         { productName = name
                         , productSlug = slugify name
-                        , productCategoryIds = [makeSqlKey catId]
+                        , productCategoryIds = nub $ makeSqlKey catId : categories
                         , productBaseSku = T.toUpper baseSku
                         , productShortDescription = ""
                         , productLongDescription = description
@@ -401,6 +402,21 @@ makeProducts mysql = do
                         }
                    )
         makeProduct args = error $ "Invalid arguments to makeProduct:\n\t" ++ show args
+        getCategories prodId = do
+            queryString <- prepareStmt mysql . Query $
+                "SELECT ptc.categories_id "
+                <> "FROM products_to_categories AS ptc "
+                <> "RIGHT JOIN categories AS c "
+                <> "    ON c.categories_id=ptc.categories_id "
+                <> "WHERE ptc.products_id=? AND c.categories_status=1"
+            ids <- queryStmt mysql queryString [MySQLInt32 prodId]
+                >>= fmap (map makeCategoryId) . Streams.toList . snd
+            closeStmt mysql queryString
+            return ids
+        makeCategoryId [MySQLInt32 catId] =
+            makeSqlKey catId
+        makeCategoryId args =
+            error $ "Unexpected arguments to makeCtegoryId:\n\t" ++ show args
 
 
 makeVariants :: [(ProductId, T.Text, Scientific, Float, Float, Bool, Product)] -> [(ProductId, T.Text, ProductVariant)]
