@@ -13,6 +13,7 @@ module Routes.CommonData
     , getVariantPrice
     , applySalesToVariants
     , applyCategorySale
+    , getAdditionalCategories
     , PredecessorCategory
     , categoryToPredecessor
     , CategoryData(cdDescription)
@@ -108,8 +109,8 @@ instance ToJSON BaseProductData where
             , "image" .= bpdImage
             ]
 
-makeBaseProductData :: (MonadReader Config m, MonadIO m) => Entity Product -> m BaseProductData
-makeBaseProductData (Entity pId Product {..}) = do
+makeBaseProductData :: (MonadReader Config m, MonadIO m) => Entity Product -> [Entity ProductToCategory] -> m BaseProductData
+makeBaseProductData (Entity pId Product {..}) categories = do
     image <- makeSourceSet "products" $ T.unpack productImageUrl
     return BaseProductData
         { bpdId = pId
@@ -118,7 +119,9 @@ makeBaseProductData (Entity pId Product {..}) = do
         , bpdBaseSku = productBaseSku
         , bpdLongDescription = productLongDescription
         , bpdImage = image
-        , bpdCategories = productCategoryIds
+        , bpdCategories =
+            productMainCategory
+                : map (productToCategoryCategoryId . entityVal) categories
         }
 
 
@@ -154,7 +157,8 @@ getVariantPrice VariantData { vdPrice, vdSalePrice } =
 
 getProductData :: Entity Product -> AppSQL ProductData
 getProductData e@(Entity productId _) = do
-    prod <- lift $ makeBaseProductData e
+    categories <- getAdditionalCategories productId
+    prod <- lift $ makeBaseProductData e categories
     variants <- selectList
         [ ProductVariantProductId ==. productId
         , ProductVariantIsActive ==. True
@@ -204,7 +208,7 @@ makeVariantData (Entity variantId ProductVariant {..}) maybeSalePrice =
 -- | Get the CategorySales for the Product's Categories, than apply any
 -- amount if it is less than the Variant's current sale price.
 applyCategorySales :: Entity Product -> [VariantData] -> AppSQL [VariantData]
-applyCategorySales (Entity _ product) variants =
+applyCategorySales product variants =
     getCategorySales product >>= \case
         [] ->
             return variants
@@ -226,11 +230,13 @@ applyCategorySale sale variant =
                 variant
 
 -- | Get any active sales for the given categories.
-getCategorySales :: Product -> AppSQL [CategorySale]
-getCategorySales product = do
+getCategorySales :: Entity Product -> AppSQL [CategorySale]
+getCategorySales (Entity productId product) = do
     currentTime <- liftIO getCurrentTime
+    secondaryCategories <- map (productToCategoryCategoryId . entityVal)
+        <$> getAdditionalCategories productId
     categories <- lift $ map entityKey . concat <$>
-        mapM getParentCategories (productCategoryIds product)
+        mapM getParentCategories (productMainCategory product : secondaryCategories)
     activeSales <- map entityVal <$> selectList
         [ CategorySaleStartDate <=. currentTime
         , CategorySaleEndDate >=. currentTime
@@ -239,6 +245,10 @@ getCategorySales product = do
     return $ filter
         (not . null . L.intersect categories . categorySaleCategoryIds)
         activeSales
+
+getAdditionalCategories :: ProductId -> AppSQL [Entity ProductToCategory]
+getAdditionalCategories productId =
+    selectList [ProductToCategoryProductId ==. productId] []
 
 
 
@@ -419,8 +429,9 @@ getCartItems whereQuery = do
                 quantity =
                     E.unValue q
             in do
-                maybeCategorySale <- listToMaybe <$> getCategorySales (entityVal p)
-                productData <- lift $ makeBaseProductData p
+                categories <- getAdditionalCategories (entityKey p)
+                maybeCategorySale <- listToMaybe <$> getCategorySales p
+                productData <- lift $ makeBaseProductData p categories
                 variantData <- applyVariantSales v >>= \vd ->
                     return $ maybe vd (`applyCategorySale` vd) maybeCategorySale
                 return CartItemData

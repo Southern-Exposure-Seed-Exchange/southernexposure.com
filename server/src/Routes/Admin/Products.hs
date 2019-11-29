@@ -11,15 +11,15 @@ module Routes.Admin.Products
 
 import Control.Concurrent.STM (readTVarIO)
 import Control.Monad (forM_)
-import Control.Monad.Reader (asks, liftIO)
+import Control.Monad.Reader (asks, liftIO, lift)
 import Data.Aeson ((.=), (.:), ToJSON(..), FromJSON(..), Value(Object), object, withObject)
-import Data.Maybe (mapMaybe, listToMaybe)
+import Data.Maybe (mapMaybe, listToMaybe, fromMaybe)
 import Data.Monoid ((<>))
 import Data.Text.Encoding (encodeUtf8)
 import Data.Time (UTCTime, getCurrentTime)
 import Database.Persist
-    ( (==.), (=.), Entity(..), selectList, selectFirst, insert, insertMany_
-    , insert_, update, get, getBy
+    ( (==.), (=.), Entity(..), SelectOpt(Asc), selectList, selectFirst
+    , insert, insertMany_, insert_, update, get, getBy, deleteWhere
     )
 import Servant ((:<|>)(..), (:>), AuthProtect, ReqBody, Capture, Get, Post, JSON, err404)
 import Text.HTML.SanitizeXSS (sanitize)
@@ -30,8 +30,10 @@ import Cache (Caches(getCategoryPredecessorCache), CategoryPredecessorCache, que
 import Models
     ( EntityField(..), Product(..), ProductId, ProductVariant(..), ProductVariantId
     , SeedAttribute(..), Category(..), CategoryId, Unique(..), slugify
+    , ProductToCategory(..)
     )
 import Models.Fields (LotSize, Cents)
+import Routes.CommonData (getAdditionalCategories)
 import Routes.Utils (activeVariantExists, makeImageFromBase64)
 import Server (App, AppSQL, runDB, serverError)
 import Validation (Validation(validators))
@@ -122,7 +124,7 @@ productListRoute t = withAdminCookie t $ \_ -> runDB $ do
             { lpId = pId
             , lpName = productName prod
             , lpBaseSku = productBaseSku prod
-            , lpCategories = mapMaybe (`M.lookup` nameMap) $ productCategoryIds prod
+            , lpCategories = (: []) . fromMaybe "" $ productMainCategory prod `M.lookup` nameMap
             , lpIsActive = E.unValue isActive
             }
 
@@ -183,7 +185,7 @@ data ProductParameters =
     ProductParameters
         { ppName :: T.Text
         , ppSlug :: T.Text
-        , ppCategory :: CategoryId
+        , ppCategories :: [CategoryId]
         , ppBaseSku :: T.Text
         , ppLongDescription :: T.Text
         , ppImageData :: BS.ByteString
@@ -197,7 +199,7 @@ instance FromJSON ProductParameters where
     parseJSON = withObject "ProductParameters" $ \v -> do
         ppName <- v .: "name"
         ppSlug <- v .: "slug"
-        ppCategory <- v .: "category"
+        ppCategories <- v .: "categories"
         ppBaseSku <- v .: "baseSku"
         ppLongDescription <- v .: "longDescription"
         ppImageData <- encodeUtf8 <$> v .: "imageData"
@@ -210,7 +212,7 @@ instance Validation ProductParameters where
     validators ProductParameters {..} = do
         slugDoesntExist <- V.doesntExist $ UniqueProductSlug ppSlug
         skuDoesntExist <- V.doesntExist $ UniqueBaseSku ppBaseSku
-        categoryExists <- V.exists ppCategory
+        categoryValidations <- getCategoryErrors ppCategories
         return $
             [ ( ""
               , [ ("At least one Variant is required.", null ppVariantData) ]
@@ -225,11 +227,6 @@ instance Validation ProductParameters where
                    )
                  ]
               )
-            , ( "category"
-              , [ ( "Could not find this Category in the database."
-                  , categoryExists)
-                ]
-              )
             , ( "baseSku"
               , [ V.required ppBaseSku
                 , ( "A Product with this SKU already exists."
@@ -239,6 +236,7 @@ instance Validation ProductParameters where
               )
             ]
             ++ getDuplicateSuffixErrors ppVariantData
+            ++ categoryValidations
 
 data VariantData =
     VariantData
@@ -311,24 +309,32 @@ newProductRoute = validateAdminAndParameters $ \_ p@ProductParameters {..} -> do
     time <- liftIO getCurrentTime
     imageFileName <- makeImageFromBase64 "products" ppImageName ppImageData
     runDB $ do
-        productId <- insert $ makeProduct p imageFileName time
+        (prod, extraCategories) <- makeProduct p imageFileName time
+        productId <- insert prod
+        insertMany_ $ map (ProductToCategory productId) extraCategories
         insertMany_ $ map (makeVariant productId) ppVariantData
         maybe (return ()) (insert_ . makeAttributes productId) ppSeedAttribute
         return productId
   where
-    makeProduct :: ProductParameters -> T.Text -> UTCTime -> Product
+    makeProduct :: ProductParameters -> T.Text -> UTCTime -> AppSQL (Product, [CategoryId])
     makeProduct ProductParameters {..} imageUrl time =
-        Product
-            { productName = sanitize ppName
-            , productSlug = slugify ppSlug
-            , productCategoryIds = [ppCategory]
-            , productBaseSku = ppBaseSku
-            , productShortDescription = ""
-            , productLongDescription = sanitize ppLongDescription
-            , productImageUrl = imageUrl
-            , productCreatedAt = time
-            , productUpdatedAt = time
-            }
+        case ppCategories of
+            main : rest -> return
+                ( Product
+                    { productName = sanitize ppName
+                    , productSlug = slugify ppSlug
+                    , productMainCategory = main
+                    , productBaseSku = ppBaseSku
+                    , productShortDescription = ""
+                    , productLongDescription = sanitize ppLongDescription
+                    , productImageUrl = imageUrl
+                    , productCreatedAt = time
+                    , productUpdatedAt = time
+                    }
+                , rest
+                )
+            [] ->
+                lift $ V.singleError "At least one Category is required."
 
 
 -- EDIT
@@ -344,7 +350,7 @@ data EditProductData =
         { epdId :: ProductId
         , epdName :: T.Text
         , epdSlug :: T.Text
-        , epdCategory :: Maybe CategoryId
+        , epdCategories :: [CategoryId]
         , epdBaseSku :: T.Text
         , epdLongDescription :: T.Text
         , epdImageUrl :: T.Text
@@ -358,7 +364,7 @@ instance ToJSON EditProductData where
             [ "id" .= epdId
             , "name" .= epdName
             , "slug" .= epdSlug
-            , "category" .= epdCategory
+            , "categories" .= epdCategories
             , "baseSku" .= epdBaseSku
             , "longDescription" .= epdLongDescription
             , "imageUrl" .= epdImageUrl
@@ -372,13 +378,18 @@ editProductDataRoute t productId = withAdminCookie t $ \_ ->
         Nothing ->
             serverError err404
         Just Product {..} -> runDB $ do
-            variants <- map makeVariantData <$> selectList [ProductVariantProductId ==. productId] []
+            variants <- map makeVariantData
+                <$> selectList
+                    [ProductVariantProductId ==. productId]
+                    [Asc ProductVariantSkuSuffix]
             seedAttr <- fmap makeAttributeData <$> getBy (UniqueAttribute productId)
+            categories <- getAdditionalCategories productId
             return EditProductData
                 { epdId = productId
                 , epdName = productName
                 , epdSlug = productSlug
-                , epdCategory = listToMaybe productCategoryIds
+                , epdCategories = productMainCategory
+                    : map (productToCategoryCategoryId . entityVal) categories
                 , epdBaseSku = productBaseSku
                 , epdLongDescription = productLongDescription
                 , epdImageUrl = productImageUrl
@@ -429,7 +440,7 @@ instance Validation EditProductParameters where
     validators EditProductParameters {..} = do
         let ProductParameters {..} = eppProduct
         productExists <- V.exists eppId
-        categoryExists <- V.exists ppCategory
+        categoryValidations <- getCategoryErrors ppCategories
         return $
             [ ( ""
               , [ ("Could not find this product in the database.", productExists)
@@ -438,14 +449,10 @@ instance Validation EditProductParameters where
               )
             , ( "name", [ V.required ppName ] )
             , ( "slug", [ V.required ppSlug ] )
-            , ( "category"
-              , [ ( "Could not find this Category in the database."
-                  , categoryExists)
-                ]
-              )
             , ( "baseSku", [ V.required ppBaseSku ])
             ]
             ++ getDuplicateSuffixErrors ppVariantData
+            ++ categoryValidations
 
 
 editProductRoute :: WrappedAuthToken -> EditProductParameters -> App (Cookied ProductId)
@@ -458,15 +465,23 @@ editProductRoute = validateAdminAndParameters $ \_ EditProductParameters {..} ->
         else
             return []
     time <- liftIO getCurrentTime
+    (mainCategory, extraCategories) <-
+        case ppCategories of
+            [] ->
+                V.singleError "At least one Category is required."
+            main : rest ->
+                return (main, rest)
     runDB $ do
         update eppId $
             [ ProductName =. sanitize ppName
             , ProductSlug =. slugify ppSlug
-            , ProductCategoryIds =. [ppCategory]
+            , ProductMainCategory =. mainCategory
             , ProductBaseSku =. ppBaseSku
             , ProductLongDescription =. sanitize ppLongDescription
             , ProductUpdatedAt =. time
             ] ++ imageUpdate
+        deleteWhere [ProductToCategoryProductId ==. eppId]
+        insertMany_ $ map (ProductToCategory eppId) extraCategories
         (ppSeedAttribute,) <$> selectFirst [SeedAttributeProductId ==. eppId] [] >>= \case
             (Just seedData, Nothing) ->
                 insert_ $ makeAttributes eppId seedData
@@ -539,3 +554,27 @@ getDuplicateSuffixErrors variants =
                     )
                 )
                 duplicateIndexes
+
+
+getCategoryErrors :: [CategoryId] -> App [(T.Text, [(T.Text, Bool)])]
+getCategoryErrors categories =
+    if null categories then
+        return [ ("", [ ("At least one Category is required.", True) ]) ]
+    else
+        mapMWithIndex validateCategory categories
+  where
+    validateCategory :: Int -> CategoryId -> App (T.Text, [(T.Text, Bool)])
+    validateCategory index categoryId = do
+        let fieldName = "category-" <> T.pack (show index)
+        exists <- V.exists categoryId
+        return   ( fieldName, [ ("Could not find this Category in the database.", exists) ])
+    mapMWithIndex action =
+        go 0
+      where
+        go index = \case
+            [] ->
+                return []
+            next : rest ->
+                (:)
+                    <$> action index next
+                    <*> go (index + 1) rest

@@ -54,7 +54,7 @@ import qualified Network.HTTP.Media as Media
 
 
 paginatedSelect :: Maybe T.Text -> Maybe Int -> Maybe Int
-                -> (E.SqlExpr (Entity Product) -> E.SqlExpr (Maybe (Entity SeedAttribute)) -> E.SqlExpr (E.Value Bool))
+                -> (E.SqlExpr (Entity Product) -> E.SqlExpr (Maybe (Entity SeedAttribute)) -> E.SqlExpr (Maybe (Entity ProductToCategory)) -> E.SqlExpr (E.Value Bool))
                 -> AppSQL ([Entity Product], Int)
 paginatedSelect maybeSorting maybePage maybePerPage productFilters =
     let sorting = fromMaybe "" maybeSorting in
@@ -82,9 +82,10 @@ paginatedSelect maybeSorting maybePage maybePerPage productFilters =
           offset =
             (page - 1) * perPage
           productsSelect ordering = do
-            products <- E.select $ E.from $ \(p `E.LeftOuterJoin` sa) -> do
+            products <- E.select $ E.from $ \(p `E.LeftOuterJoin` sa `E.LeftOuterJoin` pToC) -> do
+                E.on (E.just (p E.^. ProductId) E.==. pToC E.?. ProductToCategoryProductId)
                 E.on (E.just (p E.^. ProductId) E.==. sa E.?. SeedAttributeProductId)
-                E.where_ $ productFilters p sa E.&&. activeVariantExists p
+                E.where_ $ productFilters p sa pToC E.&&. activeVariantExists p
                 void $ ordering p
                 E.limit perPage
                 E.offset offset
@@ -94,17 +95,18 @@ paginatedSelect maybeSorting maybePage maybePerPage productFilters =
 
 variantSorted :: (E.SqlExpr (E.Value (Maybe Cents)) -> [E.SqlExpr E.OrderBy])
               -> Int64 -> Int64
-              -> (E.SqlExpr (Entity Product) -> E.SqlExpr (Maybe (Entity SeedAttribute)) -> E.SqlExpr (E.Value Bool))
+              -> (E.SqlExpr (Entity Product) -> E.SqlExpr (Maybe (Entity SeedAttribute)) -> E.SqlExpr (Maybe (Entity ProductToCategory)) -> E.SqlExpr (E.Value Bool))
               -> AppSQL ([Entity Product], Int)
 variantSorted ordering offset perPage filters = do
-    productsAndPrice <- E.select $ E.from $ \(p `E.InnerJoin` v `E.LeftOuterJoin` sa) ->
+    productsAndPrice <- E.select $ E.from $ \(p `E.InnerJoin` v `E.LeftOuterJoin` sa `E.LeftOuterJoin` pToC) ->
         let minPrice = E.min_ $ v E.^. ProductVariantPrice in
         E.distinctOnOrderBy (ordering minPrice ++ [E.asc $ p E.^. ProductName]) $ do
+        E.on (E.just (p E.^. ProductId) E.==. pToC E.?. ProductToCategoryProductId)
         E.on (E.just (p E.^. ProductId) E.==. sa E.?. SeedAttributeProductId)
         E.on (p E.^. ProductId E.==. v E.^. ProductVariantProductId
                 E.&&. v E.^. ProductVariantIsActive E.==. E.val True)
         E.groupBy $ p E.^. ProductId
-        E.where_ $ filters p sa
+        E.where_ $ filters p sa pToC
         E.limit perPage
         E.offset offset
         return (p, minPrice)
@@ -114,12 +116,13 @@ variantSorted ordering offset perPage filters = do
 
 -- | Count the number of results with the given filters.
 countProducts
-    :: (E.SqlExpr (Entity Product) -> E.SqlExpr (Maybe (Entity SeedAttribute)) -> E.SqlExpr (E.Value Bool))
+    :: (E.SqlExpr (Entity Product) -> E.SqlExpr (Maybe (Entity SeedAttribute)) -> E.SqlExpr (Maybe (Entity ProductToCategory)) -> E.SqlExpr (E.Value Bool))
     -> AppSQL Int
 countProducts filters =
-    extractRowCount . E.select $ E.from $ \(p `E.LeftOuterJoin` sa) -> do
+    extractRowCount . E.select $ E.from $ \(p `E.LeftOuterJoin` sa `E.LeftOuterJoin` pToC) -> do
+        E.on (E.just (p E.^. ProductId) E.==. pToC E.?. ProductToCategoryProductId)
         E.on (E.just (p E.^. ProductId) E.==. sa E.?. SeedAttributeProductId)
-        E.where_ $ filters p sa E.&&. activeVariantExists p
+        E.where_ $ filters p sa pToC E.&&. activeVariantExists p
         return (E.countRows :: E.SqlExpr (E.Value Int))
 
 -- | Determine if the Product has an active ProductVariant.

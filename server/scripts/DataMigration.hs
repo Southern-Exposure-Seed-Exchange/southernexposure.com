@@ -89,7 +89,7 @@ deletedProducts =
       , Product
             { productName = "Free 2013 Catalog & Garden Guide"
             , productSlug = slugify "Free 2013 Catalog & Garden Guide"
-            , productCategoryIds = []
+            , productMainCategory = toSqlKey 215
             , productBaseSku = "99001"
             , productShortDescription = ""
             , productLongDescription = ""
@@ -110,7 +110,7 @@ deletedProducts =
       , Product
             { productName = "Lahontan White Softneck Garlic 8 oz."
             , productSlug = slugify "Lahontan White Softneck Garlic 8 oz."
-            , productCategoryIds = []
+            , productMainCategory = toSqlKey 25
             , productBaseSku = "99965348"
             , productShortDescription = ""
             , productLongDescription = ""
@@ -140,7 +140,7 @@ main = do
     putStrLn "Making Category Sales"
     categorySales <- makeCategorySales mysqlConn
     putStrLn "Making Products/Variants"
-    let products = mergeProducts $ map (\(pId, _, _, _, _, _, p) -> (pId, p)) mysqlProducts
+    let products = mergeProducts $ map (\(pId, _, _, _, _, _, p, pToC) -> (pId, p, pToC)) mysqlProducts
         variants = map (fixProductIds products) $ makeVariants mysqlProducts
     putStrLn "Making Products Sales"
     productSales <- makeProductSales mysqlConn
@@ -200,13 +200,13 @@ main = do
   where
     liftPutStrLn = lift . putStrLn
     mergeProducts = nubByWith
-        (\(_, p1) (_, p2) -> productBaseSku p1 == productBaseSku p2)
+        (\(_, p1, _) (_, p2, _) -> productBaseSku p1 == productBaseSku p2)
         const
     fixProductIds products (pId, baseSku, variant) =
-        case find ((== baseSku) . productBaseSku . snd) products of
+        case find ((== baseSku) . productBaseSku . (\(_, p, _) -> p)) products of
             Nothing ->
                 error $ "fixProductIds: No Product with SKU: " ++ T.unpack baseSku
-            Just (productId, _) ->
+            Just (productId, _, _) ->
                 if productId == pId then
                     (productId, Nothing, baseSku, variant)
                 else
@@ -352,7 +352,7 @@ makeCategorySales mysql = do
 
 
 
-makeProducts :: MySQLConn -> IO [(ProductId, T.Text, Scientific, Float, Float, Bool, Product)]
+makeProducts :: MySQLConn -> IO [(ProductId, T.Text, Scientific, Float, Float, Bool, Product, [ProductToCategory])]
 makeProducts mysql = do
     products <- mysqlQuery mysql $
         "SELECT products_id, master_categories_id, products_price,"
@@ -385,6 +385,7 @@ makeProducts mysql = do
                 then return blankDate
                 else convertLocalTimeToUTC created
             time <- getCurrentTime
+            mainCategory <- checkMainCategory catId
             categories <- getCategories prodId
             let updatedAt = fromNullableDateTime time nullableUpdateAt
             return ( makeSqlKey prodId, skuSuffix
@@ -392,7 +393,7 @@ makeProducts mysql = do
                    , Product
                         { productName = name
                         , productSlug = slugify name
-                        , productCategoryIds = nub $ makeSqlKey catId : categories
+                        , productMainCategory = mainCategory
                         , productBaseSku = T.toUpper baseSku
                         , productShortDescription = ""
                         , productLongDescription = description
@@ -400,8 +401,31 @@ makeProducts mysql = do
                         , productCreatedAt = createdAt
                         , productUpdatedAt = updatedAt
                         }
+                    , map (ProductToCategory $ makeSqlKey prodId)
+                        . nub $ filter (/= makeSqlKey catId) categories
                    )
         makeProduct args = error $ "Invalid arguments to makeProduct:\n\t" ++ show args
+        checkMainCategory 0 =
+            -- Change Products w/ Invalid Category to Bush Beans
+            return $ makeSqlKey 69
+        checkMainCategory catId = do
+            queryString <- prepareStmt mysql . Query $
+                "SELECT categories_id, parent_id, categories_status "
+                <> "FROM categories "
+                <> "WHERE categories_id=?"
+            (parentId, status) <-
+                queryStmt mysql queryString [MySQLInt32 catId]
+                >>= fmap head . Streams.toList . snd
+                >>= getParentAndStatus
+            closeStmt mysql queryString
+            if status == 1 then
+                return $ makeSqlKey catId
+            else
+                checkMainCategory parentId
+        getParentAndStatus [_, MySQLInt32 parentId, MySQLInt8 status] =
+            return (parentId, status)
+        getParentAndStatus args =
+            error $ "getParentAndStatus: Unexpected args: " ++ show args
         getCategories prodId = do
             queryString <- prepareStmt mysql . Query $
                 "SELECT ptc.categories_id "
@@ -419,11 +443,11 @@ makeProducts mysql = do
             error $ "Unexpected arguments to makeCtegoryId:\n\t" ++ show args
 
 
-makeVariants :: [(ProductId, T.Text, Scientific, Float, Float, Bool, Product)] -> [(ProductId, T.Text, ProductVariant)]
+makeVariants :: [(ProductId, T.Text, Scientific, Float, Float, Bool, Product, [ProductToCategory])] -> [(ProductId, T.Text, ProductVariant)]
 makeVariants =
     map makeVariant
     where
-        makeVariant (productId, suffix, price, qty, weight, isActive, prod) =
+        makeVariant (productId, suffix, price, qty, weight, isActive, prod, _) =
             (productId, productBaseSku prod,) $
                 ProductVariant
                     productId
@@ -1138,9 +1162,9 @@ insertCategorySales =
     mapM_ insert
 
 
-insertProducts :: [(ProductId, Product)] -> SqlWriteT IO ()
+insertProducts :: [(ProductId, Product, [ProductToCategory])] -> SqlWriteT IO ()
 insertProducts =
-    mapM_ $ uncurry insertKey
+    mapM_ $ \(pId, p, pToCs) -> insertKey pId p >> insertMany_ pToCs
 
 
 insertVariants :: [(ProductId, Maybe ProductId, T.Text, ProductVariant)] -> SqlWriteT IO (OldIdMap ProductVariantId)

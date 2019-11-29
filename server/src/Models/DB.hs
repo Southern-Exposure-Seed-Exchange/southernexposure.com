@@ -32,7 +32,7 @@ Category
 Product
     name T.Text
     slug T.Text
-    categoryIds [CategoryId]
+    mainCategory CategoryId
     baseSku T.Text
     shortDescription T.Text
     longDescription T.Text
@@ -60,6 +60,12 @@ SeedAttribute json
     isSmallGrower Bool
     isRegional Bool
     UniqueAttribute productId
+    deriving Show
+
+ProductToCategory
+    productId ProductId
+    categoryId CategoryId
+    UniqueProductCategory productId categoryId
     deriving Show
 
 

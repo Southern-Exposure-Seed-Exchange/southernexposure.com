@@ -11,7 +11,7 @@ import Control.Monad.Trans (lift)
 import Data.Aeson ((.=), (.:), (.:?), ToJSON(..), FromJSON(..), object, withObject)
 import Data.Char (isAlpha)
 import Data.Maybe (listToMaybe)
-import Database.Persist ((==.), (<-.), Entity(..), selectList, get, getBy)
+import Database.Persist ((==.), Entity(..), selectList, get, getBy)
 import Servant ((:>), (:<|>)(..), Capture, QueryParam, ReqBody, Get, Post, JSON, throwError, err404)
 
 import Models
@@ -69,8 +69,9 @@ productDetailsRoute slug = do
             Nothing ->
                 throwError err404
             Just e@(Entity productId prod) -> runDB $ do
-                baseData <- lift $ makeBaseProductData e
-                (variants, maybeAttribute, categories) <-
+                extraCategories <- getAdditionalCategories productId
+                baseData <- lift $ makeBaseProductData e extraCategories
+                (variants, maybeAttribute, category) <-
                     (,,)
                         <$> (selectList
                                 [ ProductVariantProductId ==. productId
@@ -79,11 +80,11 @@ productDetailsRoute slug = do
                                 >>= applySalesToVariants e
                             )
                         <*> getBy (UniqueAttribute productId)
-                        <*> selectList [CategoryId <-. productCategoryIds prod] []
+                        <*> selectList [CategoryId ==. productMainCategory prod] []
                 when (null variants) $ throwError err404
-                predecessors <- lift $ concat . (categories :)
-                    <$> mapM getParentCategories (productCategoryIds prod)
-                categoryData <- lift $ mapM makeCategoryData categories
+                predecessors <- lift $ concat . (category :)
+                    <$> mapM (getParentCategories . entityKey) category
+                categoryData <- lift $ mapM makeCategoryData category
                 return . ProductDetailsData baseData variants maybeAttribute categoryData
                     $ map categoryToPredecessor predecessors
 
@@ -158,12 +159,12 @@ productsSearchRoute maybeSort maybePage maybePerPage parameters = runDB $ do
         Just cId -> do
             name <- fmap categoryName <$> get cId
             categories <- getChildCategoryIds cId
-            return (\p -> p E.^. ProductCategoryIds `E.in_` E.valList (map (: []) categories), name)
+            return (\p -> p E.^. ProductMainCategory `E.in_` E.valList categories, name)
     (products, productsCount) <- paginatedSelect
         maybeSort maybePage maybePerPage
-        (\p sa -> queryFilters p E.&&. organicFilter sa E.&&. heirloomFilter sa E.&&.
-                  regionalFilter sa E.&&. growerFilter sa E.&&.
-                  categoryFilter p)
+        (\p sa _ -> queryFilters p E.&&. organicFilter sa E.&&. heirloomFilter sa E.&&.
+                    regionalFilter sa E.&&. growerFilter sa E.&&.
+                    categoryFilter p)
     searchData <- mapM (getProductData . truncateDescription) products
     return $ ProductsSearchData searchData productsCount catName
     where fuzzyILike f s =

@@ -9,12 +9,13 @@ module Routes.Feeds
     ) where
 
 import Control.Concurrent.STM (readTVarIO)
+import Control.Monad (forM)
 import Control.Monad.Reader (asks, liftIO)
 import Data.Maybe (listToMaybe)
 import Data.Monoid ((<>))
 import Data.Scientific (Scientific, scientific)
 import Data.Time (UTCTime, getCurrentTime)
-import Database.Persist ((>=.), (<=.), Entity(..), selectList)
+import Database.Persist ((==.), (>=.), (<=.), Entity(..), selectList)
 import Servant ((:<|>)(..), (:>), Get)
 
 import Cache (Caches(..), CategoryPredecessorCache, queryCategoryPredecessorCache)
@@ -157,12 +158,15 @@ merchantFeedRoute = do
             , CategorySaleEndDate >=. currentTime
             ]
             []
-        ps <- E.select $ E.from $ \(p `E.InnerJoin` v) -> do
+        psVs <- E.select $ E.from $ \(p `E.InnerJoin` v) -> do
             E.on $ v E.^. ProductVariantProductId E.==. p E.^. ProductId
             E.where_ $ v E.^. ProductVariantIsActive
             return (p, v)
+        psVsCs <- forM psVs $ \(p, v) -> do
+            pToCs <- selectList [ProductToCategoryProductId ==. entityKey p] []
+            return (p,v, pToCs)
         cs <- selectList [] []
-        return (vs, catSale, ps, cs)
+        return (vs, catSale, psVsCs, cs)
     let categoryMap = foldr (\(Entity cId c) m -> M.insert cId c m) M.empty categories
     categoryCache <- asks getCaches >>= fmap getCategoryPredecessorCache . liftIO . readTVarIO
     let convert = convertProduct categoryCache categoryMap variantSales categorySales
@@ -173,9 +177,9 @@ convertProduct
     -> M.Map CategoryId Category
     -> [ProductSale]
     -> [CategorySale]
-    -> (Entity Product, Entity ProductVariant)
+    -> (Entity Product, Entity ProductVariant, [Entity ProductToCategory])
     -> GMerch.Product
-convertProduct predCache categoryMap prodSales catSales (Entity _ prod, Entity variantId variant) =
+convertProduct predCache categoryMap prodSales catSales (Entity _ prod, Entity variantId variant, categories) =
     let
         fullSku =
             productBaseSku prod <> productVariantSkuSuffix variant
@@ -189,7 +193,7 @@ convertProduct predCache categoryMap prodSales catSales (Entity _ prod, Entity v
         imageUrl =
             baseUrl <> "/media/products/originals/"
         categoryHierarchy =
-            maybe [] makeHierarchy $ listToMaybe (productCategoryIds prod)
+            makeHierarchy $ productMainCategory prod
         measure =
             productVariantLotSize variant >>= lotSizeToMeasurement
         googleCategory
@@ -249,7 +253,8 @@ convertProduct predCache categoryMap prodSales catSales (Entity _ prod, Entity v
                         prodSales
             categoryIds =
                 concatMap (\cId -> map entityKey $ queryCategoryPredecessorCache cId predCache)
-                    $ productCategoryIds prod
+                    $ productMainCategory prod
+                    : map (productToCategoryCategoryId . entityVal) categories
             categorySale =
                 listToMaybe
                     $ filter (any (`elem` categoryIds) . categorySaleCategoryIds)

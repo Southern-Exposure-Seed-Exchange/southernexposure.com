@@ -124,7 +124,12 @@ categoryDetailsRoute slug maybeSort maybePage maybePerPage = do
             descendants <- getChildCategoryIds categoryId
             (products, productsCount) <- paginatedSelect
                 maybeSort maybePage maybePerPage
-                    (\p _ -> (p E.^. ProductCategoryIds) `E.in_` E.valList (map (: []) descendants))
+                    (\p _ pToC ->
+                        p E.^. ProductMainCategory `E.in_` E.valList descendants E.||.
+                        (E.just (p E.^. ProductId) E.==. pToC E.?. ProductToCategoryProductId E.&&.
+                         pToC E.?. ProductToCategoryCategoryId `E.in_` E.justList (E.valList descendants)
+                        )
+                    )
             productData <- mapM (getProductData . truncateDescription) products
             predecessors <- lift $ getParentCategories categoryId
             return . CategoryDetailsData categoryData subCategories productData productsCount
