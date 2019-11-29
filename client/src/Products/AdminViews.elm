@@ -355,7 +355,7 @@ editForm model productData =
 type alias Form =
     { name : String
     , slug : String
-    , category : CategoryId
+    , categories : Array CategoryId
     , baseSku : String
     , description : String
     , variants : Array Variant
@@ -377,7 +377,7 @@ initialForm : Form
 initialForm =
     { name = ""
     , slug = ""
-    , category = CategoryId 0
+    , categories = Array.fromList [ CategoryId 0 ]
     , baseSku = ""
     , description = ""
     , variants = Array.repeat 1 initialVariant
@@ -414,7 +414,7 @@ encodeForm model validVariants maybeProductId =
     Encode.object
         [ ( "name", Encode.string model.name )
         , ( "slug", Encode.string model.slug )
-        , ( "category", Category.idEncoder model.category )
+        , ( "categories", Encode.array Category.idEncoder model.categories )
         , ( "baseSku", Encode.string model.baseSku )
         , ( "longDescription", Encode.string model.description )
         , ( "imageName", Encode.string model.imageName )
@@ -437,7 +437,7 @@ formDecoder =
     Decode.succeed Form
         |> Decode.required "name" Decode.string
         |> Decode.required "slug" Decode.string
-        |> Decode.required "category" Category.idDecoder
+        |> Decode.required "categories" (Decode.array Category.idDecoder)
         |> Decode.required "baseSku" Decode.string
         |> Decode.required "longDescription" Decode.string
         |> Decode.required "variants" (Decode.array variantDecoder)
@@ -540,7 +540,9 @@ type LotSizeSelector
 type FormMsg
     = InputName String
     | InputSlug String
-    | SelectCategory CategoryId
+    | SelectCategory Int CategoryId
+    | RemoveCategory Int
+    | AddCategory
     | InputBaseSku String
     | InputDescription String
     | ToggleOrganic Bool
@@ -569,8 +571,21 @@ updateForm msg model =
         InputSlug val ->
             noCommand { model | slug = val }
 
-        SelectCategory val ->
-            noCommand { model | category = val }
+        SelectCategory index val ->
+            noCommand
+                { model
+                    | categories = updateArray index (always val) model.categories
+                }
+
+        RemoveCategory index ->
+            noCommand
+                { model
+                    | categories = removeIndex index model.categories
+                }
+
+        AddCategory ->
+            noCommand
+                { model | categories = Array.push (CategoryId 0) model.categories }
 
         InputBaseSku val ->
             noCommand { model | baseSku = val }
@@ -687,18 +702,8 @@ variants or an error set.
 -}
 validateForm : Form -> Result Api.FormErrors (List ValidVariant)
 validateForm model =
-    let
-        categoryValidation : Validation.FormValidation ()
-        categoryValidation =
-            if model.category == CategoryId 0 then
-                Err <| Api.addError "category" "Select a Category" Api.initialErrors
-
-            else
-                Ok ()
-    in
     Array.toList model.variants
         |> Validation.indexedValidation "variant" validateVariant
-        |> Validation.addFormError categoryValidation
 
 
 validateVariant : Variant -> Validation.FormValidation ValidVariant
@@ -752,20 +757,6 @@ formView buttonText submitMsg msgWrapper model { categories } =
         inputRow s =
             Form.inputRow model.errors (s model)
 
-        renderCategoryOption { id, name } =
-            option
-                [ value <| (\(CategoryId i) -> String.fromInt i) id
-                , selected <| id == model.category
-                ]
-                [ text name ]
-
-        blankOption =
-            if model.category == CategoryId 0 then
-                [ option [ value "", selected True ] [ text "" ] ]
-
-            else
-                []
-
         existingImage =
             if not <| String.isEmpty model.imageUrl then
                 Form.withLabel "Current Image" True <|
@@ -788,9 +779,7 @@ formView buttonText submitMsg msgWrapper model { categories } =
             , h3 [] [ text "Base Product" ]
             , inputRow .name InputName True "Name" "name" "text" "off"
             , inputRow .slug InputSlug True "Slug" "slug" "text" "off"
-            , Form.selectRow Category.idParser SelectCategory "Category" True <|
-                blankOption
-                    ++ List.map renderCategoryOption categories
+            , categorySelects model categories
             , inputRow .baseSku InputBaseSku True "Base SKU" "baseSku" "text" "off"
             , Form.textareaRow model.errors model.description InputDescription False "Description" "description" 10
             , Form.checkboxRow model.isOrganic ToggleOrganic "Is Organic" "isOrganic"
@@ -814,6 +803,76 @@ formView buttonText submitMsg msgWrapper model { categories } =
                     [ text "Add Variant" ]
                 ]
             ]
+
+
+{-| Render the category selection inputs.
+-}
+categorySelects : Form -> List PageData.AdminProductCategory -> Html FormMsg
+categorySelects model categories =
+    let
+        renderSelect index category =
+            div [ class "mb-2 d-flex align-items-center" ]
+                [ select
+                    [ class "form-control d-inline-block  w-75"
+                    , onSelect index
+                    ]
+                  <|
+                    blankOption category
+                        ++ List.map (renderCategoryOption category) categories
+                , if index /= 0 then
+                    button
+                        [ class "btn btn-sm btn-danger ml-2"
+                        , onClick <| RemoveCategory index
+                        , type_ "button"
+                        ]
+                        [ icon "times" ]
+
+                  else
+                    text ""
+                , Api.getErrorHtml ("category-" ++ String.fromInt index) model.errors
+                ]
+
+        onSelect index =
+            targetValue
+                |> Decode.andThen decoder
+                |> Decode.map (SelectCategory index)
+                |> on "change"
+
+        decoder str =
+            case Category.idParser str of
+                Ok x ->
+                    Decode.succeed x
+
+                Err e ->
+                    Decode.fail e
+
+        renderCategoryOption category { id, name } =
+            option
+                [ value <| (\(CategoryId i) -> String.fromInt i) id
+                , selected <| id == category
+                ]
+                [ text name ]
+
+        blankOption category =
+            if category == CategoryId 0 then
+                [ option [ value "", selected True ] [ text "" ] ]
+
+            else
+                []
+    in
+    Form.withLabel "Categories"
+        True
+    <|
+        [ div [] <|
+            Array.toList <|
+                Array.indexedMap renderSelect model.categories
+        , button
+            [ class "btn btn-sm btn-secondary"
+            , type_ "button"
+            , onClick AddCategory
+            ]
+            [ text "Add Category" ]
+        ]
 
 
 {-| Render the sub-form for ProductVariants.
