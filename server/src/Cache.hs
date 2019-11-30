@@ -76,6 +76,9 @@ syncCategoryPredecessorCache = do
 
 -- | Query the cache for all predecessors(parents, grandparents, etc.) of
 -- a 'Category'.
+--
+-- Note: The returned list will be ordered by increasing depth. I.e.,
+-- @[parent, grandparent, great-grandparent, etc.]@
 queryCategoryPredecessorCache :: CategoryId -> CategoryPredecessorCache -> [Entity Category]
 queryCategoryPredecessorCache categoryId (CategoryPredecessorCache cache) =
     fromMaybe [] $ M.lookup categoryId cache
