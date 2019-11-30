@@ -122,13 +122,18 @@ renderMilligrams (Milligrams mg) =
         _ ->
             let
                 (wholePart, fractionalPart) = mg `divMod` 1000
+                fractionalString = stripZeroes $ T.pack $ show fractionalPart
+                decimalPart =
+                    if T.null fractionalString then
+                        ""
+                    else
+                        "." <> fractionalString
             in
-                (<> " g") . stripZeroes
-                    $ T.pack (show wholePart) <> "." <> T.pack (show fractionalPart)
+                T.pack (show wholePart) <> decimalPart <> " g"
   where
     stripZeroes :: T.Text -> T.Text
     stripZeroes t =
-        if T.takeEnd 1 t `elem` ["0", "1"] then
+        if T.takeEnd 1 t == "0" then
             stripZeroes $ T.dropEnd 1 t
         else
             t
