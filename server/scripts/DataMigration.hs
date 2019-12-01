@@ -76,6 +76,7 @@ recreatedProducts :: [(ProductId, T.Text, T.Text)]
 recreatedProducts =
     [ (toSqlKey 1039, "92504", "")       -- Allium Mix
     , (toSqlKey 1641, "92506", "")       -- Asiatic & Turban Garlic Sampler
+    , (toSqlKey 2204, "66708", "A")      -- Grey Griselle Shallot, 8oz.
     ]
 
 -- | A list of old product ids, new Products, & new Variants for products
