@@ -13,6 +13,9 @@ var OptimizeCSSAssetsPlugin = require('optimize-css-assets-webpack-plugin');
 
 var isProduction = process.env.NODE_ENV === 'production';
 
+var STRIPE_API_KEY = process.env.STRIPE_ENV === 'production'
+  ? 'pk_live_TBFfasfS7K7wBmYGrsbetA4W' : 'pk_test_F6Mr5XLKEDMn4rUsmsv5aqvr';
+
 const GA_MEASUREMENT_ID = 'UA-5070189-1';
 
 
@@ -160,6 +163,10 @@ module.exports = {
     new webpack.ProvidePlugin({
       $: 'jquery',
       jQuery: 'jquery',
+    }),
+    new webpack.DefinePlugin({
+      GA_MEASUREMENT_ID: JSON.stringify(GA_MEASUREMENT_ID),
+      STRIPE_API_KEY: JSON.stringify(STRIPE_API_KEY),
     }),
     new SriWebpackPlugin({
       hashFuncNames: ['sha512'],

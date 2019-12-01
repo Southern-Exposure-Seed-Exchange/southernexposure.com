@@ -4,9 +4,6 @@ const authUserIdKey = 'authUserId';
 const cartTokenKey = 'cartSessionToken';
 const cartItemCountKey = 'cartItemCount';
 
-// TODO: Select between test or production key
-const stripeApiKey = 'pk_test_F6Mr5XLKEDMn4rUsmsv5aqvr';
-
 
 /** FLAGS **/
 var cartToken = localStorage.getItem(cartTokenKey);
@@ -27,7 +24,7 @@ var app = Elm.Main.init({
 
 /** STRIPE **/
 var stripeHandler = StripeCheckout.configure({
-  key: stripeApiKey,
+  key: STRIPE_API_KEY,
   locale: 'auto',
   name: 'Southern Exposure',
   image: '/static/img/logos/sese.png',
@@ -40,8 +37,6 @@ var stripeHandler = StripeCheckout.configure({
 
 
 /** ANALYTICS **/
-// TODO: Reduce ID duplication - stated here & in webpack config
-const GA_MEASUREMENT_ID = 'UA-5070189-1';
 window.dataLayer = window.dataLayer || [];
 function gtag(){dataLayer.push(arguments);}
 gtag('js', new Date());
