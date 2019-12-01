@@ -603,7 +603,7 @@ makeAddresses mysql = do
         <> "      a.entry_company, a.entry_street_address, a.entry_suburb,"
         <> "      a.entry_postcode, a.entry_city, a.entry_state,"
         <> "      z.zone_name, co.countries_iso_code_2, c.customers_id,"
-        <> "      c.customers_default_address_id "
+        <> "      c.customers_telephone, c.customers_default_address_id "
         <> "FROM address_book AS a "
         <> "RIGHT JOIN customers AS c "
         <> "    ON c.customers_id=a.customers_id "
@@ -619,7 +619,7 @@ makeAddresses mysql = do
          , MySQLText companyName, MySQLText street, nullableAddressTwo
          , MySQLText zipCode, MySQLText city, MySQLText state
          , nullableZoneName, MySQLText rawCountryCode, MySQLInt32 customerId
-         , MySQLInt32 defaultAddress
+         , MySQLText telephone, MySQLInt32 defaultAddress
          ] =
         let
             addressTwo_ =
@@ -643,6 +643,7 @@ makeAddresses mysql = do
                 , addressState = region
                 , addressZipCode = zipCode
                 , addressCountry = country
+                , addressPhoneNumber = telephone
                 , addressIsDefault = defaultAddress == addressId
                 , addressType = Shipping
                 , addressCustomerId = toSqlKey $ fromIntegral customerId
@@ -730,7 +731,7 @@ makeOrders mysql = do
         "       customers_name, customers_company, " <>
         "       customers_street_address, customers_suburb, customers_city, " <>
         "       customers_postcode, customers_state, customers_country, " <>
-        "       cc.countries_iso_code_2 AS customers_country_code, " <>
+        "       cc.countries_iso_code_2 AS customers_country_code, customers_telephone " <>
         -- Shipping Address
         "       delivery_name, delivery_company, " <>
         "       delivery_street_address, delivery_suburb, delivery_city, " <>
@@ -759,7 +760,7 @@ makeOrders mysql = do
         , MySQLText customerName, nullableCustomerCompany
         , MySQLText customerStreet, nullableCustomerStreetTwo, MySQLText customerCity
         , MySQLText customerZip, nullableCustomerState, MySQLText customerCountry
-        , nullableCustomerCountryCode
+        , nullableCustomerCountryCode, MySQLText customerTelephone
         -- Shipping Address
         , MySQLText shippingName, nullableShippingCompany
         , MySQLText shippingStreet, nullableShippingStreetTwo, MySQLText shippingCity
@@ -782,19 +783,19 @@ makeOrders mysql = do
                         -- A single order(#15567) has no address
                         -- details at all, so use the customer's
                         -- address_book entry.
-                        makeAddressFromCustomer customerId
+                        makeAddressFromCustomer customerId customerTelephone
                 else if isAddressEmpty shippingName shippingStreet then
                     return $ makeOrderAddress customerName
                         nullableCustomerCompany customerStreet
                         nullableCustomerStreetTwo customerCity customerZip
                         nullableCustomerState customerCountry nullableCustomerCountryCode
-                        customerId Shipping
+                        customerTelephone customerId Shipping
                 else
                     return $ makeOrderAddress shippingName
                         nullableShippingCompany shippingStreet
                         nullableShippingStreetTwo shippingCity shippingZip
                         nullableShippingState shippingCountry nullableShippingCountryCode
-                        customerId Shipping
+                        customerTelephone customerId Shipping
             billingAddress <-
                 if isAddressEmpty billingName billingStreet then
                     return Nothing
@@ -804,7 +805,7 @@ makeOrders mysql = do
                             nullableBillingCompany billingStreet
                             nullableBillingStreetTwo billingCity billingZip
                             nullableBillingState billingCountry nullableBillingCountryCode
-                            customerId Billing
+                            customerTelephone customerId Billing
                     let handleError e = print e >> return (Just shippingAddress)
                     either handleError (return . Just) eitherAddr
             lineItems <- makeLineItems orderId
@@ -873,7 +874,7 @@ makeOrders mysql = do
     isAddressEmpty :: T.Text -> T.Text -> Bool
     isAddressEmpty name street =
         all (T.null . T.strip) [name, street]
-    makeOrderAddress name nullableCompany street nullableStreetTwo city zipCode nullableState country nullableCountryCode customerId type_ =
+    makeOrderAddress name nullableCompany street nullableStreetTwo city zipCode nullableState country nullableCountryCode telephone customerId type_ =
         let company = fromNullableText "" nullableCompany
             addressTwo = fromNullableText "" nullableStreetTwo
             state = T.strip $ fromNullableText "" nullableState
@@ -927,6 +928,7 @@ makeOrders mysql = do
                 , addressState = region
                 , addressZipCode = zipCode
                 , addressCountry = parsedCountry
+                , addressPhoneNumber = telephone
                 , addressIsDefault = True
                 , addressType = type_
                 , addressCustomerId = toSqlKey $ fromIntegral customerId
@@ -942,8 +944,8 @@ makeOrders mysql = do
             ( T.unwords $ take (wordCount - 1) split
             , T.unwords $ drop (wordCount - 1) split
             )
-    makeAddressFromCustomer :: Int32 -> IO Address
-    makeAddressFromCustomer customerId = do
+    makeAddressFromCustomer :: Int32 -> T.Text -> IO Address
+    makeAddressFromCustomer customerId telephone = do
         query <- prepareStmt mysql . Query $
             "SELECT a.entry_firstname, a.entry_lastname,"
             <> "      a.entry_company, a.entry_street_address, a.entry_suburb,"
@@ -979,6 +981,7 @@ makeOrders mysql = do
                         , addressState = makeRegion zone country
                         , addressZipCode = zipCode
                         , addressCountry = country
+                        , addressPhoneNumber = telephone
                         , addressIsDefault = True
                         , addressType = Shipping
                         , addressCustomerId = toSqlKey $ fromIntegral customerId
@@ -1629,6 +1632,7 @@ insertUniqueAddress c@(addrCache, defaultCache) address@Address {..} = do
             , addressState = addressState
             , addressZipCode = T.toLower addressZipCode
             , addressCountry = addressCountry
+            , addressPhoneNumber = T.toLower addressPhoneNumber
             , addressIsDefault = addressIsDefault
             , addressType = addressType
             , addressCustomerId = addressCustomerId

@@ -251,7 +251,7 @@ transformOrder (order, createdAt, customer, shipping, maybeBilling, maybeCoupon,
         StoneEdgeOrderBilling
             { seobFullName = addressFirstName addr <> " " <> addressLastName addr
             , seobCompany = nothingIfNull $ addressCompanyName addr
-            , seobPhone = Nothing
+            , seobPhone = Just $ addressPhoneNumber addr
             , seobEmail = Just . customerEmail $ entityVal customer
             , seobAddress = transformAddress addr
             }

@@ -166,6 +166,7 @@ Address
     state Region
     zipCode T.Text
     country Country
+    phoneNumber T.Text
     type AddressType
     customerId CustomerId
     isActive Bool

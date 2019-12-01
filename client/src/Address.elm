@@ -46,6 +46,7 @@ type alias Model =
     , state : Region
     , zipCode : String
     , country : String
+    , phoneNumber : String
     , isDefault : Bool
     }
 
@@ -62,6 +63,7 @@ initial =
     , state = USState "AL"
     , zipCode = ""
     , country = "US"
+    , phoneNumber = ""
     , isDefault = True
     }
 
@@ -79,9 +81,10 @@ decoder =
         (Decode.field "state" regionDecoder)
         |> Decode.andThen
             (\constr ->
-                Decode.map3 constr
+                Decode.map4 constr
                     (Decode.field "zipCode" Decode.string)
                     (Decode.field "country" Decode.string)
+                    (Decode.field "phoneNumber" Decode.string)
                     (Decode.field "isDefault" Decode.bool)
             )
 
@@ -118,6 +121,7 @@ encode { model } =
     , ( "city", model.city )
     , ( "zipCode", model.zipCode )
     , ( "country", model.country )
+    , ( "phoneNumber", model.phoneNumber )
     ]
         |> List.map (Tuple.mapSecond Encode.string)
         |> (::)
@@ -144,6 +148,7 @@ type Msg
     | State String
     | ZipCode String
     | Country String
+    | PhoneNumber String
 
 
 update : Msg -> Form -> Form
@@ -211,6 +216,9 @@ updateModel msg model =
             else
                 model
 
+        PhoneNumber str ->
+            { model | phoneNumber = str }
+
 
 
 -- View
@@ -244,6 +252,7 @@ card address locations =
     , notBlank address.addressTwo
     , Just <| text <| address.city ++ ", " ++ stateString ++ " " ++ address.zipCode
     , countryHtml
+    , Just <| text address.phoneNumber
     ]
         |> List.filterMap identity
         |> List.intersperse (br [] [])
@@ -355,6 +364,7 @@ form { model, errors } inputPrefix locations =
         , regionField
         , field .zipCode ZipCode "Zip Code" "zipCode" "postal-code" True
         , selectField .country Country locations.countries "Country" "country"
+        , field .phoneNumber PhoneNumber "Phone Number" "phoneNumber" "tel" True
         ]
 
 
@@ -407,6 +417,7 @@ horizontalForm { model, errors } locations =
     , regionField
     , requiredField .zipCode ZipCode "Zip Code" "zipCode" "text" "postal-code"
     , countrySelect
+    , requiredField .phoneNumber PhoneNumber "Phone Number" "phoneNumber" "tel" "tel"
     ]
 
 

@@ -662,6 +662,7 @@ data AddressData =
         , adState :: Region
         , adZipCode :: T.Text
         , adCountry :: Country
+        , adPhoneNumber :: T.Text
         , adIsDefault :: Bool
         } deriving (Eq, Show)
 
@@ -678,6 +679,7 @@ instance FromJSON AddressData where
             <*> v .: "state"
             <*> v .: "zipCode"
             <*> v .: "country"
+            <*> v .: "phoneNumber"
             <*> v .: "isDefault"
 
 instance ToJSON AddressData where
@@ -693,6 +695,7 @@ instance ToJSON AddressData where
             , "state" .= adState address
             , "zipCode" .= adZipCode address
             , "country" .= adCountry address
+            , "phoneNumber" .= adPhoneNumber address
             , "isDefault" .= adIsDefault address
             ]
 
@@ -728,6 +731,7 @@ instance Validation AddressData where
                     , customRegionValidator
                     ]
                   )
+                , ( "phoneNumber", [ V.required $ adPhoneNumber address ])
                 , ( "zipCode", [ V.required $ adZipCode address ] )
                 ]
 
@@ -743,6 +747,7 @@ fromAddressData type_ customerId address =
         , addressState = adState address
         , addressZipCode = adZipCode address
         , addressCountry = adCountry address
+        , addressPhoneNumber = adPhoneNumber address
         , addressIsDefault = adIsDefault address
         , addressType = type_
         , addressCustomerId = customerId
@@ -762,6 +767,7 @@ toAddressData (Entity addressId address) =
         , adState = addressState address
         , adZipCode = addressZipCode address
         , adCountry = addressCountry address
+        , adPhoneNumber = addressPhoneNumber address
         , adIsDefault = addressIsDefault address
         }
 

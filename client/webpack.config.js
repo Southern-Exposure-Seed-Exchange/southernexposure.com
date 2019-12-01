@@ -195,8 +195,8 @@ module.exports = {
       'object-src': "'none'",
       'connect-src': ["'self'", "https://checkout.stripe.com"],
       'frame-src': ["'self'", "https://checkout.stripe.com", "https://www.farmraiser.com"],
-      'script-src': ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://www.googletagmanager.com", "https://google-analytics.com/", "https://checkout.stripe.com"],
-      'img-src': ["'self'", "data:", "https://www.googletagmanager.com", "https://*.stripe.com"],
+      'script-src': ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://www.googletagmanager.com", "https://www.google-analytics.com/", "https://checkout.stripe.com"],
+      'img-src': ["'self'", "data:", "https://www.googletagmanager.com", "https://www.google-analytics.com/", "https://stats.g.doubleclick.net/", "https://www.google.com", "https://*.stripe.com"],
       'font-src': ["'self'", "https://fonts.gstatic.com"],
       'style-src': ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
     }, {
