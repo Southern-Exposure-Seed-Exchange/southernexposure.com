@@ -53,8 +53,8 @@ data ImageConfig =
         -- ^ Is the @jpegtran@ executable available?
         , icGifsicleAvailable :: Bool
         -- ^ Is the @gifsicle@ executable available?
-        , icImageMagickAvailable :: Bool
-        -- ^ Is ImageMagick's @mogrify@ executable available?
+        , icGraphicsMagickAvailable :: Bool
+        -- ^ Is GraphicsMagick's @mogrify@ executable available?
         }
 
 -- | Build an 'ImageConfig' by testing for the existence of the optimizer
@@ -65,7 +65,7 @@ makeImageConfig =
         <$> hasExe "optipng"
         <*> hasExe "jpegtran"
         <*> hasExe "gifsicle"
-        <*> hasExe "mogrify"
+        <*> hasExe "gm"
   where
     hasExe = fmap isJust . liftIO . findExecutable
 
@@ -213,7 +213,7 @@ scaleImage config filename destinationDirectory fileContents = do
         let scaledPath = scaledDirectory </> newName
         scaledExists <- liftIO $ doesFileExist scaledPath
         unless scaledExists $ do
-            resizeWithImageMagick config originalPath scaledDirectory newWidth
+            resizeWithGraphicsMagick config originalPath scaledDirectory newWidth
             optimizeImage config imageFormat scaledPath
     return originalPath
   where
@@ -238,14 +238,14 @@ scaleImage config filename destinationDirectory fileContents = do
             either (throwM . DirectoryCreationError path) return
 
 
--- | Call ImageMagick's @mogrify@ command to resize a file to a new width,
+-- | Call GraphicsMagick's @mogrify@ command to resize a file to a new width,
 -- placing it in a different output directory.
 --
 -- Does nothing if imagemagick is not available on the current system.
-resizeWithImageMagick :: MonadIO m => ImageConfig -> FilePath -> FilePath -> Int -> m ()
-resizeWithImageMagick cfg inputPath outputDirectory targetWidth =
-    when (icImageMagickAvailable cfg) $ runProcess_ $
-        proc "mogrify" ["-path", outputDirectory, "-resize", show targetWidth, inputPath]
+resizeWithGraphicsMagick :: MonadIO m => ImageConfig -> FilePath -> FilePath -> Int -> m ()
+resizeWithGraphicsMagick cfg inputPath outputDirectory targetWidth =
+    when (icGraphicsMagickAvailable cfg) $ runProcess_ $
+        proc "gm" ["mogrify", "-output-directory", outputDirectory, "-resize", show targetWidth <> "x!", inputPath]
 
 
 -- | Call an optimization program on the given file, depending on the file
