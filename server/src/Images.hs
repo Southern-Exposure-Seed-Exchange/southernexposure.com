@@ -34,8 +34,12 @@ import Data.Text (Text)
 import Data.Maybe (isJust)
 import Data.Monoid ((<>))
 import System.Directory (findExecutable, createDirectoryIfMissing, doesFileExist)
-import System.FilePath ((</>), takeBaseName, takeExtension)
-import System.Process.Typed (runProcess_, setStdin, setStdout, closed, proc)
+import System.FilePath
+    ( (</>), takeBaseName, takeExtension, splitFileName, splitPath, joinPath
+    )
+import System.Process.Typed
+    (runProcess_, setStdin, setStdout, setWorkingDir, closed, proc
+    )
 
 import Config (Config, getMediaDirectory)
 import Models.Utils (slugify)
@@ -244,8 +248,20 @@ scaleImage config filename destinationDirectory fileContents = do
 -- Does nothing if imagemagick is not available on the current system.
 resizeWithGraphicsMagick :: MonadIO m => ImageConfig -> FilePath -> FilePath -> Int -> m ()
 resizeWithGraphicsMagick cfg inputPath outputDirectory targetWidth =
-    when (icGraphicsMagickAvailable cfg) $ runProcess_ $
-        proc "gm" ["mogrify", "-output-directory", outputDirectory, "-resize", show targetWidth <> "x!", inputPath]
+    let (workingDirectory, inputFile) =
+            splitFileName inputPath
+        workingDirSegments =
+            length $ splitPath workingDirectory
+        workingDirToOutputDir =
+            joinPath (replicate workingDirSegments "..") </> outputDirectory
+    in
+    when (icGraphicsMagickAvailable cfg) $ runProcess_ $ setWorkingDir workingDirectory $
+        proc "gm"
+            [ "mogrify"
+            , "-output-directory", workingDirToOutputDir
+            , "-resize", show targetWidth <> "x!"
+            , inputFile
+            ]
 
 
 -- | Call an optimization program on the given file, depending on the file
