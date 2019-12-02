@@ -1,5 +1,6 @@
 elm-stuff
 client/dist
+client/node_modules
 
 .stack-work
 server/media
