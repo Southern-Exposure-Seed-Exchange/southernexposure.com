@@ -262,7 +262,7 @@ transformOrder (order, createdAt, customer, shipping, maybeBilling, maybeCoupon,
         in StoneEdgeOrderShipping
             { seosFullName = addressFirstName addr <> " " <> addressLastName addr
             , seosCompany = nothingIfNull $ addressCompanyName addr
-            , seosPhone = Nothing
+            , seosPhone = Just $ addressPhoneNumber addr
             , seosEmail = Just . customerEmail $ entityVal customer
             , seosAddress = transformAddress addr
             , seosProduct = map transformProduct products
