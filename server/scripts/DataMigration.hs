@@ -141,7 +141,7 @@ main = do
     putStrLn "Making Category Sales"
     categorySales <- makeCategorySales mysqlConn
     putStrLn "Making Products/Variants"
-    let products = mergeProducts $ map (\(pId, _, _, _, _, _, p, pToC) -> (pId, p, pToC)) mysqlProducts
+    let products = mergeProducts $ map (\(pId, _, _, _, _, isActive, p, pToC) -> (pId, p, isActive, pToC)) mysqlProducts
         variants = map (fixProductIds products) $ makeVariants mysqlProducts
     putStrLn "Making Products Sales"
     productSales <- makeProductSales mysqlConn
@@ -201,13 +201,13 @@ main = do
   where
     liftPutStrLn = lift . putStrLn
     mergeProducts = nubByWith
-        (\(_, p1, _) (_, p2, _) -> productBaseSku p1 == productBaseSku p2)
-        const
+        (\(_, p1, _, _) (_, p2, _, _) -> productBaseSku p1 == productBaseSku p2)
+        (\pd1@(_, _, active1, _) pd2 -> if active1 then pd1 else pd2)
     fixProductIds products (pId, baseSku, variant) =
-        case find ((== baseSku) . productBaseSku . (\(_, p, _) -> p)) products of
+        case find ((== baseSku) . productBaseSku . (\(_, p, _, _) -> p)) products of
             Nothing ->
                 error $ "fixProductIds: No Product with SKU: " ++ T.unpack baseSku
-            Just (productId, _, _) ->
+            Just (productId, _, _, _) ->
                 if productId == pId then
                     (productId, Nothing, baseSku, variant)
                 else
@@ -1173,9 +1173,9 @@ insertCategorySales =
     mapM_ insert
 
 
-insertProducts :: [(ProductId, Product, [ProductToCategory])] -> SqlWriteT IO ()
+insertProducts :: [(ProductId, Product, Bool, [ProductToCategory])] -> SqlWriteT IO ()
 insertProducts =
-    mapM_ $ \(pId, p, pToCs) -> insertKey pId p >> insertMany_ pToCs
+    mapM_ $ \(pId, p, _, pToCs) -> insertKey pId p >> insertMany_ pToCs
 
 
 insertVariants :: [(ProductId, Maybe ProductId, T.Text, ProductVariant)] -> SqlWriteT IO (OldIdMap ProductVariantId)
