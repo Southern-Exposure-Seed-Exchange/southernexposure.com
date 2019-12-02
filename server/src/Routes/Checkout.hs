@@ -956,10 +956,16 @@ createLineItems currentTime customerId shippingAddress items orderId memberNumbe
     maybeCouponDiscount <-
         maybe (return Nothing) (fmap Just . insertEntity . makeLine CouponDiscountLine)
             $ ccCouponDiscount charges
+    maybeTaxLine <-
+        if ccAmount (ccTax charges) > 0 then
+            fmap Just . insertEntity . makeLine TaxLine $ ccTax charges
+        else
+            return Nothing
     return
         ( sum (map (centsToInteger . orderLineItemAmount . entityVal) surcharges)
             + centsToInteger (orderLineItemAmount $ entityVal shippingLine)
             + maybeLineAmount maybePriorityShippingCharge
+            + maybeLineAmount maybeTaxLine
             - maybeLineAmount maybeMemberDiscount
             - maybeLineAmount maybeCouponDiscount
         , entityKey <$> maybeCoupon
