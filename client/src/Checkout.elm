@@ -161,7 +161,7 @@ anonymousResponseDecoder =
         (Decode.field "orderId" Decode.int)
         (Decode.field "lines" <| Decode.list PageData.lineItemDecoder)
         (Decode.field "products" <| Decode.list PageData.orderProductDecoder)
-        (Decode.field "authStatus" User.decoder)
+        (Decode.field "authData" User.decoder)
 
 
 customerResponseDecoder : AuthStatus -> Decode.Decoder CheckoutResponse
