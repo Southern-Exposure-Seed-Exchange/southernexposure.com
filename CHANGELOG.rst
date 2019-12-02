@@ -6,6 +6,8 @@ CHANGELOG
 v0.11.0
 ========
 
+* Lots of small fixes & tweaks based on user feedback before rolling out to
+  Production.
 * Show a preview of a Variant's grams, as rendered by the frontend, on the Add
   & Edit Product pages.
 * Move the "special shipping requirements" text from the Checkout Success page

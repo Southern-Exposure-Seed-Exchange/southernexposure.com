@@ -185,7 +185,7 @@ module.exports = {
         developerURL: "https://github.com/Southern-Exposure-Seed-Exchange/southernexposure.com/",
         background: "#ffffff00",
         theme_color: "#158312",
-        version: "v0.10.0",
+        version: "v0.11.0",
       },
     }),
     new CspHtmlWebpackPlugin({
