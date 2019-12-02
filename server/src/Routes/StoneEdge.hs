@@ -208,9 +208,10 @@ downloadOrdersRoute DownloadOrdersRequest { dorLastOrder, dorStartNumber, dorBat
                 (adminCommentContent comment,)
                     <$> convertToLocalTime (adminCommentTime comment)
             lineItems <- selectList [OrderLineItemOrderId ==. entityKey o] []
-            products <- E.select $ E.from $ \(op `E.InnerJoin` p `E.InnerJoin` v) -> do
-                E.on (op E.^. OrderProductProductVariantId E.==. v E.^. ProductVariantId)
+            products <- E.select $ E.from $ \(op `E.InnerJoin` v `E.InnerJoin` p) -> do
                 E.on (v E.^. ProductVariantProductId E.==. p E.^. ProductId)
+                E.on (op E.^. OrderProductProductVariantId E.==. v E.^. ProductVariantId)
+                E.where_ $ op E.^. OrderProductOrderId E.==. E.val (entityKey o)
                 return (op, p, v)
             return (o, createdAt, c, sa, ba, cp, lineItems, products, adminComments)
     return . DownloadOrdersResponse $ map transformOrder rawOrderData
