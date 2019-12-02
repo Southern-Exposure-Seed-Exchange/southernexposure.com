@@ -355,7 +355,10 @@ transformOrder (order, createdAt, customer, shipping, maybeBilling, maybeCoupon,
                         RefundLine ->
                             (ds, ss, mShip, mCoupon, mTax)
                         TaxLine ->
-                            (ds, ss, mShip, mCoupon, Just item)
+                            if orderLineItemAmount (entityVal item) /= 0 then
+                                (ds, ss, mShip, mCoupon, Just item)
+                            else
+                                (ds, ss, mShip, mCoupon, mTax)
                 ) ([], [], Nothing, Nothing, Nothing) items
             subTotal = productTotal - sum (map (orderLineItemAmount . entityVal) discounts)
             grandTotal =
@@ -443,7 +446,7 @@ transformTax OrderLineItem { orderLineItemAmount, orderLineItemDescription } =
     in StoneEdgeTax
                 { setAmount = convertCents orderLineItemAmount
                 , setRate = maybeRate
-                , setShippingTaxed = Just False
+                , setShippingTaxed = Just True
                 , setTaxExempt = Just False
                 , setTaxId = Nothing
                 }

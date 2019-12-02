@@ -597,11 +597,11 @@ routesStoneEdge = testGroup "Routes.StoneEdge Module"
         in Nothing @=? transformStoreCredit li
     taxTransform :: Assertion
     taxTransform =
-        let st = StoneEdgeTax (StoneEdgeCents 9001) Nothing (Just False) (Just False) Nothing
+        let st = StoneEdgeTax (StoneEdgeCents 9001) Nothing (Just True) (Just False) Nothing
         in st @=? transformTax (makeTaxLine "Tax Description" (Cents 9001))
     taxTransformRate :: Assertion
     taxTransformRate =
-        let st = StoneEdgeTax (StoneEdgeCents 9001) (Just 0.053) (Just False) (Just False) Nothing
+        let st = StoneEdgeTax (StoneEdgeCents 9001) (Just 0.053) (Just True) (Just False) Nothing
         in st @=? transformTax (makeTaxLine "VA Tax (5.3%)" (Cents 9001))
     discountTransform :: Assertion
     discountTransform =
