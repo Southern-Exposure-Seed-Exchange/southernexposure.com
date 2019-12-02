@@ -76,6 +76,7 @@ module StoneEdge
 
 import Data.Monoid ((<>))
 import Data.Scientific (Scientific, FPFormat(Fixed), formatScientific, scientific)
+import Data.Text.Encoding (decodeUtf8, encodeUtf8)
 import Data.Time (LocalTime, Day, parseTimeM, defaultTimeLocale, formatTime)
 import Text.Read (readMaybe)
 import Text.XML.Generator
@@ -677,6 +678,9 @@ maybeXelemTextWith tagName renderer =
 
 -- | Render an XML Response to StoneEdge, with a response code/description
 -- & root element based on the 'TypeOfDownload'.
+--
+-- Note that StoneEdge's XML parser does not like the newlines that the
+-- xml-gen package inserts into the rendered output, so we strip them out.
 renderXmlSETIResponse :: TypeOfDownload -> Integer -> T.Text -> Xml Elem -> BS.ByteString
 renderXmlSETIResponse downloadType responseCode responseDescription responseData =
     let rootElement = case downloadType of
@@ -686,7 +690,7 @@ renderXmlSETIResponse downloadType responseCode responseDescription responseData
                 "SETIProducts"
             Customers ->
                 "SETICustomers"
-    in xrender $ doc defaultDocInfo $
+    in filterNewlines . xrender $ doc defaultDocInfo $
         xelem rootElement $
             xelems
                 [ xelem "Response" $
@@ -696,6 +700,9 @@ renderXmlSETIResponse downloadType responseCode responseDescription responseData
                         ]
                 , responseData
                 ]
+  where
+    filterNewlines =
+        encodeUtf8 . T.filter (/= '\n') . decodeUtf8
 
 -- | Ensure the @setifunction@ parameter of the form matches the given
 -- value. If so, run the parser on the 'Form'.
