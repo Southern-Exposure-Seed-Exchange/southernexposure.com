@@ -864,10 +864,17 @@ makeOrders mysql = do
                      )
         closeStmt mysql commentsQuery
         return comments
+    -- Note: A status of `1` is equivalent to `OrderReceived` but since the
+    -- StoneEdge integration looks for OrderReceived & since we will be
+    -- importing all orders into StoneEdge before migrating, we can safely
+    -- set them all to Processing instead.
+    --
+    -- Otherwise we end up exporting a bunch of old orders whose status was
+    -- never updated on the first sync with StoneEdge.
     getOrderStatus :: Int32 -> OrderStatus
     getOrderStatus status =
         case status of
-            1 -> OrderReceived
+            1 -> Processing
             2 -> Processing
             3 -> Delivered
             4 -> Processing
