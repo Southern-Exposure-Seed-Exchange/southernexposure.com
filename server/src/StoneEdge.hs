@@ -633,7 +633,7 @@ instance FromForm LastDate where
         "all" ->
             return NoDate
         dateStr ->
-            fmap LastDate . parseTimeM True defaultTimeLocale "%d-%h-%Y"
+            fmap LastDate . parseTimeM True defaultTimeLocale "%e-%h-%Y"
                 $ T.unpack dateStr
 
 
