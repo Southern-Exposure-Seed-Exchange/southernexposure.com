@@ -732,7 +732,7 @@ makeOrders mysql = do
         "       customers_name, customers_company, " <>
         "       customers_street_address, customers_suburb, customers_city, " <>
         "       customers_postcode, customers_state, customers_country, " <>
-        "       cc.countries_iso_code_2 AS customers_country_code, customers_telephone " <>
+        "       cc.countries_iso_code_2 AS customers_country_code, customers_telephone, " <>
         -- Shipping Address
         "       delivery_name, delivery_company, " <>
         "       delivery_street_address, delivery_suburb, delivery_city, " <>
