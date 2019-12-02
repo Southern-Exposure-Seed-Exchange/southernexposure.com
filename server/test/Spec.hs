@@ -305,6 +305,7 @@ productSaleTests = testGroup "Product Sale Calculations"
 stoneEdge :: TestTree
 stoneEdge = testGroup "StoneEdge Module"
     [ errorTests
+    , lastDateParsing
     , sendVersionTests
     , orderCountTests
     , downloadOrdersTests
@@ -323,6 +324,17 @@ stoneEdge = testGroup "StoneEdge Module"
     xmlErrorRendering =
         renderXmlSETIError Orders "test error message"
             @?= SEF.ordersErrorXml
+    lastDateParsing :: TestTree
+    lastDateParsing = testGroup "LastDate - Form Parsing "
+        [ testCase "NoDate" lastDateAllParsing
+        , testCase "LastDate Day" lastDateDayParsing
+        ]
+    lastDateAllParsing :: Assertion
+    lastDateAllParsing =
+        testFormParsing "lastdate=All" NoDate
+    lastDateDayParsing :: Assertion
+    lastDateDayParsing =
+        testFormParsing "lastdate=2-dec-2019" $ LastDate (fromGregorian 2019 12 2)
     sendVersionTests :: TestTree
     sendVersionTests = testGroup "SendVersion SETI Function"
         [ testCase "Form Parsing" sendVersionParsing

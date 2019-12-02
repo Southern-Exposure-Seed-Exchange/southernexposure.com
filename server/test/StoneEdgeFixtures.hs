@@ -8,51 +8,56 @@ module StoneEdgeFixtures where
 
 import qualified Data.ByteString as BS
 import Data.Monoid ((<>))
+import qualified Data.Text as T
+import Data.Text.Encoding (encodeUtf8, decodeUtf8)
 import Text.RawString.QQ (r)
 
 
+
+-- | Strip New Lines
+sNL :: BS.ByteString -> BS.ByteString
+sNL = encodeUtf8 . T.filter (/= '\n') . decodeUtf8
+
 ordersErrorXml :: BS.ByteString
 ordersErrorXml =
-    [r|<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<SETIOrders
-><Response
-><ResponseCode
->3</ResponseCode
-><ResponseDescription
->test error message</ResponseDescription
-></Response
-></SETIOrders
->|]
+    sNL [r|
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<SETIOrders>
+<Response>
+<ResponseCode>3</ResponseCode>
+<ResponseDescription>test error message</ResponseDescription>
+</Response>
+</SETIOrders>
+|]
 
 ordersParseErrorXml :: BS.ByteString
 ordersParseErrorXml =
-    [r|<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<SETIOrders
-><Response
-><ResponseCode
->3</ResponseCode
-><ResponseDescription
->Could not find key &quot;setiuser&quot;</ResponseDescription
-></Response
-></SETIOrders
->|]
+    sNL [r|
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<SETIOrders>
+<Response>
+<ResponseCode>3</ResponseCode>
+<ResponseDescription>Could not find key &quot;setiuser&quot;</ResponseDescription>
+</Response>
+</SETIOrders>
+|]
 
 noOrdersXml :: BS.ByteString
 noOrdersXml =
-    [r|<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<SETIOrders
-><Response
-><ResponseCode
->2</ResponseCode
-><ResponseDescription
->Success</ResponseDescription
-></Response
-></SETIOrders
->|]
+    sNL [r|
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<SETIOrders>
+<Response>
+<ResponseCode>2</ResponseCode>
+<ResponseDescription>Success</ResponseDescription>
+</Response>
+</SETIOrders>
+|]
 
 downloadOrdersXml :: BS.ByteString
 downloadOrdersXml =
-    [r|<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+    sNL $ [r|
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <SETIOrders
 ><Response
 ><ResponseCode
