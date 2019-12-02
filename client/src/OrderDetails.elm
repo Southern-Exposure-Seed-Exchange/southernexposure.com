@@ -169,7 +169,7 @@ orderTable ({ lineItems, products } as details) =
                                 maybePriority
                                 maybeCoupon
                                 (Just lineItem)
-                                ({ lineItem | amount = centsMap negate lineItem.amount } :: rs)
+                                rs
                                 ss
                 )
                 (Tuple8 Nothing Nothing Nothing Nothing Nothing Nothing [] [])
