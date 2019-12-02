@@ -40,6 +40,7 @@ ghc-options:
     - -Wincomplete-record-updates
     - -Wincomplete-uni-patterns
     - -Wredundant-constraints
+    - -with-rtsopts "-N -T"
 
 # TODO: Split up between lib/exe sections unless used throughout
 dependencies:
