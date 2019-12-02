@@ -267,7 +267,7 @@ productionBuild = do
     printInfo "Building Server"
     serverDirectory <- getServerDirectory
     jobCount <- stackJobCount
-    liftIO $ run "stack" ["build", "--test", "--pedantic", jobCount, "--color", "always", "--ghc-options", "-O2"]
+    liftIO $ run "stack" ["build", "--test", "--pedantic", jobCount, "--color", "always", "--ghc-options", "-O2 -threaded"]
         serverDirectory printServerOutput
         >>= exitOnError "Server"
     where exitOnError description =
