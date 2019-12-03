@@ -433,11 +433,11 @@ pageImage { route, pageData } =
     case route of
         ProductDetails _ ->
             RemoteData.toMaybe pageData.productDetails
-                |> Maybe.map (.product >> .image >> .original >> media)
+                |> Maybe.map (.product >> .image >> .original)
 
         CategoryDetails _ _ ->
             Paginate.getResponseData pageData.categoryDetails
-                |> Maybe.map (.category >> .image >> .original >> media)
+                |> Maybe.map (.category >> .image >> .original)
 
         _ ->
             Nothing

@@ -6,6 +6,7 @@ CHANGELOG
 v1.00.00
 =========
 
+* Fix URL of Product & Category Images in the ``og:image`` SEO meta attribute.
 * Fix display of the mobile navigation menu's ``Log Out`` link.
 * Fix display of prettified mass quantities in the Lot Size input of the Edit
   Product Page.
