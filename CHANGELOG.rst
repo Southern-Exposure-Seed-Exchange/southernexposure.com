@@ -3,6 +3,13 @@ CHANGELOG
 =========
 
 
+v1.00.00
+=========
+
+* Fix the Location URLs in the generated Sitemaps so they include the domain
+  name.
+
+
 v0.11.0
 ========
 

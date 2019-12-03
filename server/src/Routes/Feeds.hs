@@ -79,11 +79,17 @@ sitemapRoute = do
             , "quick-order"
             , "cart"
             ]
-    return $ renderSitemap $ Sitemap $
-        map makeCategoryUrl categories
-            <> map makeProductUrl products
-            <> map makePageUrl pages
-            <> map makeUrl staticPages
+    let urls =
+            map makeCategoryUrl categories
+                <> map makeProductUrl products
+                <> map makePageUrl pages
+                <> map makeUrl staticPages
+        -- TODO: Move our URL into a Config field
+        base =
+            "https://www.southernexposure.com"
+        urlsWithBase =
+            map (\url -> url { sitemapLocation = base <> sitemapLocation url }) urls
+    return $ renderSitemap $ Sitemap urlsWithBase
   where
     getActiveProducts :: AppSQL [Entity Product]
     getActiveProducts = E.select $ E.from $ \p -> do
@@ -132,9 +138,11 @@ type SitemapIndexRoute =
 
 sitemapIndexRoute :: Monad m => m LBS.ByteString
 sitemapIndexRoute =
+    let baseUrl = "https://www.southernexposure.com"
+    in
     return $ renderSitemapIndex $ SitemapIndex
-        [ IndexEntry { indexLocation = "/sitemap.xml", indexLastModified = Nothing }
-        , IndexEntry { indexLocation = "/blog/sitemap.xml.gz", indexLastModified = Nothing }
+        [ IndexEntry { indexLocation = baseUrl <> "/sitemap.xml", indexLastModified = Nothing }
+        , IndexEntry { indexLocation = baseUrl <> "/blog/sitemap.xml.gz", indexLastModified = Nothing }
         ]
 
 
