@@ -18,6 +18,7 @@ module Models.Fields exposing
     , lotSizeEncoder
     , lotSizeToString
     , milligramsFromString
+    , milligramsToGrams
     , milligramsToString
     )
 
@@ -102,19 +103,11 @@ milligramsFromDecimal =
         >> Milligrams
 
 
+{-| Note: When modifying the case matches, update the Server code in
+Models.Fields as well.
+-}
 milligramsToString : Milligrams -> String
-milligramsToString (Milligrams i) =
-    let
-        stripZeroes str =
-            if String.right 1 str == "0" then
-                stripZeroes <| String.dropRight 1 str
-
-            else if String.right 1 str == "." then
-                String.dropRight 1 str
-
-            else
-                str
-    in
+milligramsToString ((Milligrams i) as m) =
     case i of
         114000 ->
             "¼ lb"
@@ -147,12 +140,32 @@ milligramsToString (Milligrams i) =
             "5 lbs"
 
         _ ->
-            Decimal.fromInt i
-                |> Decimal.mul (Decimal.fromIntWithExponent 1 -3)
-                |> Decimal.round -2
-                |> Decimal.toString
-                |> stripZeroes
-                |> (\s -> s ++ " g")
+            milligramsToGrams m ++ " g"
+
+
+{-| Convert a Milligrams amount into a string representation of grams.
+
+Does not include a trailing `g`.
+
+-}
+milligramsToGrams : Milligrams -> String
+milligramsToGrams (Milligrams i) =
+    let
+        stripZeroes str =
+            if String.right 1 str == "0" then
+                stripZeroes <| String.dropRight 1 str
+
+            else if String.right 1 str == "." then
+                String.dropRight 1 str
+
+            else
+                str
+    in
+    Decimal.fromInt i
+        |> Decimal.mul (Decimal.fromIntWithExponent 1 -3)
+        |> Decimal.round -2
+        |> Decimal.toString
+        |> stripZeroes
 
 
 type LotSize

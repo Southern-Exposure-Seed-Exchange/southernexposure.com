@@ -6,6 +6,9 @@ CHANGELOG
 v1.00.00
 =========
 
+* Fix display of prettified mass quantities in the Lot Size input of the Edit
+  Product Page.
+* Don't log SQL queries when running on the Production site.
 * Fix broken Images on the Edit Category Admin page.
 * Fix the Location URLs in the generated Sitemaps so they include the domain
   name.

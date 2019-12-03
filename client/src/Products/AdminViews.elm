@@ -29,7 +29,7 @@ import Html.Events exposing (on, onCheck, onClick, onInput, onSubmit, targetValu
 import Json.Decode as Decode exposing (Decoder)
 import Json.Decode.Pipeline as Decode
 import Json.Encode as Encode exposing (Value)
-import Models.Fields exposing (Cents(..), LotSize(..), centsDecoder, centsEncoder, centsToString, lotSizeDecoder, lotSizeEncoder, milligramsToString)
+import Models.Fields exposing (Cents(..), LotSize(..), centsDecoder, centsEncoder, centsToString, lotSizeDecoder, lotSizeEncoder, milligramsToGrams, milligramsToString)
 import Models.Utils exposing (slugify)
 import PageData
 import Ports
@@ -484,7 +484,7 @@ variantDecoder =
                     s
 
                 Just (Mass mg) ->
-                    String.dropRight 2 <| milligramsToString mg
+                    milligramsToGrams mg
 
                 Just (Bulbs i) ->
                     String.fromInt i
