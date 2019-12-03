@@ -97,10 +97,10 @@ update key msg model maybeSessionToken =
                         redirectCmd =
                             case model.redirectTo of
                                 Nothing ->
-                                    Routing.newUrl key <| PageDetails "home"
+                                    Routing.newUrl key Routing.homePage
 
                                 Just "" ->
-                                    Routing.newUrl key <| PageDetails "home"
+                                    Routing.newUrl key Routing.homePage
 
                                 Just url ->
                                     Browser.Navigation.pushUrl key url

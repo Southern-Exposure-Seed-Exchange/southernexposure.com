@@ -10,6 +10,7 @@ port module Ports exposing
     , removeCartSessionToken
     , scrollToErrorMessage
     , scrollToID
+    , scrollToName
     , scrollToTop
     , setCartItemCount
     , setPageTitle
@@ -48,6 +49,11 @@ scrollToID id =
 scrollToErrorMessage : Cmd msg
 scrollToErrorMessage =
     scrollToID "form-errors-text"
+
+
+scrollToName : String -> Cmd msg
+scrollToName name =
+    scrollToSelector <| "*[name='" ++ name ++ "']"
 
 
 

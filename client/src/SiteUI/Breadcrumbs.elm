@@ -21,7 +21,7 @@ view route pageData =
 
             else
                 List.indexedMap (\i f -> f <| i + 1) <|
-                    inactiveItem "Home" (PageDetails "home")
+                    inactiveItem "Home" Routing.homePage
                         :: childItems
 
         activeItem content position =
@@ -40,10 +40,10 @@ view route pageData =
 
         childItems =
             case route of
-                PageDetails "home" ->
+                PageDetails "home" _ ->
                     []
 
-                PageDetails _ ->
+                PageDetails _ _ ->
                     pageData.pageDetails
                         |> RemoteData.toMaybe
                         |> maybeToList (.name >> activeItem >> List.singleton)

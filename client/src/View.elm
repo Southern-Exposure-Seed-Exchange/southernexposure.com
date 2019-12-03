@@ -117,7 +117,7 @@ view ({ route, pageData, navigationData, zone } as model) =
                     else
                         searchResultsView data pagination model.addToCartForms pageData.searchResults
 
-                PageDetails _ ->
+                PageDetails _ _ ->
                     withIntermediateText staticPageView pageData.pageDetails
 
                 CreateAccount ->
@@ -314,7 +314,7 @@ pageTitle ({ route, pageData } as model) =
                         AttributeSearch SeedAttribute.SmallGrower ->
                             "Products from Small Farms in our Grower Network"
 
-        PageDetails _ ->
+        PageDetails _ _ ->
             getFromPageData .pageDetails .name
 
         CreateAccount ->

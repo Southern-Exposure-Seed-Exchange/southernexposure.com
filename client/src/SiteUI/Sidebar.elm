@@ -32,7 +32,7 @@ view route =
                 ]
 
         staticPageLink slug =
-            pageLink (PageDetails slug)
+            pageLink (PageDetails slug Nothing)
 
         specialSearchLink modifier =
             SearchResults (modifier Search.initial) Pagination.default

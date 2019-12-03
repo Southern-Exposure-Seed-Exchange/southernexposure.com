@@ -16,7 +16,7 @@ view =
 
         staticPageLink slug title =
             li []
-                [ a (routeLinkAttributes <| PageDetails slug) [ text title ]
+                [ a (routeLinkAttributes <| PageDetails slug Nothing) [ text title ]
                 ]
 
         informationLinks =

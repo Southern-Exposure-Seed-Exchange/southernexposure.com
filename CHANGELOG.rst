@@ -6,6 +6,7 @@ CHANGELOG
 v1.00.00
 =========
 
+* Fix scrolling to anchor links on Static Pages.
 * Show Loading/Success/Error text below the Add to Cart button when a Customer
   adds an item to their Cart. The message will automatically disappear after 10
   seconds.

@@ -167,7 +167,7 @@ fetchDataForRoute ({ route, pageData, key } as model) =
                         |> Tuple.mapFirst (\sr -> { pageData | searchResults = sr })
                         |> Tuple.mapSecond (Cmd.map SearchPaginationMsg)
 
-                PageDetails slug ->
+                PageDetails slug _ ->
                     ( { pageData | pageDetails = RemoteData.Loading }
                     , getPageDetails slug
                     )
@@ -1004,14 +1004,20 @@ update msg ({ pageData, key } as model) =
             case response of
                 RemoteData.Success authStatus ->
                     let
-                        baseUpdate =
+                        updatedModel =
                             { model | currentUser = authStatus, maybeSessionToken = Nothing }
-                                |> fetchDataForRoute
+
+                        baseUpdate =
+                            if Routing.authRequired model.route || List.member model.route [ Cart, Checkout ] then
+                                fetchDataForRoute updatedModel
+
+                            else
+                                ( updatedModel, Cmd.none )
                     in
                     case model.route of
                         Login (Just "") ->
                             baseUpdate
-                                |> batchCommand (Routing.newUrl key <| PageDetails "home")
+                                |> batchCommand (Routing.newUrl key Routing.homePage)
 
                         Login (Just newUrl) ->
                             baseUpdate
@@ -1079,11 +1085,18 @@ update msg ({ pageData, key } as model) =
             let
                 updatedPageData =
                     { pageData | pageDetails = response }
+
+                scrollCmd =
+                    case model.route of
+                        PageDetails _ Nothing ->
+                            Ports.scrollToTop
+
+                        _ ->
+                            Cmd.none
             in
             ( { model | pageData = updatedPageData }
-            , Cmd.none
+            , scrollCmd
             )
-                |> extraCommand (always Ports.scrollToTop)
 
         GetAddressLocations response ->
             let
@@ -1296,8 +1309,8 @@ update msg ({ pageData, key } as model) =
 
 
 {-| Wrap the normal update function, checking to see if the page has finished
-loading all it's dependent data. If so, run the SEO ports. Otherwise do
-nothing.
+loading all it's dependent data. If so, run ports that should fire once a page
+has loaded. Otherwise do nothing.
 -}
 updateWrapper : Msg -> Model -> ( Model, Cmd Msg )
 updateWrapper msg model =
@@ -1308,11 +1321,20 @@ updateWrapper msg model =
         noLoadNeededOrLoadJustFinished =
             (not (pageLoadCompleted model) && pageLoadCompleted newModel)
                 || (model.route /= newModel.route && pageLoadCompleted newModel)
+
+        pageDetailsScroll =
+            case newModel.route of
+                PageDetails _ (Just fragment) ->
+                    Ports.scrollToName fragment
+
+                _ ->
+                    Cmd.none
     in
     if noLoadNeededOrLoadJustFinished then
         ( newModel
         , Cmd.batch
             [ Ports.updatePageMetadata ( Routing.reverse newModel.route, View.pageTitle newModel, View.pageImage newModel )
+            , pageDetailsScroll
             , cmd
             ]
         )
@@ -1343,7 +1365,7 @@ pageLoadCompleted { pageData, route } =
         SearchResults _ _ ->
             checkPaginate pageData.searchResults
 
-        PageDetails _ ->
+        PageDetails _ _ ->
             checkRemote pageData.pageDetails
 
         CreateAccount ->
@@ -1559,7 +1581,7 @@ resetForm oldRoute model =
         SearchResults _ _ ->
             model
 
-        PageDetails _ ->
+        PageDetails _ _ ->
             model
 
         CreateAccount ->

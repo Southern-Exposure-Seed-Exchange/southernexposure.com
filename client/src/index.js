@@ -92,6 +92,8 @@ app.ports.scrollToSelector.subscribe(function(selector) {
       var elementTop = $selector.offset().top;
       if (elementTop < $(window).scrollTop()) {
         $('html, body').animate({ scrollTop: elementTop }, 300);
+      } else if (elementTop > $(window).scrollTop() + window.innerHeight) {
+        $('html, body').animate({ scrollTop: elementTop }, 300);
       }
     }
     $(':focus').blur();

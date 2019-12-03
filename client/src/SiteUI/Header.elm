@@ -15,7 +15,7 @@ view : (SiteSearch.Msg -> Msg) -> SiteSearch.Data -> AuthStatus -> Int -> Html M
 view searchTagger searchData authStatus cartItemCount =
     div [ class "container" ]
         [ div [ id "site-header", class "row clearfix" ]
-            [ div [ class "col" ] [ logoAndName <| PageDetails "home" ]
+            [ div [ class "col" ] [ logoAndName Routing.homePage ]
             , div [ class "col-auto ml-auto d-none d-md-block text-right" ] <|
                 linksAndSearch searchTagger searchData authStatus cartItemCount
             ]
@@ -100,7 +100,7 @@ adminView =
         rightLinks =
             ul [ class "list-unstyled" ]
                 [ li []
-                    [ a (routeLinkAttributes <| PageDetails "home") [ text "Home Page" ]
+                    [ a (routeLinkAttributes Routing.homePage) [ text "Home Page" ]
                     ]
                 , li []
                     [ a [ href "/account/logout/", onClickPreventDefault LogOut, target "" ]

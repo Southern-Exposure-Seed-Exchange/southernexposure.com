@@ -3,6 +3,7 @@ module Routing exposing
     , Key
     , Route(..)
     , authRequired
+    , homePage
     , isAdminRoute
     , newUrl
     , parseRoute
@@ -27,7 +28,7 @@ type Route
     | CategoryDetails String Pagination.Data
     | AdvancedSearch
     | SearchResults Search.Data Pagination.Data
-    | PageDetails String
+    | PageDetails String (Maybe String)
     | CreateAccount
     | CreateAccountSuccess
     | Login (Maybe String)
@@ -43,6 +44,13 @@ type Route
     | Admin AdminRoute
     | Redirect String
     | NotFound
+
+
+{-| The Homepage Route.
+-}
+homePage : Route
+homePage =
+    PageDetails "home" Nothing
 
 
 {-| Does the 'Route' specify a Page to the Admin Backend?
@@ -154,7 +162,7 @@ parseRoute =
 
         routeParser =
             Url.oneOf
-                [ Url.map (PageDetails "home") Url.top
+                [ Url.map (PageDetails "home" Nothing) Url.top
                 , Url.map ProductDetails (Url.s "products" </> Url.string)
                 , Url.map CategoryDetails (Url.s "categories" </> Url.string)
                     |> Pagination.fromQueryString
@@ -170,7 +178,7 @@ parseRoute =
                 , Url.map CheckoutSuccess (Url.s "checkout" </> Url.s "success" </> Url.int <?> parseFlag "newAccount")
                 , Url.map Admin <| Url.s "admin" </> adminParser
                 , redirectParser
-                , Url.map PageDetails Url.string
+                , Url.map PageDetails (Url.string </> Url.fragment identity)
                 ]
     in
     Url.parse routeParser
@@ -251,12 +259,12 @@ reverse route =
                         AttributeSearch SeedAttribute.SmallGrower ->
                             specialSearchUrl "small-grower"
 
-        PageDetails slug ->
+        PageDetails slug fragment ->
             if slug == "home" then
-                "/"
+                "/" ++ reverseFragment fragment
 
             else
-                joinPath [ slug ]
+                joinPath [ slug ] ++ reverseFragment fragment
 
         CreateAccount ->
             joinPath [ "account", "create" ]
@@ -312,6 +320,12 @@ reverse route =
 
         NotFound ->
             joinPath [ "page-not-found" ]
+
+
+reverseFragment : Maybe String -> String
+reverseFragment =
+    Maybe.map (\s -> "#" ++ s)
+        >> Maybe.withDefault ""
 
 
 reverseAdmin : AdminRoute -> String
@@ -438,7 +452,7 @@ authRequired route =
         SearchResults _ _ ->
             False
 
-        PageDetails _ ->
+        PageDetails _ _ ->
             False
 
         CreateAccount ->

@@ -88,9 +88,9 @@ view route authStatus navigationData activeCategoryIds searchData =
                 [ text category.name ]
 
         mobileOnlyItems =
-            [ mobileLink (PageDetails "about-us") "About Us"
-            , mobileLink (PageDetails "growing-guides") "Growing Guides"
-            , mobileLink (PageDetails "retail-stores") "Retail Stores"
+            [ mobileLink (PageDetails "about-us" Nothing) "About Us"
+            , mobileLink (PageDetails "growing-guides" Nothing) "Growing Guides"
+            , mobileLink (PageDetails "retail-stores" Nothing) "Retail Stores"
             , mobileLink QuickOrder "Quick Order"
             ]
                 ++ authLinks
