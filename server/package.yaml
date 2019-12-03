@@ -151,6 +151,7 @@ executables:
             - -with-rtsopts=-N
         dependencies:
             - sese-website
+            - monad-control
             - monad-logger
             - persistent-postgresql
             - stripe-core

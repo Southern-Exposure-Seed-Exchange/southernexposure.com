@@ -1,9 +1,12 @@
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 module Main where
 
 import Control.Concurrent.STM.TVar (newTVarIO)
-import Control.Monad.Logger (runStderrLoggingT)
+import Control.Monad.IO.Class (MonadIO)
+import Control.Monad.Trans.Control (MonadBaseControl)
+import Control.Monad.Logger (MonadLogger, runNoLoggingT, runStderrLoggingT)
 import Data.Maybe (fromMaybe)
 import Data.Version (showVersion)
 import Database.Persist.Postgresql
@@ -73,7 +76,13 @@ main = do
                 >>= maybe (error $ "Could not find required env variable: " ++ env) return
           makePool :: Environment -> IO ConnectionPool
           makePool env =
-            runStderrLoggingT $ do
+            case env of
+                Production ->
+                    runNoLoggingT $ makeSqlPool env
+                Development ->
+                    runStderrLoggingT $ makeSqlPool env
+          makeSqlPool :: (MonadIO m, MonadLogger m, MonadBaseControl IO m) => Environment -> m ConnectionPool
+          makeSqlPool env = do
                 pool <- createPostgresqlPool "dbname=sese-website" $ poolSize env
                 runSqlPool (runMigration migrateAll) pool
                 return pool
