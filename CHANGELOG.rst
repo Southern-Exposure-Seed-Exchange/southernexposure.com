@@ -6,6 +6,7 @@ CHANGELOG
 v1.00.00
 =========
 
+* Fix display of the mobile navigation menu's ``Log Out`` link.
 * Fix display of prettified mass quantities in the Lot Size input of the Edit
   Product Page.
 * Don't log SQL queries when running on the Production site.
