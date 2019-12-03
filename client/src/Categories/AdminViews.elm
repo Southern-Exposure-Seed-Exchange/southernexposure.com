@@ -421,7 +421,7 @@ edit categoryId model categories originalCategory =
                     div [ class "image-preview mb-4" ]
                         [ img
                             [ class "img-fluid"
-                            , src <| media originalCategory.image.original
+                            , src originalCategory.image.original
                             ]
                             []
                         ]

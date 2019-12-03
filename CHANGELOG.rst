@@ -6,6 +6,7 @@ CHANGELOG
 v1.00.00
 =========
 
+* Fix broken Images on the Edit Category Admin page.
 * Fix the Location URLs in the generated Sitemaps so they include the domain
   name.
 
