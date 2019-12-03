@@ -35,7 +35,8 @@ import Data.Time
     ( UTCTime, LocalTime, getTimeZone, utcToLocalTime, formatTime, defaultTimeLocale
     )
 import Database.Persist.Sql
-    ( (>.), (<-.), (==.), Entity(..), count, toSqlKey, fromSqlKey, selectList
+    ( (>.), (<-.), (==.), (=.), Entity(..), count, toSqlKey, fromSqlKey
+    , selectList, updateWhere
     )
 import Text.Read (readMaybe)
 import Servant ((:>), ReqBody, FormUrlEncoded, Post, PlainText, MimeRender(..))
@@ -56,9 +57,6 @@ import qualified Database.Esqueleto as E
 import qualified Web.Stripe.Types as Stripe
 
 
--- TODO: PlainText return type is OK? Or Custom StoneEdge one?
--- Need to add Content-Type request header?
--- Determine this when testing against test-version of StoneEdge
 type StoneEdgeAPI =
     ReqBody '[FormUrlEncoded] StoneEdgeRequest :> Post '[PlainText] StoneEdgeResponse
 
@@ -202,6 +200,8 @@ downloadOrdersRoute DownloadOrdersRequest { dorLastOrder, dorStartNumber, dorBat
             E.orderBy [E.asc $ o E.^. OrderId]
             limitAndOffset
             return (o, c, sa, ba, cp)
+        let orderIds = map (\(Entity orderId _, _, _, _, _) -> orderId) orders
+        updateWhere [OrderId <-. orderIds] [ OrderStatus =. Processing ]
         forM orders $ \(o, c, sa, ba, cp) -> do
             createdAt <- convertToLocalTime $ orderCreatedAt $ entityVal o
             adminComments <- forM (orderAdminComments $ entityVal o) $ \comment ->

@@ -6,6 +6,8 @@ CHANGELOG
 v1.00.00
 =========
 
+* Set Order Statuses to ``Processing`` after they have been exported to
+  StoneEdge.
 * Fix scrolling to anchor links on Static Pages.
 * Show Loading/Success/Error text below the Add to Cart button when a Customer
   adds an item to their Cart. The message will automatically disappear after 10
