@@ -103,8 +103,8 @@ view route authStatus navigationData activeCategoryIds searchData =
 
             else
                 [ mobileLink MyAccount "My Account"
-                , li [ class "nav-item" ]
-                    [ a [ href "/account/logout", onClickPreventDefault LogOut ]
+                , li [ class "nav-item d-md-none" ]
+                    [ a [ class "nav-link", href "/account/logout", onClickPreventDefault LogOut ]
                         [ text "Log Out" ]
                     ]
                 ]
