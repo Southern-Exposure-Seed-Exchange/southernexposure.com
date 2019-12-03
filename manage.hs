@@ -267,7 +267,7 @@ productionBuild = do
     printInfo "Building Server"
     serverDirectory <- getServerDirectory
     jobCount <- stackJobCount
-    liftIO $ run "stack" ["build", "--test", "--pedantic", jobCount, "--color", "always", "--ghc-options", "-O2 -threaded"]
+    liftIO $ run "stack" ["build", "--test", "--pedantic", jobCount, "--color", "always"]
         serverDirectory printServerOutput
         >>= exitOnError "Server"
     where exitOnError description =
@@ -298,6 +298,7 @@ buildAndStartServer serverDirectory buildRef serverRef jobCount = do
         [ "build"
         , "--pedantic"
         , jobCount
+        , "--fast"
         , "--test"
         , "--test-arguments=--color=always"
         , "--color"

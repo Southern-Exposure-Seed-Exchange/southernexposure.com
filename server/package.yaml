@@ -41,6 +41,8 @@ ghc-options:
     - -Wincomplete-uni-patterns
     - -Wredundant-constraints
     - -with-rtsopts "-N -T"
+    - -O2
+    - -threaded
 
 # TODO: Split up between lib/exe sections unless used throughout
 dependencies:
