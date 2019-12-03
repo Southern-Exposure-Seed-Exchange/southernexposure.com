@@ -66,6 +66,7 @@ type alias CartForms =
     Dict Int
         { variant : Maybe ProductVariantId
         , quantity : Int
+        , requestStatus : WebData ()
         }
 
 

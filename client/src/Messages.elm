@@ -44,7 +44,8 @@ type Msg
     | ChangeCartFormVariantId ProductId ProductVariantId
     | ChangeCartFormQuantity ProductId Int
     | SubmitAddToCart ProductId ProductVariantId
-    | SubmitAddToCartResponse Int (WebData String)
+    | SubmitAddToCartResponse ProductId Int (WebData String)
+    | ResetCartFormStatus ProductId
       -- My Account Page
     | ShowAllOrders
       -- Sub-Messages

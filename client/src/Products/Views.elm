@@ -15,12 +15,13 @@ import Paginate exposing (Paginated)
 import Product exposing (Product, ProductId(..), ProductVariant, ProductVariantId(..), variantPrice)
 import Products.Pagination as Pagination
 import Products.Sorting as Sorting
+import RemoteData
 import Routing exposing (Route(..))
 import SeedAttribute exposing (SeedAttribute)
 import Views.Format as Format
 import Views.Microdata as Microdata
 import Views.Pager as Pager
-import Views.Utils exposing (htmlOrBlank, numericInput, onIntInput, rawHtml, routeLinkAttributes)
+import Views.Utils exposing (htmlOrBlank, icon, numericInput, onIntInput, rawHtml, routeLinkAttributes)
 
 
 details : CartForms -> PageData.ProductDetails -> List (Html Msg)
@@ -329,7 +330,7 @@ limitedAvailabilityBadge =
 
 
 cartForm : CartFormData -> Product -> Html Msg
-cartForm { maybeSelectedVariant, maybeSelectedVariantId, quantity, isOutOfStock, isLimitedAvailablity, variantSelect, selectedItemNumber, offersMeta } product =
+cartForm { maybeSelectedVariant, maybeSelectedVariantId, quantity, isOutOfStock, isLimitedAvailablity, variantSelect, selectedItemNumber, offersMeta, requestFeedback } product =
     let
         formAttributes =
             (::) (class "add-to-cart-form") <|
@@ -378,6 +379,7 @@ cartForm { maybeSelectedVariant, maybeSelectedVariantId, quantity, isOutOfStock,
         [ selectedPrice
         , variantSelect
         , viewIfLazy (not isOutOfStock) addToCartInput
+        , Html.map never requestFeedback
         , availabilityBadge
         , small [ class "text-muted d-block" ]
             [ text <| "Item #" ++ selectedItemNumber ]
@@ -394,16 +396,17 @@ type alias CartFormData =
     , variantSelect : Html Msg
     , selectedItemNumber : String
     , offersMeta : Html Never
+    , requestFeedback : Html Never
     }
 
 
 cartFormData : CartForms -> ( Product, Dict Int ProductVariant ) -> CartFormData
 cartFormData addToCartForms ( product, variants ) =
     let
-        ( maybeSelectedVariantId, quantity ) =
+        ( maybeSelectedVariantId, quantity, requestStatus ) =
             Dict.get (fromProductId product.id) addToCartForms
-                |> Maybe.withDefault { variant = Nothing, quantity = 1 }
-                |> (\v -> ( v.variant |> ifNothing maybeFirstVariantId, v.quantity ))
+                |> Maybe.withDefault { variant = Nothing, quantity = 1, requestStatus = RemoteData.NotAsked }
+                |> (\v -> ( v.variant |> ifNothing maybeFirstVariantId, v.quantity, v.requestStatus ))
 
         maybeSelectedVariant =
             maybeSelectedVariantId
@@ -535,6 +538,29 @@ cartFormData addToCartForms ( product, variants ) =
                     Routing.reverse <|
                         ProductDetails product.slug
                 ]
+
+        requestFeedback =
+            case requestStatus of
+                RemoteData.NotAsked ->
+                    text ""
+
+                RemoteData.Loading ->
+                    div [ class "text-warning font-weight-bold small" ]
+                        [ icon "spinner fa-spin mr-1"
+                        , text "Adding to Cart"
+                        ]
+
+                RemoteData.Success _ ->
+                    div [ class "text-success font-weight-bold small" ]
+                        [ icon "check-circle mr-1"
+                        , text "Added to Cart!"
+                        ]
+
+                RemoteData.Failure _ ->
+                    div [ class "text-danger font-weight-bold small" ]
+                        [ icon "times mr-1"
+                        , text "Error Adding To Cart!"
+                        ]
     in
     { maybeSelectedVariant = maybeSelectedVariant
     , maybeSelectedVariantId = maybeSelectedVariantId
@@ -544,4 +570,5 @@ cartFormData addToCartForms ( product, variants ) =
     , variantSelect = viewIfLazy showVariantSelect variantSelect
     , selectedItemNumber = selectedItemNumber
     , offersMeta = offers
+    , requestFeedback = requestFeedback
     }

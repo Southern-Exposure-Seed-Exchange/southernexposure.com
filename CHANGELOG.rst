@@ -6,6 +6,9 @@ CHANGELOG
 v1.00.00
 =========
 
+* Show Loading/Success/Error text below the Add to Cart button when a Customer
+  adds an item to their Cart. The message will automatically disappear after 10
+  seconds.
 * Fix URL of Product & Category Images in the ``og:image`` SEO meta attribute.
 * Fix display of the mobile navigation menu's ``Log Out`` link.
 * Fix display of prettified mass quantities in the Lot Size input of the Edit

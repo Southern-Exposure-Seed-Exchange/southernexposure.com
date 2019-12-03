@@ -21,10 +21,11 @@ import Json.Decode as Decode
 import Json.Encode as Encode
 import Locations
 import Messages exposing (Msg(..))
-import Model exposing (Model)
+import Model exposing (CartForms, Model)
 import PageData exposing (CartItemId(..), PageData)
 import Paginate exposing (Paginated)
 import Ports
+import Process
 import Product exposing (ProductId(..), ProductVariantId(..))
 import Products.AdminViews as ProductAdmin
 import QuickOrder
@@ -487,8 +488,8 @@ reAuthorize userId =
         |> Api.sendRequest ReAuthorize
 
 
-addToCustomerCart : Int -> ProductVariantId -> Cmd Msg
-addToCustomerCart quantity (ProductVariantId variantId) =
+addToCustomerCart : CartForms -> ProductId -> Int -> ProductVariantId -> ( CartForms, Cmd Msg )
+addToCustomerCart forms pId quantity ((ProductVariantId variantId) as vId) =
     let
         body =
             Encode.object
@@ -499,11 +500,12 @@ addToCustomerCart quantity (ProductVariantId variantId) =
     Api.post Api.CartAddCustomer
         |> Api.withJsonBody body
         |> Api.withJsonResponse (Decode.succeed "")
-        |> Api.sendRequest (SubmitAddToCartResponse quantity)
+        |> Api.sendRequest (SubmitAddToCartResponse pId quantity)
+        |> setCartFormToLoading forms quantity pId vId
 
 
-addToAnonymousCart : Maybe String -> Int -> ProductVariantId -> Cmd Msg
-addToAnonymousCart maybeSessionToken quantity (ProductVariantId variantId) =
+addToAnonymousCart : Maybe String -> CartForms -> ProductId -> Int -> ProductVariantId -> ( CartForms, Cmd Msg )
+addToAnonymousCart maybeSessionToken forms pId quantity ((ProductVariantId variantId) as vId) =
     let
         body =
             Encode.object
@@ -518,7 +520,29 @@ addToAnonymousCart maybeSessionToken quantity (ProductVariantId variantId) =
     Api.post Api.CartAddAnonymous
         |> Api.withJsonBody body
         |> Api.withStringResponse
-        |> Api.sendRequest (SubmitAddToCartResponse quantity)
+        |> Api.sendRequest (SubmitAddToCartResponse pId quantity)
+        |> setCartFormToLoading forms quantity pId vId
+
+
+setCartFormToLoading : CartForms -> Int -> ProductId -> ProductVariantId -> Cmd Msg -> ( CartForms, Cmd Msg )
+setCartFormToLoading forms quantity (ProductId pId) (ProductVariantId vId) cmd =
+    let
+        newForms =
+            Dict.update pId updateForm forms
+
+        updateForm maybeForm =
+            case maybeForm of
+                Nothing ->
+                    Just
+                        { variant = Just <| ProductVariantId vId
+                        , quantity = quantity
+                        , requestStatus = RemoteData.Loading
+                        }
+
+                Just v ->
+                    Just { v | requestStatus = RemoteData.Loading }
+    in
+    ( newForms, cmd )
 
 
 getCustomerCartItemsCount : Cmd Msg
@@ -690,14 +714,18 @@ update msg ({ pageData, key } as model) =
                 |> updateCartQuantity productId quantity
                 |> noCommand
 
-        SubmitAddToCart (ProductId productId) defaultVariant ->
+        SubmitAddToCart ((ProductId productId) as pId) defaultVariant ->
             let
                 performRequest f =
-                    ( model, f quantity variantId )
+                    let
+                        ( newForms, cmd ) =
+                            f model.addToCartForms pId quantity variantId
+                    in
+                    ( { model | addToCartForms = newForms }, cmd )
 
                 ( variantId, quantity ) =
                     Dict.get productId model.addToCartForms
-                        |> Maybe.withDefault { variant = Nothing, quantity = 1 }
+                        |> Maybe.withDefault { variant = Nothing, quantity = 1, requestStatus = RemoteData.NotAsked }
                         |> (\v -> ( v.variant |> Maybe.withDefault defaultVariant, v.quantity ))
             in
             case model.currentUser of
@@ -707,14 +735,36 @@ update msg ({ pageData, key } as model) =
                 User.Anonymous ->
                     performRequest (addToAnonymousCart model.maybeSessionToken)
 
-        -- TODO: error/success alert
-        SubmitAddToCartResponse quantity response ->
+        SubmitAddToCartResponse productId quantity response ->
             case response of
                 RemoteData.Success sessionToken ->
                     updateSessionTokenAndCartItemCount model quantity sessionToken
+                        |> updateCartFormRequestStatus productId response
 
                 _ ->
-                    model |> noCommand
+                    model
+                        |> noCommand
+                        |> updateCartFormRequestStatus productId response
+
+        ResetCartFormStatus (ProductId productId) ->
+            let
+                updatedForms =
+                    Dict.update productId updateForm model.addToCartForms
+
+                updateForm maybeForm =
+                    case maybeForm of
+                        Nothing ->
+                            Just
+                                { variant = Nothing
+                                , quantity = 1
+                                , requestStatus = RemoteData.NotAsked
+                                }
+
+                        Just v ->
+                            Just { v | requestStatus = RemoteData.NotAsked }
+            in
+            { model | addToCartForms = updatedForms }
+                |> noCommand
 
         ShowAllOrders ->
             case model.currentUser of
@@ -1567,7 +1617,11 @@ updateCartQuantity (ProductId productId) quantity model =
         updateForm maybeForm =
             case maybeForm of
                 Nothing ->
-                    Just { variant = Nothing, quantity = quantity }
+                    Just
+                        { variant = Nothing
+                        , quantity = quantity
+                        , requestStatus = RemoteData.NotAsked
+                        }
 
                 Just v ->
                     Just { v | quantity = quantity }
@@ -1584,12 +1638,53 @@ updateCartVariant (ProductId productId) variantId model =
         updateForm maybeForm =
             case maybeForm of
                 Nothing ->
-                    Just { variant = Just variantId, quantity = 1 }
+                    Just
+                        { variant = Just variantId
+                        , quantity = 1
+                        , requestStatus = RemoteData.NotAsked
+                        }
 
                 Just v ->
                     Just { v | variant = Just variantId }
     in
     { model | addToCartForms = addToCartForms }
+
+
+updateCartFormRequestStatus : ProductId -> WebData a -> ( Model, Cmd Msg ) -> ( Model, Cmd Msg )
+updateCartFormRequestStatus (ProductId productId) response ( { addToCartForms } as model, cmd ) =
+    let
+        unitResponse =
+            RemoteData.map (always ()) response
+
+        updatedForms =
+            Dict.update productId updateForm addToCartForms
+
+        updateForm maybeForm =
+            case maybeForm of
+                Nothing ->
+                    Just
+                        { variant = Nothing
+                        , quantity = 1
+                        , requestStatus = unitResponse
+                        }
+
+                Just v ->
+                    Just { v | requestStatus = unitResponse }
+
+        resetStatusCmd =
+            case response of
+                RemoteData.Loading ->
+                    Cmd.none
+
+                RemoteData.NotAsked ->
+                    Cmd.none
+
+                _ ->
+                    Process.sleep (10 * 1000)
+                        |> Task.andThen (always <| Task.succeed <| ProductId productId)
+                        |> Task.perform ResetCartFormStatus
+    in
+    ( { model | addToCartForms = updatedForms }, Cmd.batch [ cmd, resetStatusCmd ] )
 
 
 resetEditCartForm : WebData PageData.CartDetails -> Model -> Model
