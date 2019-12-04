@@ -6,6 +6,7 @@ CHANGELOG
 v1.00.00
 =========
 
+* Remove the ``DataMigration`` & ``ImageMigration`` scripts.
 * Automatically generate & serve a ``robots.txt`` file, varying the included
   directives depending on what environment we are deploying to.
 * Trigger proper status codes when prerender pages for web bots/crawlers.

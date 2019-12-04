@@ -160,26 +160,6 @@ executables:
             - wai-extra
             - warp
 
-    data-migration:
-        main: DataMigration.hs
-        <<: *script-defaults
-        dependencies:
-            - sese-website
-            - bytestring
-            - containers
-            - filepath
-            - io-streams
-            - iso3166-country-codes
-            - monad-logger
-            - mysql-haskell
-            - persistent
-            - persistent-postgresql
-            - resource-pool
-            - state-codes
-            - text
-            - transformers
-            - uuid
-
     export-odd-weights:
         main: ExportOddWeights.hs
         <<: *script-defaults
@@ -199,19 +179,6 @@ executables:
             - bytestring
             - cassava
             - esqueleto
-            - monad-logger
-            - persistent-postgresql
-            - text
-
-    image-migration:
-        main: ImageMigration.hs
-        <<: *script-defaults
-        other-modules: []
-        dependencies:
-            - sese-website
-            - bytestring
-            - directory
-            - filepath
             - monad-logger
             - persistent-postgresql
             - text
