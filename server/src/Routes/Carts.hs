@@ -1,5 +1,6 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE TypeFamilies #-}
@@ -14,9 +15,10 @@ import Data.Aeson ((.:), (.:?), (.=), FromJSON(..), ToJSON(..), object, withObje
 import Data.Int (Int64)
 import Data.Maybe (fromMaybe, listToMaybe)
 import Data.Time.Clock (getCurrentTime, addUTCTime)
-import Database.Persist ( (+=.), (=.), (==.), Entity(..), getBy, insert
-                        , insertEntity, update, updateWhere, upsertBy
-                        , deleteWhere )
+import Database.Persist
+    ( (+=.), (=.), (==.), Entity(..), get, getBy, insert, insertEntity, update
+    , updateWhere, upsertBy, deleteWhere
+    )
 import Database.Persist.Sql (toSqlKey)
 import Numeric.Natural (Natural)
 import Servant ((:>), (:<|>)(..), AuthProtect, ReqBody, JSON, PlainText, Get, Post, err404)
@@ -129,11 +131,8 @@ instance FromJSON CustomerAddParameters where
 
 instance Validation CustomerAddParameters where
     validators parameters = do
-        variantExists <- V.exists $ capVariantId parameters
-        return [ ( "variant"
-                 , [ ( "This Product Variant Does Not Exist.", variantExists )
-                   ]
-                 )
+        variantErrors <- validateVariant $ capVariantId parameters
+        return [ ( "variant", variantErrors )
                , ( "quantity"
                  , [ V.zeroOrPositive $ capQuantity parameters
                    ]
@@ -180,11 +179,8 @@ instance FromJSON AnonymousAddParameters where
 
 instance Validation AnonymousAddParameters where
     validators parameters = do
-        variantExists <- V.exists $ aapVariantId parameters
-        return [ ( "variant"
-                 , [ ( "This Product Variant Does Not Exist.", variantExists )
-                   ]
-                 )
+        variantErrors <- validateVariant $ aapVariantId parameters
+        return [ ( "variant", variantErrors )
                , ( "quantity"
                  , [ V.zeroOrPositive $ aapQuantity parameters
                    ]
@@ -215,6 +211,28 @@ anonymousAddRoute = validate >=> \parameters ->
         void . runDB $ upsertBy (UniqueCartItem cartId productVariant)
             (item cartId) [CartItemQuantity +=. quantity]
         return token
+
+
+-- | Ensure a Variant exists, is active, and is not sold out.
+validateVariant :: ProductVariantId -> App [(T.Text, Bool)]
+validateVariant variantId =
+    runDB $ get variantId >>= \case
+        Nothing ->
+            return
+                [ ( "This Product Variant Does Not Exist.", True ) ]
+        Just variant ->
+            let inactiveError =
+                    [ ( "This Product Variant is Inactive."
+                        , not (productVariantIsActive variant)
+                        )
+                    ]
+                soldOutError =
+                    [ ( "This Product Variant is Sold Out."
+                        , productVariantQuantity variant <= 0
+                        )
+                    ]
+            in
+            return $ inactiveError ++ soldOutError
 
 
 -- DETAILS
