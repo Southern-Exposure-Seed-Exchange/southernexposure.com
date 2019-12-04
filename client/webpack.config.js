@@ -10,10 +10,12 @@ var CspHtmlWebpackPlugin = require('csp-html-webpack-plugin');
 var MiniCssExtractPlugin = require('mini-css-extract-plugin');
 var TerserJSPlugin = require('terser-webpack-plugin');
 var OptimizeCSSAssetsPlugin = require('optimize-css-assets-webpack-plugin');
+var RobotsTxtPlugin = require('robotstxt-webpack-plugin');
 
 var isProduction = process.env.NODE_ENV === 'production';
+var isStripeProduction = process.env.STRIPE_ENV === 'production';
 
-var STRIPE_API_KEY = process.env.STRIPE_ENV === 'production'
+var STRIPE_API_KEY = isStripeProduction
   ? 'pk_live_TBFfasfS7K7wBmYGrsbetA4W' : 'pk_test_F6Mr5XLKEDMn4rUsmsv5aqvr';
 
 const GA_MEASUREMENT_ID = 'UA-5070189-1';
@@ -213,6 +215,17 @@ module.exports = {
     }),
     new MiniCssExtractPlugin({
       filename: '[name].[contenthash].css',
+    }),
+    new RobotsTxtPlugin({
+      policy: [
+        { userAgent: "*",
+          crawlDelay: 2,
+          allow: isStripeProduction ? "/" : false,
+          disallow: isStripeProduction ? ["/admin"] : "/"
+        },
+      ],
+      sitemap: "https://www.southernexposure.com/sitemap-index.xml",
+      host: "https://www.southernexposure.com",
     }),
   ],
 
