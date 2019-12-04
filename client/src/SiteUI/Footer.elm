@@ -25,7 +25,6 @@ view =
                 , staticPageLink "privacy" "Privacy Notice"
                 , staticPageLink "conditions" "Conditions of Use"
                 , staticPageLink "contact-us" "Contact Us"
-                , staticPageLink "site-map" "Site Map"
                 ]
 
         importantLinks =

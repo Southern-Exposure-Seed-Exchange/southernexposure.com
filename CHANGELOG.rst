@@ -6,6 +6,7 @@ CHANGELOG
 v1.00.00
 =========
 
+* Remove the Site Map link from the Footer.
 * Fix a bug in the order total calculation for Order Confirmation emails.
 * Fix a bug allowing Customers to add Sold Out or Inactive Product Variants to
   their Cart via the Quick Order page.
