@@ -85,6 +85,9 @@ runCommand args =
             clientAndServerWatching
         ["build"] ->
             productionBuild
+        ["install"] -> do
+            productionBuild
+            installServer
         ["clean"] -> do
             printInfo "Removing Built Files"
             cleanBuiltFiles
@@ -120,6 +123,7 @@ helpText =
     , "watch        (default) Run the Client & Server in Development Mode,"
     , "                       re-building & restarting if source files change."
     , "build                  Build the Client & Server for Production."
+    , "install                Make a Production Build and Install Server to ~/.local/bin"
     , "clean                  Remove All Built Files."
     , "sql                    Launch a PostgreSQL REPL."
     , "server repl            Launch a Haskell REPL."
@@ -262,22 +266,25 @@ productionBuild = do
     printInfo "Building Client"
     clientDirectory <- getClientDirectory
     liftIO $ run "npm" ["run", "build"] clientDirectory printClientOutput
-        >>= exitOnError "Client"
+        >>= exitOnError "Client Built" "Client Build Failed"
     initializeServer
     printInfo "Building Server"
     serverDirectory <- getServerDirectory
     jobCount <- stackJobCount
     liftIO $ run "stack" ["build", "--test", "--pedantic", jobCount, "--color", "always"]
         serverDirectory printServerOutput
-        >>= exitOnError "Server"
-    where exitOnError description =
-            waitForProcess >=> \status ->
-                case status of
-                    ExitSuccess ->
-                        printSuccess $ description ++ " Built"
-                    _ ->
-                        printError (description ++ " Build Failed")
-                        >> liftIO (exitWith status)
+        >>= exitOnError "Server Built" "Server Build Failed"
+
+
+installServer :: Script
+installServer = do
+    printInfo "Installing Server Executables"
+    serverDirectory <- getServerDirectory
+    jobCount <- stackJobCount
+    liftIO $ run "stack" ["install", "--test", "--pedantic", jobCount, "--color", "always"]
+        serverDirectory printServerOutput
+        >>= exitOnError "Server Installed" "Server Install Failed"
+
 
 
 stackSetup :: String -> FilePath -> IO ()
@@ -392,6 +399,15 @@ installDependency cmd args dir outputHandler description =
 getHandle :: (a, b, c, d) -> d
 getHandle (_, _, _, handle) = handle
 
+exitOnError :: String -> String -> ProcessHandle -> IO ()
+exitOnError successDescription failureDescription =
+    waitForProcess >=> \status ->
+        case status of
+            ExitSuccess ->
+                printSuccess successDescription
+            _ ->
+                printError failureDescription
+                >> liftIO (exitWith status)
 
 -- Output Utilities
 
