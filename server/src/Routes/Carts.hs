@@ -8,7 +8,7 @@ module Routes.Carts
     , cartRoutes
     ) where
 
-import Control.Monad ((>=>), void)
+import Control.Monad ((>=>), void, when)
 import Control.Monad.IO.Class (liftIO)
 import Data.Aeson ((.:), (.:?), (.=), FromJSON(..), ToJSON(..), object, withObject)
 import Data.Int (Int64)
@@ -465,7 +465,7 @@ validateItems =
             variants <- getVariantsByItem item
             return
                 ( T.pack . show $ qoiIndex item
-                , [ ("Not a Valid Item Number", null variants) ]
+                , [ ("Product is Invalid, Inactive, or Sold Out", null variants) ]
                 )
 
 upsertQuickOrderItem :: CartId -> QuickOrderItem -> App ()
@@ -474,26 +474,32 @@ upsertQuickOrderItem cartId item = do
     case variants of
         [] ->
             return ()
-        Entity variantId _ : _ ->
+        Entity variantId variant : _ ->
             let
-                quantity =
-                    qoiQuantity item
+                boundedQuantity =
+                    fromIntegral $ max 0
+                        $ min (productVariantQuantity variant)
+                        $ fromIntegral $ qoiQuantity item
                 cartItem =
                     CartItem
                         { cartItemCartId = cartId
                         , cartItemProductVariantId = variantId
-                        , cartItemQuantity = quantity
+                        , cartItemQuantity = boundedQuantity
                         }
             in
-                void . runDB $ upsertBy (UniqueCartItem cartId variantId)
-                    cartItem [CartItemQuantity +=. quantity]
+                when (boundedQuantity > 0) $
+                    void . runDB $ upsertBy (UniqueCartItem cartId variantId)
+                        cartItem [CartItemQuantity +=. boundedQuantity]
 
 getVariantsByItem :: QuickOrderItem -> App [Entity ProductVariant]
 getVariantsByItem item =
     runDB $ E.select $ E.from $ \(v `E.InnerJoin` p) -> do
         E.on $ v E.^. ProductVariantProductId E.==. p E.^. ProductId
         let fullSku = E.lower_ $ p E.^. ProductBaseSku E.++. v E.^. ProductVariantSkuSuffix
-        E.where_ $ fullSku E.==. E.val (T.toLower $ qoiSku item)
+        E.where_ $
+            fullSku E.==. E.val (T.toLower $ qoiSku item) E.&&.
+            v E.^. ProductVariantIsActive E.&&.
+            v E.^. ProductVariantQuantity E.>. E.val 0
         return v
 
 

@@ -6,6 +6,8 @@ CHANGELOG
 v1.00.00
 =========
 
+* Fix a bug allowing Customers to add Sold Out or Inactive Product Variants to
+  their Cart via the Quick Order page.
 * Remove the ``DataMigration`` & ``ImageMigration`` scripts.
 * Automatically generate & serve a ``robots.txt`` file, varying the included
   directives depending on what environment we are deploying to.
