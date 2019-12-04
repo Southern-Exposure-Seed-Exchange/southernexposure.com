@@ -166,8 +166,6 @@ orderTable productData lineItems =
         subTotal =
             sum $ map (\(op, _, _) -> orderProductPrice op * Cents (orderProductQuantity op))
                 productData
-        tax =
-            getOrderTax lineItems
         maybeTaxLine =
             listToMaybe $ filter ((== TaxLine) . orderLineItemType) lineItems
         -- TODO: turn this tuple into a type, & do this in a separate
@@ -196,7 +194,7 @@ orderTable productData lineItems =
 
             ) (Nothing, Nothing, Nothing, Nothing, Nothing, [], []) lineItems
         total =
-            subTotal + tax + sum (map orderLineItemAmount lineItems)
+            getOrderTotal lineItems $ map (\(op, _, _) -> op) productData
     in
         H.table $ do
             H.thead $ H.tr $ do

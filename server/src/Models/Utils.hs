@@ -267,7 +267,6 @@ getLineItemTotal = sum . map
 getOrderTotal :: [OrderLineItem] -> [OrderProduct] -> Cents
 getOrderTotal lineItems products = Cents . fromIntegral $
     integerCents (getOrderSubtotal products)
-        + integerCents (getOrderTax lineItems)
         + getLineItemTotal lineItems
 
 -- | Convert a Cents value into it's integer equivalent.
