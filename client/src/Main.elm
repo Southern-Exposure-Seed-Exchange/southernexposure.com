@@ -1329,12 +1329,18 @@ updateWrapper msg model =
 
                 _ ->
                     Cmd.none
+
+        statusCodeCmd =
+            getStatusCode newModel
+                |> Maybe.map Ports.logStatusCode
+                |> Maybe.withDefault Cmd.none
     in
     if noLoadNeededOrLoadJustFinished then
         ( newModel
         , Cmd.batch
             [ Ports.updatePageMetadata ( Routing.reverse newModel.route, View.pageTitle newModel, View.pageImage newModel )
             , pageDetailsScroll
+            , statusCodeCmd
             , cmd
             ]
         )
@@ -1343,121 +1349,170 @@ updateWrapper msg model =
         ( newModel, cmd )
 
 
+{-| Check if all of the current route's data has been fetched successfully.
+-}
 pageLoadCompleted : Model -> Bool
-pageLoadCompleted { pageData, route } =
-    let
-        checkRemote =
-            RemoteData.isSuccess
+pageLoadCompleted =
+    runOnCurrentWebData
+        (Maybe.map (\wd -> RemoteData.isSuccess wd || RemoteData.isFailure wd)
+            >> Maybe.withDefault True
+        )
 
-        checkPaginate =
-            Paginate.getRemoteData >> RemoteData.isSuccess
+
+{-| Get the status code of the current route's responses.
+-}
+getStatusCode : Model -> Maybe Int
+getStatusCode =
+    runOnCurrentWebData <|
+        Maybe.withDefault (RemoteData.Success ())
+            >> (\webData ->
+                    case webData of
+                        RemoteData.NotAsked ->
+                            Nothing
+
+                        RemoteData.Loading ->
+                            Nothing
+
+                        RemoteData.Success _ ->
+                            Just 200
+
+                        RemoteData.Failure (Http.BadStatus code) ->
+                            Just code
+
+                        RemoteData.Failure Http.Timeout ->
+                            Just 408
+
+                        RemoteData.Failure (Http.BadUrl _) ->
+                            Just 400
+
+                        RemoteData.Failure (Http.BadBody _) ->
+                            Just 422
+
+                        RemoteData.Failure Http.NetworkError ->
+                            Just 503
+               )
+
+
+{-| Run some generic transforming function on the current route's page data.
+-}
+runOnCurrentWebData : (Maybe (WebData ()) -> b) -> Model -> b
+runOnCurrentWebData runner { pageData, route } =
+    let
+        paginateRunner =
+            Paginate.getRemoteData >> RemoteData.map (always ()) >> Just >> runner
+
+        justRunner =
+            RemoteData.map (always ()) >> Just >> runner
+
+        nothingRunner =
+            runner Nothing
     in
     case route of
         ProductDetails _ ->
-            checkRemote pageData.productDetails
+            justRunner pageData.productDetails
 
         CategoryDetails _ _ ->
-            checkPaginate pageData.categoryDetails
+            paginateRunner pageData.categoryDetails
 
         AdvancedSearch ->
-            checkRemote pageData.advancedSearch
+            justRunner pageData.advancedSearch
 
         SearchResults _ _ ->
-            checkPaginate pageData.searchResults
+            paginateRunner pageData.searchResults
 
         PageDetails _ _ ->
-            checkRemote pageData.pageDetails
+            justRunner pageData.pageDetails
 
         CreateAccount ->
-            True
+            nothingRunner
 
         CreateAccountSuccess ->
-            True
+            nothingRunner
 
         Login _ ->
-            True
+            nothingRunner
 
         ResetPassword _ ->
-            True
+            nothingRunner
 
         MyAccount ->
             RemoteData.map2 Tuple.pair pageData.locations pageData.myAccount
-                |> checkRemote
+                |> justRunner
 
         EditLogin ->
-            True
+            nothingRunner
 
         EditAddress ->
             RemoteData.map2 Tuple.pair pageData.locations pageData.addressDetails
-                |> checkRemote
+                |> justRunner
 
         OrderDetails _ ->
             RemoteData.map2 Tuple.pair pageData.locations pageData.orderDetails
-                |> checkRemote
+                |> justRunner
 
         Cart ->
-            checkRemote pageData.cartDetails
+            justRunner pageData.cartDetails
 
         QuickOrder ->
-            True
+            nothingRunner
 
         Checkout ->
             RemoteData.map2 Tuple.pair pageData.locations pageData.checkoutDetails
-                |> checkRemote
+                |> justRunner
 
         CheckoutSuccess _ _ ->
             RemoteData.map2 Tuple.pair pageData.locations pageData.orderDetails
-                |> checkRemote
+                |> justRunner
 
         Admin Dashboard ->
-            True
+            nothingRunner
 
         Admin CategoryList ->
-            checkRemote pageData.adminCategoryList
+            justRunner pageData.adminCategoryList
 
         Admin CategoryNew ->
-            checkRemote pageData.adminNewCategory
+            justRunner pageData.adminNewCategory
 
         Admin (CategoryEdit _) ->
             RemoteData.map2 Tuple.pair pageData.adminNewCategory pageData.adminEditCategory
-                |> checkRemote
+                |> justRunner
 
         Admin PageList ->
-            checkRemote pageData.adminPageList
+            justRunner pageData.adminPageList
 
         Admin PageNew ->
-            True
+            nothingRunner
 
         Admin (PageEdit _) ->
-            checkRemote pageData.adminEditPage
+            justRunner pageData.adminEditPage
 
         Admin (OrderList _) ->
-            checkRemote pageData.locations
+            justRunner pageData.locations
 
         Admin (AdminOrderDetails _) ->
             RemoteData.map2 Tuple.pair pageData.locations pageData.adminOrderDetails
-                |> checkRemote
+                |> justRunner
 
         Redirect _ ->
-            True
+            nothingRunner
 
         NotFound ->
-            True
+            nothingRunner
 
         Admin (CustomerList _) ->
-            checkPaginate pageData.adminCustomerList
+            paginateRunner pageData.adminCustomerList
 
         Admin (CustomerEdit _) ->
-            checkRemote pageData.adminEditCustomer
+            justRunner pageData.adminEditCustomer
 
         Admin ProductList ->
-            checkRemote pageData.adminProductList
+            justRunner pageData.adminProductList
 
         Admin ProductNew ->
-            checkRemote pageData.adminSharedProduct
+            justRunner pageData.adminSharedProduct
 
         Admin (ProductEdit _) ->
-            checkRemote pageData.adminSharedProduct
+            justRunner pageData.adminSharedProduct
 
 
 {-| Update the current page number using the Paginated data.

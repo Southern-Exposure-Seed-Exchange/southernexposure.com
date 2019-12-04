@@ -166,6 +166,19 @@ app.ports.logPurchase.subscribe(function(purchaseData) {
   gtag('event', 'purchase', purchaseData);
 });
 
+/* Log the Status Code for the Prerender Server */
+app.ports.logStatusCode.subscribe(function(code) {
+  var metaElement = document.querySelector('meta[name="prerender-status-code"');
+  if (metaElement !== null) {
+    metaElement.setAttribute('content', code);
+  } else {
+    metaElement = document.createElement("meta");
+    metaElement.setAttribute('name', 'prerender-status-code');
+    metaElement.setAttribute('content', code);
+    document.getElementsByTagName('head')[0].appendChild(metaElement);
+  }
+});
+
 
 /** UTILITIES **/
 

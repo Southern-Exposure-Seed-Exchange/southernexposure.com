@@ -6,6 +6,7 @@ CHANGELOG
 v1.00.00
 =========
 
+* Trigger proper status codes when prerender pages for web bots/crawlers.
 * Set Order Statuses to ``Processing`` after they have been exported to
   StoneEdge.
 * Fix scrolling to anchor links on Static Pages.

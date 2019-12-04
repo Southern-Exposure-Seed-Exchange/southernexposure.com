@@ -3,6 +3,7 @@ port module Ports exposing
     , collapseMobileMenus
     , collectStripeToken
     , logPurchase
+    , logStatusCode
     , loggedIn
     , loggedOut
     , newCartSessionToken
@@ -110,6 +111,9 @@ port stripeTokenReceived : (String -> msg) -> Sub msg
 
 
 port logPurchase : Value -> Cmd msg
+
+
+port logStatusCode : Int -> Cmd msg
 
 
 {-| Send the URL, Title, & an Optional Image for updating Analytics & SEO tags.
