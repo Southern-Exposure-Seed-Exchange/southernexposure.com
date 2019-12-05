@@ -116,7 +116,8 @@ productListRoute t = withAdminCookie t $ \_ -> runDB $ do
         foldr (\(Entity cId c) m -> M.insert cId (categoryName c) m) M.empty
     getProducts :: AppSQL [(Entity Product, E.Value Bool)]
     getProducts =
-        E.select $ E.from $ \p ->
+        E.select $ E.from $ \p -> do
+            E.orderBy [E.asc $ p E.^. ProductBaseSku]
             return (p, activeVariantExists p )
     makeProduct :: M.Map CategoryId T.Text -> (Entity Product, E.Value Bool) -> ListProduct
     makeProduct nameMap (Entity pId prod, isActive) =
