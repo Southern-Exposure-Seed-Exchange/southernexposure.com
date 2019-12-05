@@ -273,6 +273,9 @@ adminView route =
                         ( ProductEdit _, _ ) ->
                             False
 
+                        ( CouponList, _ ) ->
+                            False
+
                 _ ->
                     False
     in
@@ -296,6 +299,7 @@ adminView route =
                     , navItem "Pages" PageList
                     , navItem "Orders" <| OrderList { page = 1, perPage = 50, query = "" }
                     , navItem "Customers" <| CustomerList { page = 1, perPage = 50, query = "" }
+                    , navItem "Coupons" CouponList
                     ]
                 ]
             ]

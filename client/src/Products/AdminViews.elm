@@ -79,20 +79,13 @@ updateListForm msg model =
 list : ListForm -> PageData.AdminProductListData -> List (Html ListMsg)
 list listForm { products } =
     let
-        activeIcon isActive =
-            if isActive then
-                icon "check-circle text-success"
-
-            else
-                icon "times-circle text-danger"
-
         renderProduct { id, name, baseSku, categories, isActive } =
             tr []
                 [ td [] [ text <| (\(ProductId i) -> String.fromInt i) id ]
                 , td [] [ text baseSku ]
                 , td [] [ text name ]
                 , td [] [ text <| String.join ", " categories ]
-                , td [ class "text-center" ] [ activeIcon isActive ]
+                , td [ class "text-center" ] [ Admin.activeIcon isActive ]
                 , td []
                     [ a (routeLinkAttributes <| Admin <| ProductEdit id)
                         [ text "Edit" ]

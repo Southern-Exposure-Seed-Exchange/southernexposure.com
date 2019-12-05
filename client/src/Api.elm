@@ -92,6 +92,7 @@ type Endpoint
     | AdminNewProduct
     | AdminEditProductData ProductId
     | AdminEditProduct
+    | AdminCouponList
 
 
 toUrl : Endpoint -> String
@@ -271,6 +272,9 @@ toUrl endpoint =
 
                 AdminEditProduct ->
                     joinPath [ "admin", "products", "edit" ]
+
+                AdminCouponList ->
+                    joinPath [ "admin", "coupons", "list" ]
     in
     "/api" ++ endpointUrl
 

@@ -35,6 +35,7 @@ import SiteUI.Navigation as SiteNavigation
 import SiteUI.Sidebar as SiteSidebar
 import StaticPage exposing (StaticPage)
 import User
+import Views.CouponAdmin as CouponAdmin
 import Views.CustomerAdmin as CustomerAdmin
 import Views.Images exposing (media)
 import Views.OrderAdmin as OrderAdmin
@@ -227,6 +228,9 @@ view ({ route, pageData, navigationData, zone } as model) =
                 Admin (ProductEdit _) ->
                     withIntermediateText (ProductAdmin.editForm model.editProductForm) pageData.adminSharedProduct
                         |> List.map (Html.map EditProductMsg)
+
+                Admin CouponList ->
+                    withIntermediateText (CouponAdmin.list zone) pageData.adminCouponList
 
         apply : (a -> b -> c) -> ( a, b ) -> c
         apply f ( a, b ) =
@@ -426,6 +430,9 @@ adminTitle ({ pageData } as model) adminRoute =
                 |> RemoteData.toMaybe
                 |> Maybe.withDefault ""
                 |> (\name -> "Edit Product" ++ name)
+
+        CouponList ->
+            "Coupons"
 
 
 pageImage : Model -> Maybe String

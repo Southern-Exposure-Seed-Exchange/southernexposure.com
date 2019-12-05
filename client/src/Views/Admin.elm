@@ -1,5 +1,6 @@
 module Views.Admin exposing
     ( SearchableTableConfig
+    , activeIcon
     , base64ImagePreview
     , encodeImageData
     , equalsOriginal
@@ -26,6 +27,17 @@ import Task
 import Views.HorizontalForm as Form
 import Views.Pager as Pager
 import Views.Utils exposing (icon)
+
+
+{-| Render a Green Checkmark for Active items & a Red X for Inactive Ones.
+-}
+activeIcon : Bool -> Html msg
+activeIcon isActive =
+    if isActive then
+        icon "check-circle text-success"
+
+    else
+        icon "times-circle text-danger"
 
 
 {-| Show a submit button, or a disabled saving button with a spinner if the

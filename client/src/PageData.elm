@@ -2,10 +2,12 @@ module PageData exposing
     ( AddressDetails
     , AdminCategoryListData
     , AdminComment
+    , AdminCouponListData
     , AdminEditCategoryData
     , AdminEditCustomerData
     , AdminEditPageData
     , AdminListCategory(..)
+    , AdminListCoupon
     , AdminListPage
     , AdminListProduct
     , AdminNewCategoryData
@@ -20,6 +22,7 @@ module PageData exposing
     , CartItemId(..)
     , CategoryDetails
     , CheckoutDetails
+    , CouponType(..)
     , CustomerData
     , LineItemType(..)
     , MyAccount
@@ -35,6 +38,7 @@ module PageData exposing
     , SearchResults
     , addressDetailsDecoder
     , adminCategoryListDataDecoder
+    , adminCouponListDataDecoder
     , adminEditCategoryDataDecoder
     , adminEditCustomerDataDecoder
     , adminEditPageDataDecoder
@@ -112,6 +116,7 @@ type alias PageData =
     , adminEditCustomer : WebData AdminEditCustomerData
     , adminProductList : WebData AdminProductListData
     , adminSharedProduct : WebData AdminSharedProductData
+    , adminCouponList : WebData AdminCouponListData
     }
 
 
@@ -162,6 +167,7 @@ initial =
     , adminEditCustomer = RemoteData.NotAsked
     , adminProductList = RemoteData.NotAsked
     , adminSharedProduct = RemoteData.NotAsked
+    , adminCouponList = RemoteData.NotAsked
     }
 
 
@@ -949,6 +955,69 @@ adminProductCategoryDecoder =
     Decode.map2 AdminProductCategory
         (Decode.field "id" <| Decode.map CategoryId Decode.int)
         (Decode.field "name" Decode.string)
+
+
+
+-- Coupon Admin
+
+
+type alias AdminCouponListData =
+    { coupons : List AdminListCoupon }
+
+
+adminCouponListDataDecoder : Decoder AdminCouponListData
+adminCouponListDataDecoder =
+    Decode.map AdminCouponListData
+        (Decode.field "coupons" <| Decode.list adminListCouponDecoder)
+
+
+type alias AdminListCoupon =
+    { id : Int
+    , code : String
+    , name : String
+    , isActive : Bool
+    , discount : CouponType
+    , expires : Posix
+    }
+
+
+adminListCouponDecoder : Decoder AdminListCoupon
+adminListCouponDecoder =
+    Decode.map6 AdminListCoupon
+        (Decode.field "id" Decode.int)
+        (Decode.field "code" Decode.string)
+        (Decode.field "name" Decode.string)
+        (Decode.field "isActive" Decode.bool)
+        (Decode.field "type" couponTypeDecoder)
+        (Decode.field "expires" Iso8601.decoder)
+
+
+type CouponType
+    = FlatDiscount Cents
+    | PercentageDiscount Int
+    | FreeShipping
+
+
+couponTypeDecoder : Decoder CouponType
+couponTypeDecoder =
+    Decode.field "type" Decode.string
+        |> Decode.andThen
+            (\type_ ->
+                case type_ of
+                    "flat" ->
+                        Decode.map FlatDiscount
+                            (Decode.field "amount" centsDecoder)
+
+                    "percentage" ->
+                        Decode.map PercentageDiscount
+                            (Decode.field "amount" Decode.int)
+
+                    "shipping" ->
+                        Decode.succeed FreeShipping
+
+                    _ ->
+                        Decode.fail <| "couponTypeDecoder: Unknown coupon type: " ++ type_
+            )
 
 
 

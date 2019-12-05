@@ -343,6 +343,11 @@ fetchDataForRoute ({ route, pageData, key } as model) =
                         ]
                     )
 
+                Admin CouponList ->
+                    ( { pageData | adminCouponList = RemoteData.Loading }
+                    , getAdminCouponList
+                    )
+
                 Redirect path ->
                     ( pageData
                     , Browser.Navigation.load path
@@ -641,6 +646,13 @@ getAdminEditProductData productId =
     Api.get (Api.AdminEditProductData productId)
         |> Api.withJsonResponse decoder
         |> Api.sendRequest GetAdminEditProductData
+
+
+getAdminCouponList : Cmd Msg
+getAdminCouponList =
+    Api.get Api.AdminCouponList
+        |> Api.withJsonResponse PageData.adminCouponListDataDecoder
+        |> Api.sendRequest GetAdminCouponList
 
 
 
@@ -1307,6 +1319,13 @@ update msg ({ pageData, key } as model) =
             , Cmd.none
             )
 
+        GetAdminCouponList response ->
+            let
+                updatedPageData =
+                    { pageData | adminCouponList = response }
+            in
+            ( { model | pageData = updatedPageData }, Cmd.none )
+
 
 {-| Wrap the normal update function, checking to see if the page has finished
 loading all it's dependent data. If so, run ports that should fire once a page
@@ -1514,6 +1533,9 @@ runOnCurrentWebData runner { pageData, route } =
         Admin (ProductEdit _) ->
             justRunner pageData.adminSharedProduct
 
+        Admin CouponList ->
+            justRunner pageData.adminCouponList
+
 
 {-| Update the current page number using the Paginated data.
 
@@ -1622,6 +1644,9 @@ resetForm oldRoute model =
 
                 ProductEdit _ ->
                     { model | editProductForm = ProductAdmin.initialEditForm }
+
+                CouponList ->
+                    model
     in
     case oldRoute of
         ProductDetails _ ->

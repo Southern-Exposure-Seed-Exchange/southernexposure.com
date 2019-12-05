@@ -174,6 +174,9 @@ view route pageData =
                     , activeItem "Edit Product"
                     ]
 
+                Admin CouponList ->
+                    singleItem "Coupons"
+
                 Redirect _ ->
                     singleItem "Redirecting..."
 

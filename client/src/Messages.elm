@@ -98,3 +98,4 @@ type Msg
     | GetAdminProductList (WebData PageData.AdminProductListData)
     | GetAdminSharedProductData (WebData PageData.AdminSharedProductData)
     | GetAdminEditProductData (WebData ( ProductAdmin.Form, ProductId ))
+    | GetAdminCouponList (WebData PageData.AdminCouponListData)
