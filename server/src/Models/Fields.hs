@@ -426,6 +426,23 @@ data CouponType
 
 derivePersistField "CouponType"
 
+instance ToJSON CouponType where
+    toJSON = \case
+        FlatDiscount amount ->
+            object
+                [ "type" .= ("flat" :: T.Text)
+                , "amount" .= amount
+                ]
+        PercentageDiscount percent ->
+            object
+                [ "type" .= ("percentage" :: T.Text)
+                , "amount" .= percent
+                ]
+        FreeShipping ->
+            object
+                [ "type" .= ("shipping" :: T.Text)
+                ]
+
 
 
 -- ORDERS
