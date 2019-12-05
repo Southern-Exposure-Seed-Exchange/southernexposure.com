@@ -29,38 +29,44 @@ connectToPostgres :: IO ConnectionPool
 connectToPostgres =
     runNoLoggingT $ createPostgresqlPool "dbname=sese-website" 1
 
-getProductData :: SqlPersistT IO [(Entity Product, Entity ProductVariant, [Entity Category])]
+getProductData :: SqlPersistT IO [(Entity Product, Entity ProductVariant, Maybe (Entity SeedAttribute), [Entity Category])]
 getProductData = do
     categoryCache <- syncCategoryPredecessorCache
-    products <- E.select $ E.from $ \(p `E.InnerJoin` v `E.InnerJoin` c) -> do
+    products <- E.select $ E.from $ \(p `E.InnerJoin` v `E.InnerJoin` c `E.LeftOuterJoin` sa) -> do
+        E.on $ sa E.?. SeedAttributeProductId E.==. E.just (p E.^. ProductId)
         E.on $ c E.^. CategoryId E.==. p E.^. ProductMainCategory
         E.on $ v E.^. ProductVariantProductId E.==. p E.^. ProductId
         E.where_ $ v E.^. ProductVariantIsActive
-        return (p, v, c)
+        return (p, v, sa, c)
     return $ map (addCategoryParents categoryCache) products
   where
-    addCategoryParents cache (p, v, c@(Entity categoryId _)) =
-        (p, v, reverse $ c : queryCategoryPredecessorCache categoryId cache)
+    addCategoryParents cache (p, v, sa, c@(Entity categoryId _)) =
+        (p, v, sa, reverse $ c : queryCategoryPredecessorCache categoryId cache)
 
 
 data ExportData =
     ExportData
         { fullSku :: T.Text
         , name :: T.Text
+        , isOrganic :: T.Text
         , categories :: T.Text
         } deriving (Show, Generic)
 
 instance ToNamedRecord ExportData
 instance DefaultOrdered ExportData where
-    headerOrder _ = header ["fullSku", "name", "categories"]
+    headerOrder _ = header ["fullSku", "name", "isOrganic", "categories"]
 
-makeExportData :: (Entity Product, Entity ProductVariant, [Entity Category]) -> ExportData
-makeExportData (Entity _ prod, Entity _ variant, categories_) =
+makeExportData :: (Entity Product, Entity ProductVariant, Maybe (Entity SeedAttribute), [Entity Category]) -> ExportData
+makeExportData (Entity _ prod, Entity _ variant, maybeAttribute, categories_) =
     ExportData
         { fullSku = productBaseSku prod <> productVariantSkuSuffix variant
         , name = productName prod <> maybe "" ((", " <>) . renderLotSize) (productVariantLotSize variant)
+        , isOrganic = getOrganicStatus maybeAttribute
         , categories = T.intercalate " > " $ map (categoryName . entityVal) categories_
         }
+  where
+    getOrganicStatus =
+        maybe "No" (\sa -> if seedAttributeIsOrganic $ entityVal sa then "Yes" else "No")
 
 exportData :: [ExportData] -> IO ()
 exportData rows =
