@@ -7,28 +7,38 @@ module Routes.Admin.Coupons
     , couponRoutes
     ) where
 
-import Data.Aeson (ToJSON(..), (.=), object)
-import Data.Time (UTCTime)
-import Database.Persist (Entity(..), SelectOpt(Desc), selectList)
-import Servant ((:>), AuthProtect, Get, JSON)
+import Control.Monad.IO.Class (liftIO)
+import Data.Aeson (ToJSON(..), FromJSON(..), Value(String), (.=), (.:), object, withObject, withText)
+import Data.Time
+    ( UTCTime, LocalTime(..), localTimeToUTC, getCurrentTimeZone
+    , getCurrentTime
+    )
+import Database.Persist (Entity(..), SelectOpt(Desc), selectList, insert)
+import Numeric.Natural (Natural)
+import Servant ((:<|>)(..), (:>), AuthProtect, ReqBody, Get, Post, JSON)
 
-import Auth (Cookied, WrappedAuthToken, withAdminCookie)
-import Models (EntityField(..), Coupon(..), CouponId)
-import Models.Fields (CouponType(..))
+import Auth (Cookied, WrappedAuthToken, withAdminCookie, validateAdminAndParameters)
+import Models (EntityField(..), Unique(..), Coupon(..), CouponId)
+import Models.Fields (Cents, CouponType(..))
 import Server (App, runDB)
+import Validation (Validation(..))
 
 import qualified Data.Text as T
+import qualified Validation as V
 
 
 type CouponAPI =
          "list" :> CouponListRoute
+    :<|> "new" :> NewCouponRoute
 
 type CouponRoutes =
          (WrappedAuthToken -> App (Cookied CouponListData))
+    :<|> (WrappedAuthToken -> NewCouponParameters -> App (Cookied CouponId))
 
 couponRoutes :: CouponRoutes
 couponRoutes =
          couponListRoute
+    :<|> newCouponRoute
 
 
 -- LIST
@@ -83,3 +93,73 @@ couponListRoute = flip withAdminCookie $ const $
             , lcType = couponDiscount
             , lcExpiration = couponExpirationDate
             }
+
+
+-- NEW
+
+type NewCouponRoute =
+       AuthProtect "cookie-auth"
+    :> ReqBody '[JSON] NewCouponParameters
+    :> Post '[JSON] (Cookied CouponId)
+
+data NewCouponParameters =
+    NewCouponParameters
+        { ncpCode :: T.Text
+        , ncpName :: T.Text
+        , ncpDescription :: T.Text
+        , ncpIsActive :: Bool
+        , ncpDiscount :: CouponType
+        , ncpMinimumOrder :: Cents
+        , ncpExpirationDate :: LocalTime
+        -- ^ Send an ISO8601 UTC Datetime(with a trailing `Z`)
+        , ncpTotalUses :: Natural
+        , ncpUsesPerCustomer :: Natural
+        } deriving (Show)
+
+instance FromJSON NewCouponParameters where
+    parseJSON = withObject "NewCouponParameters" $ \v -> do
+        ncpCode <- v .: "code"
+        ncpName <- v .: "name"
+        ncpDescription <- v .: "description"
+        ncpIsActive <- v .: "isActive"
+        ncpDiscount <- v .: "discount"
+        ncpMinimumOrder <- v .: "minimumOrder"
+        ncpExpirationDate <- v .: "expires" >>= parseExpires
+        ncpTotalUses <- v .: "totalUses"
+        ncpUsesPerCustomer <- v .: "usesPerCustomer"
+        return NewCouponParameters {..}
+      where
+        -- Drop the trailing `Z` from the ISO8601 UTC datetime so the
+        -- parsing of LocalTime will succeed.
+        parseExpires =
+            withText "expires" (parseJSON . String . T.dropEnd 1)
+
+instance Validation NewCouponParameters where
+    validators NewCouponParameters {..} = do
+        codeDoesntExist <- V.doesntExist $ UniqueCoupon ncpCode
+        return
+            [ ( "code"
+              , [ V.required ncpCode
+                , ( "A Coupon with this Code already exists.", codeDoesntExist )
+                ]
+              )
+            , ( "name", [ V.required ncpName ] )
+            ]
+
+newCouponRoute :: WrappedAuthToken -> NewCouponParameters -> App (Cookied CouponId)
+newCouponRoute = validateAdminAndParameters $ \_ NewCouponParameters {..} -> do
+    currentTime <- liftIO getCurrentTime
+    timeZone <- liftIO getCurrentTimeZone
+    let expiration = localTimeToUTC timeZone ncpExpirationDate
+    runDB $ insert Coupon
+        { couponCode = ncpCode
+        , couponName = ncpName
+        , couponDescription = ncpDescription
+        , couponIsActive = ncpIsActive
+        , couponDiscount = ncpDiscount
+        , couponMinimumOrder = ncpMinimumOrder
+        , couponExpirationDate = expiration
+        , couponTotalUses = ncpTotalUses
+        , couponUsesPerCustomer = ncpUsesPerCustomer
+        , couponCreatedAt = currentTime
+        }

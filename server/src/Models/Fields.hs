@@ -422,7 +422,7 @@ data CouponType
     = FlatDiscount Cents
     | PercentageDiscount Percent    -- ^ Percent field is whole percentage(`5 == 5`).
     | FreeShipping
-    deriving (Show, Read, Generic)
+    deriving (Show, Read, Eq, Generic)
 
 derivePersistField "CouponType"
 
@@ -443,6 +443,17 @@ instance ToJSON CouponType where
                 [ "type" .= ("shipping" :: T.Text)
                 ]
 
+instance FromJSON CouponType where
+    parseJSON = withObject "CouponType" $ \v ->
+        v .: "type" >>= \case
+            ("flat" :: T.Text) ->
+                FlatDiscount <$> v .: "amount"
+            "percentage" ->
+                PercentageDiscount <$> v .: "amount"
+            "shipping" ->
+                return FreeShipping
+            str ->
+                fail $ "Unexpected CouponType: " ++ T.unpack str
 
 
 -- ORDERS

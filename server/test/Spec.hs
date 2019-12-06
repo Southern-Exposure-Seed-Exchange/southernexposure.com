@@ -54,6 +54,7 @@ modelsFields :: TestTree
 modelsFields =
     testGroup "Models.Fields Module"
         [ testProperty "LotSize Aeson Instances" $ testJSON genLotSize
+        , testProperty "CouponType Aeson Instances" $ testJSON genCouponType
         ]
   where
       testJSON gen = property $ do
