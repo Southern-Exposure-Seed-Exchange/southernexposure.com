@@ -214,7 +214,7 @@ list routeConstructor pagination addToCartForms products =
 
 
 renderMobileProductBlock : CartFormData -> ( Product, Dict Int ProductVariant, Maybe SeedAttribute ) -> Html Msg
-renderMobileProductBlock { maybeSelectedVariantId, maybeSelectedVariant, variantSelect, selectedItemNumber, quantity, isOutOfStock, isLimitedAvailablity } ( product, variants, maybeSeedAttribute ) =
+renderMobileProductBlock { maybeSelectedVariantId, maybeSelectedVariant, variantSelect, selectedItemNumber, quantity, isOutOfStock, isLimitedAvailablity, requestFeedback } ( product, variants, maybeSeedAttribute ) =
     let
         formAttributes =
             (::) (class "row product-block") <|
@@ -246,6 +246,7 @@ renderMobileProductBlock { maybeSelectedVariantId, maybeSelectedVariant, variant
                     [ button [ class "btn btn-primary btn-block", type_ "submit" ]
                         [ text "Add to Cart" ]
                     ]
+                , div [ class "col-12 mt-3 text-center" ] [ Html.map never requestFeedback ]
                 ]
 
         availabilityBadge =

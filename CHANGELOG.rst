@@ -3,6 +3,13 @@ CHANGELOG
 =========
 
 
+v1.01.00
+=========
+
+* Fix a bug causing the "Adding to Cart.." loading text to not be shown on
+  mobile devices.
+
+
 v1.00.00
 =========
 
