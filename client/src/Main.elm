@@ -41,6 +41,7 @@ import Update.Utils exposing (batchCommand, discardCommand, extraCommand, noComm
 import Url exposing (Url)
 import User exposing (AuthStatus)
 import View exposing (view)
+import Views.CouponAdmin as CouponAdmin
 import Views.CustomerAdmin as CustomerAdmin
 import Views.OrderAdmin as OrderAdmin
 import Views.StaticPageAdmin as StaticPageAdmin
@@ -347,6 +348,9 @@ fetchDataForRoute ({ route, pageData, key } as model) =
                     ( { pageData | adminCouponList = RemoteData.Loading }
                     , getAdminCouponList
                     )
+
+                Admin CouponNew ->
+                    doNothing
 
                 Redirect path ->
                     ( pageData
@@ -1012,6 +1016,11 @@ update msg ({ pageData, key } as model) =
                 |> Tuple.mapFirst (\form -> { model | editProductForm = form })
                 |> Tuple.mapSecond (Cmd.map EditProductMsg)
 
+        NewCouponMsg subMsg ->
+            CouponAdmin.updateNewForm subMsg model.newCouponForm
+                |> Tuple.mapFirst (\form -> { model | newCouponForm = form })
+                |> Tuple.mapSecond (Cmd.map NewCouponMsg)
+
         ReAuthorize response ->
             case response of
                 RemoteData.Success authStatus ->
@@ -1536,6 +1545,9 @@ runOnCurrentWebData runner { pageData, route } =
         Admin CouponList ->
             justRunner pageData.adminCouponList
 
+        Admin CouponNew ->
+            nothingRunner
+
 
 {-| Update the current page number using the Paginated data.
 
@@ -1647,6 +1659,9 @@ resetForm oldRoute model =
 
                 CouponList ->
                     model
+
+                CouponNew ->
+                    { model | newCouponForm = CouponAdmin.initialNewForm }
     in
     case oldRoute of
         ProductDetails _ ->

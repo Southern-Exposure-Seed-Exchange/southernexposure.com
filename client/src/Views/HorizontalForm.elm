@@ -2,6 +2,7 @@ module Views.HorizontalForm exposing
     ( checkboxRow
     , genericErrorText
     , inputRow
+    , selectElement
     , selectRow
     , submitButton
     , textareaRow
@@ -158,9 +159,19 @@ checkboxRow value msg labelText name_ =
 
 selectRow : (String -> Result String a) -> (a -> msg) -> String -> Bool -> List (Html msg) -> Html msg
 selectRow parser msg labelText isRequired options =
+    selectElement labelText "" parser msg options
+        |> List.singleton
+        |> withLabel labelText isRequired
+
+
+{-| Make a `select` element without embedding it in row or label. Used for form
+rows with multiple inputs.
+-}
+selectElement : String -> String -> (String -> Result String a) -> (a -> msg) -> List (Html msg) -> Html msg
+selectElement name_ classes parser msg options =
     let
         inputId =
-            "input" ++ String.filter (\c -> c /= ' ') labelText
+            "input" ++ String.filter (\c -> c /= ' ') name_
 
         onSelect =
             targetValue
@@ -176,9 +187,13 @@ selectRow parser msg labelText isRequired options =
                 Err e ->
                     Decode.fail e
     in
-    select [ id inputId, class "form-control", onSelect ] options
-        |> List.singleton
-        |> withLabel labelText isRequired
+    select
+        [ id inputId
+        , name name_
+        , class <| "form-control " ++ classes
+        , onSelect
+        ]
+        options
 
 
 withLabel : String -> Bool -> List (Html msg) -> Html msg

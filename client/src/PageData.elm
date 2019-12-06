@@ -55,6 +55,7 @@ module PageData exposing
     , categoryConfig
     , categoryDetailsDecoder
     , checkoutDetailsDecoder
+    , couponTypeEncoder
     , customersConfig
     , initial
     , isFreeCheckout
@@ -76,8 +77,9 @@ import Category exposing (Category, CategoryId(..))
 import Dict exposing (Dict)
 import Iso8601
 import Json.Decode as Decode exposing (Decoder)
+import Json.Encode as Encode exposing (Value)
 import Locations exposing (AddressLocations)
-import Models.Fields exposing (Cents(..), ImageData, LotSize, centsDecoder, centsMap, centsMap2, imageDecoder, lotSizeDecoder)
+import Models.Fields exposing (Cents(..), ImageData, LotSize, centsDecoder, centsEncoder, centsMap, centsMap2, imageDecoder, lotSizeDecoder)
 import Paginate exposing (Paginated)
 import Product exposing (Product, ProductId, ProductVariant, ProductVariantId(..), variantPrice)
 import Products.Pagination as Pagination
@@ -1018,6 +1020,25 @@ couponTypeDecoder =
                     _ ->
                         Decode.fail <| "couponTypeDecoder: Unknown coupon type: " ++ type_
             )
+
+
+couponTypeEncoder : CouponType -> Value
+couponTypeEncoder type_ =
+    let
+        ( typeField, amountField ) =
+            case type_ of
+                FreeShipping ->
+                    ( "shipping", [] )
+
+                PercentageDiscount percent ->
+                    ( "percentage", [ ( "amount", Encode.int percent ) ] )
+
+                FlatDiscount amount ->
+                    ( "flat", [ ( "amount", centsEncoder amount ) ] )
+    in
+    Encode.object <|
+        ( "type", Encode.string typeField )
+            :: amountField
 
 
 

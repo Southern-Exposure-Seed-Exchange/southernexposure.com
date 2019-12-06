@@ -232,6 +232,10 @@ view ({ route, pageData, navigationData, zone } as model) =
                 Admin CouponList ->
                     withIntermediateText (CouponAdmin.list zone) pageData.adminCouponList
 
+                Admin CouponNew ->
+                    CouponAdmin.new model.newCouponForm
+                        |> List.map (Html.map NewCouponMsg)
+
         apply : (a -> b -> c) -> ( a, b ) -> c
         apply f ( a, b ) =
             f a b
@@ -433,6 +437,9 @@ adminTitle ({ pageData } as model) adminRoute =
 
         CouponList ->
             "Coupons"
+
+        CouponNew ->
+            "New Coupon"
 
 
 pageImage : Model -> Maybe String

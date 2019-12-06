@@ -2,7 +2,7 @@ module Validation exposing
     ( FormValidation, formValidation, mapFormErrors, mergeFormValidation, addFormError, indexedValidation
     , FormErrors, mapFieldNames
     , Validation, succeed, map, apply, fromMaybe
-    , int, cents, milligrams
+    , int, natural, cents, milligrams, date
     )
 
 {-| This module allows us to validate & transform strings received from input
@@ -23,7 +23,7 @@ elements.
 
 @docs Validation, succeed, map, apply, fromMaybe
 
-@docs int, cents, milligrams
+@docs int, natural, cents, milligrams, date
 
 TODO: Move the FormErrors types & manipulation functions from the Api module to
 here.
@@ -32,7 +32,9 @@ here.
 
 import Api
 import Dict
+import Iso8601
 import Models.Fields exposing (Cents, Milligrams, centsFromString, milligramsFromString)
+import Time exposing (Posix)
 
 
 {-| The result of a form validation.
@@ -188,6 +190,22 @@ int =
     String.toInt >> fromMaybe "Please enter a whole number."
 
 
+{-| Validate a String is a whole number greater than or equal to zero.
+-}
+natural : String -> Validation Int
+natural str =
+    case String.toInt str of
+        Nothing ->
+            Err "Please enter a whole number."
+
+        Just x ->
+            if x >= 0 then
+                Ok x
+
+            else
+                Err "Please enter a number greater than or equal to 0."
+
+
 {-| Validate a dollar amount.
 -}
 cents : String -> Validation Cents
@@ -200,6 +218,13 @@ cents =
 milligrams : String -> Validation Milligrams
 milligrams =
     milligramsFromString >> fromMaybe "Please enter a valid decimal amount."
+
+
+{-| Validate a YYYY-MM-DD date from a `date` input.
+-}
+date : String -> Validation Posix
+date =
+    Iso8601.toTime >> Result.mapError (always <| "Please enter a valid YYYY-MM-DD date.")
 
 
 {-| Transform a Maybe type into a Validation by using the given error message

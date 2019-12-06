@@ -23,6 +23,7 @@ import Search
 import SiteUI exposing (NavigationData)
 import Time
 import User exposing (AuthStatus)
+import Views.CouponAdmin as CouponAdmin
 import Views.CustomerAdmin as CustomerAdmin
 import Views.OrderAdmin as OrderAdmin
 import Views.StaticPageAdmin as StaticPageAdmin
@@ -54,6 +55,7 @@ type alias Model =
     , productListForm : ProductAdmin.ListForm
     , newProductForm : ProductAdmin.NewForm
     , editProductForm : ProductAdmin.EditForm
+    , newCouponForm : CouponAdmin.NewForm
     , cartItemCount : Int
     , maybeSessionToken : Maybe String
     , currentUser : AuthStatus
@@ -97,6 +99,7 @@ initial key route =
     , productListForm = ProductAdmin.initialListForm
     , newProductForm = ProductAdmin.initialNewForm
     , editProductForm = ProductAdmin.initialEditForm
+    , newCouponForm = CouponAdmin.initialNewForm
     , cartItemCount = 0
     , maybeSessionToken = Nothing
     , currentUser = User.unauthorized
