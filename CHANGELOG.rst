@@ -6,6 +6,8 @@ CHANGELOG
 v1.01.00
 =========
 
+* Ensure that invalid URLs cause the prerendering server to return a 404 status
+  code.
 * Add a Coupons section to the Admin site, allowing administrators to view,
   edit, and create Coupons.
 * Fix a bug causing the "Adding to Cart.." loading text to not be shown on

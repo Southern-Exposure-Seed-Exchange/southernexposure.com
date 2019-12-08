@@ -1415,34 +1415,45 @@ pageLoadCompleted =
 -}
 getStatusCode : Model -> Maybe Int
 getStatusCode =
-    runOnCurrentWebData <|
-        Maybe.withDefault (RemoteData.Success ())
-            >> (\webData ->
-                    case webData of
-                        RemoteData.NotAsked ->
-                            Nothing
+    let
+        checkNotFound : (Model -> Maybe Int) -> Model -> Maybe Int
+        checkNotFound f model =
+            if model.route == NotFound then
+                Just 404
 
-                        RemoteData.Loading ->
-                            Nothing
+            else
+                f model
 
-                        RemoteData.Success _ ->
-                            Just 200
+        webDataToCode : WebData () -> Maybe Int
+        webDataToCode webData =
+            case webData of
+                RemoteData.NotAsked ->
+                    Nothing
 
-                        RemoteData.Failure (Http.BadStatus code) ->
-                            Just code
+                RemoteData.Loading ->
+                    Nothing
 
-                        RemoteData.Failure Http.Timeout ->
-                            Just 408
+                RemoteData.Success _ ->
+                    Just 200
 
-                        RemoteData.Failure (Http.BadUrl _) ->
-                            Just 400
+                RemoteData.Failure (Http.BadStatus code) ->
+                    Just code
 
-                        RemoteData.Failure (Http.BadBody _) ->
-                            Just 422
+                RemoteData.Failure Http.Timeout ->
+                    Just 408
 
-                        RemoteData.Failure Http.NetworkError ->
-                            Just 503
-               )
+                RemoteData.Failure (Http.BadUrl _) ->
+                    Just 400
+
+                RemoteData.Failure (Http.BadBody _) ->
+                    Just 422
+
+                RemoteData.Failure Http.NetworkError ->
+                    Just 503
+    in
+    checkNotFound <|
+        runOnCurrentWebData
+            (Maybe.withDefault (RemoteData.Success ()) >> webDataToCode)
 
 
 {-| Run some generic transforming function on the current route's page data.
