@@ -30,7 +30,6 @@ import Routing exposing (AdminRoute(..), Route(..))
 import Update.Utils exposing (noCommand)
 import Views.Admin as Admin exposing (equalsOriginal, formSavingClass, slugFrom, submitOrSavingButton, updateEditField)
 import Views.HorizontalForm as Form
-import Views.Images exposing (media)
 import Views.Utils exposing (routeLinkAttributes, selectImageFile)
 
 
