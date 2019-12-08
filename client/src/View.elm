@@ -37,7 +37,6 @@ import StaticPage exposing (StaticPage)
 import User
 import Views.CouponAdmin as CouponAdmin
 import Views.CustomerAdmin as CustomerAdmin
-import Views.Images exposing (media)
 import Views.OrderAdmin as OrderAdmin
 import Views.StaticPageAdmin as StaticPageAdmin
 import Views.Utils exposing (rawHtml)
