@@ -728,7 +728,7 @@ anonymousPlaceOrderRoute = validate >=> \parameters -> do
                 , customerIsAdmin = False
                 }
         customerId <- insert customer
-        mergeCarts (apopCartToken parameters) customerId
+        mergeAnonymousCart (apopCartToken parameters) customerId
         (Entity cartId _) <- getBy (UniqueCustomerCart $ Just customerId)
             >>= maybe (throwM CartNotFound) return
         let shippingAddress = fromAddressData Shipping customerId

@@ -9,6 +9,7 @@ module Models.Utils
     , getParentCategories
     , categorySalePrice
       -- * Carts
+    , mergeAnonymousCart
     , mergeCarts
       -- * Addresses
     , insertOrActivateAddress
@@ -22,6 +23,7 @@ module Models.Utils
     , avalaraRegion
     ) where
 
+import Control.Monad.IO.Class (MonadIO)
 import Data.Char (isAlphaNum)
 import Data.Maybe (listToMaybe)
 import Data.Monoid ((<>))
@@ -30,6 +32,7 @@ import Database.Persist
     ( (==.), (=.), (+=.), Entity(..), Key(..), getBy, update, upsert
     , delete, deleteWhere, selectList, selectKeysList, insertEntity
     )
+import Database.Persist.Sql (SqlPersistT)
 import Text.HTML.TagSoup (Tag(..), parseTags, innerText, renderTags)
 
 import Cache
@@ -171,8 +174,8 @@ categorySalePrice price categorySale =
 
 -- | Merge an Anonymous Cart into a Customer's Cart, removing the Anonymous
 -- Cart.
-mergeCarts :: T.Text -> CustomerId -> AppSQL ()
-mergeCarts cartToken customerId = do
+mergeAnonymousCart :: T.Text -> CustomerId -> AppSQL ()
+mergeAnonymousCart cartToken customerId = do
     maybeCustomerCart <- getBy . UniqueCustomerCart $ Just customerId
     maybeAnonymousCart <- getBy . UniqueAnonymousCart $ Just cartToken
     case (maybeCustomerCart, maybeAnonymousCart) of
@@ -197,6 +200,23 @@ mergeCarts cartToken customerId = do
                     , cartItemQuantity = cartItemQuantity anonymousCartItem
                     }
                 [ CartItemQuantity +=. cartItemQuantity anonymousCartItem ]
+
+-- | Merge the second Cart into the first, then delete it.
+mergeCarts :: MonadIO m => Entity Cart -> Entity Cart -> SqlPersistT m ()
+mergeCarts (Entity keepId _) (Entity mergeId _) = do
+    mergeItems <- selectList [CartItemCartId ==. mergeId] []
+    mapM_ upsertCartItem mergeItems
+    deleteWhere [CartItemCartId ==. mergeId] >> delete mergeId
+  where
+    upsertCartItem :: MonadIO m => Entity CartItem -> SqlPersistT m (Entity CartItem)
+    upsertCartItem (Entity _ mergeItem) =
+        upsert
+            CartItem
+                { cartItemCartId = keepId
+                , cartItemProductVariantId = cartItemProductVariantId mergeItem
+                , cartItemQuantity = cartItemQuantity mergeItem
+                }
+            [ CartItemQuantity +=. cartItemQuantity mergeItem ]
 
 
 -- | Insert an Address for a Customer, or activate an existing Address if

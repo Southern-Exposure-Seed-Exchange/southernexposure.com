@@ -739,4 +739,4 @@ addressDeleteRoute token aId = withValidatedCookie token $ \(Entity customerId _
 
 maybeMergeCarts :: CustomerId -> Maybe T.Text -> AppSQL ()
 maybeMergeCarts customerId =
-    maybe (return ()) (`mergeCarts` customerId)
+    maybe (return ()) (`mergeAnonymousCart` customerId)

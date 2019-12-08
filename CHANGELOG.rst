@@ -6,6 +6,10 @@ CHANGELOG
 v1.01.00
 =========
 
+* Add a script to merge & export Customer accounts with email addresses that
+  differ only in their casing. Emails from popular domains simply have the
+  Customer merged(along with Addresses, Orders, & Reviews) while less popular
+  domains have Customer emails exported so we can contact them.
 * Fix D.C. & Outlying Territories of the United States being missing from the
   State dropdowns.
 * Set the ``description`` meta tag, describing the current page to search
