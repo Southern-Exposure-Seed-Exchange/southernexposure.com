@@ -28,7 +28,7 @@ import StaticPage exposing (StaticPageId)
 import Update.Utils exposing (noCommand)
 import Views.Admin as Admin exposing (equalsOriginal, formSavingClass, updateEditField)
 import Views.HorizontalForm as Form
-import Views.Utils exposing (rawHtml, routeLinkAttributes)
+import Views.Utils exposing (htmlOrBlank, rawHtml, routeLinkAttributes)
 
 
 
@@ -36,7 +36,7 @@ import Views.Utils exposing (rawHtml, routeLinkAttributes)
 
 
 list : PageData.AdminPageListData -> List (Html msg)
-list { pages } =
+list { pages, homePageId } =
     let
         renderPage { name, slug, id } =
             tr []
@@ -53,9 +53,21 @@ list { pages } =
             , th [] [ text "Slug" ]
             , th [] []
             ]
+
+        editHomepageButton =
+            htmlOrBlank
+                (\id ->
+                    a
+                        (class "ml-3 mb-3 btn btn-secondary"
+                            :: routeLinkAttributes (Admin <| PageEdit id)
+                        )
+                        [ text "Edit Homepage" ]
+                )
+                homePageId
     in
     [ a (class "mb-3 btn btn-primary" :: routeLinkAttributes (Admin PageNew))
         [ text "New Page" ]
+    , editHomepageButton
     , table [ class "table table-sm table-striped" ]
         [ thead [] [ tr [] headerCells ]
         , tbody [] <| List.map renderPage pages

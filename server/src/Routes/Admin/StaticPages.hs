@@ -14,6 +14,7 @@ import Data.Maybe (catMaybes)
 import Data.Time (getCurrentTime)
 import Database.Persist
     ( (=.), Entity(..), SelectOpt(Asc), Update, selectList, insert, get, update
+    , getBy
     )
 import Servant ((:<|>)(..), (:>), AuthProtect, ReqBody, Capture, Get, Post, Patch, JSON, err404)
 import Text.HTML.SanitizeXSS (sanitize)
@@ -55,15 +56,17 @@ type PageListRoute =
        AuthProtect "cookie-auth"
     :> Get '[JSON] (Cookied PageListData)
 
-newtype PageListData =
+data PageListData =
     PageListData
         { pldPages :: [ListPage]
+        , pldHomePageId :: Maybe PageId
         } deriving (Show)
 
 instance ToJSON PageListData where
     toJSON PageListData {..} =
         object
             [ "pages" .= pldPages
+            , "homePageId" .= pldHomePageId
             ]
 
 data ListPage =
@@ -82,8 +85,10 @@ instance ToJSON ListPage where
             ]
 
 pageListRoute :: WrappedAuthToken -> App (Cookied PageListData)
-pageListRoute = flip withAdminCookie $ const $
-    PageListData . map makeListPage <$> runDB (selectList [] [Asc PageName])
+pageListRoute = flip withAdminCookie $ const $ runDB $ do
+    pldPages <- map makeListPage <$> selectList [] [Asc PageName]
+    pldHomePageId <- fmap entityKey <$> getBy (UniquePageSlug "home")
+    return PageListData {..}
   where
     makeListPage :: Entity Page -> ListPage
     makeListPage (Entity pageId page) =

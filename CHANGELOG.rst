@@ -6,6 +6,7 @@ CHANGELOG
 v1.01.00
 =========
 
+* Add an ``Edit Homepage`` button to the Pages list on the Admin site.
 * Add a ``slug`` column to the Pages table on the Admin site.
 * Ensure that invalid URLs cause the prerendering server to return a 404 status
   code.

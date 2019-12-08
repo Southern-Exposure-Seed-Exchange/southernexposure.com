@@ -739,13 +739,15 @@ adminEditCategoryDataDecoder =
 
 type alias AdminPageListData =
     { pages : List AdminListPage
+    , homePageId : Maybe StaticPageId
     }
 
 
 adminPageListDataDecoder : Decoder AdminPageListData
 adminPageListDataDecoder =
-    Decode.map AdminPageListData
+    Decode.map2 AdminPageListData
         (Decode.field "pages" <| Decode.list adminListPageDecoder)
+        (Decode.field "homePageId" <| Decode.nullable StaticPage.idDecoder)
 
 
 type alias AdminListPage =
