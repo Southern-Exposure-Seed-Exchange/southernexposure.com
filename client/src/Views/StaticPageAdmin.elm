@@ -14,7 +14,7 @@ module Views.StaticPageAdmin exposing
 
 import Api
 import Dict
-import Html exposing (Html, a, div, form, h1, hr, table, tbody, td, text, tr)
+import Html exposing (Html, a, div, form, h1, hr, table, tbody, td, text, th, thead, tr)
 import Html.Attributes exposing (class)
 import Html.Events exposing (onSubmit)
 import Json.Decode as Decode
@@ -38,19 +38,28 @@ import Views.Utils exposing (rawHtml, routeLinkAttributes)
 list : PageData.AdminPageListData -> List (Html msg)
 list { pages } =
     let
-        renderPage { name, id } =
+        renderPage { name, slug, id } =
             tr []
                 [ td [] [ text name ]
+                , td [] [ text slug ]
                 , td []
                     [ a (routeLinkAttributes <| Admin <| PageEdit id)
                         [ text "Edit" ]
                     ]
                 ]
+
+        headerCells =
+            [ th [] [ text "Name" ]
+            , th [] [ text "Slug" ]
+            , th [] []
+            ]
     in
     [ a (class "mb-3 btn btn-primary" :: routeLinkAttributes (Admin PageNew))
         [ text "New Page" ]
     , table [ class "table table-sm table-striped" ]
-        [ tbody [] <| List.map renderPage pages ]
+        [ thead [] [ tr [] headerCells ]
+        , tbody [] <| List.map renderPage pages
+        ]
     ]
 
 

@@ -6,6 +6,7 @@ CHANGELOG
 v1.01.00
 =========
 
+* Add a ``slug`` column to the Pages table on the Admin site.
 * Ensure that invalid URLs cause the prerendering server to return a 404 status
   code.
 * Add a Coupons section to the Admin site, allowing administrators to view,
