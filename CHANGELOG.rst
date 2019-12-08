@@ -6,6 +6,8 @@ CHANGELOG
 v1.01.00
 =========
 
+* Fix D.C. & Outlying Territories of the United States being missing from the
+  State dropdowns.
 * Set the ``description`` meta tag, describing the current page to search
   engine crawlers & social networks.
 * Add an ``Edit Homepage`` button to the Pages list on the Admin site.

@@ -151,7 +151,7 @@ locationRoute =
                 ++ filter (`notElem` initialCountries)
                     (enumFromTo minBound maxBound)
         states =
-            map (uncurry $ flip Location) StateCodes.stateList
+            map (uncurry $ flip Location) StateCodes.allStates
 
         armedForcesRegions =
             map (\r -> Location r $ armedForcesRegion r)
