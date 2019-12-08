@@ -72,6 +72,7 @@ type Msg
     | NewProductMsg ProductAdmin.NewMsg
     | EditProductMsg ProductAdmin.EditMsg
     | NewCouponMsg CouponAdmin.NewMsg
+    | EditCouponMsg CouponAdmin.EditMsg
       -- API Requests
     | ReAuthorize (WebData User.AuthStatus)
     | LogOutResponse (WebData ())
@@ -101,3 +102,4 @@ type Msg
     | GetAdminSharedProductData (WebData PageData.AdminSharedProductData)
     | GetAdminEditProductData (WebData ( ProductAdmin.Form, ProductId ))
     | GetAdminCouponList (WebData PageData.AdminCouponListData)
+    | GetAdminEditCouponData (WebData PageData.AdminEditCouponData)

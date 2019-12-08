@@ -352,6 +352,11 @@ fetchDataForRoute ({ route, pageData, key } as model) =
                 Admin CouponNew ->
                     doNothing
 
+                Admin (CouponEdit couponId) ->
+                    ( { pageData | adminEditCoupon = RemoteData.Loading }
+                    , getAdminEditCouponData couponId
+                    )
+
                 Redirect path ->
                     ( pageData
                     , Browser.Navigation.load path
@@ -657,6 +662,13 @@ getAdminCouponList =
     Api.get Api.AdminCouponList
         |> Api.withJsonResponse PageData.adminCouponListDataDecoder
         |> Api.sendRequest GetAdminCouponList
+
+
+getAdminEditCouponData : Int -> Cmd Msg
+getAdminEditCouponData couponId =
+    Api.get (Api.AdminEditCouponData couponId)
+        |> Api.withJsonResponse PageData.adminEditCouponDataDecoder
+        |> Api.sendRequest GetAdminEditCouponData
 
 
 
@@ -1017,9 +1029,14 @@ update msg ({ pageData, key } as model) =
                 |> Tuple.mapSecond (Cmd.map EditProductMsg)
 
         NewCouponMsg subMsg ->
-            CouponAdmin.updateNewForm subMsg model.newCouponForm
+            CouponAdmin.updateNewForm key subMsg model.newCouponForm
                 |> Tuple.mapFirst (\form -> { model | newCouponForm = form })
                 |> Tuple.mapSecond (Cmd.map NewCouponMsg)
+
+        EditCouponMsg subMsg ->
+            CouponAdmin.updateEditForm key pageData.adminEditCoupon subMsg model.editCouponForm
+                |> Tuple.mapFirst (\form -> { model | editCouponForm = form })
+                |> Tuple.mapSecond (Cmd.map EditCouponMsg)
 
         ReAuthorize response ->
             case response of
@@ -1335,6 +1352,13 @@ update msg ({ pageData, key } as model) =
             in
             ( { model | pageData = updatedPageData }, Cmd.none )
 
+        GetAdminEditCouponData response ->
+            let
+                updatedPageData =
+                    { pageData | adminEditCoupon = response }
+            in
+            ( { model | pageData = updatedPageData }, Cmd.none )
+
 
 {-| Wrap the normal update function, checking to see if the page has finished
 loading all it's dependent data. If so, run ports that should fire once a page
@@ -1548,6 +1572,9 @@ runOnCurrentWebData runner { pageData, route } =
         Admin CouponNew ->
             nothingRunner
 
+        Admin (CouponEdit _) ->
+            justRunner pageData.adminEditCoupon
+
 
 {-| Update the current page number using the Paginated data.
 
@@ -1662,6 +1689,9 @@ resetForm oldRoute model =
 
                 CouponNew ->
                     { model | newCouponForm = CouponAdmin.initialNewForm }
+
+                CouponEdit _ ->
+                    { model | editCouponForm = CouponAdmin.initialEditForm }
     in
     case oldRoute of
         ProductDetails _ ->

@@ -4,6 +4,7 @@ module PageData exposing
     , AdminComment
     , AdminCouponListData
     , AdminEditCategoryData
+    , AdminEditCouponData
     , AdminEditCustomerData
     , AdminEditPageData
     , AdminListCategory(..)
@@ -40,6 +41,7 @@ module PageData exposing
     , adminCategoryListDataDecoder
     , adminCouponListDataDecoder
     , adminEditCategoryDataDecoder
+    , adminEditCouponDataDecoder
     , adminEditCustomerDataDecoder
     , adminEditPageDataDecoder
     , adminListPageDecoder
@@ -119,6 +121,7 @@ type alias PageData =
     , adminProductList : WebData AdminProductListData
     , adminSharedProduct : WebData AdminSharedProductData
     , adminCouponList : WebData AdminCouponListData
+    , adminEditCoupon : WebData AdminEditCouponData
     }
 
 
@@ -170,6 +173,7 @@ initial =
     , adminProductList = RemoteData.NotAsked
     , adminSharedProduct = RemoteData.NotAsked
     , adminCouponList = RemoteData.NotAsked
+    , adminEditCoupon = RemoteData.NotAsked
     }
 
 
@@ -1039,6 +1043,39 @@ couponTypeEncoder type_ =
     Encode.object <|
         ( "type", Encode.string typeField )
             :: amountField
+
+
+type alias AdminEditCouponData =
+    { id : Int
+    , code : String
+    , name : String
+    , description : String
+    , isActive : Bool
+    , discount : CouponType
+    , minimumOrder : Cents
+    , expires : Posix
+    , totalUses : Int
+    , customerUses : Int
+    }
+
+
+adminEditCouponDataDecoder : Decoder AdminEditCouponData
+adminEditCouponDataDecoder =
+    Decode.map8 AdminEditCouponData
+        (Decode.field "id" Decode.int)
+        (Decode.field "code" Decode.string)
+        (Decode.field "name" Decode.string)
+        (Decode.field "description" Decode.string)
+        (Decode.field "isActive" Decode.bool)
+        (Decode.field "discount" couponTypeDecoder)
+        (Decode.field "minimumOrder" centsDecoder)
+        (Decode.field "expires" Iso8601.decoder)
+        |> Decode.andThen
+            (\d ->
+                Decode.map2 d
+                    (Decode.field "totalUses" Decode.int)
+                    (Decode.field "usesPerCustomer" Decode.int)
+            )
 
 
 

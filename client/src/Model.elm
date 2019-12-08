@@ -56,6 +56,7 @@ type alias Model =
     , newProductForm : ProductAdmin.NewForm
     , editProductForm : ProductAdmin.EditForm
     , newCouponForm : CouponAdmin.NewForm
+    , editCouponForm : CouponAdmin.EditForm
     , cartItemCount : Int
     , maybeSessionToken : Maybe String
     , currentUser : AuthStatus
@@ -100,6 +101,7 @@ initial key route =
     , newProductForm = ProductAdmin.initialNewForm
     , editProductForm = ProductAdmin.initialEditForm
     , newCouponForm = CouponAdmin.initialNewForm
+    , editCouponForm = CouponAdmin.initialEditForm
     , cartItemCount = 0
     , maybeSessionToken = Nothing
     , currentUser = User.unauthorized

@@ -282,6 +282,12 @@ adminView route =
                         ( CouponNew, _ ) ->
                             False
 
+                        ( CouponEdit _, CouponList ) ->
+                            True
+
+                        ( CouponEdit _, _ ) ->
+                            False
+
                 _ ->
                     False
     in

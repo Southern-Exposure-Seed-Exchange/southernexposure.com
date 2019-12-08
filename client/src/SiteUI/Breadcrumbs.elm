@@ -182,6 +182,11 @@ view route pageData =
                     , activeItem "New Coupon"
                     ]
 
+                Admin (CouponEdit _) ->
+                    [ inactiveItem "Coupons" <| Admin CouponList
+                    , activeItem "Edit Coupon"
+                    ]
+
                 Redirect _ ->
                     singleItem "Redirecting..."
 

@@ -236,6 +236,10 @@ view ({ route, pageData, navigationData, zone } as model) =
                     CouponAdmin.new model.newCouponForm
                         |> List.map (Html.map NewCouponMsg)
 
+                Admin (CouponEdit _) ->
+                    withIntermediateText (CouponAdmin.edit model.editCouponForm) pageData.adminEditCoupon
+                        |> List.map (Html.map EditCouponMsg)
+
         apply : (a -> b -> c) -> ( a, b ) -> c
         apply f ( a, b ) =
             f a b
@@ -440,6 +444,13 @@ adminTitle ({ pageData } as model) adminRoute =
 
         CouponNew ->
             "New Coupon"
+
+        CouponEdit _ ->
+            pageData.adminEditCoupon
+                |> RemoteData.map (\c -> " - " ++ c.code)
+                |> RemoteData.toMaybe
+                |> Maybe.withDefault ""
+                |> (\code -> "Edit Coupon" ++ code)
 
 
 pageImage : Model -> Maybe String

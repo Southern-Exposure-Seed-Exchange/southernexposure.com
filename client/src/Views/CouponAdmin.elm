@@ -1,9 +1,14 @@
 module Views.CouponAdmin exposing
-    ( NewForm
+    ( EditForm
+    , EditMsg
+    , NewForm
     , NewMsg
+    , edit
+    , initialEditForm
     , initialNewForm
     , list
     , new
+    , updateEditForm
     , updateNewForm
     )
 
@@ -15,7 +20,7 @@ import Html.Events exposing (onInput, onSubmit)
 import Iso8601
 import Json.Decode as Decode
 import Json.Encode as Encode exposing (Value)
-import Models.Fields exposing (Cents, centsEncoder)
+import Models.Fields exposing (Cents, centsEncoder, centsToString)
 import PageData exposing (CouponType(..))
 import Ports
 import RemoteData exposing (WebData)
@@ -23,7 +28,7 @@ import Routing exposing (AdminRoute(..), Route(..))
 import Time exposing (Posix)
 import Update.Utils exposing (noCommand)
 import Validation exposing (FormErrors, formValidation)
-import Views.Admin as Admin
+import Views.Admin as Admin exposing (updateEditField)
 import Views.Format as Format
 import Views.HorizontalForm as Form
 import Views.Utils exposing (routeLinkAttributes)
@@ -33,8 +38,6 @@ import Views.Utils exposing (routeLinkAttributes)
 -- LIST
 
 
-{-| TODO: Link up the Edit Column
--}
 list : Time.Zone -> PageData.AdminCouponListData -> List (Html msg)
 list zone { coupons } =
     let
@@ -55,7 +58,10 @@ list zone { coupons } =
                 , td [] [ text coupon.code ]
                 , td [ class "text-center" ] [ Admin.activeIcon coupon.isActive ]
                 , td [] [ text <| Format.date zone coupon.expires ]
-                , td [] [ text "Edit" ]
+                , td []
+                    [ a (routeLinkAttributes <| Admin <| CouponEdit coupon.id)
+                        [ text "Edit" ]
+                    ]
                 ]
 
         renderType couponType =
@@ -106,7 +112,7 @@ initialNewForm =
     , isActive = True
     , discountType = Shipping
     , discountAmount = ""
-    , minimumOrder = "0"
+    , minimumOrder = "0.00"
     , expires = ""
     , totalUses = "0"
     , usesPerCustomer = "0"
@@ -136,8 +142,8 @@ type NewMsg
     | SubmitNewResponse (WebData (Result FormErrors Int))
 
 
-updateNewForm : NewMsg -> NewForm -> ( NewForm, Cmd NewMsg )
-updateNewForm msg model =
+updateNewForm : Routing.Key -> NewMsg -> NewForm -> ( NewForm, Cmd NewMsg )
+updateNewForm key msg model =
     case msg of
         NInputCode val ->
             noCommand { model | code = val }
@@ -186,10 +192,9 @@ updateNewForm msg model =
 
         SubmitNewResponse response ->
             case response of
-                RemoteData.Success (Ok _) ->
+                RemoteData.Success (Ok couponId) ->
                     ( initialNewForm
-                    , Cmd.none
-                      -- TODO: Redirect to Edit Page Once that Exists
+                    , Routing.newUrl key <| Admin <| CouponEdit couponId
                     )
 
                 RemoteData.Success (Err errors) ->
@@ -234,7 +239,8 @@ validateNewForm model =
             , usesPerCustomer = customer
             }
         )
-        |> Validation.apply "discount" (Validation.succeed FreeShipping)
+        |> Validation.apply "discount"
+            (validateDiscount ( model.discountType, model.discountAmount ))
         |> Validation.apply "minimumOrder" (Validation.cents model.minimumOrder)
         |> Validation.apply "expires" (Validation.date model.expires)
         |> Validation.apply "totalUses" (Validation.natural model.totalUses)
@@ -263,14 +269,8 @@ new model =
             Form.inputRow model.errors
 
         formDescription =
-            String.join " "
-                [ "Use this form to create a new Coupon for Customers to use during Checkout."
-                , "The \"Code\" is what the Customer enters into the Checkout form."
-                , "The \"Name\" & \"Description\" will be sent to StoneEdge."
-                , "Set the minimum order amount, total use count, or customer use to enforce usage requirements for the Coupon."
-                , "A value of \"0\" for any of those field will prevent their enforcement."
-                , "Coupons will automatically be disabled when they reach their maximum total uses or pass their expiration date."
-                ]
+            "Use this form to create a new Coupon for Customers to use during Checkout. "
+                ++ helpText
     in
     [ form [ class (Admin.formSavingClass model), onSubmit SubmitNew ]
         [ Form.genericErrorText <| not <| Dict.isEmpty model.errors
@@ -279,11 +279,15 @@ new model =
         , inputRow model.code NInputCode True "Code" "code" "text" "off"
         , inputRow model.name NInputName True "Name" "name" "text" "off"
         , inputRow model.description NInputDescription False "Description" "description" "text" "off"
-        , couponTypeRow model.errors model.discountType model.discountAmount
+        , couponTypeRow model.errors
+            model.discountType
+            model.discountAmount
+            NSelectType
+            NInputAmount
         , inputRow model.minimumOrder NInputMinimum True "Minimum Order Size" "minimumOrder" "text" "off"
         , inputRow model.totalUses NInputTotalUses True "Total Uses" "totalUses" "number" "off"
         , inputRow model.usesPerCustomer NInputCustomerUses True "Uses per Customer" "usesPerCustomer" "number" "off"
-        , dateRow model.errors model.expires
+        , dateRow model.errors model.expires NInputExpires
         , Form.checkboxRow model.isActive NToggleActive "Is Enabled" "isActive"
         , div [ class "form-group" ]
             [ Admin.submitOrSavingButton model "Add Coupon" ]
@@ -291,8 +295,8 @@ new model =
     ]
 
 
-couponTypeRow : Api.FormErrors -> DiscountType -> String -> Html NewMsg
-couponTypeRow errors selectedType enteredAmount =
+couponTypeRow : Api.FormErrors -> DiscountType -> String -> (DiscountType -> msg) -> (String -> msg) -> Html msg
+couponTypeRow errors selectedType enteredAmount selectMsg inputMsg =
     let
         inputId =
             "DiscountAmount"
@@ -373,13 +377,13 @@ couponTypeRow errors selectedType enteredAmount =
     in
     Form.withLabel "Discount Type"
         True
-        [ Form.selectElement selectId "w-25 d-inline-block" typeParser NSelectType options
+        [ Form.selectElement selectId "w-25 d-inline-block" typeParser selectMsg options
         , input
             ([ id <| "input" ++ inputId
              , name inputId
              , required True
              , value enteredAmount
-             , onInput NInputAmount
+             , onInput inputMsg
              , class "form-control w-50 d-inline-block ml-4"
              ]
                 ++ inputAttrs
@@ -392,8 +396,8 @@ couponTypeRow errors selectedType enteredAmount =
 {-| TODO: Will probably re-use when we make the Sales admin. At that point we
 should move this to the HorizontalForm module.
 -}
-dateRow : FormErrors -> String -> Html NewMsg
-dateRow errors date =
+dateRow : FormErrors -> String -> (String -> msg) -> Html msg
+dateRow errors date msg =
     let
         dateId =
             "Expires"
@@ -419,9 +423,335 @@ dateRow errors date =
             , required True
             , value date
             , type_ "date"
-            , onInput NInputExpires
+            , onInput msg
             , class "form-control"
             ]
             []
         , errorHtml
+        ]
+
+
+
+-- Edit
+
+
+type alias EditForm =
+    { code : Maybe String
+    , name : Maybe String
+    , description : Maybe String
+    , isActive : Maybe Bool
+    , discountType : Maybe DiscountType
+    , discountAmount : Maybe String
+    , minimumOrder : Maybe String
+    , expires : Maybe String
+    , totalUses : Maybe String
+    , customerUses : Maybe String
+    , errors : FormErrors
+    , isSaving : Bool
+    }
+
+
+initialEditForm : EditForm
+initialEditForm =
+    { code = Nothing
+    , name = Nothing
+    , description = Nothing
+    , isActive = Nothing
+    , discountType = Nothing
+    , discountAmount = Nothing
+    , minimumOrder = Nothing
+    , expires = Nothing
+    , totalUses = Nothing
+    , customerUses = Nothing
+    , errors = Api.initialErrors
+    , isSaving = False
+    }
+
+
+type EditMsg
+    = EInputCode String
+    | EInputName String
+    | EInputDescription String
+    | EToggleActive Bool
+    | ESelectType DiscountType
+    | EInputAmount String
+    | EInputMinimum String
+    | EInputExpires String
+    | EInputTotalUses String
+    | EInputCustomerUses String
+    | SubmitEdit
+    | SubmitEditResponse (WebData (Result FormErrors ()))
+
+
+updateEditForm : Routing.Key -> WebData PageData.AdminEditCouponData -> EditMsg -> EditForm -> ( EditForm, Cmd EditMsg )
+updateEditForm key original msg model =
+    case msg of
+        EInputCode val ->
+            noCommand <|
+                updateEditField val original .code <|
+                    \v -> { model | code = v }
+
+        EInputName val ->
+            noCommand <|
+                updateEditField val original .name <|
+                    \v -> { model | name = v }
+
+        EInputDescription val ->
+            noCommand <|
+                updateEditField val original .description <|
+                    \v -> { model | description = v }
+
+        EToggleActive val ->
+            noCommand <|
+                updateEditField val original .isActive <|
+                    \v -> { model | isActive = v }
+
+        ESelectType val ->
+            noCommand <|
+                case model.discountAmount of
+                    Nothing ->
+                        { model
+                            | discountType = Just val
+                            , discountAmount =
+                                RemoteData.map (.discount >> couponToAmount) original
+                                    |> RemoteData.toMaybe
+                        }
+
+                    Just _ ->
+                        { model | discountType = Just val }
+
+        EInputAmount val ->
+            noCommand <|
+                case model.discountType of
+                    Nothing ->
+                        { model
+                            | discountAmount = Just val
+                            , discountType =
+                                RemoteData.map (.discount >> couponToType) original
+                                    |> RemoteData.toMaybe
+                        }
+
+                    Just _ ->
+                        { model | discountAmount = Just val }
+
+        EInputMinimum val ->
+            noCommand <|
+                updateEditField val original (.minimumOrder >> centsToString) <|
+                    \v -> { model | minimumOrder = v }
+
+        EInputExpires val ->
+            noCommand <|
+                updateEditField val original (.expires >> posixToDateString) <|
+                    \v -> { model | expires = v }
+
+        EInputTotalUses val ->
+            noCommand <|
+                updateEditField val original (.totalUses >> String.fromInt) <|
+                    \v -> { model | totalUses = v }
+
+        EInputCustomerUses val ->
+            noCommand <|
+                updateEditField val original (.customerUses >> String.fromInt) <|
+                    \v -> { model | customerUses = v }
+
+        SubmitEdit ->
+            case RemoteData.map .id original |> RemoteData.toMaybe of
+                Nothing ->
+                    noCommand model
+
+                Just couponId ->
+                    case validateEditForm couponId model of
+                        Err e ->
+                            ( { model | errors = e }
+                            , Ports.scrollToErrorMessage
+                            )
+
+                        Ok validModel ->
+                            ( { model | isSaving = True }
+                            , Api.patch Api.AdminEditCoupon
+                                |> Api.withJsonBody (encodeEditForm validModel)
+                                |> Api.withErrorHandler (Decode.succeed ())
+                                |> Api.sendRequest SubmitEditResponse
+                            )
+
+        SubmitEditResponse response ->
+            case response of
+                RemoteData.Success (Ok ()) ->
+                    ( initialEditForm
+                    , Routing.newUrl key <| Admin CouponList
+                    )
+
+                RemoteData.Success (Err errors) ->
+                    ( { model | errors = errors }
+                    , Ports.scrollToErrorMessage
+                    )
+
+                RemoteData.Failure error ->
+                    ( { model | errors = Api.apiFailureToError error, isSaving = False }
+                    , Ports.scrollToErrorMessage
+                    )
+
+                _ ->
+                    noCommand { model | isSaving = False }
+
+
+type alias ValidEditForm =
+    { id : Int
+    , code : Maybe String
+    , name : Maybe String
+    , description : Maybe String
+    , isActive : Maybe Bool
+    , discount : Maybe CouponType
+    , minimumOrder : Maybe Cents
+    , expires : Maybe Posix
+    , totalUses : Maybe Int
+    , customerUses : Maybe Int
+    }
+
+
+validateEditForm : Int -> EditForm -> Result FormErrors ValidEditForm
+validateEditForm couponId model =
+    formValidation
+        (\discount min expires total customer ->
+            { id = couponId
+            , code = model.code
+            , name = model.name
+            , description = model.description
+            , isActive = model.isActive
+            , discount = discount
+            , minimumOrder = min
+            , expires = expires
+            , totalUses = total
+            , customerUses = customer
+            }
+        )
+        |> Validation.applyMaybe "discount"
+            validateDiscount
+            (Maybe.map2 Tuple.pair model.discountType model.discountAmount)
+        |> Validation.applyMaybe "minimumOrder" Validation.cents model.minimumOrder
+        |> Validation.applyMaybe "expires" Validation.date model.expires
+        |> Validation.applyMaybe "totalUses" Validation.natural model.totalUses
+        |> Validation.applyMaybe "usesPerCustomer" Validation.natural model.customerUses
+
+
+encodeEditForm : ValidEditForm -> Value
+encodeEditForm model =
+    let
+        encodeMaybe encoder =
+            Maybe.map encoder >> Maybe.withDefault Encode.null
+    in
+    Encode.object
+        [ ( "id", Encode.int model.id )
+        , ( "code", encodeMaybe Encode.string model.code )
+        , ( "name", encodeMaybe Encode.string model.name )
+        , ( "description", encodeMaybe Encode.string model.description )
+        , ( "isActive", encodeMaybe Encode.bool model.isActive )
+        , ( "discount", encodeMaybe PageData.couponTypeEncoder model.discount )
+        , ( "minimumOrder", encodeMaybe centsEncoder model.minimumOrder )
+        , ( "expires", encodeMaybe Iso8601.encode model.expires )
+        , ( "totalUses", encodeMaybe Encode.int model.totalUses )
+        , ( "usesPerCustomer", encodeMaybe Encode.int model.customerUses )
+        ]
+
+
+edit : EditForm -> PageData.AdminEditCouponData -> List (Html EditMsg)
+edit model original =
+    let
+        valueWithFallback s1 s2 =
+            s1 model
+                |> Maybe.withDefault (s2 original)
+
+        inputRow s1 s2 =
+            Form.inputRow model.errors (valueWithFallback s1 s2)
+    in
+    [ form [ class (Admin.formSavingClass model), onSubmit SubmitEdit ]
+        [ Form.genericErrorText <| not <| Dict.isEmpty model.errors
+        , Html.p [] [ text helpText ]
+        , Api.generalFormErrors model
+        , inputRow .code .code EInputCode True "Code" "code" "text" "off"
+        , inputRow .name .name EInputName True "Name" "name" "text" "off"
+        , inputRow .description .description EInputDescription False "Description" "description" "text" "off"
+        , couponTypeRow model.errors
+            (valueWithFallback .discountType (.discount >> couponToType))
+            (valueWithFallback .discountAmount (.discount >> couponToAmount))
+            ESelectType
+            EInputAmount
+        , inputRow .minimumOrder (.minimumOrder >> centsToString) EInputMinimum True "Minimum Order Size" "minimumOrder" "text" "off"
+        , inputRow .totalUses (.totalUses >> String.fromInt) EInputTotalUses True "Total Uses" "totalUses" "number" "off"
+        , inputRow .customerUses (.customerUses >> String.fromInt) EInputCustomerUses True "Uses per Customer" "usesPerCustomer" "number" "off"
+        , dateRow model.errors (valueWithFallback .expires (.expires >> posixToDateString)) EInputExpires
+        , Form.checkboxRow (valueWithFallback .isActive .isActive) EToggleActive "Is Enabled" "isActive"
+        , div [ class "form-group" ]
+            [ Admin.submitOrSavingButton model "Update Coupon" ]
+        ]
+    ]
+
+
+
+-- UTILS
+
+
+{-| Returns just the `YYYY-MM-DD` portion of the time's ISO8601 string.
+-}
+posixToDateString : Posix -> String
+posixToDateString =
+    Iso8601.fromTime >> String.left 10
+
+
+couponToType : CouponType -> DiscountType
+couponToType type_ =
+    case type_ of
+        FreeShipping ->
+            Shipping
+
+        FlatDiscount _ ->
+            Flat
+
+        PercentageDiscount _ ->
+            Percentage
+
+
+couponToAmount : CouponType -> String
+couponToAmount type_ =
+    case type_ of
+        FreeShipping ->
+            ""
+
+        FlatDiscount cents ->
+            centsToString cents
+
+        PercentageDiscount percent ->
+            String.fromInt percent
+
+
+validateDiscount : ( DiscountType, String ) -> Validation.Validation CouponType
+validateDiscount ( type_, amount ) =
+    let
+        validatePercentage =
+            Validation.int amount
+                |> Validation.map PercentageDiscount
+
+        validateFlat =
+            Validation.cents amount
+                |> Validation.map FlatDiscount
+    in
+    case type_ of
+        Shipping ->
+            Validation.succeed FreeShipping
+
+        Percentage ->
+            validatePercentage
+
+        Flat ->
+            validateFlat
+
+
+helpText : String
+helpText =
+    String.join " "
+        [ "The \"Code\" is what the Customer enters into the Checkout form."
+        , "The \"Name\" & \"Description\" will be sent to StoneEdge."
+        , "Set the minimum order amount, total use count, or customer use to enforce usage requirements for the Coupon."
+        , "A value of \"0\" for any of those field will prevent their enforcement."
+        , "Coupons will automatically be disabled when they reach their maximum total uses or pass their expiration date."
         ]

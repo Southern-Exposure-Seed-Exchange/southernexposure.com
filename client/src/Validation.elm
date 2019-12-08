@@ -1,7 +1,7 @@
 module Validation exposing
     ( FormValidation, formValidation, mapFormErrors, mergeFormValidation, addFormError, indexedValidation
     , FormErrors, mapFieldNames
-    , Validation, succeed, map, apply, fromMaybe
+    , Validation, succeed, map, apply, applyMaybe, fromMaybe
     , int, natural, cents, milligrams, date
     )
 
@@ -21,7 +21,7 @@ elements.
 
 # Field Validation
 
-@docs Validation, succeed, map, apply, fromMaybe
+@docs Validation, succeed, map, apply, applyMaybe, fromMaybe
 
 @docs int, natural, cents, milligrams, date
 
@@ -55,6 +55,11 @@ formValidation =
 mapFormErrors : (FormErrors -> FormErrors) -> FormValidation a -> FormValidation a
 mapFormErrors updater =
     Result.mapError updater
+
+
+mapFormValidation : (a -> b) -> FormValidation a -> FormValidation b
+mapFormValidation =
+    Result.map
 
 
 {-| Turn a list of valiated forms in a form of validation lists.
@@ -181,6 +186,16 @@ apply fieldName validation result =
 
         ( Ok a, Ok aToB ) ->
             Ok <| aToB a
+
+
+applyMaybe : String -> (a -> Validation b) -> Maybe a -> FormValidation (Maybe b -> c) -> FormValidation c
+applyMaybe fieldName validator maybeVal result =
+    case maybeVal of
+        Nothing ->
+            mapFormValidation ((|>) Nothing) result
+
+        Just val ->
+            apply fieldName (map Just <| validator val) result
 
 
 {-| Validate a String is a whole number.
