@@ -190,6 +190,7 @@ executables:
         dependencies:
             - sese-website
             - bytestring
+            - esqueleto
             - monad-logger
             - persistent
             - persistent-postgresql
