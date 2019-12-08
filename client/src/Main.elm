@@ -110,7 +110,12 @@ init flags url key =
 
         metadataCmd =
             if pageLoadCompleted model then
-                Ports.updatePageMetadata ( Routing.reverse route, View.pageTitle model, View.pageImage model )
+                Ports.updatePageMetadata
+                    { url = Routing.reverse route
+                    , title = View.pageTitle model
+                    , description = View.pageDescription model
+                    , image = View.pageImage model
+                    }
 
             else
                 Cmd.none
@@ -1390,7 +1395,12 @@ updateWrapper msg model =
     if noLoadNeededOrLoadJustFinished then
         ( newModel
         , Cmd.batch
-            [ Ports.updatePageMetadata ( Routing.reverse newModel.route, View.pageTitle newModel, View.pageImage newModel )
+            [ Ports.updatePageMetadata
+                { url = Routing.reverse newModel.route
+                , title = View.pageTitle newModel
+                , description = View.pageDescription newModel
+                , image = View.pageImage newModel
+                }
             , pageDetailsScroll
             , statusCodeCmd
             , cmd

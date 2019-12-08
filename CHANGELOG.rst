@@ -6,6 +6,8 @@ CHANGELOG
 v1.01.00
 =========
 
+* Set the ``description`` meta tag, describing the current page to search
+  engine crawlers & social networks.
 * Add an ``Edit Homepage`` button to the Pages list on the Admin site.
 * Add a ``slug`` column to the Pages table on the Admin site.
 * Ensure that invalid URLs cause the prerendering server to return a 404 status

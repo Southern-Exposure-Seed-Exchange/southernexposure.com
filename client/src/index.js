@@ -147,10 +147,15 @@ app.ports.collectStripeToken.subscribe(function(portData) {
 
 /* Update the Page's Meta Elements & Send a Page Hit to Analytics */
 app.ports.updatePageMetadata.subscribe(function(portData) {
-  var [url, title, maybeImage] = portData;
+  var url = portData.url,
+      title = portData.title,
+      description = portData.description,
+      maybeImage = portData.image;
   gtag('config', GA_MEASUREMENT_ID, { 'page_path': url, 'page_title': title });
   setOgMeta('title', title);
   setOgMeta('url', document.location.origin + url);
+  setOgMeta('description', description);
+  createOrUpdateMeta('description', description);
   if (maybeImage === null) {
     // TODO: Add ability to override the domain & reduce duplication of path
     // here and in webpack.config.js
@@ -168,15 +173,7 @@ app.ports.logPurchase.subscribe(function(purchaseData) {
 
 /* Log the Status Code for the Prerender Server */
 app.ports.logStatusCode.subscribe(function(code) {
-  var metaElement = document.querySelector('meta[name="prerender-status-code"');
-  if (metaElement !== null) {
-    metaElement.setAttribute('content', code);
-  } else {
-    metaElement = document.createElement("meta");
-    metaElement.setAttribute('name', 'prerender-status-code');
-    metaElement.setAttribute('content', code);
-    document.getElementsByTagName('head')[0].appendChild(metaElement);
-  }
+  createOrUpdateMeta('prerender-status-code', code)
 });
 
 
@@ -211,5 +208,18 @@ function updateCanonicalLink(path) {
   if (linkElement !== null) {
     // TODO: Add ability to override the domain
     linkElement.setAttribute("href", "https://www.southernexposure.com" + path);
+  }
+}
+
+/* Create or Update a `meta` tag with the given `name` & `content` */
+function createOrUpdateMeta(name, content) {
+  var metaElement = document.querySelector('meta[name="' + name + '"]')
+  if (metaElement !== null) {
+    metaElement.setAttribute('content', content);
+  } else {
+    metaElement = document.createElement("meta");
+    metaElement.setAttribute('name', name);
+    metaElement.setAttribute('content', content);
+    document.getElementsByTagName('head')[0].appendChild(metaElement);
   }
 }

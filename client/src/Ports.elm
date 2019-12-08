@@ -1,5 +1,6 @@
 port module Ports exposing
-    ( cartItemCountChanged
+    ( PageMetadata
+    , cartItemCountChanged
     , collapseMobileMenus
     , collectStripeToken
     , logPurchase
@@ -118,4 +119,12 @@ port logStatusCode : Int -> Cmd msg
 
 {-| Send the URL, Title, & an Optional Image for updating Analytics & SEO tags.
 -}
-port updatePageMetadata : ( String, String, Maybe String ) -> Cmd msg
+port updatePageMetadata : PageMetadata -> Cmd msg
+
+
+type alias PageMetadata =
+    { url : String
+    , title : String
+    , description : String
+    , image : Maybe String
+    }

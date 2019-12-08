@@ -150,6 +150,7 @@ module.exports = {
         { property: "og:image", content: "https://www.southernexposure.com/static/img/logos/sese.png" },
         { property: "og:title",
           content: "Southern Exposure Seed Exchange, Saving the Past for the Future" },
+        { property: "og:description", content: "" },
         { property: "og:url", content: "https://www.southernexposure.com/" },
       ],
       xhtml: true,

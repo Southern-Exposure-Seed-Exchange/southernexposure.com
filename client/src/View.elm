@@ -1,4 +1,4 @@
-module View exposing (pageImage, pageTitle, view)
+module View exposing (pageDescription, pageImage, pageTitle, view)
 
 import AdvancedSearch
 import Auth.CreateAccount as CreateAccount
@@ -465,6 +465,78 @@ pageImage { route, pageData } =
 
         _ ->
             Nothing
+
+
+{-| Get the meta description for a page.
+-}
+pageDescription : Model -> String
+pageDescription { route, pageData } =
+    case route of
+        ProductDetails _ ->
+            RemoteData.toMaybe pageData.productDetails
+                |> Maybe.map (.product >> .longDescription)
+                |> Maybe.withDefault ""
+
+        CategoryDetails _ _ ->
+            Paginate.getResponseData pageData.categoryDetails
+                |> Maybe.map (.category >> .description)
+                |> Maybe.withDefault ""
+
+        PageDetails _ _ ->
+            RemoteData.toMaybe pageData.pageDetails
+                |> Maybe.map .content
+                |> Maybe.withDefault ""
+
+        NotFound ->
+            "Sorry, this page no longer exists."
+
+        Login _ ->
+            "Log in to your Southern Exposure Seed Exchange account."
+
+        CreateAccount ->
+            "Create a free account to purchase products from our catalog."
+
+        ResetPassword _ ->
+            "Reset the password to your Southern Exposure Seed Exchange account."
+
+        AdvancedSearch ->
+            "Search our entire product catalog, filtering by types or categories."
+
+        QuickOrder ->
+            "Easily add multiple items to your shopping cart with our Quick Order form."
+
+        Cart ->
+            "View the contents of your shopping cart."
+
+        Redirect path ->
+            "This page has moved to: " ++ path
+
+        SearchResults _ _ ->
+            ""
+
+        Checkout ->
+            ""
+
+        CheckoutSuccess _ _ ->
+            ""
+
+        CreateAccountSuccess ->
+            ""
+
+        MyAccount ->
+            ""
+
+        EditLogin ->
+            ""
+
+        EditAddress ->
+            ""
+
+        OrderDetails _ ->
+            ""
+
+        Admin _ ->
+            ""
 
 
 withIntermediateText : (a -> List (Html msg)) -> WebData a -> List (Html msg)
