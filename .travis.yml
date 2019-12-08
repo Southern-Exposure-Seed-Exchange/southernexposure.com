@@ -8,8 +8,6 @@ dist: bionic
 
 cache:
     directories:
-        # Client Wrapper to Fix CPU Count
-        - $TRAVIS_BUILD_DIR/sysconfcpus
         # Server Dependencies
         - $HOME/.stack
         - $HOME/.local/bin
@@ -20,15 +18,6 @@ jobs:
     include:
         - stage: Install Helpers
           script:
-              # Install sysconfcpus to Fix Client Build Times
-              - if [ ! -d $TRAVIS_BUILD_DIR/sysconfcpus/bin ];
-                then
-                  git clone https://github.com/obmarg/libsysconfcpus.git;
-                  cd libsysconfcpus;
-                  ./configure --prefix=$TRAVIS_BUILD_DIR/sysconfcpus;
-                  make && make install;
-                  cd ..;
-                fi
               # Download Stack Binary from GitHub
               - mkdir -p ~/.local/bin
               - export PATH=$HOME/.local/.bin:$PATH
@@ -40,6 +29,5 @@ jobs:
               - cd server && stack install --only-dependencies && cd ..
         - stage: Build & Test
           script:
-              - $TRAVIS_BUILD_DIR/sysconfcpus/bin/sysconfcpus -n 2
-                ./manage.hs build
+              - ./manage.hs build
               - cd client; npx elm-format --validate src
