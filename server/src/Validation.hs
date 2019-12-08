@@ -9,6 +9,7 @@ module Validation
     , mapCheck
     , required
     , doesntExist
+    , noMatches
     , exists
     , uniqueExists
     , minimumLength
@@ -19,7 +20,10 @@ import Control.Arrow (second)
 import Data.Aeson (ToJSON(..), encode, object)
 import Data.Maybe (isJust, isNothing)
 import Data.Monoid ((<>))
-import Database.Persist (PersistEntityBackend, PersistEntity, Unique, get, getBy)
+import Database.Persist
+    ( PersistEntityBackend, PersistEntity, Filter, Unique, get, getBy
+    , selectFirst
+    )
 import Database.Persist.Sql (SqlBackend, Key)
 import Servant (err422, errBody)
 
@@ -98,6 +102,11 @@ doesntExist :: (PersistEntityBackend r ~ SqlBackend, PersistEntity r)
             => Unique r -> App Bool
 doesntExist uniqueKey =
     isJust <$> runDB (getBy uniqueKey)
+
+noMatches :: (PersistEntityBackend e ~ SqlBackend, PersistEntity e)
+          => [Filter e] -> App Bool
+noMatches filters =
+    isJust <$> runDB (selectFirst filters [])
 
 exists :: (PersistEntityBackend r ~ SqlBackend, PersistEntity r)
        => Key r -> App Bool

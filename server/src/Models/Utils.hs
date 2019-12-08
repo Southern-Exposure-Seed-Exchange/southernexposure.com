@@ -11,6 +11,8 @@ module Models.Utils
       -- * Carts
     , mergeAnonymousCart
     , mergeCarts
+      -- * Customers
+    , getCustomerByEmail
       -- * Addresses
     , insertOrActivateAddress
       -- * Orders
@@ -42,6 +44,7 @@ import Server
 
 import qualified Avalara
 import qualified Data.Text as T
+import qualified Database.Esqueleto as E
 
 
 -- | Turn a name into a URL-safe string.
@@ -217,6 +220,14 @@ mergeCarts (Entity keepId _) (Entity mergeId _) = do
                 , cartItemQuantity = cartItemQuantity mergeItem
                 }
             [ CartItemQuantity +=. cartItemQuantity mergeItem ]
+
+
+-- | Get the first matching customer with the given email, searching by
+-- ignoring the casing.
+getCustomerByEmail :: T.Text -> AppSQL (Maybe (Entity Customer))
+getCustomerByEmail email = fmap listToMaybe . E.select $ E.from $ \c -> do
+    E.where_ $ E.lower_ (c E.^. CustomerEmail) E.==. E.val (T.toLower email)
+    return c
 
 
 -- | Insert an Address for a Customer, or activate an existing Address if

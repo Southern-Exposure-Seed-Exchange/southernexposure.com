@@ -6,6 +6,9 @@ CHANGELOG
 v1.01.00
 =========
 
+* Change the Login, Registration, & Password Reset pages so that
+  the casing of email addresses is ignored. Instead, it will attempt processing
+  against the first Customer with a case-insensitive matching email.
 * Add a script to merge & export Customer accounts with email addresses that
   differ only in their casing. Emails from popular domains simply have the
   Customer merged(along with Addresses, Orders, & Reviews) while less popular

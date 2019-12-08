@@ -236,7 +236,7 @@ instance Validation CustomerEditParameters where
         uniqueEmail <- case cepEmail of
             Nothing -> return []
             Just email -> do
-                doesntExist <- V.doesntExist $ UniqueEmail email
+                doesntExist <- V.noMatches [CustomerEmail ==. T.toLower email]
                 return
                     [ ( "email"
                       , [ V.required email

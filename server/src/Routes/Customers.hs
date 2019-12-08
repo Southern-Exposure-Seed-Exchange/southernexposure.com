@@ -190,7 +190,7 @@ instance FromJSON RegistrationParameters where
 instance Validation RegistrationParameters where
     -- TODO: Better validation, validate emails, compare to Zencart
     validators parameters = do
-        emailDoesntExist <- V.doesntExist $ UniqueEmail $ rpEmail parameters
+        emailDoesntExist <- V.noMatches [CustomerEmail ==. T.toLower (rpEmail parameters)]
         return
             [ ( "email"
               , [ V.required $ rpEmail parameters
@@ -268,7 +268,7 @@ loginRoute LoginParameters { lpEmail, lpPassword, lpCartToken, lpRemember } =
             void . hashAnyways $ V.singleError
                 "Sorry, you need to reset your password before logging in."
     in do
-        maybeCustomer <- runDB . getBy $ UniqueEmail lpEmail
+        maybeCustomer <- runDB $ getCustomerByEmail lpEmail
         case maybeCustomer of
             Just e@(Entity customerId customer) -> do
                 isValid <- validatePassword e
@@ -410,7 +410,7 @@ type ResetRequestRoute =
 
 resetRequestRoute :: ResetRequestParameters -> App ()
 resetRequestRoute = validate >=> \parameters -> do
-    maybeCustomer <- runDB . getBy $ UniqueEmail $ rrpEmail parameters
+    maybeCustomer <- runDB . getCustomerByEmail $ rrpEmail parameters
     case maybeCustomer of
         Nothing ->
             (UUID.toText <$> liftIO UUID4.nextRandom)
@@ -603,7 +603,8 @@ instance FromJSON EditDetailsParameters where
 
 instance Validation (EditDetailsParameters, Customer) where
     validators (parameters, customer) = do
-        maybeEmailDoesntExist <- mapM (V.doesntExist . UniqueEmail) $ edpEmail parameters
+        maybeEmailDoesntExist <- mapM (\e -> V.noMatches [CustomerEmail ==. T.toLower e])
+            $ edpEmail parameters
         return
             [ ( "email"
               , [ ( "An Account with this Email already exists."
