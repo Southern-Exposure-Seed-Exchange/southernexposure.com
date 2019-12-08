@@ -1,4 +1,5 @@
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TypeOperators #-}
@@ -7,20 +8,28 @@ module Routes.Admin.Coupons
     , couponRoutes
     ) where
 
+import Control.Monad (unless)
 import Control.Monad.IO.Class (liftIO)
-import Data.Aeson (ToJSON(..), FromJSON(..), Value(String), (.=), (.:), object, withObject, withText)
+import Data.Aeson (ToJSON(..), FromJSON(..), Value(..), (.=), (.:), object, withObject, withText)
+import Data.Maybe (catMaybes)
 import Data.Time
-    ( UTCTime, LocalTime(..), localTimeToUTC, getCurrentTimeZone
-    , getCurrentTime
+    ( UTCTime, LocalTime(..), Day, localTimeToUTC, getCurrentTimeZone
+    , getCurrentTime, utcToLocalTime
     )
-import Database.Persist (Entity(..), SelectOpt(Desc), selectList, insert)
+import Database.Persist
+    ( Entity(..), SelectOpt(Desc), Update, selectList, insert, get, update
+    )
 import Numeric.Natural (Natural)
-import Servant ((:<|>)(..), (:>), AuthProtect, ReqBody, Get, Post, JSON)
+import Servant
+    ( (:<|>)(..), (:>), AuthProtect, Capture, ReqBody, Get, Post, Patch, JSON
+    , err404
+    )
 
 import Auth (Cookied, WrappedAuthToken, withAdminCookie, validateAdminAndParameters)
 import Models (EntityField(..), Unique(..), Coupon(..), CouponId)
 import Models.Fields (Cents, CouponType(..))
-import Server (App, runDB)
+import Server (App, runDB, serverError)
+import Routes.Utils (mapUpdate)
 import Validation (Validation(..))
 
 import qualified Data.Text as T
@@ -30,15 +39,21 @@ import qualified Validation as V
 type CouponAPI =
          "list" :> CouponListRoute
     :<|> "new" :> NewCouponRoute
+    :<|> "edit" :> EditCouponDataRoute
+    :<|> "edit" :> EditCouponRoute
 
 type CouponRoutes =
          (WrappedAuthToken -> App (Cookied CouponListData))
     :<|> (WrappedAuthToken -> NewCouponParameters -> App (Cookied CouponId))
+    :<|> (WrappedAuthToken -> CouponId -> App (Cookied EditCouponData))
+    :<|> (WrappedAuthToken -> EditCouponParameters -> App (Cookied ()))
 
 couponRoutes :: CouponRoutes
 couponRoutes =
          couponListRoute
     :<|> newCouponRoute
+    :<|> editCouponDataRoute
+    :<|> editCouponRoute
 
 
 -- LIST
@@ -163,3 +178,151 @@ newCouponRoute = validateAdminAndParameters $ \_ NewCouponParameters {..} -> do
         , couponUsesPerCustomer = ncpUsesPerCustomer
         , couponCreatedAt = currentTime
         }
+
+
+-- EDIT
+
+type EditCouponDataRoute =
+       AuthProtect "cookie-auth"
+    :> Capture "id" CouponId
+    :> Get '[JSON] (Cookied EditCouponData)
+
+data EditCouponData =
+    EditCouponData
+        { ecdId :: CouponId
+        , ecdCode :: T.Text
+        , ecdName :: T.Text
+        , ecdDescription :: T.Text
+        , ecdIsActive :: Bool
+        , ecdDiscount :: CouponType
+        , ecdMinimumOrder :: Cents
+        , ecdExpirationDate :: Day
+        , ecdTotalUses :: Natural
+        , ecdUsesPerCustomer :: Natural
+        } deriving (Show)
+
+instance ToJSON EditCouponData where
+    toJSON EditCouponData {..} =
+        object
+            [ "id" .= ecdId
+            , "code" .= ecdCode
+            , "name" .= ecdName
+            , "description" .= ecdDescription
+            , "isActive" .= ecdIsActive
+            , "discount" .= ecdDiscount
+            , "minimumOrder" .= ecdMinimumOrder
+            , "expires" .= ecdExpirationDate
+            , "totalUses" .= ecdTotalUses
+            , "usesPerCustomer" .= ecdUsesPerCustomer
+            ]
+
+editCouponDataRoute :: WrappedAuthToken -> CouponId -> App (Cookied EditCouponData)
+editCouponDataRoute t couponId = withAdminCookie t $ \_ ->
+    runDB (get couponId) >>= \case
+        Nothing ->
+            serverError err404
+        Just Coupon {..} -> do
+            timezone <- liftIO getCurrentTimeZone
+            let localTime = utcToLocalTime timezone couponExpirationDate
+            return EditCouponData
+                { ecdId = couponId
+                , ecdCode = couponCode
+                , ecdName = couponName
+                , ecdDescription = couponDescription
+                , ecdIsActive = couponIsActive
+                , ecdDiscount = couponDiscount
+                , ecdMinimumOrder = couponMinimumOrder
+                , ecdExpirationDate = localDay localTime
+                , ecdTotalUses = couponTotalUses
+                , ecdUsesPerCustomer = couponUsesPerCustomer
+                }
+
+
+type EditCouponRoute =
+       AuthProtect "cookie-auth"
+    :> ReqBody '[JSON] EditCouponParameters
+    :> Patch '[JSON] (Cookied ())
+
+data EditCouponParameters =
+    EditCouponParameters
+        { ecpId :: CouponId
+        , ecpCode :: Maybe T.Text
+        , ecpName :: Maybe T.Text
+        , ecpDescription :: Maybe T.Text
+        , ecpIsActive :: Maybe Bool
+        , ecpDiscount :: Maybe CouponType
+        , ecpMinimumOrder :: Maybe Cents
+        , ecpExpirationDate :: Maybe LocalTime
+        -- ^ Send an ISO8601 UTC Datetime(with a trailing `Z`)
+        , ecpTotalUses :: Maybe Natural
+        , ecpUsesPerCustomer :: Maybe Natural
+        }
+
+instance FromJSON EditCouponParameters where
+    parseJSON = withObject "EditCouponParameters" $ \v -> do
+        ecpId <- v .: "id"
+        ecpCode <- v .: "code"
+        ecpName <- v .: "name"
+        ecpDescription <- v .: "description"
+        ecpIsActive <- v .: "isActive"
+        ecpDiscount <- v .: "discount"
+        ecpMinimumOrder <- v .: "minimumOrder"
+        ecpExpirationDate <- v .: "expires" >>= parseExpires
+        ecpTotalUses <- v .: "totalUses"
+        ecpUsesPerCustomer <- v .: "usesPerCustomer"
+        return EditCouponParameters {..}
+      where
+        -- Drop the trailing `Z` from the ISO8601 UTC datetime so the
+        -- parsing of LocalTime will succeed.
+        parseExpires =
+            \case
+                Null ->
+                    return Nothing
+                val ->
+                    Just <$> withText "expires" (parseJSON . String . T.dropEnd 1) val
+
+instance Validation EditCouponParameters where
+    validators EditCouponParameters {..} = do
+        codeCheck <- case ecpCode of
+            Nothing -> return []
+            Just code -> do
+                -- TODO: Similar to slugCheck in EditCouponParameters
+                doesntExist <- V.doesntExist $ UniqueCoupon code
+                return
+                    [ ( "code"
+                      , [ V.required code
+                        , ( "A Coupon with this Code already exists."
+                          , doesntExist
+                          )
+                        ]
+                      )
+                    ]
+        return $ catMaybes
+            [ V.mapCheck ecpName $ \name ->
+                ( "name"
+                , [ V.required name ]
+                )
+            ]
+            ++ codeCheck
+
+editCouponRoute :: WrappedAuthToken -> EditCouponParameters -> App (Cookied ())
+editCouponRoute = validateAdminAndParameters $ \_ parameters -> do
+    timezone <- liftIO getCurrentTimeZone
+    let maybeExpires = localTimeToUTC timezone <$> ecpExpirationDate parameters
+        updates = makeUpdates parameters maybeExpires
+    unless (null updates) $
+        runDB $ update (ecpId parameters) updates
+  where
+    makeUpdates :: EditCouponParameters -> Maybe UTCTime -> [Update Coupon]
+    makeUpdates EditCouponParameters {..} expires =
+        catMaybes
+            [ mapUpdate CouponCode ecpCode
+            , mapUpdate CouponName ecpName
+            , mapUpdate CouponDescription ecpDescription
+            , mapUpdate CouponIsActive ecpIsActive
+            , mapUpdate CouponDiscount ecpDiscount
+            , mapUpdate CouponMinimumOrder ecpMinimumOrder
+            , mapUpdate CouponExpirationDate expires
+            , mapUpdate CouponTotalUses ecpTotalUses
+            , mapUpdate CouponUsesPerCustomer ecpUsesPerCustomer
+            ]
