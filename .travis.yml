@@ -1,11 +1,10 @@
 ---
-# Use Travis' Container Infrastructure
-sudo: false
-
 # Have Travis Setup Node, We Will Provide the Server Build Tools
 language: elm
 node_js:
     - "12"
+os: linux
+dist: bionic
 
 cache:
     directories:
