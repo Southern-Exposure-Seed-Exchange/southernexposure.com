@@ -6,6 +6,9 @@ CHANGELOG
 v1.01.01
 =========
 
+* Include a ``From:`` name in all emails instead of only the address.
+* BCC the customer service email address when sending Order Confirmation
+  emails.
 * Fix a bug preventing the Homepage's Carousel from rotating.
 * Fix a bug causing the Media Directory configuration from being properly
   parsed.

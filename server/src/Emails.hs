@@ -9,14 +9,16 @@ import Control.Concurrent.Async (Async, async)
 import Control.Monad ((<=<))
 import Control.Monad.Reader (ask)
 import Control.Monad.IO.Class (liftIO)
+import Data.Monoid ((<>))
 import Data.Pool (withResource)
-import Network.HaskellNet.SMTP.SSL (authenticate, sendMimeMail, AuthType(PLAIN))
+import Network.HaskellNet.SMTP.SSL (authenticate, sendMimeMail2, AuthType(PLAIN))
+import Network.Mail.Mime (Address(..), Mail(..), plainPart, htmlPart)
 import Text.Blaze.Html.Renderer.Text (renderHtml)
 import Text.Markdown (markdown, def)
 import Text.Pandoc (readHtml, writeMarkdown, runPure)
 
 import Config
-import Models hiding (PasswordReset)
+import Models hiding (Address, PasswordReset)
 import Server
 
 import qualified Data.Text as T
@@ -35,32 +37,46 @@ data EmailType
 
 
 -- TODO: Make Configurable
-developmentEmailRecipient :: String
-developmentEmailRecipient = "pavan@acorncommunity.org"
+developmentEmailRecipient :: Address
+developmentEmailRecipient =
+    Address
+        { addressName = Nothing
+        , addressEmail = "pavan@acorncommunity.org"
+        }
+
+-- TODO: Make Configurable
+customerServiceAddress :: Address
+customerServiceAddress =
+    Address
+        { addressName = Just "Southern Exposure Seed Exchange"
+        , addressEmail = "gardens@southernexposure.com"
+        }
+
 
 
 send :: EmailType -> App (Async ())
 send email = ask >>= \cfg ->
     let
-        -- TODO: Add a Name to the sender address(see source for sendMimeMail)
-        -- TODO: Make Configurable
-        sender =
-            "gardens@southernexposure.com"
+        env =
+            getEnv cfg
 
-        recipient env =
-            if env /= Production then
-                developmentEmailRecipient
-            else
-                T.unpack . customerEmail $ case email of
-                    AccountCreated customer ->
-                        customer
-                    PasswordReset customer _ ->
-                        customer
-                    PasswordResetSuccess customer ->
-                        customer
-                    OrderPlaced parameters ->
-                        OrderPlaced.customer parameters
+        bcc =
+            case email of
+                OrderPlaced _ ->
+                    if env /= Production then
+                        []
+                    else
+                        [ Address
+                            { addressName = Just "Southern Exposure Seed Exchange"
+                            , addressEmail = "gardens@southernexposure.com"
+                            }
+                        ]
+                _ ->
+                    []
 
+
+        -- TODO: Make this configurable - real domain is needed in several
+        -- places(here & Feeds)
         domainName =
             case getEnv cfg of
                 Development ->
@@ -90,12 +106,54 @@ send email = ask >>= \cfg ->
 
         htmlToMarkdown =
             either (const "") L.fromStrict . runPure . (writeMarkdown def <=< readHtml def) . L.toStrict
+
+        mail =
+            Mail
+                { mailFrom = customerServiceAddress
+                , mailTo = [makeRecipient env email]
+                , mailCc = []
+                , mailBcc = bcc
+                , mailHeaders = [("Subject", T.pack subject)]
+                , mailParts = [[plainPart plainMessage, htmlPart htmlMessage]]
+                }
     in
         liftIO $ async $ withResource (getSmtpPool cfg) $ \conn -> do
             authSucceeded <- authenticate PLAIN (getSmtpUser cfg) (getSmtpPass cfg) conn
             if authSucceeded then
-                sendMimeMail (recipient $ getEnv cfg) sender subject plainMessage
-                    htmlMessage [] conn
+                sendMimeMail2 mail conn
             else
                 -- TODO: Properly Log SMTP Auth Error
                 print ("SMTP AUTHENTICATION FAILED" :: T.Text)
+
+
+makeRecipient :: Environment -> EmailType -> Address
+makeRecipient env email =
+    let
+        recipientEmail =
+            customerEmail $ case email of
+                AccountCreated customer ->
+                    customer
+                PasswordReset customer _ ->
+                    customer
+                PasswordResetSuccess customer ->
+                    customer
+                OrderPlaced parameters ->
+                    OrderPlaced.customer parameters
+
+        recipientName =
+            case email of
+                OrderPlaced parameters ->
+                    Just $
+                        Models.addressFirstName (OrderPlaced.shippingAddress parameters)
+                        <> " "
+                        <> Models.addressLastName (OrderPlaced.shippingAddress parameters)
+                _ ->
+                    Nothing
+    in
+    if env /= Production then
+        developmentEmailRecipient
+    else
+        Address
+            { addressName = recipientName
+            , addressEmail = recipientEmail
+            }
