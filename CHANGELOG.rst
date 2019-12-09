@@ -6,6 +6,10 @@ CHANGELOG
 v1.01.00
 =========
 
+* Improve the "Loading" text that is shown while navigating between pages.
+  Instead of simple text, it is now a translucent overlay over the entire
+  window with a large spinner. It will now appear when navigating between
+  different Categories.
 * Change the Login, Registration, & Password Reset pages so that
   the casing of email addresses is ignored. Instead, it will attempt processing
   against the first Customer with a case-insensitive matching email.

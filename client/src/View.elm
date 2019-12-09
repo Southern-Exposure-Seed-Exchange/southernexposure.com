@@ -39,7 +39,7 @@ import Views.CouponAdmin as CouponAdmin
 import Views.CustomerAdmin as CustomerAdmin
 import Views.OrderAdmin as OrderAdmin
 import Views.StaticPageAdmin as StaticPageAdmin
-import Views.Utils exposing (rawHtml)
+import Views.Utils exposing (icon, rawHtml)
 
 
 view : Model -> Document Msg
@@ -95,15 +95,16 @@ view ({ route, pageData, navigationData, zone } as model) =
 
                 CategoryDetails _ pagination ->
                     if Paginate.getResponseData pageData.categoryDetails == Nothing then
-                        [ text "Loading..." ]
+                        [ loadingInterstitial True ]
 
                     else if Paginate.getError pageData.categoryDetails /= Nothing then
                         notFoundView
 
                     else
-                        CategoryViews.details pagination
-                            model.addToCartForms
-                            pageData.categoryDetails
+                        loadingInterstitial False
+                            :: CategoryViews.details pagination
+                                model.addToCartForms
+                                pageData.categoryDetails
 
                 AdvancedSearch ->
                     withIntermediateText
@@ -112,10 +113,11 @@ view ({ route, pageData, navigationData, zone } as model) =
 
                 SearchResults data pagination ->
                     if Paginate.isLoading pageData.searchResults then
-                        [ text "Loading..." ]
+                        [ loadingInterstitial True ]
 
                     else
-                        searchResultsView data pagination model.addToCartForms pageData.searchResults
+                        loadingInterstitial False
+                            :: searchResultsView data pagination model.addToCartForms pageData.searchResults
 
                 PageDetails _ _ ->
                     withIntermediateText staticPageView pageData.pageDetails
@@ -543,16 +545,33 @@ withIntermediateText : (a -> List (Html msg)) -> WebData a -> List (Html msg)
 withIntermediateText subView data =
     case data of
         RemoteData.Loading ->
-            [ text "Loading..." ]
+            [ loadingInterstitial True ]
 
         RemoteData.Success d ->
-            subView d
+            loadingInterstitial False
+                :: subView d
 
         RemoteData.Failure httpError ->
             remoteFailureView httpError
 
         RemoteData.NotAsked ->
             [ text "BUG! Reached NotAsked!" ]
+
+
+loadingInterstitial : Bool -> Html msg
+loadingInterstitial isVisible =
+    let
+        class_ =
+            if isVisible then
+                "loading-interstitial"
+
+            else
+                "loading-interstitial hidden"
+    in
+    div [ class class_ ]
+        [ div [] [ icon "spinner fa-spin fa-5x" ]
+        , div [ class "mt-4 font-weight-bold" ] [ text "Loading..." ]
+        ]
 
 
 remoteFailureView : Http.Error -> List (Html msg)

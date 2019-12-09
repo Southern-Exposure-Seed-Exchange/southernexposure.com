@@ -141,8 +141,16 @@ fetchDataForRoute : Model -> ( Model, Cmd Msg )
 fetchDataForRoute ({ route, pageData, key } as model) =
     let
         updateCategoryDetails slug pagination products =
+            let
+                updater =
+                    if slug == (.slug <| Paginate.getRequestData products) then
+                        Paginate.updateData
+
+                    else
+                        Paginate.updateAndResetData
+            in
             products
-                |> Paginate.updateData PageData.categoryConfig
+                |> updater PageData.categoryConfig
                     { slug = slug, sorting = pagination.sorting }
                 |> discardCommand (Paginate.updatePerPage PageData.categoryConfig pagination.perPage)
                 |> discardCommand (Paginate.jumpTo PageData.categoryConfig pagination.page)
