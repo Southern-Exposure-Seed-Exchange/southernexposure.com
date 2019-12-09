@@ -183,6 +183,19 @@ executables:
             - persistent-postgresql
             - text
 
+    update-product-descriptions:
+        main: UpdateProductDescriptions.hs
+        <<: *script-defaults
+        other-modules: []
+        dependencies:
+            - sese-website
+            - bytestring
+            - cassava
+            - monad-logger
+            - persistent-postgresql
+            - text
+            - vector
+
     merge-customers:
         main: MergeCustomers.hs
         <<: *script-defaults

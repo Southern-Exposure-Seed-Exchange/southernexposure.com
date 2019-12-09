@@ -6,6 +6,7 @@ CHANGELOG
 v1.01.00
 =========
 
+* Add script to update descriptions for products from a CSV file.
 * Add a translucent "Processing" overlay with a spinner to the Checkout page
   after the Customer clicks the Place Order button(for free checkouts) or after
   they have entered their creditcard details.
