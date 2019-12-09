@@ -3,6 +3,13 @@ CHANGELOG
 =========
 
 
+v1.01.01
+=========
+
+* Fix a bug causing the Media Directory configuration from being properly
+  parsed.
+
+
 v1.01.00
 =========
 

@@ -29,11 +29,13 @@ import qualified Data.Text as T
 import qualified Network.Wai.Handler.Warp as Warp
 
 -- | Connect to the database, configure the application, & start the server.
+--
+-- TODO: Document enviornmental variables in README.
 main :: IO ()
 main = do
     env <- lookupSetting "ENV" Development
     port <- lookupSetting "PORT" 3000
-    mediaDir <- lookupSetting "MEDIA" =<< (++ "/media/") <$> getCurrentDirectory
+    mediaDir <- lookupMediaDirectory
     createDirectoryIfMissing True mediaDir
     smtpServer <- fromMaybe "" <$> lookupEnv "SMTP_SERVER"
     smtpUser <- fromMaybe "" <$> lookupEnv "SMTP_USER"
@@ -74,6 +76,9 @@ main = do
           requireSetting env =
             lookupEnv env
                 >>= maybe (error $ "Could not find required env variable: " ++ env) return
+          lookupMediaDirectory :: IO FilePath
+          lookupMediaDirectory =
+            lookupEnv "MEDIA" >>= maybe ((++ "/media/") <$> getCurrentDirectory) return
           makePool :: Environment -> IO ConnectionPool
           makePool env =
             case env of
