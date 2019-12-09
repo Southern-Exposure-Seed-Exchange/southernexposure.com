@@ -6,6 +6,7 @@ CHANGELOG
 v1.01.01
 =========
 
+* Fix a bug preventing the Homepage's Carousel from rotating.
 * Fix a bug causing the Media Directory configuration from being properly
   parsed.
 
