@@ -176,6 +176,20 @@ app.ports.logStatusCode.subscribe(function(code) {
   createOrUpdateMeta('prerender-status-code', code)
 });
 
+/* Initialize the Homepage Carousel When the Page is Loaded, Destroy it when Navigating Away. */
+var $homepageCarousel = null;
+app.ports.initializeOrDestroyHomepageCarousel.subscribe(function(isHomepage) {
+  requestAnimationFrame(function () {
+    if (isHomepage) {
+      $homepageCarousel = $('#homepage-carousel');
+      $homepageCarousel.carousel();
+    } else if ($homepageCarousel !== null) {
+      $homepageCarousel.carousel('dispose');
+      $homepageCarousel = null;
+    }
+  });
+});
+
 
 /** UTILITIES **/
 

@@ -1399,6 +1399,11 @@ updateWrapper msg model =
             getStatusCode newModel
                 |> Maybe.map Ports.logStatusCode
                 |> Maybe.withDefault Cmd.none
+
+        homepageCarouselCmd =
+            newModel.route
+                == Routing.homePage
+                |> Ports.initializeOrDestroyHomepageCarousel
     in
     if noLoadNeededOrLoadJustFinished then
         ( newModel
@@ -1411,6 +1416,7 @@ updateWrapper msg model =
                 }
             , pageDetailsScroll
             , statusCodeCmd
+            , homepageCarouselCmd
             , cmd
             ]
         )

@@ -3,6 +3,7 @@ port module Ports exposing
     , cartItemCountChanged
     , collapseMobileMenus
     , collectStripeToken
+    , initializeOrDestroyHomepageCarousel
     , logPurchase
     , logStatusCode
     , loggedIn
@@ -128,3 +129,8 @@ type alias PageMetadata =
     , description : String
     , image : Maybe String
     }
+
+
+{-| Initialize the carousel if True, otherwise destroy any running Carousel.
+-}
+port initializeOrDestroyHomepageCarousel : Bool -> Cmd msg
