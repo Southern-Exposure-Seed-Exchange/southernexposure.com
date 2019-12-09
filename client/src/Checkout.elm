@@ -31,7 +31,7 @@ import Time
 import Update.Utils exposing (nothingAndNoCommand)
 import User exposing (AuthStatus)
 import Views.Format as Format
-import Views.Utils exposing (decimalInput, emailInput)
+import Views.Utils exposing (decimalInput, emailInput, icon, pageOverlay)
 
 
 
@@ -58,6 +58,7 @@ type alias Form =
     , couponCode : String
     , comment : String
     , errors : Api.FormErrors
+    , isProcessing : Bool
     }
 
 
@@ -77,6 +78,7 @@ initial =
     , couponCode = ""
     , comment = ""
     , errors = Api.initialErrors
+    , isProcessing = False
     }
 
 
@@ -116,6 +118,7 @@ initialWithDefaults shippingAddresses billingAddresses =
     , couponCode = ""
     , comment = ""
     , errors = Api.initialErrors
+    , isProcessing = False
     }
 
 
@@ -290,7 +293,10 @@ update msg model authStatus maybeSessionToken checkoutDetails =
                                         model.email
                         in
                         if PageData.isFreeCheckout checkoutDetails || finalTotal == 0 then
-                            ( model, Nothing, placeOrder model authStatus maybeSessionToken Nothing checkoutDetails )
+                            ( { model | isProcessing = True }
+                            , Nothing
+                            , placeOrder model authStatus maybeSessionToken Nothing checkoutDetails
+                            )
 
                         else
                             ( model, Nothing, Ports.collectStripeToken ( customerEmail, finalTotal ) )
@@ -299,7 +305,10 @@ update msg model authStatus maybeSessionToken checkoutDetails =
                         ( model, Nothing, Cmd.none )
 
         TokenReceived stripeTokenId ->
-            ( model, Nothing, placeOrder model authStatus maybeSessionToken (Just stripeTokenId) checkoutDetails )
+            ( { model | isProcessing = True }
+            , Nothing
+            , placeOrder model authStatus maybeSessionToken (Just stripeTokenId) checkoutDetails
+            )
 
         SubmitResponse (RemoteData.Success (Ok response)) ->
             let
@@ -375,6 +384,7 @@ update msg model authStatus maybeSessionToken checkoutDetails =
             ( { model
                 | shippingAddress = updatedShippingForm
                 , billingAddress = updatedBillingForm
+                , isProcessing = False
                 , errors =
                     Dict.fromList generalErrors
                         |> addAddresErrorIfExisting "shipping" model.shippingAddress
@@ -385,13 +395,13 @@ update msg model authStatus maybeSessionToken checkoutDetails =
             )
 
         SubmitResponse (RemoteData.Failure error) ->
-            ( { model | errors = Api.apiFailureToError error }
+            ( { model | errors = Api.apiFailureToError error, isProcessing = False }
             , Nothing
             , Ports.scrollToTop
             )
 
         SubmitResponse _ ->
-            model |> nothingAndNoCommand
+            { model | isProcessing = False } |> nothingAndNoCommand
 
         RefreshDetails (RemoteData.Success (Ok details)) ->
             ( model
@@ -1090,11 +1100,27 @@ view model authStatus locations checkoutDetails =
 
         freeCheckout =
             finalTotal <= 0
+
+        buttonContents =
+            if model.isProcessing then
+                [ text "Placing Order..."
+                , icon "spinner fa-spin ml-2"
+                ]
+
+            else if freeCheckout then
+                [ text "Place Order" ]
+
+            else
+                [ text "Pay with Credit Card" ]
+
+        processingOverlay =
+            pageOverlay model.isProcessing "Processing..."
     in
     [ h1 [] [ text "Checkout" ]
     , hr [] []
     , form [ onSubmit Submit ]
-        [ generalErrors
+        [ processingOverlay
+        , generalErrors
         , registrationCard
         , div [ class "row mb-3" ]
             [ addressForm
@@ -1144,14 +1170,12 @@ view model authStatus locations checkoutDetails =
                 ]
             ]
         , div [ class "form-group text-right" ]
-            [ button [ class "btn btn-primary", type_ "submit" ]
-                [ text <|
-                    if freeCheckout then
-                        "Place Order"
-
-                    else
-                        "Pay with Credit Card"
+            [ button
+                [ class "btn btn-primary"
+                , type_ "submit"
+                , A.disabled model.isProcessing
                 ]
+                buttonContents
             ]
         ]
     ]

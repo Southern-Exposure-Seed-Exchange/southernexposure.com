@@ -39,7 +39,7 @@ import Views.CouponAdmin as CouponAdmin
 import Views.CustomerAdmin as CustomerAdmin
 import Views.OrderAdmin as OrderAdmin
 import Views.StaticPageAdmin as StaticPageAdmin
-import Views.Utils exposing (icon, rawHtml)
+import Views.Utils exposing (pageOverlay, rawHtml)
 
 
 view : Model -> Document Msg
@@ -560,18 +560,7 @@ withIntermediateText subView data =
 
 loadingInterstitial : Bool -> Html msg
 loadingInterstitial isVisible =
-    let
-        class_ =
-            if isVisible then
-                "loading-interstitial"
-
-            else
-                "loading-interstitial hidden"
-    in
-    div [ class class_ ]
-        [ div [] [ icon "spinner fa-spin fa-5x" ]
-        , div [ class "mt-4 font-weight-bold" ] [ text "Loading..." ]
-        ]
+    pageOverlay isVisible "Loading..."
 
 
 remoteFailureView : Http.Error -> List (Html msg)

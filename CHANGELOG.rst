@@ -6,6 +6,9 @@ CHANGELOG
 v1.01.00
 =========
 
+* Add a translucent "Processing" overlay with a spinner to the Checkout page
+  after the Customer clicks the Place Order button(for free checkouts) or after
+  they have entered their creditcard details.
 * Improve the "Loading" text that is shown while navigating between pages.
   Instead of simple text, it is now a translucent overlay over the entire
   window with a large spinner. It will now appear when navigating between

@@ -7,6 +7,7 @@ module Views.Utils exposing
     , inputMode
     , numericInput
     , onIntInput
+    , pageOverlay
     , rawHtml
     , routeLinkAttributes
     , selectImageFile
@@ -14,7 +15,7 @@ module Views.Utils exposing
 
 import File exposing (File)
 import File.Select as Select
-import Html exposing (Attribute, Html, i, text)
+import Html exposing (Attribute, Html, div, i, text)
 import Html.Attributes exposing (attribute, class, href)
 import Html.Events exposing (on)
 import Html.Events.Extra exposing (targetValueInt)
@@ -51,6 +52,28 @@ rawHtml : String -> Html msg
 rawHtml =
     Markdown.toHtmlWith { defaultOptions | sanitize = False, smartypants = True }
         []
+
+
+{-| Render a translucent overlay with a spinner and some text below it.
+
+Note: to get a nice fade in effect, you should always render the overlay, but
+control whether it is displayed or not with the Bool argument.
+
+-}
+pageOverlay : Bool -> String -> Html msg
+pageOverlay isVisible contents =
+    let
+        class_ =
+            if isVisible then
+                "translucent-page-overlay"
+
+            else
+                "translucent-page-overlay hidden"
+    in
+    div [ class class_ ]
+        [ div [] [ icon "spinner fa-spin fa-5x" ]
+        , div [ class "mt-4 font-weight-bold" ] [ text contents ]
+        ]
 
 
 {-| Set the `inputmode` attribute
