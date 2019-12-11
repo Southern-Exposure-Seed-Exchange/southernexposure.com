@@ -6,7 +6,7 @@ module Views.Aria exposing (..)
 
 @docs haspopup, expanded
 
-@docs controls, disabled
+@docs controls, disabled, live
 
 -}
 
@@ -52,6 +52,11 @@ controls =
 disabled : Bool -> Attribute msg
 disabled =
     attribute "aria-disabled" << boolToString
+
+
+live : String -> Attribute msg
+live =
+    attribute "aria-live"
 
 
 

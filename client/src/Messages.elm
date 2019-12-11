@@ -39,6 +39,8 @@ type Msg
     | NewZone Time.Zone
     | UpdateZone
     | LogOut
+    | FocusMainContent
+    | FocusMainContentResult
       -- Other Tabs (via localStorage ports)
     | OtherTabLoggedIn Int
     | OtherTabNewCartToken String

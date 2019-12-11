@@ -14,7 +14,8 @@ import Categories.AdminViews as CategoryAdminViews
 import Categories.Views as CategoryViews
 import Checkout
 import Html exposing (..)
-import Html.Attributes exposing (class)
+import Html.Attributes exposing (class, href, id, target)
+import Html.Events exposing (onClick)
 import Http
 import Messages exposing (Msg(..))
 import Model exposing (CartForms, Model)
@@ -36,6 +37,7 @@ import SiteUI.Navigation as SiteNavigation
 import SiteUI.Sidebar as SiteSidebar
 import StaticPage exposing (StaticPage)
 import User
+import Views.Aria as Aria
 import Views.CouponAdmin as CouponAdmin
 import Views.CustomerAdmin as CustomerAdmin
 import Views.OrderAdmin as OrderAdmin
@@ -49,7 +51,7 @@ view ({ route, pageData, navigationData, zone } as model) =
         middleContent =
             case route of
                 Checkout ->
-                    div [ class "container" ]
+                    div [ class "container", Aria.live "polite", id "main" ]
                         [ div [ class "row justify-content-center" ]
                             [ div [ class "col-md-10" ] pageContent
                             ]
@@ -72,9 +74,9 @@ view ({ route, pageData, navigationData, zone } as model) =
                     withSidebar pageContent
 
         withSidebar content =
-            div [ class "container" ]
+            div [ class "container", Aria.live "polite" ]
                 [ div [ class "row" ]
-                    [ div [ class "col order-md-2" ] content
+                    [ div [ class "col order-md-2", id "main" ] content
                     , SiteSidebar.view route
                     ]
                 ]
@@ -263,6 +265,15 @@ view ({ route, pageData, navigationData, zone } as model) =
 
                 _ ->
                     []
+
+        skipLink =
+            a
+                [ class "sr-only sr-only-focusable"
+                , href "#main"
+                , target "_self"
+                , onClick FocusMainContent
+                ]
+                [ text "Skip to main content" ]
     in
     Document (pageTitle model) <|
         if isAdminRoute route && User.isAdmin model.currentUser then
@@ -272,7 +283,8 @@ view ({ route, pageData, navigationData, zone } as model) =
             ]
 
         else
-            [ SiteHeader.view SearchMsg model.searchData model.currentUser model.cartItemCount
+            [ skipLink
+            , SiteHeader.view SearchMsg model.searchData model.currentUser model.cartItemCount
             , SiteNavigation.view route model.currentUser navigationData activeCategoryIds model.searchData
             , SiteBreadcrumbs.view route pageData
             , middleContent

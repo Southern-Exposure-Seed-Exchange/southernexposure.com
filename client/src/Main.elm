@@ -11,6 +11,7 @@ import Auth.MyAccount as MyAccount
 import Auth.ResetPassword as ResetPassword
 import BootstrapGallery as Gallery
 import Browser
+import Browser.Dom as Dom
 import Browser.Navigation
 import Cart
 import Categories.AdminViews as CategoryAdmin
@@ -725,6 +726,14 @@ update msg ({ pageData, key } as model) =
 
         LogOut ->
             ( model, logOut )
+
+        FocusMainContent ->
+            ( model
+            , Task.attempt (always FocusMainContentResult) <| Dom.focus "main"
+            )
+
+        FocusMainContentResult ->
+            ( model, Cmd.none )
 
         OtherTabLoggedIn userId ->
             ( model, reAuthorize userId )

@@ -6,6 +6,8 @@ CHANGELOG
 v1.02.00
 =========
 
+* Add a ``skip link`` allowing users with screen readers to skip the navigation
+  elements and begin reading at the main content of the page.
 * Add additional accessibility attributes to UI elements, improving the
   feedback given to disabled users using assistive technologies.
 * Display a pop-up lightbox for showing large versions of Product images when
