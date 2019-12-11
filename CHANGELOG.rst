@@ -6,6 +6,7 @@ CHANGELOG
 v1.02.00
 =========
 
+* Add a script to update product prices from a CSV file.
 * Add a ``skip link`` allowing users with screen readers to skip the navigation
   elements and begin reading at the main content of the page.
 * Add additional accessibility attributes to UI elements, improving the
