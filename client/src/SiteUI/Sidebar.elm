@@ -138,6 +138,7 @@ view route =
                         [ target "_blank"
                         , href "http://www.facebook.com/pages/Southern-Exposure-Seed-Exchange/353814746253?ref=ts"
                         , Aria.label "Visit Our Facebook Page"
+                        , noOpener
                         ]
                         [ img
                             [ class "img-fluid"
@@ -152,6 +153,7 @@ view route =
                         [ target "_blank"
                         , href "http://www.smartgardener.com/"
                         , Aria.label "Visit Smart Gardener"
+                        , noOpener
                         ]
                         [ img
                             [ class "mb-3 img-fluid"
@@ -165,6 +167,7 @@ view route =
                         [ target "_blank"
                         , href "http://www.localharvest.org/"
                         , Aria.label "Visit Local Harvest"
+                        , noOpener
                         ]
                         [ img
                             [ class "img-fluid"
@@ -175,6 +178,9 @@ view route =
                         ]
                     ]
                 ]
+
+        noOpener =
+            A.attribute "rel" "noopener"
     in
     div [ id "sidebar", class "col-12 col-md-3 col-lg-3 col-xl-2 order-md-1 d-print-none" ]
         [ pageLinks

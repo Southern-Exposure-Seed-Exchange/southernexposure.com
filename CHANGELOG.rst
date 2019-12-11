@@ -3,6 +3,13 @@ CHANGELOG
 =========
 
 
+v1.03.00
+=========
+
+* Add the ``rel=noopener`` HTML attribute to external links to prevent security
+  vulnerabilities.
+
+
 v1.02.00
 =========
 
