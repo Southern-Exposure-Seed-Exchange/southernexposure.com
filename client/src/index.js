@@ -234,6 +234,6 @@ function createOrUpdateMeta(name, content) {
     metaElement = document.createElement("meta");
     metaElement.setAttribute('name', name);
     metaElement.setAttribute('content', content);
-    document.getElementsByTagName('head')[0].appendChild(metaElement);
+    document.head.appendChild(metaElement);
   }
 }
