@@ -6,6 +6,7 @@ module SeedAttribute exposing
     , iconUrl
     , icons
     , legend
+    , toDescription
     )
 
 import Html exposing (Html, div, img, li, span, text, ul)

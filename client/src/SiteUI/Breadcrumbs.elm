@@ -1,6 +1,6 @@
 module SiteUI.Breadcrumbs exposing (view)
 
-import Html exposing (Html, a, div, li, ol, span, text)
+import Html exposing (Html, a, li, node, ol, span, text)
 import Html.Attributes exposing (class, id)
 import Messages exposing (Msg(..))
 import PageData exposing (PageData)
@@ -8,6 +8,7 @@ import Paginate
 import Products.Pagination as Pagination
 import RemoteData
 import Routing exposing (AdminRoute(..), Route(..))
+import Views.Aria as Aria
 import Views.Microdata as Microdata
 import Views.Utils exposing (routeLinkAttributes)
 
@@ -210,5 +211,6 @@ view route pageData =
         maybeToList f =
             Maybe.map f >> Maybe.withDefault []
     in
-    div [ id "breadcrumbs", class "container d-print-none" ]
+    node "nav"
+        [ id "breadcrumbs", class "container d-print-none", Aria.label "breadcrumb" ]
         [ ol (class "breadcrumb mb-0" :: Microdata.breadcrumbList) items ]

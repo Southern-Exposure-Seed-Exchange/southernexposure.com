@@ -16,7 +16,7 @@ import Address exposing (AddressId(..))
 import Api
 import Dict
 import Html exposing (..)
-import Html.Attributes as A exposing (attribute, checked, class, colspan, for, id, minlength, name, required, rows, src, step, type_, value)
+import Html.Attributes as A exposing (alt, attribute, checked, class, colspan, for, id, minlength, name, required, rows, src, step, type_, value)
 import Html.Events exposing (onCheck, onClick, onInput, onSubmit)
 import Json.Decode as Decode
 import Json.Encode as Encode exposing (Value)
@@ -30,6 +30,7 @@ import RemoteData exposing (WebData)
 import Time
 import Update.Utils exposing (nothingAndNoCommand)
 import User exposing (AuthStatus)
+import Views.Aria as Aria
 import Views.Format as Format
 import Views.Utils exposing (decimalInput, emailInput, icon, pageOverlay)
 
@@ -993,6 +994,7 @@ view model authStatus locations checkoutDetails =
                         , onInput MemberNumber
                         , value <|
                             Maybe.withDefault checkoutDetails.memberNumber model.memberNumber
+                        , Aria.label "Member Number"
                         ]
                         []
                     ]
@@ -1441,6 +1443,7 @@ summaryTable ({ items, charges } as checkoutDetails) creditString couponCode cou
                         [ src <| imgSrcFallback product.image
                         , imageToSrcSet product.image
                         , imageSizes
+                        , alt <| "Product Image for " ++ product.name
                         ]
                         []
                     ]
@@ -1546,6 +1549,7 @@ summaryTable ({ items, charges } as checkoutDetails) creditString couponCode cou
                             , onInput CouponCode
                             , value couponCode
                             , A.placeholder "Coupon Code"
+                            , Aria.label "Coupon Code"
                             ]
                             []
                         , button

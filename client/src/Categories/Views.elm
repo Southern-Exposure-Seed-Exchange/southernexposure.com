@@ -2,7 +2,7 @@ module Categories.Views exposing (details)
 
 import Category
 import Html exposing (Html, a, div, h1, hr, img, text)
-import Html.Attributes exposing (attribute, class, src)
+import Html.Attributes exposing (alt, attribute, class, src)
 import Messages exposing (Msg)
 import Model exposing (CartForms)
 import Models.Fields exposing (imageToSrcSet, imgSrcFallback)
@@ -54,6 +54,7 @@ details pagination addToCartForms products =
                                     , "(max-width: 1199px) 160px"
                                     , "225px"
                                     ]
+                            , alt <| "Category Image for " ++ subCategory.name
                             ]
                             []
                         , div [ class "my-auto" ] [ text subCategory.name ]
@@ -67,6 +68,7 @@ details pagination addToCartForms products =
             , src <| imgSrcFallback category.image
             , imageToSrcSet category.image
             , attribute "sizes" "100px"
+            , alt <| "Category Image for " ++ category.name
             ]
             []
         , h1 [ class "mb-0 pl-2" ] [ text category.name ]

@@ -11,6 +11,7 @@ import Html.Events exposing (onInput, onSubmit)
 import Products.Pagination as Pagination
 import Routing exposing (Route(..))
 import Search
+import Views.Aria as Aria
 import Views.Microdata as Microdata
 
 
@@ -56,6 +57,7 @@ form tagger buttonColor { query } =
                     , onInput <| tagger << Update
                     , required True
                     , Microdata.queryInput
+                    , Aria.label "Search"
                     ]
                     []
                 , div [ class "input-group-append" ]

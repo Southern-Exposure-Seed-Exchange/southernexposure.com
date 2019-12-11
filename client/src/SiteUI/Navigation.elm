@@ -13,6 +13,7 @@ import Search
 import SiteUI exposing (NavigationData)
 import SiteUI.Search as SiteSearch
 import User exposing (AuthStatus(..))
+import Views.Aria as Aria
 import Views.Utils exposing (icon, routeLinkAttributes)
 
 
@@ -28,6 +29,9 @@ view route authStatus navigationData activeCategoryIds searchData =
             let
                 (CategoryId categoryId) =
                     category.id
+
+                linkId =
+                    "category-nav-" ++ String.fromInt categoryId
 
                 dropdownCategories children =
                     let
@@ -73,11 +77,14 @@ view route authStatus navigationData activeCategoryIds searchData =
                                 reverse <|
                                     CategoryDetails category.slug Pagination.default
                             , attribute "data-toggle" "dropdown"
-                            , attribute "aria-haspopup" "true"
-                            , attribute "aria-expanded" "false"
+                            , Aria.haspopup True
+                            , Aria.expanded False
+                            , Aria.role "button"
+                            , id linkId
                             ]
                             [ text category.name ]
-                        , div [ class "dropdown-menu mt-0" ] <| dropdownCategories children
+                        , div [ class "dropdown-menu mt-0", Aria.labelledby linkId ] <|
+                            dropdownCategories children
                         ]
 
         childCategory category =
@@ -142,9 +149,9 @@ view route authStatus navigationData activeCategoryIds searchData =
                 , type_ "button"
                 , attribute "data-toggle" "collapse"
                 , attribute "data-target" "#search-navbar"
-                , attribute "aria-controls" "navbarSupportedContent"
-                , attribute "aria-expanded" "false"
-                , attribute "aria-label" "Toggle navigation"
+                , Aria.controls "search-navbar"
+                , Aria.expanded False
+                , Aria.label "Toggle search menu"
                 ]
                 [ icon "search p-1" ]
             , button
@@ -152,9 +159,9 @@ view route authStatus navigationData activeCategoryIds searchData =
                 , type_ "button"
                 , attribute "data-toggle" "collapse"
                 , attribute "data-target" "#category-navbar"
-                , attribute "aria-controls" "navbarSupportedContent"
-                , attribute "aria-expanded" "false"
-                , attribute "aria-label" "Toggle navigation"
+                , Aria.controls "category-navbar"
+                , Aria.expanded False
+                , Aria.label "Toggle navigation"
                 ]
                 [ span [ class "navbar-toggler-icon" ] [] ]
             , div [ id "search-navbar", class "collapse navbar-collapse" ]
@@ -299,9 +306,9 @@ adminView route =
                 , type_ "button"
                 , attribute "data-toggle" "collapse"
                 , attribute "data-target" "#admin-navbar"
-                , attribute "aria-controls" "navbarSupportedContent"
-                , attribute "aria-expanded" "false"
-                , attribute "aria-label" "Toggle navigation"
+                , Aria.controls "admin-navbar"
+                , Aria.expanded False
+                , Aria.label "Toggle navigation"
                 ]
                 [ span [ class "navbar-toggler-icon" ] [] ]
             , div [ id "admin-navbar", class "collapse navbar-collapse" ]

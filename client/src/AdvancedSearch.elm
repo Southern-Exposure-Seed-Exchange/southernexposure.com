@@ -2,7 +2,7 @@ module AdvancedSearch exposing (Msg(..), update, view)
 
 import Category exposing (CategoryId(..))
 import Html exposing (..)
-import Html.Attributes exposing (checked, class, for, id, selected, src, type_, value)
+import Html.Attributes exposing (alt, checked, class, for, id, selected, src, type_, value)
 import Html.Events exposing (on, onCheck, onClick, onInput, onSubmit, targetValue)
 import Json.Decode as Decode
 import PageData
@@ -10,6 +10,7 @@ import Products.Pagination as Pagination
 import Routing exposing (Route(..))
 import Search
 import SeedAttribute
+import Views.Aria as Aria
 
 
 type Msg
@@ -80,7 +81,11 @@ view routingMsg formMsg data categories =
                         , checked <| selector data
                         ]
                         []
-                    , img [ src <| SeedAttribute.iconUrl attribute ] []
+                    , img
+                        [ src <| SeedAttribute.iconUrl attribute
+                        , alt <| SeedAttribute.toDescription attribute
+                        ]
+                        []
                     , text content
                     ]
                 ]
@@ -110,7 +115,12 @@ view routingMsg formMsg data categories =
                 ]
 
         categorySelect =
-            select [ class "form-control", onCategorySelect <| formMsg << CategorySelect ] <|
+            select
+                [ class "form-control"
+                , onCategorySelect <| formMsg << CategorySelect
+                , Aria.label "Filter by Category"
+                ]
+            <|
                 option [ value "", selected (data.category == Nothing) ] [ text "All Categories" ]
                     :: List.map categoryOption categories
 
@@ -138,6 +148,7 @@ view routingMsg formMsg data categories =
                 , type_ "search"
                 , value data.query
                 , onInput <| formMsg << KeywordInput
+                , Aria.label "Search Terms"
                 ]
                 []
             ]

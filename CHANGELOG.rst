@@ -6,6 +6,8 @@ CHANGELOG
 v1.02.00
 =========
 
+* Add additional accessibility attributes to UI elements, improving the
+  feedback given to disabled users using assistive technologies.
 * Display a pop-up lightbox for showing large versions of Product images when
   clicking images on the Product Details page.
 * Include a ``From:`` name in all emails instead of only the address.

@@ -1,12 +1,13 @@
 module SiteUI.Sidebar exposing (view)
 
 import Html exposing (..)
-import Html.Attributes as A exposing (class, href, id, name, src, target, type_, value)
+import Html.Attributes as A exposing (alt, class, href, id, name, src, target, type_, value)
 import Messages exposing (Msg)
 import Products.Pagination as Pagination
 import Routing exposing (Route(..))
 import Search
 import SeedAttribute
+import Views.Aria as Aria
 import Views.Images as Images
 import Views.Utils exposing (icon, routeLinkAttributes)
 
@@ -39,18 +40,23 @@ view route =
                 |> pageLink
 
         pageLinks =
-            ul [ class "nav nav-pills nav-fill flex-column text-center mb-2" ]
-                [ pageLink QuickOrder "Quick Order"
-                , staticPageLink "about-us" "About Us"
-                , staticPageLink "growing-guides" "Growing Guides"
-                , staticPageLink "retail-stores" "Retail Stores"
-                , staticPageLink "events" "Events"
-                , staticPageLink "faq" "FAQ"
-                , staticPageLink "links" "Links"
-                , a [ href "/blog/", target "_blank" ] [ text "Blog" ]
-                , staticPageLink "contact-us" "Contact Us"
-                , staticPageLink "seeds-for-schools-fundraisers" "Fundraisers"
-                , specialSearchLink identity "All Products"
+            div [ Aria.role "navigation" ]
+                [ ul [ class "nav nav-pills nav-fill flex-column text-center mb-2" ]
+                    [ pageLink QuickOrder "Quick Order"
+                    , staticPageLink "about-us" "About Us"
+                    , staticPageLink "growing-guides" "Growing Guides"
+                    , staticPageLink "retail-stores" "Retail Stores"
+                    , staticPageLink "events" "Events"
+                    , staticPageLink "faq" "FAQ"
+                    , staticPageLink "links" "Links"
+                    , li [ class "nav-item" ]
+                        [ a [ href "/blog/", target "_blank", class "py-1 d-block nav-link" ]
+                            [ text "Blog" ]
+                        ]
+                    , staticPageLink "contact-us" "Contact Us"
+                    , staticPageLink "seeds-for-schools-fundraisers" "Fundraisers"
+                    , specialSearchLink identity "All Products"
+                    ]
                 ]
 
         specialSearch modifier =
@@ -60,7 +66,12 @@ view route =
             li [ class "media" ]
                 [ a (class "px-2 w-100" :: specialSearch modifier)
                     [ div [ class "mr-auto d-flex align-items-center" ]
-                        [ img [ class "pl-1 my-2", src <| SeedAttribute.iconUrl attribute ] []
+                        [ img
+                            [ class "pl-1 my-2"
+                            , src <| SeedAttribute.iconUrl attribute
+                            , alt <| SeedAttribute.toDescription attribute
+                            ]
+                            []
                         , h6 [ class "pl-2 py-2 mb-0 font-weight-normal" ] [ text title ]
                         ]
                     ]
@@ -102,6 +113,7 @@ view route =
                                 , type_ "email"
                                 , name "email"
                                 , A.placeholder "Enter your email"
+                                , Aria.label "Email"
                                 ]
                                 []
                             ]
@@ -122,15 +134,45 @@ view route =
         logoCard =
             div [ class "card mb-3" ]
                 [ div [ class "card-body text-center" ]
-                    [ a [ target "_blank", href "http://www.facebook.com/pages/Southern-Exposure-Seed-Exchange/353814746253?ref=ts" ]
-                        [ img [ class "img-fluid", src <| Images.static "logos/facebook-big-icon.png" ] [] ]
+                    [ a
+                        [ target "_blank"
+                        , href "http://www.facebook.com/pages/Southern-Exposure-Seed-Exchange/353814746253?ref=ts"
+                        , Aria.label "Visit Our Facebook Page"
+                        ]
+                        [ img
+                            [ class "img-fluid"
+                            , src <| Images.static "logos/facebook-big-icon.png"
+                            , alt "Facebook Logo"
+                            ]
+                            []
+                        ]
                     , hr [] []
                     , div [ class "text-center font-weight-bold" ] [ text "Our Partners" ]
-                    , a [ target "_blank", href "http://www.smartgardener.com/" ]
-                        [ img [ class "mb-3 img-fluid", src <| Images.static "logos/smart-gardener.jpg" ] [] ]
+                    , a
+                        [ target "_blank"
+                        , href "http://www.smartgardener.com/"
+                        , Aria.label "Visit Smart Gardener"
+                        ]
+                        [ img
+                            [ class "mb-3 img-fluid"
+                            , src <| Images.static "logos/smart-gardener.jpg"
+                            , alt "Smart Gardener - Simply Grow Great Food"
+                            ]
+                            []
+                        ]
                     , br [] []
-                    , a [ target "_blank", href "http://www.localharvest.org/" ]
-                        [ img [ class "img-fluid", src <| Images.static "logos/local-harvest.jpg" ] [] ]
+                    , a
+                        [ target "_blank"
+                        , href "http://www.localharvest.org/"
+                        , Aria.label "Visit Local Harvest"
+                        ]
+                        [ img
+                            [ class "img-fluid"
+                            , src <| Images.static "logos/local-harvest.jpg"
+                            , alt "Local Harvest - Real Food, Real Farmers, Real Community"
+                            ]
+                            []
+                        ]
                     ]
                 ]
     in

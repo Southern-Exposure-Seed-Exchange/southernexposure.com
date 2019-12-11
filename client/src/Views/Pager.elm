@@ -10,9 +10,10 @@ text, etc.
 -}
 
 import Html exposing (Html, a, b, div, li, node, span, text, ul)
-import Html.Attributes exposing (attribute, class, tabindex)
+import Html.Attributes exposing (class, tabindex)
 import Paginate exposing (Paginated)
 import Routing exposing (Route)
+import Views.Aria as Aria
 import Views.Utils exposing (routeLinkAttributes)
 
 
@@ -150,7 +151,7 @@ elements cfg items =
 
             else
                 node "nav"
-                    [ attribute "aria-label" cfg.pagerAriaLabel, class cfg.pagerCssClass ]
+                    [ Aria.label cfg.pagerAriaLabel, class cfg.pagerCssClass ]
                     [ ul [ class "pagination pagination-sm mb-0" ] <|
                         previousLink ()
                             :: renderSections ()
@@ -182,7 +183,7 @@ prevNextLink items isDisabled route content =
     let
         ( itemClass, linkAttrs ) =
             if isDisabled items then
-                ( " disabled", [ tabindex -1 ] )
+                ( " disabled", [ tabindex -1, Aria.disabled True ] )
 
             else
                 ( "", [] )

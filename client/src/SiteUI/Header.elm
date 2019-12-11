@@ -1,7 +1,7 @@
 module SiteUI.Header exposing (adminView, view)
 
 import Html exposing (Html, a, br, div, h1, img, li, small, text, ul)
-import Html.Attributes exposing (class, href, id, src, target)
+import Html.Attributes exposing (alt, class, href, id, src, target)
 import Html.Events.Extra exposing (onClickPreventDefault)
 import Messages exposing (Msg(..))
 import Routing exposing (AdminRoute(..), Route(..))
@@ -30,6 +30,7 @@ logoAndName linkRoute =
                 [ id "site-logo"
                 , class "float-left mr-2 mx-lg-3"
                 , src <| Images.static "logos/sese.png"
+                , alt "SESE's Logo - Two Hands Supporting a Growing Flower"
                 ]
                 []
 

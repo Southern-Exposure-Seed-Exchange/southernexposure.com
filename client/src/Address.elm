@@ -23,6 +23,7 @@ import Html.Events exposing (on, onInput, targetValue)
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode exposing (Value)
 import Locations exposing (AddressLocations, Location, Region(..), regionDecoder, regionEncoder)
+import Views.Aria as Aria
 import Views.HorizontalForm as Form
 import Views.Utils exposing (autocomplete)
 
@@ -320,7 +321,7 @@ select selectMsg maybeAddressId addresses newAddressOption =
                     (addressDescription a)
             )
         |> addNewOption
-        |> Html.select [ class "form-control", onSelectInt selectMsg ]
+        |> Html.select [ class "form-control", onSelectInt selectMsg, Aria.label "Select an Existing Address" ]
 
 
 form : Form -> String -> AddressLocations -> Html Msg

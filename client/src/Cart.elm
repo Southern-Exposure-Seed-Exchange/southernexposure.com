@@ -10,7 +10,7 @@ module Cart exposing
 import Api
 import Dict exposing (Dict)
 import Html exposing (..)
-import Html.Attributes as A exposing (class, colspan, disabled, src, step, type_, value)
+import Html.Attributes as A exposing (alt, class, colspan, disabled, src, step, type_, value)
 import Html.Events exposing (onClick, onSubmit)
 import Html.Keyed as Keyed
 import Json.Encode as Encode
@@ -20,6 +20,7 @@ import Product exposing (variantPrice)
 import RemoteData
 import Routing exposing (Route(..))
 import User exposing (AuthStatus)
+import Views.Aria as Aria
 import Views.Format as Format
 import Views.Utils exposing (htmlOrBlank, icon, numericInput, onIntInput, rawHtml, routeLinkAttributes)
 
@@ -212,16 +213,21 @@ view ({ quantities } as form_) ({ items, charges } as cartDetails) =
                         , A.min "1"
                         , A.step "1"
                         , numericInput
+                        , Aria.label "quantity"
                         ]
                         []
                     ]
                 , td [ class "align-middle" ]
-                    [ a (routeLinkAttributes <| ProductDetails product.slug)
+                    [ a
+                        (Aria.label ("View Product Details for " ++ product.name)
+                            :: routeLinkAttributes (ProductDetails product.slug)
+                        )
                         [ img
                             [ src <| imgSrcFallback product.image
                             , imageToSrcSet product.image
                             , productImageSizes
                             , class "cart-product-image"
+                            , alt <| "Product Image for " ++ product.name
                             ]
                             []
                         ]
@@ -240,7 +246,11 @@ view ({ quantities } as form_) ({ items, charges } as cartDetails) =
                 , td [ class "text-right align-middle" ]
                     [ text <| Format.cents <| centsMap ((*) quantity) <| variantPrice variant ]
                 , td [ class "text-center align-middle" ]
-                    [ button [ class "btn btn-link text-danger", onClick <| Remove id ]
+                    [ button
+                        [ class "btn btn-link text-danger"
+                        , onClick <| Remove id
+                        , Aria.label <| "Remove " ++ product.name ++ " From Cart"
+                        ]
                         [ icon "times" ]
                     ]
                 ]

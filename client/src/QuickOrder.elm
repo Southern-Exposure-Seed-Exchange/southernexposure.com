@@ -18,6 +18,7 @@ import Json.Encode as Encode exposing (Value)
 import Ports
 import RemoteData exposing (WebData)
 import User exposing (AuthStatus)
+import Views.Aria as Aria
 import Views.Utils exposing (numericInput)
 
 
@@ -261,6 +262,7 @@ renderForm errors index model =
                 , type_ "text"
                 , value model.sku
                 , onInput <| Sku index
+                , Aria.label "Item Number"
                 ]
                 []
 
@@ -315,6 +317,7 @@ renderForm errors index model =
             , value <| String.fromInt model.quantity
             , required <| not <| String.isEmpty model.sku
             , numericInput
+            , Aria.label "Quantity"
             ]
             []
         ]

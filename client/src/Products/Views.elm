@@ -3,7 +3,7 @@ module Products.Views exposing (details, list)
 import BootstrapGallery as Gallery
 import Dict exposing (Dict)
 import Html exposing (..)
-import Html.Attributes as A exposing (attribute, class, for, href, id, selected, src, type_, value)
+import Html.Attributes as A exposing (alt, attribute, class, for, href, id, selected, src, type_, value)
 import Html.Events exposing (on, onSubmit, targetValue)
 import Html.Extra exposing (viewIfLazy)
 import Html.Keyed as Keyed
@@ -19,6 +19,7 @@ import Products.Sorting as Sorting
 import RemoteData
 import Routing exposing (Route(..))
 import SeedAttribute exposing (SeedAttribute)
+import Views.Aria as Aria
 import Views.Format as Format
 import Views.Microdata as Microdata
 import Views.Pager as Pager
@@ -61,11 +62,13 @@ details addToCartForms { product, variants, maybeSeedAttribute, categories } =
                                     [ href <| product.image.original
                                     , A.target "self"
                                     , Gallery.openOnClick ProductDetailsLightbox product.image
+                                    , Aria.label <| "View Product Image for " ++ product.name
                                     ]
                                     [ img
                                         [ src <| imgSrcFallback product.image
                                         , imageToSrcSet product.image
                                         , class "img-fluid mb-2"
+                                        , alt <| "Product Image for " ++ product.name
                                         , Microdata.image
                                         , attribute "sizes" <|
                                             String.join ", "
@@ -176,13 +179,16 @@ list routeConstructor pagination addToCartForms products =
             tr Microdata.product
                 [ td [ class "row-product-image text-center align-middle" ]
                     [ Keyed.node "a"
-                        (routeLinkAttributes <| ProductDetails product.slug)
+                        (Aria.label ("View Details for " ++ product.name)
+                            :: routeLinkAttributes (ProductDetails product.slug)
+                        )
                         [ ( "product-img-" ++ (String.fromInt <| (\(ProductId i) -> i) product.id)
                           , img
                                 [ src <| imgSrcFallback product.image
                                 , imageToSrcSet product.image
                                 , listImageSizes
                                 , Microdata.image
+                                , alt <| "Product Image for " ++ product.name
                                 ]
                                 []
                           )
@@ -246,6 +252,7 @@ renderMobileProductBlock { maybeSelectedVariantId, maybeSelectedVariant, variant
                         , value <| String.fromInt quantity
                         , onIntInput <| ChangeCartFormQuantity product.id
                         , numericInput
+                        , Aria.label "Quantity"
                         ]
                         []
                     ]
@@ -363,6 +370,7 @@ cartForm { maybeSelectedVariant, maybeSelectedVariantId, quantity, isOutOfStock,
                     , value <| String.fromInt quantity
                     , onIntInput <| ChangeCartFormQuantity product.id
                     , numericInput
+                    , Aria.label "Quantity"
                     ]
                     []
                 , div [ class "input-group-append" ]
@@ -453,6 +461,7 @@ cartFormData addToCartForms ( product, variants ) =
                 [ id <| "inputVariant-" ++ String.fromInt (fromProductId product.id)
                 , class "variant-select form-control mb-1 mx-auto mr-sm-3 mx-md-auto"
                 , onSelectInt <| ChangeCartFormVariantId product.id
+                , Aria.label <| "Select a Lot Size Variant for " ++ product.name
                 ]
                 (List.map variantOption <| List.sortBy .skuSuffix variantList)
 
