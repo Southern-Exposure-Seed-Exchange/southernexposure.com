@@ -142,7 +142,10 @@ view route authStatus navigationData activeCategoryIds searchData =
         [ node "nav"
             [ class "navbar navbar-expand-md navbar-light bg-success" ]
             [ a
-                (class "ml-auto navbar-toggler" :: routeLinkAttributes Cart)
+                (Aria.label "View Your Shopping Cart"
+                    :: class "ml-auto navbar-toggler"
+                    :: routeLinkAttributes Cart
+                )
                 [ icon "shopping-cart p-1" ]
             , button
                 [ class "navbar-toggler ml-2"

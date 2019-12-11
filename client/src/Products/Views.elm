@@ -60,7 +60,7 @@ details addToCartForms { product, variants, maybeSeedAttribute, categories } =
                             [ div [ class "card-body text-center p-1" ]
                                 [ a
                                     [ href <| product.image.original
-                                    , A.target "self"
+                                    , A.target "_self"
                                     , Gallery.openOnClick ProductDetailsLightbox product.image
                                     , Aria.label <| "View Product Image for " ++ product.name
                                     ]
@@ -126,6 +126,7 @@ list routeConstructor pagination addToCartForms products =
                     [ id "product-sort-select"
                     , class "form-control form-control-sm ml-md-2"
                     , onProductsSortSelect (NavigateTo << routeConstructor)
+                    , Aria.label "Select Products Sorting Method"
                     ]
                   <|
                     List.map
@@ -276,13 +277,16 @@ renderMobileProductBlock { maybeSelectedVariantId, maybeSelectedVariant, variant
     form formAttributes <|
         [ div [ class "col-12 col-sm-4 pr-sm-0 mb-sm-2" ]
             [ Keyed.node "a"
-                (routeLinkAttributes <| ProductDetails product.slug)
+                (Aria.label ("View Details for " ++ product.name)
+                    :: routeLinkAttributes (ProductDetails product.slug)
+                )
                 [ ( "product-img-" ++ (String.fromInt <| (\(ProductId i) -> i) product.id)
                   , img
                         [ src <| imgSrcFallback product.image
                         , imageToSrcSet product.image
                         , class "img-fluid"
                         , listImageSizes
+                        , alt <| "Product Image for " ++ product.name
                         ]
                         []
                   )
