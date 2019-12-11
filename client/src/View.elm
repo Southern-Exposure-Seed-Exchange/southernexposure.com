@@ -7,6 +7,7 @@ import Auth.EditLogin as EditLogin
 import Auth.Login as Login
 import Auth.MyAccount as MyAccount
 import Auth.ResetPassword as ResetPassword
+import BootstrapGallery as Gallery
 import Browser exposing (Document)
 import Cart
 import Categories.AdminViews as CategoryAdminViews
@@ -276,6 +277,8 @@ view ({ route, pageData, navigationData, zone } as model) =
             , SiteBreadcrumbs.view route pageData
             , middleContent
             , SiteFooter.view
+            , Gallery.modal model.productDetailsLightbox
+                |> Html.map ProductDetailsLightbox
             ]
 
 

@@ -9,10 +9,12 @@ import Auth.EditAddress as EditAddress
 import Auth.EditLogin as EditLogin
 import Auth.Login as Login
 import Auth.ResetPassword as ResetPassword
+import BootstrapGallery as Gallery
 import Cart
 import Categories.AdminViews as CategoryAdmin
 import Checkout
 import Dict exposing (Dict)
+import Models.Fields exposing (ImageData)
 import PageData exposing (PageData)
 import Product exposing (ProductVariantId)
 import Products.AdminViews as ProductAdmin
@@ -41,6 +43,7 @@ type alias Model =
     , editAddressForm : EditAddress.Form
     , resetPasswordForm : ResetPassword.Form
     , addToCartForms : CartForms
+    , productDetailsLightbox : Gallery.Model ImageData
     , editCartForm : Cart.Form
     , quickOrderForms : QuickOrder.Forms
     , checkoutForm : Checkout.Form
@@ -86,6 +89,7 @@ initial key route =
     , editAddressForm = EditAddress.initial
     , resetPasswordForm = ResetPassword.initial
     , addToCartForms = Dict.empty
+    , productDetailsLightbox = Gallery.initial
     , editCartForm = Cart.initial
     , quickOrderForms = QuickOrder.initial
     , checkoutForm = Checkout.initial

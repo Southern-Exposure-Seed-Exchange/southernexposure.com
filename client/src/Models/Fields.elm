@@ -11,6 +11,7 @@ module Models.Fields exposing
     , centsMap
     , centsMap2
     , centsToString
+    , imageDataLightboxConfig
     , imageDecoder
     , imageToSrcSet
     , imgSrcFallback
@@ -22,6 +23,7 @@ module Models.Fields exposing
     , milligramsToString
     )
 
+import BootstrapGallery as Gallery
 import Decimal exposing (Decimal)
 import Html exposing (Attribute)
 import Html.Attributes exposing (attribute)
@@ -308,6 +310,13 @@ imgSrcFallback i =
     asum [ i.md, i.lg, i.sm, i.xl, i.xs ]
         |> Maybe.map (.path >> media)
         |> Maybe.withDefault i.original
+
+
+imageDataLightboxConfig : Gallery.Config ImageData
+imageDataLightboxConfig =
+    { thumbnailUrl = always Nothing
+    , imageUrl = .original
+    }
 
 
 type alias ScaledImage =

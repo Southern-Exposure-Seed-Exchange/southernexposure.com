@@ -1,8 +1,9 @@
 module Products.Views exposing (details, list)
 
+import BootstrapGallery as Gallery
 import Dict exposing (Dict)
 import Html exposing (..)
-import Html.Attributes as A exposing (attribute, class, for, id, selected, src, type_, value)
+import Html.Attributes as A exposing (attribute, class, for, href, id, selected, src, type_, value)
 import Html.Events exposing (on, onSubmit, targetValue)
 import Html.Extra exposing (viewIfLazy)
 import Html.Keyed as Keyed
@@ -56,20 +57,26 @@ details addToCartForms { product, variants, maybeSeedAttribute, categories } =
                         [ div
                             [ class "card" ]
                             [ div [ class "card-body text-center p-1" ]
-                                [ img
-                                    [ src <| imgSrcFallback product.image
-                                    , imageToSrcSet product.image
-                                    , class "img-fluid mb-2"
-                                    , Microdata.image
-                                    , attribute "sizes" <|
-                                        String.join ", "
-                                            [ "(max-width: 767px) 100vw"
-                                            , "(max-width: 991px) 125px"
-                                            , "(max-width: 1199px) 230px"
-                                            , "315px"
-                                            ]
+                                [ a
+                                    [ href <| product.image.original
+                                    , A.target "self"
+                                    , Gallery.openOnClick ProductDetailsLightbox product.image
                                     ]
-                                    []
+                                    [ img
+                                        [ src <| imgSrcFallback product.image
+                                        , imageToSrcSet product.image
+                                        , class "img-fluid mb-2"
+                                        , Microdata.image
+                                        , attribute "sizes" <|
+                                            String.join ", "
+                                                [ "(max-width: 767px) 100vw"
+                                                , "(max-width: 991px) 125px"
+                                                , "(max-width: 1199px) 230px"
+                                                , "315px"
+                                                ]
+                                        ]
+                                        []
+                                    ]
                                 , cartForm (cartFormData addToCartForms ( product, variants )) product
                                 ]
                             ]

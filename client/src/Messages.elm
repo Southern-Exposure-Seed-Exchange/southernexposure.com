@@ -7,11 +7,13 @@ import Auth.EditAddress as EditAddress
 import Auth.EditLogin as EditLogin
 import Auth.Login as Login
 import Auth.ResetPassword as ResetPassword
+import BootstrapGallery as Gallery
 import Browser exposing (UrlRequest)
 import Cart
 import Categories.AdminViews as CategoryAdmin
 import Checkout
 import Locations exposing (AddressLocations)
+import Models.Fields exposing (ImageData)
 import PageData exposing (CustomerData, OrderData, ProductData)
 import Paginate
 import Product exposing (ProductId, ProductVariantId)
@@ -42,6 +44,7 @@ type Msg
     | OtherTabNewCartToken String
     | OtherTabCartItemCountChanged Int
       -- Product List/Details Cart Forms
+    | ProductDetailsLightbox (Gallery.Msg ImageData)
     | ChangeCartFormVariantId ProductId ProductVariantId
     | ChangeCartFormQuantity ProductId Int
     | SubmitAddToCart ProductId ProductVariantId

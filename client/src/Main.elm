@@ -9,6 +9,7 @@ import Auth.EditLogin as EditLogin
 import Auth.Login as Login
 import Auth.MyAccount as MyAccount
 import Auth.ResetPassword as ResetPassword
+import BootstrapGallery as Gallery
 import Browser
 import Browser.Navigation
 import Cart
@@ -22,6 +23,7 @@ import Json.Encode as Encode
 import Locations
 import Messages exposing (Msg(..))
 import Model exposing (CartForms, Model)
+import Models.Fields exposing (imageDataLightboxConfig)
 import PageData exposing (CartItemId(..), PageData)
 import Paginate exposing (Paginated)
 import Ports
@@ -53,15 +55,17 @@ main =
         { init = init
         , update = updateWrapper
         , subscriptions =
-            Sub.batch
-                [ Ports.loggedOut (always LogOut)
-                , Ports.loggedIn OtherTabLoggedIn
-                , Ports.newCartSessionToken OtherTabNewCartToken
-                , Ports.cartItemCountChanged OtherTabCartItemCountChanged
-                , Sub.map CheckoutMsg Checkout.subscriptions
-                , Time.every (60 * 60 * 1000) (always <| UpdateZone)
-                ]
-                |> always
+            \model ->
+                Sub.batch
+                    [ Ports.loggedOut (always LogOut)
+                    , Ports.loggedIn OtherTabLoggedIn
+                    , Ports.newCartSessionToken OtherTabNewCartToken
+                    , Ports.cartItemCountChanged OtherTabCartItemCountChanged
+                    , Gallery.subscriptions model.productDetailsLightbox
+                        |> Sub.map ProductDetailsLightbox
+                    , Sub.map CheckoutMsg Checkout.subscriptions
+                    , Time.every (60 * 60 * 1000) (always <| UpdateZone)
+                    ]
         , view = view
         , onUrlChange = parseRoute >> UrlUpdate
         , onUrlRequest = LinkClick
@@ -745,6 +749,18 @@ update msg ({ pageData, key } as model) =
             { model | cartItemCount = quantity }
                 |> fetchCommand
 
+        ProductDetailsLightbox subMsg ->
+            let
+                updateLightbox { product } =
+                    Gallery.update imageDataLightboxConfig subMsg model.productDetailsLightbox [ product.image ]
+            in
+            pageData.productDetails
+                |> RemoteData.toMaybe
+                |> Maybe.map updateLightbox
+                |> Maybe.map (\l -> { model | productDetailsLightbox = l })
+                |> Maybe.withDefault model
+                |> noCommand
+
         ChangeCartFormVariantId productId variantId ->
             model
                 |> updateCartVariant productId variantId
@@ -1118,7 +1134,12 @@ update msg ({ pageData, key } as model) =
                 updatedPageData =
                     { pageData | productDetails = response }
             in
-            ( { model | pageData = updatedPageData }, Cmd.none )
+            ( { model
+                | pageData = updatedPageData
+                , productDetailsLightbox = Gallery.initial
+              }
+            , Cmd.none
+            )
                 |> extraCommand (always Ports.scrollToTop)
 
         -- TODO: Handle navigation loading errors - maybe w/ a global error list

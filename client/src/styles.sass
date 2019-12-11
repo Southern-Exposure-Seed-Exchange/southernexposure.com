@@ -264,6 +264,36 @@ body > div.container
     opacity: 0
     z-index: -999
 
+.gallery-modal
+  /* Fix z-index relative to input-groups buttons */
+  position: fixed
+  z-index: 4
+  .modal-backdrop
+    opacity: 0.5
+  .modal-dialog-background, .modal-dialog-foreground
+    /* Background color for non-image areas */
+    background-color: #292B2C
+    /* Center & contain the image in the modal */
+    background-size: contain
+    background-position: center
+    background-repeat: no-repeat
+  .modal-dialog
+    max-width: inherit
+    /* Vary the maximum lightbox width for different screen sizes */
+    +media-breakpoint-only(xs)
+      width: 95%
+      height: 95vh
+    +media-breakpoint-up(sm)
+      width: 90%
+      height: 90vh
+    +media-breakpoint-up(lg)
+      width: 85%
+      height: 85vh
+  .modal-close
+    position: absolute
+    cursor: pointer
+    top: 2.5%
+    right: 2.5%
 
 
 /** Product Details **/

@@ -3,9 +3,11 @@ CHANGELOG
 =========
 
 
-v1.01.01
+v1.02.00
 =========
 
+* Display a pop-up lightbox for showing large versions of Product images when
+  clicking images on the Product Details page.
 * Include a ``From:`` name in all emails instead of only the address.
 * BCC the customer service email address when sending Order Confirmation
   emails.
