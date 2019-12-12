@@ -3,6 +3,12 @@ CHANGELOG
 =========
 
 
+v1.03.00
+=========
+
+* Add server logging for any Stripe, Avalara, or Email Authentication errors.
+
+
 v1.02.01
 =========
 
