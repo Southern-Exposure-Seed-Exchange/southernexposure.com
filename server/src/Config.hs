@@ -12,6 +12,7 @@ import Data.Text (Text)
 import Database.Persist.Sql (ConnectionPool)
 import Network.HaskellNet.SMTP.SSL (SMTPConnection, connectSMTPSTARTTLS, closeSMTP)
 import Servant.Server.Experimental.Auth.Cookie (PersistentServerKey, RandomSource)
+import System.Log.FastLogger (LoggerSet)
 import Web.Stripe.Client (StripeConfig)
 
 import Cache (Caches)
@@ -42,6 +43,9 @@ data Config
     , getAvalaraCompanyId :: Avalara.CompanyId
     , getAvalaraCompanyCode :: Avalara.CompanyCode
     , getAvalaraSourceLocationCode :: Text
+    , getAvalaraLogger :: LoggerSet
+    , getStripeLogger :: LoggerSet
+    , getServerLogger :: LoggerSet
     }
 
 defaultConfig :: Config
@@ -62,6 +66,9 @@ defaultConfig =
         , getAvalaraCompanyId = undefined
         , getAvalaraCompanyCode = undefined
         , getAvalaraSourceLocationCode = "DEFAULT"
+        , getAvalaraLogger = undefined
+        , getStripeLogger = undefined
+        , getServerLogger = undefined
         }
 
 

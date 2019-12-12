@@ -7,23 +7,29 @@ module Server
     , stripeRequest
     , avalaraRequest
     , serverError
+    , logMsg
+    , msgLoggerIO
     , readCache
     , writeCache
     ) where
 
 import Control.Concurrent.STM (atomically, readTVarIO, modifyTVar)
+import Control.Exception.Safe (tryAny, throwM)
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Reader (ReaderT, asks, lift, runReaderT)
 import Control.Monad.Except (MonadError)
 import Data.Aeson (FromJSON)
+import Data.Text (Text)
 import Database.Persist.Sql (SqlPersistT, runSqlPool)
 import Servant (Handler, throwError)
+import System.Log.FastLogger (pushLogStrLn, toLogStr)
 import Web.Stripe
 
 import Cache (Caches)
-import Config (Config(getPool, getCaches, getStripeConfig, getAvalaraConfig))
+import Config (Config(..))
 
 import qualified Avalara
+import qualified Data.Text as T
 
 
 -- | `App` is the monad stack used in the Servant Handlers. It wraps
@@ -47,7 +53,19 @@ stripeRequest :: FromJSON (StripeReturn a)
               -> App (Either StripeError (StripeReturn a))
 stripeRequest req = do
     stripeConfig <- asks getStripeConfig
-    liftIO $ stripe stripeConfig req
+    result <- liftIO $ stripe stripeConfig req
+    case result of
+        Left e -> do
+            logger <- asks getStripeLogger
+            let requestString =
+                    show (method req)
+                        ++ " - " ++ T.unpack (endpoint req)
+                        ++ " ? " ++ show (queryParams req)
+            liftIO . pushLogStrLn logger . toLogStr
+                $ "StripeError from request(" ++ requestString ++ "): " ++ show e
+            return result
+        _ ->
+            return result
 
 
 -- | Perform a request to Avalara's AvaTax API.
@@ -55,15 +73,41 @@ stripeRequest req = do
 -- TODO: Add a setting allowing us to skip Avalara calls, since
 -- eventaully our Sandbox account will expire.
 --
--- TODO: Use with `try`. When a request fails, log & return the error.
-avalaraRequest :: ReaderT Avalara.Config IO a -> App a
-avalaraRequest req =
-    asks getAvalaraConfig >>= liftIO . runReaderT req
+-- TODO: Log the request data as well! Maybe refactor to:
+--       @(a -> ReaderT .... b) -> a -> App b@
+avalaraRequest :: ReaderT Avalara.Config IO (Avalara.WithError a) -> App (Avalara.WithError a)
+avalaraRequest req = do
+    cfg <- asks getAvalaraConfig
+    response <- tryAny $ liftIO $ runReaderT req cfg
+    loggerSet <- asks getAvalaraLogger
+    case response of
+        Left e -> do
+            liftIO . pushLogStrLn loggerSet . toLogStr $ show e
+            throwM e
+        Right r@(Avalara.SuccessfulResponse _) ->
+            return r
+        Right r@(Avalara.ErrorResponse err) -> do
+            liftIO . pushLogStrLn loggerSet . toLogStr $ show err
+            return r
+
 
 -- | Throw an HTTP error.
 serverError :: MonadError e Handler => e -> App a
 serverError =
     lift . throwError
+
+
+-- | Log a message to the server log.
+logMsg :: Text -> App ()
+logMsg msg = do
+    loggerSet <- asks getServerLogger
+    liftIO . pushLogStrLn loggerSet $ toLogStr msg
+
+-- | Produce a function for logging messages in the IO monad.
+msgLoggerIO :: App (Text -> IO ())
+msgLoggerIO = do
+    loggerSet <- asks getServerLogger
+    return (pushLogStrLn loggerSet . toLogStr)
 
 
 -- | Read a value from the available caches.

@@ -116,14 +116,15 @@ send email = ask >>= \cfg ->
                 , mailHeaders = [("Subject", T.pack subject)]
                 , mailParts = [[plainPart plainMessage, htmlPart htmlMessage]]
                 }
-    in
+    in do
+        logger <- msgLoggerIO
         liftIO $ async $ withResource (getSmtpPool cfg) $ \conn -> do
-            authSucceeded <- authenticate PLAIN (getSmtpUser cfg) (getSmtpPass cfg) conn
+            let user = getSmtpUser cfg
+            authSucceeded <- authenticate PLAIN user (getSmtpPass cfg) conn
             if authSucceeded then
                 sendMimeMail2 mail conn
             else
-                -- TODO: Properly Log SMTP Auth Error
-                print ("SMTP AUTHENTICATION FAILED" :: T.Text)
+                logger $ "SMTP Authentication Failed for User `" <> T.pack user <> "`"
 
 
 makeRecipient :: Environment -> EmailType -> Address

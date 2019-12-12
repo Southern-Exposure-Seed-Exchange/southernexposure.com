@@ -13,6 +13,7 @@ import Database.Persist.Postgresql
 import Network.Wai.Middleware.RequestLogger (logStdoutDev, logStdout)
 import System.Directory (getCurrentDirectory, createDirectoryIfMissing)
 import System.Environment (lookupEnv)
+import System.Log.FastLogger (LoggerSet, newStdoutLoggerSet, newFileLoggerSet, defaultBufSize)
 import Web.Stripe.Client (StripeConfig(..), StripeKey(..))
 
 import Api
@@ -35,8 +36,8 @@ main :: IO ()
 main = do
     env <- lookupSetting "ENV" Development
     port <- lookupSetting "PORT" 3000
-    mediaDir <- lookupMediaDirectory
-    createDirectoryIfMissing True mediaDir
+    mediaDir <- lookupDirectory "MEDIA" "/media/"
+    (avalaraLogger, stripeLogger, serverLogger) <- makeLoggers env
     smtpServer <- fromMaybe "" <$> lookupEnv "SMTP_SERVER"
     smtpUser <- fromMaybe "" <$> lookupEnv "SMTP_USER"
     smtpPass <- fromMaybe "" <$> lookupEnv "SMTP_PASS"
@@ -68,6 +69,9 @@ main = do
             , getAvalaraCompanyId = avalaraCompanyId
             , getAvalaraCompanyCode = avalaraCompanyCode
             , getAvalaraSourceLocationCode = avalaraSourceLocation
+            , getAvalaraLogger = avalaraLogger
+            , getStripeLogger = stripeLogger
+            , getServerLogger = serverLogger
             }
     Warp.runSettings (warpSettings port) . httpLogger env $ app cfg
     where lookupSetting env def =
@@ -76,9 +80,6 @@ main = do
           requireSetting env =
             lookupEnv env
                 >>= maybe (error $ "Could not find required env variable: " ++ env) return
-          lookupMediaDirectory :: IO FilePath
-          lookupMediaDirectory =
-            lookupEnv "MEDIA" >>= maybe ((++ "/media/") <$> getCurrentDirectory) return
           makePool :: Environment -> IO ConnectionPool
           makePool env =
             case env of
@@ -129,3 +130,23 @@ main = do
                     error $ "Invalid AVATAX_ENVIRONMENT: " ++ T.unpack rawEnvironment
                         ++ "\n\n\tValid value are `Production` or `Sandbox`"
             return Avalara.Config {..}
+          makeLoggers :: Environment -> IO (LoggerSet, LoggerSet, LoggerSet)
+          makeLoggers env =
+            case env of
+                Development ->
+                    (,,)
+                        <$> newStdoutLoggerSet defaultBufSize
+                        <*> newStdoutLoggerSet defaultBufSize
+                        <*> newStdoutLoggerSet defaultBufSize
+                Production -> do
+                    logDir <- lookupDirectory "LOGS" "/logs/"
+                    (,,)
+                        <$> newFileLoggerSet defaultBufSize (logDir ++ "/avalara.log")
+                        <*> newFileLoggerSet defaultBufSize (logDir ++ "/stripe.log")
+                        <*> newFileLoggerSet defaultBufSize (logDir ++ "/server.log")
+          lookupDirectory :: String -> FilePath -> IO FilePath
+          lookupDirectory envName defaultPath = do
+                dir <- lookupEnv envName
+                    >>= maybe ((++ defaultPath) <$> getCurrentDirectory) return
+                createDirectoryIfMissing True dir
+                return dir
