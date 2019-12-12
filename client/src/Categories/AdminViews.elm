@@ -376,7 +376,7 @@ updateEditForm key original msg model =
                     )
 
                 RemoteData.Success (Err errors) ->
-                    ( { model | errors = errors }, Ports.scrollToErrorMessage )
+                    ( { model | errors = errors, isSaving = False }, Ports.scrollToErrorMessage )
 
                 RemoteData.Failure error ->
                     ( { model | errors = Api.apiFailureToError error, isSaving = False }

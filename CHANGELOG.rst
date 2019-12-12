@@ -3,9 +3,11 @@ CHANGELOG
 =========
 
 
-v1.03.00
+v1.02.01
 =========
 
+* Fix a bug causing errors in the Edit Category admin form from removing the
+  opaque overlay.
 * Add the ``rel=noopener`` HTML attribute to external links to prevent security
   vulnerabilities.
 
