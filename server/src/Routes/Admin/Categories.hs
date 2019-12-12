@@ -208,7 +208,7 @@ newCategoryRoute = validateAdminAndParameters $ \_ NewCategoryParameters {..} ->
     time <- liftIO getCurrentTime
     imageFileName <- makeImageFromBase64 "categories" ncpImageName ncpImageData
     let newCategory = Category
-            { categoryName = sanitize ncpName
+            { categoryName = ncpName
             , categorySlug = slugify $ sanitize ncpSlug
             , categoryParentId = ncpParentId
             , categoryDescription = sanitize ncpDescription
@@ -388,7 +388,7 @@ editCategoryRoute = validateAdminAndParameters $ \_ parameters -> do
     makeUpdates :: EditCategoryParameters -> [Update Category]
     makeUpdates EditCategoryParameters {..} =
         catMaybes
-            [ mapUpdateWith CategoryName ecpName sanitize
+            [ mapUpdate CategoryName ecpName
             , mapUpdateWith CategorySlug ecpSlug (slugify . sanitize)
             , mapUpdate CategoryParentId $ either (const Nothing) Just ecpParentId
             , mapUpdateWith CategoryDescription ecpDescription sanitize

@@ -6,6 +6,8 @@ CHANGELOG
 v1.02.01
 =========
 
+* Fix a bug causing Category names to render with HTML-encoded entities like
+  ``&amp;``.
 * Fix a bug causing errors in the Edit Category admin form from removing the
   opaque overlay.
 * Add the ``rel=noopener`` HTML attribute to external links to prevent security
