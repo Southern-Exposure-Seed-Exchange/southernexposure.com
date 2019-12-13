@@ -4,16 +4,23 @@
 module Main where
 
 import Control.Concurrent.STM.TVar (newTVarIO)
+import Control.Exception (Exception(..), SomeException)
 import Control.Monad.IO.Class (MonadIO)
 import Control.Monad.Trans.Control (MonadBaseControl)
 import Control.Monad.Logger (MonadLogger, runNoLoggingT, runStderrLoggingT)
 import Data.Maybe (fromMaybe)
+import Data.Monoid ((<>))
+import Data.Text.Encoding (decodeUtf8)
 import Data.Version (showVersion)
 import Database.Persist.Postgresql
+import Network.Wai (Request, requestMethod, rawPathInfo, rawQueryString)
 import Network.Wai.Middleware.RequestLogger (logStdoutDev, logStdout)
 import System.Directory (getCurrentDirectory, createDirectoryIfMissing)
 import System.Environment (lookupEnv)
-import System.Log.FastLogger (LoggerSet, newStdoutLoggerSet, newFileLoggerSet, defaultBufSize)
+import System.Log.FastLogger
+     ( LoggerSet, newStdoutLoggerSet, newFileLoggerSet, defaultBufSize
+     , pushLogStrLn, toLogStr
+     )
 import Web.Stripe.Client (StripeConfig(..), StripeKey(..))
 
 import Api
@@ -73,7 +80,7 @@ main = do
             , getStripeLogger = stripeLogger
             , getServerLogger = serverLogger
             }
-    Warp.runSettings (warpSettings port) . httpLogger env $ app cfg
+    Warp.runSettings (warpSettings port serverLogger) . httpLogger env $ app cfg
     where lookupSetting env def =
             maybe def read <$> lookupEnv env
           requireSetting :: String -> IO String
@@ -98,9 +105,28 @@ main = do
                     8
                 Development ->
                     1
-          warpSettings port =
+          warpSettings port serverLogger =
               Warp.setServerName ""
+              $ Warp.setOnException (exceptionHandler serverLogger)
               $ Warp.setPort port Warp.defaultSettings
+          exceptionHandler :: LoggerSet -> Maybe Request -> SomeException -> IO ()
+          exceptionHandler logger mReq e =
+            let reqString = flip (maybe "") mReq $ \req ->
+                    decodeUtf8 $
+                        "("
+                        <> requestMethod req
+                        <> " "
+                        <> rawPathInfo req
+                        <> rawQueryString req
+                        <> ")"
+            in
+            pushLogStrLn logger $ toLogStr $ T.concat
+                [ "Exception while processing request"
+                , reqString
+                , ": "
+                , T.pack $ displayException e
+
+                ]
           httpLogger env =
               case env of
                 Production ->
