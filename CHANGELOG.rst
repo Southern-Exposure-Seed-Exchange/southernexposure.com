@@ -3,6 +3,13 @@ CHANGELOG
 =========
 
 
+v1.03.00
+=========
+
+* Log any uncaught exceptions encountered during route processing to the
+  server's log file.
+
+
 v1.02.02
 =========
 
