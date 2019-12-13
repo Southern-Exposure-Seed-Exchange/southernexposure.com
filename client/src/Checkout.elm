@@ -891,7 +891,7 @@ view model authStatus locations checkoutDetails =
                             [ h4 [ class "d-flex flex-wrap justify-content-between" ]
                                 [ span [] [ text "Create an Account" ]
                                 , a
-                                    (class "btn btn-sm btn-link"
+                                    (class "btn btn-link p-0"
                                         :: routeLinkAttributes (Login <| Just <| Routing.reverse Cart)
                                     )
                                     [ text "Already have an Account?" ]

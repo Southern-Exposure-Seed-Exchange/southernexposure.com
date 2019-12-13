@@ -6,6 +6,8 @@ CHANGELOG
 v1.03.00
 =========
 
+* Increase the font-size of the "Already have an account?" link on the
+  Anonymous Checkout page.
 * Add additionally environment logging during server startup.
 * Log any uncaught exceptions encountered during route processing to the
   server's log file.
