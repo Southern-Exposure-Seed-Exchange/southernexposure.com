@@ -6,6 +6,7 @@ CHANGELOG
 v1.03.00
 =========
 
+* Add additionally environment logging during server startup.
 * Log any uncaught exceptions encountered during route processing to the
   server's log file.
 

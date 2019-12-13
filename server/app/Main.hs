@@ -19,7 +19,7 @@ import System.Directory (getCurrentDirectory, createDirectoryIfMissing)
 import System.Environment (lookupEnv)
 import System.Log.FastLogger
      ( LoggerSet, newStdoutLoggerSet, newFileLoggerSet, defaultBufSize
-     , pushLogStrLn, toLogStr
+     , pushLogStrLn, toLogStr, flushLogStr
      )
 import Web.Stripe.Client (StripeConfig(..), StripeKey(..))
 
@@ -36,19 +36,26 @@ import qualified Data.ByteString.Char8 as C
 import qualified Data.Text as T
 import qualified Network.Wai.Handler.Warp as Warp
 
+import Prelude hiding (log)
+
+
 -- | Connect to the database, configure the application, & start the server.
 --
 -- TODO: Document enviornmental variables in README.
 main :: IO ()
 main = do
     env <- lookupSetting "ENV" Development
+    (avalaraLogger, stripeLogger, serverLogger) <- makeLoggers env
+    let log s = logMsg serverLogger s >> flushLogStr serverLogger
+    log "SESE API Server starting up."
     port <- lookupSetting "PORT" 3000
     mediaDir <- lookupDirectory "MEDIA" "/media/"
-    (avalaraLogger, stripeLogger, serverLogger) <- makeLoggers env
+    log $ "Media directory initialized at " <> T.pack mediaDir <> "."
     smtpServer <- fromMaybe "" <$> lookupEnv "SMTP_SERVER"
     smtpUser <- fromMaybe "" <$> lookupEnv "SMTP_USER"
     smtpPass <- fromMaybe "" <$> lookupEnv "SMTP_PASS"
     emailPool <- smtpPool smtpServer (poolSize env)
+    log $ "Initialized SMTP Pool at " <> T.pack smtpServer <> "."
     stripeToken <- fromMaybe "" <$> lookupEnv "STRIPE_TOKEN"
     cookieSecret <- mkPersistentServerKey . C.pack . fromMaybe ""
         <$> lookupEnv "COOKIE_SECRET"
@@ -59,7 +66,9 @@ main = do
     avalaraCompanyCode <- Avalara.CompanyCode . T.pack <$> requireSetting "AVATAX_COMPANY_CODE"
     avalaraSourceLocation <- lookupSetting "AVATAX_LOCATION_CODE" "DEFAULT"
     dbPool <- makePool env
+    log "Initialized database pool."
     cache <- runSqlPool initializeCaches dbPool >>= newTVarIO
+    log "Initialized database cache."
     let cfg = defaultConfig
             { getPool = dbPool
             , getEnv = env
@@ -80,6 +89,7 @@ main = do
             , getStripeLogger = stripeLogger
             , getServerLogger = serverLogger
             }
+    log $ "Serving HTTP requests on port " <> T.pack (show port) <> "."
     Warp.runSettings (warpSettings port serverLogger) . httpLogger env $ app cfg
     where lookupSetting env def =
             maybe def read <$> lookupEnv env
@@ -120,13 +130,16 @@ main = do
                         <> rawQueryString req
                         <> ")"
             in
-            pushLogStrLn logger $ toLogStr $ T.concat
-                [ "Exception while processing request"
-                , reqString
-                , ": "
-                , T.pack $ displayException e
-
-                ]
+            when (Warp.defaultShouldDisplayException e) $
+                logMsg logger $ T.concat
+                    [ "Exception while processing request"
+                    , reqString
+                    , ": "
+                    , T.pack $ displayException e
+                    ]
+          logMsg :: LoggerSet -> T.Text -> IO ()
+          logMsg logger =
+            pushLogStrLn logger . toLogStr
           httpLogger env =
               case env of
                 Production ->
