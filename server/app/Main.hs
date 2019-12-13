@@ -5,6 +5,7 @@ module Main where
 
 import Control.Concurrent.STM.TVar (newTVarIO)
 import Control.Exception (Exception(..), SomeException)
+import Control.Monad (when)
 import Control.Monad.IO.Class (MonadIO)
 import Control.Monad.Trans.Control (MonadBaseControl)
 import Control.Monad.Logger (MonadLogger, runNoLoggingT, runStderrLoggingT)
