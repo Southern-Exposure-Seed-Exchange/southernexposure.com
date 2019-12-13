@@ -27,12 +27,13 @@ import PageData exposing (LineItemType(..))
 import Ports
 import Product exposing (variantPrice)
 import RemoteData exposing (WebData)
+import Routing exposing (Route(..))
 import Time
 import Update.Utils exposing (nothingAndNoCommand)
 import User exposing (AuthStatus)
 import Views.Aria as Aria
 import Views.Format as Format
-import Views.Utils exposing (decimalInput, emailInput, icon, pageOverlay)
+import Views.Utils exposing (decimalInput, emailInput, icon, pageOverlay, routeLinkAttributes)
 
 
 
@@ -887,7 +888,14 @@ view model authStatus locations checkoutDetails =
                 User.Anonymous ->
                     div [ class "mb-3" ]
                         [ div [ class "" ]
-                            [ h4 [] [ text "Login Details" ]
+                            [ h4 [ class "d-flex flex-wrap justify-content-between" ]
+                                [ span [] [ text "Create an Account" ]
+                                , a
+                                    (class "btn btn-sm btn-link"
+                                        :: routeLinkAttributes (Login <| Just <| Routing.reverse Cart)
+                                    )
+                                    [ text "Already have an Account?" ]
+                                ]
                             , registrationForm model
                             ]
                         ]

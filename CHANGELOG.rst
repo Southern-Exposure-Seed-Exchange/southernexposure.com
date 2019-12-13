@@ -3,9 +3,12 @@ CHANGELOG
 =========
 
 
-v1.03.00
+v1.02.02
 =========
 
+* Rename the ``Login Details`` section of the anonymous Checkout page to
+  ``Create an Account`` and include a link to the Login page for Customers that
+  already have an account.
 * Add server logging for any Stripe, Avalara, or Email Authentication errors.
 
 
