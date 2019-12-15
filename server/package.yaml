@@ -116,6 +116,7 @@ library:
         - Routes.CommonData
         - Routes.StoneEdge
         - StoneEdge
+        - Workers
 
 tests:
     sese-website-test:

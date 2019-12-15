@@ -26,7 +26,7 @@ import Data.Text.Encoding (encodeUtf8, decodeUtf8)
 import Data.Time.Clock (UTCTime, getCurrentTime, addUTCTime)
 import Data.Typeable (Typeable)
 import Database.Persist
-    ( (=.), (==.), Entity(..), get, getBy, insertUnique, insert_, update
+    ( (=.), (==.), Entity(..), get, getBy, insertUnique, insert, update
     , selectList, delete, deleteWhere, getEntity, updateWhere, SelectOpt(Asc)
     )
 import Database.Persist.Sql (toSqlKey)
@@ -46,6 +46,7 @@ import Routes.CommonData
 import Routes.Utils (generateUniqueToken, hashPassword)
 import Server
 import Validation (Validation(..))
+import Workers (Task(..), enqueueTask)
 
 import qualified Crypto.BCrypt as BCrypt
 import qualified Data.ByteString.Lazy as LBS
@@ -229,9 +230,11 @@ registrationRoute = validate >=> \parameters -> do
         Nothing ->
             serverError err500
         Just customerId ->
-            runDB (maybeMergeCarts customerId $ rpCartToken parameters) >>
-            Emails.send (Emails.AccountCreated customer) >>
-            addSessionCookie temporarySession (AuthToken authToken)
+            runDB
+                (maybeMergeCarts customerId (rpCartToken parameters)
+                    >> enqueueTask Nothing (SendEmail $ Emails.AccountCreated customerId)
+                )
+            >> addSessionCookie temporarySession (AuthToken authToken)
                 (toAuthorizationData $ Entity customerId customer)
 
 
@@ -416,7 +419,7 @@ resetRequestRoute = validate >=> \parameters -> do
             (UUID.toText <$> liftIO UUID4.nextRandom)
             >> (addUTCTime (15 * 60) <$> liftIO getCurrentTime)
             >> return ()
-        Just (Entity customerId customer) -> do
+        Just (Entity customerId _) -> do
             runDB $ deleteWhere [PasswordResetCustomerId ==. customerId]
             resetCode <- UUID.toText <$> liftIO UUID4.nextRandom
             expirationTime <- addUTCTime (15 * 60) <$> liftIO getCurrentTime
@@ -426,8 +429,9 @@ resetRequestRoute = validate >=> \parameters -> do
                         , passwordResetExpirationTime = expirationTime
                         , passwordResetCode = resetCode
                         }
-            runDB $ insert_ passwordReset
-            void . Emails.send $ Emails.PasswordReset customer passwordReset
+            runDB $ do
+                resetId <- insert passwordReset
+                enqueueTask Nothing $ SendEmail $ Emails.PasswordReset customerId resetId
 
 
 data ResetPasswordParameters =
@@ -487,7 +491,7 @@ resetPasswordRoute = validate >=> \parameters ->
                     maybeCustomer <- runDB $ get customerId
                     -- TODO: Something more relevant than invalidCodeError
                     flip (maybe invalidCodeError) maybeCustomer $ \customer -> do
-                        void . Emails.send $ Emails.PasswordResetSuccess customer
+                        runDB $ enqueueTask Nothing $ SendEmail $ Emails.PasswordResetSuccess customerId
                         addSessionCookie temporarySession (AuthToken token) . toAuthorizationData
                             $ Entity customerId customer
                 else

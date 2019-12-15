@@ -33,10 +33,11 @@ import Servant (Accept(..), MimeRender(..), errBody, err500)
 import System.FilePath ((</>), takeFileName)
 
 import Config (Config(getMediaDirectory))
-import Images (makeImageConfig, scaleImage)
+import Images (saveOriginalImage)
 import Models
 import Models.Fields (Cents(..))
 import Server
+import Workers (Task(OptimizeImage), enqueueTask)
 
 import qualified Avalara
 import qualified Crypto.BCrypt as BCrypt
@@ -160,7 +161,8 @@ hashPassword password = do
 -- IMAGES
 
 -- | Save an Image encoded in a Base64 ByteString, returning the new filename
--- with the content hash appended to the original.
+-- with the content hash appended to the original. Enqueue a Task to
+-- optimize the images.
 makeImageFromBase64 :: FilePath -> T.Text -> BS.ByteString -> App T.Text
 makeImageFromBase64 basePath fileName imageData =
     if BS.null imageData then
@@ -169,10 +171,12 @@ makeImageFromBase64 basePath fileName imageData =
         Left _ ->
             return ""
         Right rawImageData -> do
-            imageConfig <- makeImageConfig
             mediaDirectory <- asks getMediaDirectory
-            T.pack . takeFileName
-                <$> scaleImage imageConfig fileName (mediaDirectory </> basePath) rawImageData
+            originalPath <- saveOriginalImage fileName (mediaDirectory </> basePath)
+                rawImageData
+            runDB $ enqueueTask Nothing
+                $ OptimizeImage originalPath (mediaDirectory </> basePath)
+            return . T.pack $ takeFileName originalPath
 
 
 -- SERVANT

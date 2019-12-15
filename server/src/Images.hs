@@ -20,6 +20,9 @@ module Images
     , makeSourceSet
     -- * Manipulation / Scaling
     , scaleImage
+    , saveOriginalImage
+    , optimizeImage
+    , scaleExistingImage
     , ImageError(..)
     ) where
 
@@ -36,6 +39,7 @@ import Data.Monoid ((<>))
 import System.Directory (findExecutable, createDirectoryIfMissing, doesFileExist)
 import System.FilePath
     ( (</>), takeBaseName, takeExtension, splitFileName, splitPath, joinPath
+    , takeFileName
     )
 import System.Process.Typed
     (runProcess_, setStdin, setStdout, setWorkingDir, closed, proc
@@ -198,48 +202,60 @@ instance Exception ImageError
 -- Throws 'ImageError'.
 scaleImage :: (MonadIO m, MonadThrow m) => ImageConfig -> Text -> FilePath -> BS.ByteString -> m FilePath
 scaleImage config filename destinationDirectory fileContents = do
+    originalPath <- saveOriginalImage filename destinationDirectory fileContents
+    scaleExistingImage config originalPath destinationDirectory
+    return originalPath
+
+saveOriginalImage :: (MonadIO m, MonadThrow m) => Text -> FilePath -> BS.ByteString -> m FilePath
+saveOriginalImage filename destinationDirectory fileContents = do
     let fileHash = md5 $ LBS.fromStrict fileContents
         baseName = takeBaseName $ T.unpack filename
         extension = takeExtension $ T.unpack filename
         newName = T.unpack (slugify $ T.pack baseName) <> "-" <> show fileHash <> extension
-        imageFormat = getFormat
     let originalDirectory = destinationDirectory </> "originals"
     createDirectory originalDirectory
     let originalPath = originalDirectory </> newName
     originalExists <- liftIO $ doesFileExist originalPath
-    unless originalExists $ do
+    unless originalExists $
         liftIO $ BS.writeFile (originalDirectory </> newName) fileContents
-        optimizeImage config imageFormat originalPath
+    return originalPath
+
+-- | Throws 'ImageError'.
+scaleExistingImage :: (MonadIO m, MonadThrow m) => ImageConfig -> FilePath -> FilePath -> m ()
+scaleExistingImage config filePath destinationDirectory =
+    let fileName = takeFileName filePath
+    in
     forM_ [minBound .. maxBound] $ \size -> do
         let newWidth = sizeWidth size
             scaledDirectory = destinationDirectory </> imageDirectory size
+            scaledPath = scaledDirectory </> fileName
         createDirectory scaledDirectory
-        let scaledPath = scaledDirectory </> newName
         scaledExists <- liftIO $ doesFileExist scaledPath
         unless scaledExists $ do
-            resizeWithGraphicsMagick config originalPath scaledDirectory newWidth
-            optimizeImage config imageFormat scaledPath
-    return originalPath
-  where
-    -- Use the extension of the filename to determine the optimization
-    -- format.
-    getFormat =
-        case map toLower (takeExtension $ T.unpack filename) of
-            ".png" ->
-                Just PNG
-            ".jpg" ->
-                Just JPEG
-            ".jpeg" ->
-                Just JPEG
-            ".gif" ->
-                Just GIF
-            _ ->
-                Nothing
-    -- Create a directory & it's parents, rethrowing any IOErrors as
-    -- DirectoryCreationErrors.
-    createDirectory path =
-        liftIO (tryIO $ createDirectoryIfMissing True path) >>=
-            either (throwM . DirectoryCreationError path) return
+            resizeWithGraphicsMagick config filePath scaledDirectory newWidth
+            optimizeImage config scaledPath
+
+-- | Use the extension of the filename to determine the optimization
+-- format.
+getFormat :: Text -> Maybe OptimizableFormat
+getFormat fileName =
+    case map toLower (takeExtension $ T.unpack fileName) of
+        ".png" ->
+            Just PNG
+        ".jpg" ->
+            Just JPEG
+        ".jpeg" ->
+            Just JPEG
+        ".gif" ->
+            Just GIF
+        _ ->
+            Nothing
+-- | Create a directory & it's parents, rethrowing any IOErrors as
+-- DirectoryCreationErrors.
+createDirectory :: (MonadThrow m, MonadIO m) => FilePath -> m ()
+createDirectory path =
+    liftIO (tryIO $ createDirectoryIfMissing True path) >>=
+        either (throwM . DirectoryCreationError path) return
 
 
 -- | Call GraphicsMagick's @mogrify@ command to resize a file to a new width,
@@ -267,8 +283,10 @@ resizeWithGraphicsMagick cfg inputPath outputDirectory targetWidth =
 -- | Call an optimization program on the given file, depending on the file
 -- format & whether or not the optimization program is available on the
 -- system.
-optimizeImage :: MonadIO m => ImageConfig -> Maybe OptimizableFormat -> FilePath -> m ()
-optimizeImage ImageConfig {..} format path =
+optimizeImage :: MonadIO m => ImageConfig -> FilePath -> m ()
+optimizeImage ImageConfig {..} path =
+    let format = getFormat $ T.pack $ takeExtension path
+    in
     case format of
         Just PNG ->
             runWhen icOptipngAvailable "optipng"

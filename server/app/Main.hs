@@ -28,9 +28,11 @@ import Api
 import Auth (sessionEntropy, mkPersistentServerKey)
 import Cache (initializeCaches)
 import Config
+import ImmortalQueue (processImmortalQueue)
 import Models
 import Paths_sese_website (version)
 import StoneEdge (StoneEdgeCredentials(..))
+import Workers (taskQueueConfig)
 
 import qualified Avalara
 import qualified Data.ByteString.Char8 as C
@@ -90,6 +92,8 @@ main = do
             , getStripeLogger = stripeLogger
             , getServerLogger = serverLogger
             }
+    log "Starting 2 worker threads."
+    workers <- processImmortalQueue $ taskQueueConfig 2 cfg
     log $ "Serving HTTP requests on port " <> T.pack (show port) <> "."
     Warp.runSettings (warpSettings port serverLogger) . httpLogger env $ app cfg
     where lookupSetting env def =
@@ -115,7 +119,7 @@ main = do
                 Production ->
                     8
                 Development ->
-                    1
+                    2
           warpSettings port serverLogger =
               Warp.setServerName ""
               $ Warp.setOnException (exceptionHandler serverLogger)

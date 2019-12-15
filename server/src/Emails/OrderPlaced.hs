@@ -1,8 +1,11 @@
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE Rank2Types #-}
+{-# LANGUAGE TypeFamilies #-}
 module Emails.OrderPlaced (Parameters(..), fetchData, get) where
 
 import Control.Monad (when, unless)
+import Control.Monad.IO.Class (MonadIO)
 import Data.Maybe (listToMaybe, fromMaybe, isJust)
 import Data.Monoid ((<>))
 import Data.Time (formatTime, defaultTimeLocale, hoursToTimeZone, utcToZonedTime)
@@ -11,7 +14,6 @@ import Text.Blaze.Renderer.Text (renderMarkup)
 
 import Models
 import Models.Fields (Cents(..), regionName, formatCents, LineItemType(..))
-import Server
 
 import qualified Data.Text as T
 import qualified Data.Text.Lazy as L
@@ -35,7 +37,7 @@ data Parameters =
 type ProductData = [(OrderProduct, Product, ProductVariant)]
 
 
-fetchData :: OrderId -> AppSQL (Maybe Parameters)
+fetchData :: (Monad m, MonadIO m) => OrderId -> E.SqlReadT m (Maybe Parameters)
 fetchData orderId = do
     maybeCustomerOrderAddresses <- fmap listToMaybe . E.select . E.from $
         \(o `E.InnerJoin` c `E.InnerJoin` sa `E.LeftOuterJoin` ba) -> do

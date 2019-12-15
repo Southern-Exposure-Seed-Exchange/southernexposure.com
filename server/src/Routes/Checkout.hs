@@ -43,11 +43,11 @@ import Routes.CommonData
     )
 import Routes.Utils (hashPassword, generateUniqueToken)
 import Validation (Validation(..))
+import Workers (Task(SendEmail), enqueueTask)
 
 import qualified Data.Text as T
 import qualified Database.Esqueleto as E
 import qualified Emails
-import qualified Emails.OrderPlaced as OrderPlaced
 import qualified Validation as V
 import qualified Web.Stripe as Stripe
 import qualified Web.Stripe.Types as Stripe
@@ -551,8 +551,7 @@ customerPlaceOrderRoute = validateCookieAndParameters $ \ce@(Entity customerId c
             update customerId [CustomerStoreCredit -=. appliedCredit]
         deleteCart cartId
         return orderId
-    runDB (OrderPlaced.fetchData orderId)
-        >>= maybe (return ()) (void . Emails.send . Emails.OrderPlaced)
+    runDB $ enqueueTask Nothing $ SendEmail $ Emails.OrderPlaced orderId
     (orderLines, products) <- runDB $ (,)
         <$> selectList [OrderLineItemOrderId ==. orderId] []
         <*> getCheckoutProducts orderId
@@ -761,8 +760,7 @@ anonymousPlaceOrderRoute = validate >=> \parameters -> do
                 , apodAuthorizationData = toAuthorizationData $ Entity customerId customer
                 }
             )
-    runDB (OrderPlaced.fetchData orderId)
-        >>= maybe (return ()) (void . Emails.send . Emails.OrderPlaced)
+    runDB $ enqueueTask Nothing $ SendEmail $ Emails.OrderPlaced orderId
     addSessionCookie temporarySession (AuthToken authToken) orderData
 
 
