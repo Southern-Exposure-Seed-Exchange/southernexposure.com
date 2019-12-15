@@ -163,6 +163,7 @@ executables:
             - monad-logger
             - persistent-postgresql
             - stripe-core
+            - unix
             - wai-extra
             - warp
 

@@ -3,14 +3,17 @@
 {-# LANGUAGE RecordWildCards #-}
 module Main where
 
+import Control.Concurrent (newEmptyMVar, takeMVar, putMVar, threadDelay)
+import Control.Concurrent.Async (async, cancel, race_)
 import Control.Concurrent.STM.TVar (newTVarIO)
 import Control.Exception (Exception(..), SomeException)
-import Control.Monad (when)
+import Control.Monad (when, forever, void)
 import Control.Monad.IO.Class (MonadIO)
 import Control.Monad.Trans.Control (MonadBaseControl)
 import Control.Monad.Logger (MonadLogger, runNoLoggingT, runStderrLoggingT)
 import Data.Maybe (fromMaybe)
 import Data.Monoid ((<>))
+import Data.Pool (destroyAllResources)
 import Data.Text.Encoding (decodeUtf8)
 import Data.Version (showVersion)
 import Database.Persist.Postgresql
@@ -20,15 +23,16 @@ import System.Directory (getCurrentDirectory, createDirectoryIfMissing)
 import System.Environment (lookupEnv)
 import System.Log.FastLogger
      ( LoggerSet, newStdoutLoggerSet, newFileLoggerSet, defaultBufSize
-     , pushLogStrLn, toLogStr, flushLogStr
+     , pushLogStrLn, toLogStr, flushLogStr, rmLoggerSet
      )
+import System.Posix.Signals (installHandler, sigTERM, Handler(CatchOnce))
 import Web.Stripe.Client (StripeConfig(..), StripeKey(..))
 
 import Api
 import Auth (sessionEntropy, mkPersistentServerKey)
 import Cache (initializeCaches)
 import Config
-import ImmortalQueue (processImmortalQueue)
+import ImmortalQueue (processImmortalQueue, killImmortalQueue)
 import Models
 import Paths_sese_website (version)
 import StoneEdge (StoneEdgeCredentials(..))
@@ -95,7 +99,27 @@ main = do
     log "Starting 2 worker threads."
     workers <- processImmortalQueue $ taskQueueConfig 2 cfg
     log $ "Serving HTTP requests on port " <> T.pack (show port) <> "."
-    Warp.runSettings (warpSettings port serverLogger) . httpLogger env $ app cfg
+    shutdownMVar <- newEmptyMVar
+    void $ installHandler sigTERM (CatchOnce $ putMVar shutdownMVar ()) Nothing
+    asyncWarp <- async
+        $ Warp.runSettings (warpSettings port serverLogger) . httpLogger env
+        $ app cfg
+    race_ (takeMVar shutdownMVar) (forever $ threadDelay maxBound)
+    log "Received SIGTERM, starting clean shutdown."
+    log "Waiting for worker queue to finish..."
+    killImmortalQueue workers
+    log "Worker queue closed."
+    cancel asyncWarp
+    log "HTTP server stopped."
+    destroyAllResources emailPool
+    log "SMTP pool closed."
+    destroyAllResources dbPool
+    log "PostgresQL pool closed."
+    rmLoggerSet avalaraLogger
+    rmLoggerSet stripeLogger
+    flushLogStr serverLogger
+    log "Logs flushed."
+    log "Shutdown completed successfully."
     where lookupSetting env def =
             maybe def read <$> lookupEnv env
           requireSetting :: String -> IO String
