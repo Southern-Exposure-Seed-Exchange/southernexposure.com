@@ -71,6 +71,7 @@ dependencies:
     - http-client
     - http-media
     - http-types
+    - immortal
     - iso3166-country-codes
     - markdown
     - mime-mail
@@ -109,6 +110,7 @@ library:
         - Cache
         - Config
         - Images
+        - ImmortalQueue
         - Models
         - Models.Fields
         - Routes.CommonData
