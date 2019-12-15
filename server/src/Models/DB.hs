@@ -13,6 +13,7 @@ import Database.Persist.TH
 import Numeric.Natural (Natural)
 
 import Models.Fields
+import Models.PersistJSON (JSONValue)
 
 import qualified Data.Text as T
 
@@ -218,5 +219,13 @@ CategorySale
     startDate UTCTime
     endDate UTCTime
     categoryIds [CategoryId]
+    deriving Show
+
+
+Job
+    action JSONValue
+    queuedAt UTCTime
+    runAt UTCTime Maybe
+    retries Int
     deriving Show
 |]
