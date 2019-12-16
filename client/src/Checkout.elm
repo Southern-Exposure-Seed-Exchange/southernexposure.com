@@ -888,10 +888,10 @@ view model authStatus locations checkoutDetails =
                 User.Anonymous ->
                     div [ class "mb-3" ]
                         [ div [ class "" ]
-                            [ h4 [ class "d-flex flex-wrap justify-content-between" ]
+                            [ h4 [ class "d-flex flex-wrap justify-content-between align-items-baseline" ]
                                 [ span [] [ text "Create an Account" ]
                                 , a
-                                    (class "btn btn-link p-0"
+                                    (class "font-weight-bold small mb-0"
                                         :: routeLinkAttributes (Login <| Just <| Routing.reverse Cart)
                                     )
                                     [ text "Already have an Account?" ]
