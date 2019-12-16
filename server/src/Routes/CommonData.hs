@@ -365,7 +365,6 @@ data CartCharges =
         , ccShippingMethods :: [ShippingCharge]
         , ccPriorityShippingFee :: Maybe CartCharge
         , ccProductTotal :: Cents
-        , ccMemberDiscount :: Maybe CartCharge
         , ccCouponDiscount :: Maybe CartCharge
         , ccGrandTotal :: Cents
         }
@@ -377,7 +376,6 @@ instance ToJSON CartCharges where
                , "surcharges" .= ccSurcharges charges
                , "shippingMethods" .= ccShippingMethods charges
                , "priorityShipping" .= ccPriorityShippingFee charges
-               , "memberDiscount" .= ccMemberDiscount charges
                , "couponDiscount" .= ccCouponDiscount charges
                , "grandTotal" .= ccGrandTotal charges
                ]
@@ -457,25 +455,15 @@ getCharges
     :: Maybe Country            -- ^ Used to calculate the Shipping charge.
     -> Maybe Region             -- ^ Used to calculate the Tax charge.
     -> [CartItemData]           -- ^ The cart items (see `getCartItems`)
-    -> Bool                     -- ^ Include the 5% Member Discount?
     -> Maybe (Entity Coupon)    -- ^ A Coupon to apply.
     -> Bool                     -- ^ Include Priority S&H
     -> AppSQL CartCharges
-getCharges maybeCountry maybeRegion items includeMemberDiscount maybeCoupon priorityShipping =
+getCharges maybeCountry maybeRegion items maybeCoupon priorityShipping =
     let
         subTotal =
             foldl (\acc item -> acc + itemTotal item) 0 items
         itemTotal item =
             fromIntegral (cidQuantity item) * fromCents (getVariantPrice $ cidVariant item)
-        memberDiscount =
-            if includeMemberDiscount && calculatedMemberDiscount > 0 then
-                Just CartCharge
-                    { ccDescription = "5% Member Discount"
-                    , ccAmount = calculatedMemberDiscount
-                    }
-            else Nothing
-        calculatedMemberDiscount =
-            Cents . round $ (5 % 100) * toRational subTotal
         couponCredit ms (Entity _ coupon) =
             if couponMinimumOrder coupon <= Cents subTotal then
                 Just $ CartCharge
@@ -510,7 +498,6 @@ getCharges maybeCountry maybeRegion items includeMemberDiscount maybeCoupon prio
                         + amt ccTax
                         + mAmt (listToMaybe . map scCharge . ccShippingMethods)
                         + mAmt ccPriorityShippingFee
-                        - mAmt ccMemberDiscount
                         - mAmt ccCouponDiscount
                 tax =
                     taxLine preTaxTotal
@@ -530,7 +517,6 @@ getCharges maybeCountry maybeRegion items includeMemberDiscount maybeCoupon prio
             , ccShippingMethods = shippingMethods
             , ccPriorityShippingFee = priorityCharge shippingMethods
             , ccProductTotal = Cents subTotal
-            , ccMemberDiscount = memberDiscount
             , ccCouponDiscount = maybeCoupon >>= couponCredit shippingMethods
             , ccGrandTotal = 0
             }

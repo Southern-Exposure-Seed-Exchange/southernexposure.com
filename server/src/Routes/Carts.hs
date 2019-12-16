@@ -246,13 +246,12 @@ customerDetailsRoute :: WrappedAuthToken -> App (Cookied CartDetailsData)
 customerDetailsRoute token = withValidatedCookie token getCustomerCartDetails
 
 getCustomerCartDetails :: Entity Customer -> App CartDetailsData
-getCustomerCartDetails (Entity customerId customer) =
+getCustomerCartDetails (Entity customerId _) =
     runDB $ do
         (shippingCountry, shippingRegion) <- getShippingCountry
         items <- getCartItems $ \c ->
             c E.^. CartCustomerId E.==. E.just (E.val customerId)
         charges <- getCharges shippingCountry shippingRegion items
-            (not . T.null $ customerMemberNumber customer)
             Nothing False
         return $ CartDetailsData items charges
     where getShippingCountry = do
@@ -291,7 +290,7 @@ anonymousDetailsRoute parameters =
     runDB $ do
         items <- getCartItems $ \c ->
             c E.^. CartSessionToken E.==. E.just (E.val $ adpCartToken parameters)
-        charges <- getCharges Nothing Nothing items False Nothing False
+        charges <- getCharges Nothing Nothing items Nothing False
         return $ CartDetailsData items charges
 
 

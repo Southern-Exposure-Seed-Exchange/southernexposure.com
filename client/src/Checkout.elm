@@ -55,7 +55,6 @@ type alias Form =
     , makeBillingDefault : Bool
     , billingSameAsShipping : Bool
     , storeCredit : String
-    , memberNumber : Maybe String
     , priorityShipping : Bool
     , couponCode : String
     , comment : String
@@ -75,7 +74,6 @@ initial =
     , makeBillingDefault = False
     , billingSameAsShipping = False
     , storeCredit = ""
-    , memberNumber = Nothing
     , priorityShipping = False
     , couponCode = ""
     , comment = ""
@@ -115,7 +113,6 @@ initialWithDefaults shippingAddresses billingAddresses =
     , makeBillingDefault = isNew billingAddress
     , billingSameAsShipping = False
     , storeCredit = ""
-    , memberNumber = Nothing
     , priorityShipping = False
     , couponCode = ""
     , comment = ""
@@ -140,7 +137,6 @@ type Msg
     | BillingMsg Address.Msg
     | BillingSameAsShipping Bool
     | StoreCredit String
-    | MemberNumber String
     | TogglePriorityShipping Bool
     | CouponCode String
     | Comment String
@@ -244,10 +240,6 @@ update msg model authStatus maybeSessionToken checkoutDetails =
         StoreCredit credit ->
             { model | storeCredit = credit }
                 |> nothingAndNoCommand
-
-        MemberNumber memberNumber ->
-            { model | memberNumber = Just memberNumber }
-                |> refreshDetails authStatus maybeSessionToken False model
 
         TogglePriorityShipping isChecked ->
             { model | priorityShipping = isChecked }
@@ -453,7 +445,6 @@ refreshDetails authStatus maybeSessionToken forceUpdate oldModel newModel =
                                 maybeCountry
                                 maybeRegion
                                 maybeAddressId
-                                newModel.memberNumber
                                 newModel.couponCode
                                 newModel.priorityShipping
                         )
@@ -475,12 +466,11 @@ refreshDetails authStatus maybeSessionToken forceUpdate oldModel newModel =
                         token
                         maybeCountry
                         maybeRegion
-                        (Maybe.withDefault "" newModel.memberNumber)
                         newModel.couponCode
                         newModel.priorityShipping
 
         shouldUpdate =
-            addressChanged || memberNumberChanged || forceUpdate
+            addressChanged || forceUpdate
 
         addressChanged =
             case ( oldModel.shippingAddress, newModel.shippingAddress ) of
@@ -501,15 +491,6 @@ refreshDetails authStatus maybeSessionToken forceUpdate oldModel newModel =
 
                 _ ->
                     True
-
-        memberNumberChanged =
-            case ( oldModel.memberNumber, newModel.memberNumber ) of
-                ( Just oldNumber, Just newNumber ) ->
-                    (String.length oldNumber > 3 && String.length newNumber <= 3)
-                        || (String.length newNumber > 3 && String.length oldNumber <= 3)
-
-                ( old, new ) ->
-                    old /= new
 
         addressArguments =
             case newModel.shippingAddress of
@@ -576,33 +557,19 @@ getCustomerDetails :
     -> Maybe String
     -> Maybe Region
     -> Maybe AddressId
-    -> Maybe String
     -> String
     -> Bool
     -> Cmd msg
-getCustomerDetails msg maybeCountry maybeRegion maybeAddressId maybeMemberNumber couponCode priorityShipping =
+getCustomerDetails msg maybeCountry maybeRegion maybeAddressId couponCode priorityShipping =
     let
         data =
             Encode.object
                 [ ( "region", encodeMaybe Locations.regionEncoder maybeRegion )
                 , ( "country", encodeMaybe Encode.string maybeCountry )
                 , ( "addressId", encodeMaybe (\(AddressId i) -> Encode.int i) maybeAddressId )
-                , ( "memberNumber", encodedMemberNumber )
                 , ( "couponCode", encodeStringAsMaybe couponCode )
                 , ( "priorityShipping", Encode.bool priorityShipping )
                 ]
-
-        encodedMemberNumber =
-            maybeMemberNumber
-                |> Maybe.andThen
-                    (\num ->
-                        if String.length num > 3 then
-                            Just num
-
-                        else
-                            Nothing
-                    )
-                |> encodeMaybe Encode.string
     in
     Api.post Api.CheckoutDetailsCustomer
         |> Api.withJsonBody data
@@ -616,16 +583,14 @@ getAnonymousDetails :
     -> Maybe String
     -> Maybe Region
     -> String
-    -> String
     -> Bool
     -> Cmd msg
-getAnonymousDetails msg sessionToken maybeCountry maybeRegion memberNumber couponCode priorityShipping =
+getAnonymousDetails msg sessionToken maybeCountry maybeRegion couponCode priorityShipping =
     let
         data =
             Encode.object
                 [ ( "region", encodeMaybe Locations.regionEncoder maybeRegion )
                 , ( "country", encodeMaybe Encode.string maybeCountry )
-                , ( "memberNumber", Encode.string memberNumber )
                 , ( "sessionToken", Encode.string sessionToken )
                 , ( "couponCode", encodeStringAsMaybe couponCode )
                 , ( "priorityShipping", Encode.bool priorityShipping )
@@ -656,7 +621,6 @@ placeOrder model authStatus maybeSessionToken stripeTokenId checkoutDetails =
                 [ ( "shippingAddress", encodedShippingAddress )
                 , ( "billingAddress", encodedBillingAddress )
                 , ( "storeCredit", encodedStoreCredit )
-                , ( "memberNumber", encodedMemberNumber )
                 , ( "priorityShipping", Encode.bool model.priorityShipping )
                 , ( "couponCode", encodeStringAsMaybe model.couponCode )
                 , ( "comment", Encode.string model.comment )
@@ -667,7 +631,6 @@ placeOrder model authStatus maybeSessionToken stripeTokenId checkoutDetails =
             Encode.object
                 [ ( "shippingAddress", encodedShippingAddress )
                 , ( "billingAddress", encodedBillingAddress )
-                , ( "memberNumber", encodedMemberNumber )
                 , ( "priorityShipping", Encode.bool model.priorityShipping )
                 , ( "couponCode", encodeStringAsMaybe model.couponCode )
                 , ( "comment", Encode.string model.comment )
@@ -682,17 +645,6 @@ placeOrder model authStatus maybeSessionToken stripeTokenId checkoutDetails =
                 |> centsFromString
                 |> Maybe.map (\(Cents c) -> Encode.int c)
                 |> Maybe.withDefault Encode.null
-
-        encodedMemberNumber =
-            Encode.string <|
-                case model.memberNumber of
-                    Nothing ->
-                        RemoteData.toMaybe checkoutDetails
-                            |> Maybe.map .memberNumber
-                            |> Maybe.withDefault ""
-
-                    Just str ->
-                        str
 
         encodedShippingAddress =
             encodeAddress model.shippingAddress model.makeShippingDefault
@@ -984,30 +936,6 @@ view model authStatus locations checkoutDetails =
             min credit orderTotal
                 |> Cents
 
-        memberNumberForm =
-            div [ class "col-sm-6" ]
-                [ h5 [] [ text "Member Number" ]
-                , p []
-                    [ text <|
-                        "Returning customers can receive a 5% discount by "
-                            ++ "entering their member number. You can find your member "
-                            ++ "number on your catalog mailing label and on previous order "
-                            ++ "invoices."
-                    ]
-                , div [ class "form-group" ]
-                    [ input
-                        [ class "form-control"
-                        , type_ "text"
-                        , minlength 4
-                        , onInput MemberNumber
-                        , value <|
-                            Maybe.withDefault checkoutDetails.memberNumber model.memberNumber
-                        , Aria.label "Member Number"
-                        ]
-                        []
-                    ]
-                ]
-
         priorityShippingForm =
             div [ class "col-sm-6" ]
                 [ h5 [] [ text "Priority Shipping & Handling" ]
@@ -1156,7 +1084,7 @@ view model authStatus locations checkoutDetails =
                 billingCard
             ]
         , div [ class "row mb-3" ]
-            [ storeCreditForm, memberNumberForm, priorityShippingForm, mobileCouponCodeForm ]
+            [ storeCreditForm, priorityShippingForm, mobileCouponCodeForm ]
         , div [ class "mb-3" ]
             [ h4 [] [ text "Order Summary" ]
             , summaryTable checkoutDetails
@@ -1507,7 +1435,6 @@ summaryTable ({ items, charges } as checkoutDetails) creditString couponCode cou
                     :: List.map chargeRow charges.surcharges
                     ++ [ taxRow
                        , storeCreditRow
-                       , memberDiscountRow
                        , couponDiscountRow
                        , totalRow
                        ]
@@ -1578,11 +1505,6 @@ summaryTable ({ items, charges } as checkoutDetails) creditString couponCode cou
             centsFromString creditString
                 |> Maybe.map (limitStoreCredit checkoutDetails)
 
-        memberDiscountRow =
-            charges.memberDiscount
-                |> Maybe.map negateChargeAmount
-                |> maybeChargeRow
-
         couponDiscountRow =
             case charges.couponDiscount of
                 Nothing ->
@@ -1602,9 +1524,6 @@ summaryTable ({ items, charges } as checkoutDetails) creditString couponCode cou
                         , td [ class "text-right" ]
                             [ text <| Format.cents <| centsMap negate amount ]
                         ]
-
-        negateChargeAmount c =
-            { c | amount = centsMap negate c.amount }
 
         footerRow content amount rowClass =
             tr [ class rowClass ]

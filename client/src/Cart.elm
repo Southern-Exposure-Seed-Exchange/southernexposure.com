@@ -262,7 +262,6 @@ view ({ quantities } as form_) ({ items, charges } as cartDetails) =
                     ++ [ htmlOrBlank chargeRow <|
                             Maybe.map .charge charges.shippingMethod
                        , taxRow
-                       , memberDiscountRow
                        , totalRow
                        ]
 
@@ -275,11 +274,6 @@ view ({ quantities } as form_) ({ items, charges } as cartDetails) =
 
             else
                 chargeRow charges.tax
-
-        memberDiscountRow =
-            charges.memberDiscount
-                |> Maybe.map (\c -> { c | amount = centsMap negate c.amount })
-                |> htmlOrBlank chargeRow
 
         footerRow rowClass content amount =
             tr [ class rowClass ]
@@ -407,7 +401,6 @@ mobileCartTable { quantities } { items, charges } totals =
 
                   else
                     []
-                , Maybe.map chargeTotal charges.memberDiscount |> Maybe.withDefault []
                 , total "Total" totals.total
                 ]
 

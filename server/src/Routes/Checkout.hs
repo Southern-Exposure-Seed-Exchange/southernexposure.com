@@ -17,7 +17,7 @@ import Data.Aeson ((.:), (.:?), (.=), FromJSON(..), ToJSON(..), withObject, obje
 import Data.Foldable (asum)
 import Data.Int (Int64)
 import Data.List (partition, find)
-import Data.Maybe (listToMaybe, fromMaybe, isJust)
+import Data.Maybe (listToMaybe, isJust)
 import Data.Monoid ((<>))
 import Data.Time.Clock (getCurrentTime, UTCTime)
 import Data.Typeable (Typeable)
@@ -148,7 +148,6 @@ data CustomerDetailsParameters =
         { cdpShippingCountry :: Maybe Country
         , cdpShippingRegion :: Maybe Region
         , cdpExistingAddress :: Maybe AddressId
-        , cdpMemberNumber :: Maybe T.Text
         , cdpCouponCode :: Maybe T.Text
         , cdpPriorityShipping :: Bool
         }
@@ -159,7 +158,6 @@ instance FromJSON CustomerDetailsParameters where
             <$> v .:? "country"
             <*> v .:? "region"
             <*> v .:? "addressId"
-            <*> v .:? "memberNumber"
             <*> v .:? "couponCode"
             <*> v .:  "priorityShipping"
 
@@ -170,7 +168,6 @@ data CheckoutDetailsData =
         , cddItems :: [CartItemData]
         , cddCharges :: CartCharges
         , cddStoreCredit :: Cents
-        , cddMemberNumber :: T.Text
         }
 
 instance ToJSON CheckoutDetailsData where
@@ -181,7 +178,6 @@ instance ToJSON CheckoutDetailsData where
             , "items" .= cddItems details
             , "charges" .= cddCharges details
             , "storeCredit" .= cddStoreCredit details
-            , "memberNumber" .= cddMemberNumber details
             ]
 
 type CustomerDetailsRoute =
@@ -191,10 +187,7 @@ type CustomerDetailsRoute =
 
 customerDetailsRoute :: WrappedAuthToken -> CustomerDetailsParameters -> App (Cookied CheckoutDetailsData)
 customerDetailsRoute token parameters = withValidatedCookie token $ \(Entity customerId customer) -> do
-    let hasValidMemberNumber =
-            (> 3) . T.length . fromMaybe (customerMemberNumber customer)
-                $ cdpMemberNumber parameters
-        priorityShipping =
+    let priorityShipping =
             cdpPriorityShipping parameters
     currentTime <- liftIO getCurrentTime
     withCheckoutDetailsErrors . runDB $ do
@@ -209,19 +202,13 @@ customerDetailsRoute token parameters = withValidatedCookie token $ \(Entity cus
             $ getCoupon currentTime (Just customerId) <$> cdpCouponCode parameters
         items <- getCartItems $ \c ->
             c E.^. CartCustomerId E.==. E.just (E.val customerId)
-        charges <- getCharges maybeCountry maybeRegion items hasValidMemberNumber
-            maybeCoupon priorityShipping
-        mapException DetailsCouponError
-            $ checkCouponMeetsMinimum maybeCoupon charges
-        mapException DetailsPriorityError
-                $ checkPriorityShippingAvailable priorityShipping charges
+        charges <- detailsCharges maybeCountry maybeRegion items maybeCoupon priorityShipping
         return CheckoutDetailsData
             { cddShippingAddresses = map toAddressData shippingAddresses
             , cddBillingAddresses = map toAddressData billingAddresses
             , cddItems = items
             , cddCharges = charges
             , cddStoreCredit = customerStoreCredit customer
-            , cddMemberNumber = customerMemberNumber customer
             }
     where
         getShippingAddress :: CustomerDetailsParameters -> [Entity Address] -> (Maybe Country, Maybe Region)
@@ -248,7 +235,6 @@ data AnonymousDetailsParameters =
     AnonymousDetailsParameters
         { adpShippingCountry :: Maybe Country
         , adpShippingRegion :: Maybe Region
-        , adpMemberNumber :: Maybe T.Text
         , adpCouponCode :: Maybe T.Text
         , adpPriorityShipping :: Bool
         , adpCartToken :: T.Text
@@ -259,7 +245,6 @@ instance FromJSON AnonymousDetailsParameters where
         AnonymousDetailsParameters
             <$> v .:? "country"
             <*> v .:? "region"
-            <*> v .:? "memberNumber"
             <*> v .:? "couponCode"
             <*> v .:  "priorityShipping"
             <*> v .:  "sessionToken"
@@ -277,8 +262,6 @@ anonymousDetailsRoute parameters =
             adpShippingRegion parameters
         priorityShipping =
             adpPriorityShipping parameters
-        isValidMemberNumber =
-            maybe False ((> 3) . T.length) $ adpMemberNumber parameters
     in
         withCheckoutDetailsErrors . runDB $ do
             currentTime <- liftIO getCurrentTime
@@ -286,19 +269,13 @@ anonymousDetailsRoute parameters =
                 $ getCoupon currentTime Nothing <$> adpCouponCode parameters
             items <- getCartItems $ \c ->
                 c E.^. CartSessionToken E.==. E.just (E.val $ adpCartToken parameters)
-            charges <- getCharges maybeCountry maybeRegion items isValidMemberNumber
-                maybeCoupon priorityShipping
-            mapException DetailsCouponError
-                $ checkCouponMeetsMinimum maybeCoupon charges
-            mapException DetailsPriorityError
-                $ checkPriorityShippingAvailable priorityShipping charges
+            charges <- detailsCharges maybeCountry maybeRegion items maybeCoupon priorityShipping
             return CheckoutDetailsData
                 { cddShippingAddresses = []
                 , cddBillingAddresses = []
                 , cddItems = items
                 , cddCharges = charges
                 , cddStoreCredit = 0
-                , cddMemberNumber = ""
                 }
 
 
@@ -335,6 +312,17 @@ getCoupon currentTime maybeCustomerId couponCode = do
                     when (customerUses >= fromIntegral (couponUsesPerCustomer coupon))
                         $ throwM CouponCustomerMaxUses
                 Nothing -> return ()
+
+-- | Get the CartCharges for the details routes & check the coupon minimum
+-- & priority shipping availability. Throws 'CheckoutDetailsError'.
+detailsCharges :: Maybe Country -> Maybe Region -> [CartItemData] -> Maybe (Entity Coupon) -> Bool -> AppSQL CartCharges
+detailsCharges maybeCountry maybeRegion items maybeCoupon priorityShipping = do
+    charges <- getCharges maybeCountry maybeRegion items maybeCoupon priorityShipping
+    mapException DetailsCouponError
+        $ checkCouponMeetsMinimum maybeCoupon charges
+    mapException DetailsPriorityError
+        $ checkPriorityShippingAvailable priorityShipping charges
+    return charges
 
 -- | Ensure the product total equals or exceeds the Coupon
 -- minimum by seeing if it was removed from the CartCharges. If
@@ -442,7 +430,6 @@ data CustomerPlaceOrderParameters =
         { cpopShippingAddress :: CustomerAddress
         , cpopBillingAddress :: Maybe CustomerAddress
         , cpopStoreCredit :: Maybe Cents
-        , cpopMemberNumber :: T.Text
         , cpopPriorityShipping :: Bool
         , cpopCouponCode :: Maybe T.Text
         , cpopComment :: T.Text
@@ -455,7 +442,6 @@ instance FromJSON CustomerPlaceOrderParameters where
             <$> v .: "shippingAddress"
             <*> v .:? "billingAddress"
             <*> v .:? "storeCredit"
-            <*> v .: "memberNumber"
             <*> v .: "priorityShipping"
             <*> v .:? "couponCode"
             <*> v .: "comment"
@@ -469,12 +455,6 @@ instance Validation CustomerPlaceOrderParameters where
             ( "", [ ( "There was an error processing your payment, please try again."
                     , whenJust T.null $ cpopStripeToken parameters )
                   ] )
-            : ( "memberNumber"
-              , [ ( "Invalid Member Number"
-                  , T.length (cpopMemberNumber parameters) > 0 &&
-                    T.length (cpopMemberNumber parameters) < 4
-                  )
-                ] )
             : map (first $ T.append "shipping-") shippingValidators
             ++ map (first $ T.append "billing-") billingValidators
         where validateAddress a =
@@ -524,18 +504,14 @@ type CustomerPlaceOrderRoute =
 -- the Stripe Customer.
 customerPlaceOrderRoute :: WrappedAuthToken -> CustomerPlaceOrderParameters -> App (Cookied PlaceOrderData)
 customerPlaceOrderRoute = validateCookieAndParameters $ \ce@(Entity customerId customer) parameters -> do
-    let memberNumberParameter = cpopMemberNumber parameters
-        shippingParameter = cpopShippingAddress parameters
+    let shippingParameter = cpopShippingAddress parameters
         maybeStripeToken = cpopStripeToken parameters
     currentTime <- liftIO getCurrentTime
-    when (not (T.null memberNumberParameter) && memberNumberParameter /= customerMemberNumber customer)
-        $ runDB $ update customerId [CustomerMemberNumber =. cpopMemberNumber parameters]
     orderId <- withPlaceOrderErrors shippingParameter . runDB $ do
         (maybeBillingAddress, orderId, orderTotal, cartId, appliedCredit) <-
             createAddressesAndOrder ce shippingParameter (cpopBillingAddress parameters)
-                (cpopStoreCredit parameters) (cpopMemberNumber parameters)
-                (cpopPriorityShipping parameters) (cpopCouponCode parameters)
-                (cpopComment parameters) currentTime
+                (cpopStoreCredit parameters) (cpopPriorityShipping parameters)
+                (cpopCouponCode parameters) (cpopComment parameters) currentTime
         when (orderTotal > 0) $ case (maybeBillingAddress, maybeStripeToken) of
             (Just billingAddress, Just stripeToken) -> do
                 stripeCustomerId <- getOrCreateStripeCustomer ce stripeToken
@@ -572,16 +548,16 @@ customerPlaceOrderRoute = validateCookieAndParameters $ \ce@(Entity customerId c
                     return newId
           createAddressesAndOrder
             :: Entity Customer -> CustomerAddress -> Maybe CustomerAddress
-            -> Maybe Cents -> T.Text -> Bool -> Maybe T.Text -> T.Text -> UTCTime
+            -> Maybe Cents -> Bool -> Maybe T.Text -> T.Text -> UTCTime
             -> AppSQL (Maybe Address, OrderId, Cents, CartId, Cents)
-          createAddressesAndOrder customer@(Entity customerId _) shippingParam billingParam maybeStoreCredit memberNumber priorityShipping maybeCouponCode comment currentTime = do
+          createAddressesAndOrder customer@(Entity customerId _) shippingParam billingParam maybeStoreCredit priorityShipping maybeCouponCode comment currentTime = do
             shippingAddress <- getOrInsertAddress Shipping customerId shippingParam
             billingAddress <- sequence $ getOrInsertAddress Billing customerId <$> billingParam
             (Entity cartId _) <- getBy (UniqueCustomerCart $ Just customerId)
                 >>= maybe (throwM CartNotFound) return
             (orderId, orderTotal, appliedCredit) <- createOrder
                 customer cartId shippingAddress (entityKey <$> billingAddress)
-                maybeStoreCredit memberNumber priorityShipping maybeCouponCode comment currentTime
+                maybeStoreCredit priorityShipping maybeCouponCode comment currentTime
             return (entityVal <$> billingAddress, orderId, orderTotal, cartId, appliedCredit)
           getOrInsertAddress :: AddressType -> CustomerId -> CustomerAddress -> AppSQL (Entity Address)
           getOrInsertAddress addrType customerId = \case
@@ -628,7 +604,6 @@ data AnonymousPlaceOrderParameters =
         , apopPassword :: T.Text
         , apopShippingAddress :: AddressData
         , apopBillingAddress :: Maybe AddressData
-        , apopMemberNumber :: T.Text
         , apopPriorityShipping :: Bool
         , apopCouponCode :: Maybe T.Text
         , apopComment :: T.Text
@@ -643,7 +618,6 @@ instance FromJSON AnonymousPlaceOrderParameters where
             <*> v .: "password"
             <*> v .: "shippingAddress"
             <*> v .: "billingAddress"
-            <*> v .: "memberNumber"
             <*> v .: "priorityShipping"
             <*> v .:? "couponCode"
             <*> v .: "comment"
@@ -667,13 +641,6 @@ instance Validation AnonymousPlaceOrderParameters where
             , ( "password"
               , [ V.required $ apopPassword parameters
                 , V.minimumLength 8 $ apopPassword parameters
-                ]
-              )
-            , ( "memberNumber"
-              , [ ( "Invalid Member Number"
-                  , T.length (apopMemberNumber parameters) > 0 &&
-                    T.length (apopMemberNumber parameters) < 4
-                  )
                 ]
               )
             ]
@@ -709,13 +676,12 @@ anonymousPlaceOrderRoute = validate >=> \parameters -> do
     encryptedPass <- hashPassword $ apopPassword parameters
     authToken <- runDB $ generateUniqueToken UniqueToken
     currentTime <- liftIO getCurrentTime
-    let memberNumber = apopMemberNumber parameters
-        shippingParameter = NewAddress $ apopShippingAddress parameters
+    let shippingParameter = NewAddress $ apopShippingAddress parameters
     (orderId, orderData) <- withPlaceOrderErrors shippingParameter . runDB $ do
         let customer = Customer
                 { customerEmail = apopEmail parameters
                 , customerStoreCredit = Cents 0
-                , customerMemberNumber = memberNumber
+                , customerMemberNumber = ""
                 , customerEncryptedPassword = encryptedPass
                 , customerAuthToken = authToken
                 , customerStripeId = Nothing
@@ -734,8 +700,8 @@ anonymousPlaceOrderRoute = validate >=> \parameters -> do
         billingId <- sequence $ insert <$> maybeBillingAddress
         (orderId, orderTotal, _) <- createOrder (Entity customerId customer)
             cartId (Entity shippingId shippingAddress) billingId Nothing
-            memberNumber (apopPriorityShipping parameters)
-            (apopCouponCode parameters) (apopComment parameters) currentTime
+            (apopPriorityShipping parameters) (apopCouponCode parameters)
+            (apopComment parameters) currentTime
         when (orderTotal > 0) $ case (maybeBillingAddress, apopStripeToken parameters) of
             (Just billingAddress, Just stripeToken) -> do
                 stripeCustomerId <- createStripeCustomer (apopEmail parameters)
@@ -839,8 +805,6 @@ createOrder
     -- ^ Billing Address ID
     -> Maybe Cents
     -- ^ Store Credit
-    -> T.Text
-    -- ^ Member Number
     -> Bool
     -- ^ Enable Priority Shipping
     -> Maybe T.Text
@@ -850,7 +814,7 @@ createOrder
     -> UTCTime
     -- ^ Current Time
     -> AppSQL (OrderId, Cents, Cents)
-createOrder (Entity customerId customer) cartId shippingEntity billingId maybeStoreCredit memberNumber priorityShipping maybeCouponCode comment currentTime = do
+createOrder (Entity customerId customer) cartId shippingEntity billingId maybeStoreCredit priorityShipping maybeCouponCode comment currentTime = do
     let (Entity shippingId shippingAddress) = shippingEntity
     items <- getCartItems $ \c -> c E.^. CartId E.==. E.val cartId
     orderId <- insert Order
@@ -868,7 +832,7 @@ createOrder (Entity customerId customer) cartId shippingEntity billingId maybeSt
         , orderCreatedAt = currentTime
         }
     (lineTotal, maybeCouponId) <- createLineItems currentTime customerId
-        shippingAddress items orderId memberNumber priorityShipping maybeCouponCode
+        shippingAddress items orderId priorityShipping maybeCouponCode
     when (isJust maybeCouponId) $
         update orderId [OrderCouponId =. maybeCouponId]
     productTotals <- createProducts items orderId
@@ -900,9 +864,9 @@ deleteCart :: CartId -> AppSQL ()
 deleteCart cartId =
     deleteWhere [CartItemCartId ==. cartId] >> delete cartId
 
--- | Create the Shipping, Surcharge, MemberDiscount, & CouponDiscount
--- OrderLineItems for an Order, returning the total amount of all items
--- & the ID of a Coupon(if applied).
+-- | Create the Shipping, Surcharge, & CouponDiscount OrderLineItems for an
+-- Order, returning the total amount of all items & the ID of a Coupon(if
+-- applied).
 --
 -- Note that this returns an Integer instead of Cents for the lineItem
 -- total since the credit lines may be larger than the charge lines.
@@ -919,19 +883,17 @@ createLineItems
     -- ^ Cart Items
     -> OrderId
     -- ^ Order ID to add Line Items to
-    -> T.Text
-    -- ^ Member Number
     -> Bool
     -- ^ Use Priority Shipping
     -> Maybe T.Text
     -- ^ Coupon Code
     -> AppSQL (Integer, Maybe CouponId)
-createLineItems currentTime customerId shippingAddress items orderId memberNumber priorityShipping maybeCouponCode = do
+createLineItems currentTime customerId shippingAddress items orderId priorityShipping maybeCouponCode = do
     maybeCoupon <- mapException PlaceOrderCouponError $ sequence
         $ getCoupon currentTime (Just customerId) <$> maybeCouponCode
     charges <- getCharges
         (Just $ addressCountry shippingAddress) (Just $ addressState shippingAddress) items
-        (T.length memberNumber >= 4) maybeCoupon priorityShipping
+         maybeCoupon priorityShipping
     mapException PlaceOrderCouponError $ checkCouponMeetsMinimum maybeCoupon charges
     shippingCharge <-
         case ccShippingMethods charges of
@@ -944,9 +906,6 @@ createLineItems currentTime customerId shippingAddress items orderId memberNumbe
     maybePriorityShippingCharge <-
         maybe (return Nothing) (fmap Just . insertEntity . makeLine PriorityShippingLine)
             $ ccPriorityShippingFee charges
-    maybeMemberDiscount <-
-        maybe (return Nothing) (fmap Just . insertEntity . makeLine MemberDiscountLine)
-            $ ccMemberDiscount charges
     maybeCouponDiscount <-
         maybe (return Nothing) (fmap Just . insertEntity . makeLine CouponDiscountLine)
             $ ccCouponDiscount charges
@@ -960,7 +919,6 @@ createLineItems currentTime customerId shippingAddress items orderId memberNumbe
             + centsToInteger (orderLineItemAmount $ entityVal shippingLine)
             + maybeLineAmount maybePriorityShippingCharge
             + maybeLineAmount maybeTaxLine
-            - maybeLineAmount maybeMemberDiscount
             - maybeLineAmount maybeCouponDiscount
         , entityKey <$> maybeCoupon
         )

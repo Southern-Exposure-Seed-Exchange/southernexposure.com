@@ -246,7 +246,6 @@ fetchDataForRoute ({ route, pageData, key } as model) =
                                         Nothing
                                         Nothing
                                         Nothing
-                                        Nothing
                                         ""
                                         False
                                     )
@@ -264,7 +263,6 @@ fetchDataForRoute ({ route, pageData, key } as model) =
                                                     token
                                                     (Just <| .country Address.initial)
                                                     (Just <| .state Address.initial)
-                                                    ""
                                                     ""
                                                     False
                                                 )

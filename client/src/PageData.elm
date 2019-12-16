@@ -339,7 +339,6 @@ blankCartDetails =
             Nothing
             Nothing
             Nothing
-            Nothing
             (Cents 0)
         )
 
@@ -356,9 +355,6 @@ cartTotals { items, charges } =
     let
         subTotal =
             List.foldl (\item acc -> itemTotal item |> addCents acc) (Cents 0) items
-
-        memberDiscount =
-            maybeAmount charges.memberDiscount
 
         couponDiscount =
             maybeAmount charges.couponDiscount
@@ -387,7 +383,6 @@ cartTotals { items, charges } =
                 |> addCents shippingAmount
                 |> addCents priorityAmount
                 |> addCents charges.tax.amount
-                |> subtractCents memberDiscount
                 |> subtractCents couponDiscount
 
         addCents =
@@ -411,19 +406,17 @@ type alias CheckoutDetails =
     , items : List CartItem
     , charges : CartCharges
     , storeCredit : Cents
-    , memberNumber : String
     }
 
 
 checkoutDetailsDecoder : Decoder CheckoutDetails
 checkoutDetailsDecoder =
-    Decode.map6 CheckoutDetails
+    Decode.map5 CheckoutDetails
         (Decode.field "shippingAddresses" <| Decode.list Address.decoder)
         (Decode.field "billingAddresses" <| Decode.list Address.decoder)
         (Decode.field "items" <| Decode.list cartItemDecoder)
         (Decode.field "charges" cartChargesDecoder)
         (Decode.field "storeCredit" centsDecoder)
-        (Decode.field "memberNumber" Decode.string)
 
 
 isFreeCheckout : WebData CheckoutDetails -> Bool
@@ -1185,7 +1178,6 @@ type alias CartCharges =
     , surcharges : List CartCharge
     , shippingMethod : Maybe ShippingCharge
     , priorityShipping : Maybe CartCharge
-    , memberDiscount : Maybe CartCharge
     , couponDiscount : Maybe CartCharge
     , grandTotal : Cents
     }
@@ -1193,7 +1185,7 @@ type alias CartCharges =
 
 cartChargesDecoder : Decoder CartCharges
 cartChargesDecoder =
-    Decode.map7 CartCharges
+    Decode.map6 CartCharges
         (Decode.field "tax" cartChargeDecoder)
         (Decode.field "surcharges" <| Decode.list cartChargeDecoder)
         (Decode.field "shippingMethods" <|
@@ -1201,7 +1193,6 @@ cartChargesDecoder =
                 Decode.list shippingChargeDecoder
         )
         (Decode.field "priorityShipping" <| Decode.nullable cartChargeDecoder)
-        (Decode.field "memberDiscount" <| Decode.nullable cartChargeDecoder)
         (Decode.field "couponDiscount" <| Decode.nullable cartChargeDecoder)
         (Decode.field "grandTotal" centsDecoder)
 

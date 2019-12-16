@@ -6,6 +6,7 @@ CHANGELOG
 v1.03.00
 =========
 
+* Remove the Member Number form from the Checkout page & Checkout API routes.
 * Modify the StoneEdge integration so that Order exporting doesn't filter based
   on the Status field. Previously, we would not export Orders that were already
   exported by filtering out Orders without the PaymentReceived or OrderReceived
