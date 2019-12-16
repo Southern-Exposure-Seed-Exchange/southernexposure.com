@@ -6,6 +6,9 @@ CHANGELOG
 v1.03.00
 =========
 
+* Add a pool of asynchronous workers to the server for queueing & offloading
+  non-critical tasks such as sending emails & resizing/optimizing images,
+  allowing pages to return faster.
 * Increase the font-size of the "Already have an account?" link on the
   Anonymous Checkout page.
 * Add additionally environment logging during server startup.

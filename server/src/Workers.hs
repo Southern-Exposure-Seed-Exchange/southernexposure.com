@@ -22,14 +22,16 @@ module Workers
 
 import Control.Concurrent (threadDelay)
 import Control.Exception.Safe (Exception(..))
-import Control.Monad.IO.Class (liftIO)
+import Control.Monad.IO.Class (MonadIO, liftIO)
+import Control.Monad.Trans (lift)
 import Data.Aeson (ToJSON(toJSON), FromJSON, Result(..), fromJSON)
 import Data.Foldable (asum)
 import Data.Monoid ((<>))
 import Data.Time (UTCTime, getCurrentTime, addUTCTime)
 import Database.Persist.Sql
-    ( (==.), (<=.), Entity(..), SelectOpt(..), ToBackendKey, SqlBackend
+    ( (==.), (<=.), (<.), Entity(..), SelectOpt(..), ToBackendKey, SqlBackend
     , SqlPersistT, runSqlPool, selectFirst, delete, insert_, fromSqlKey
+    , deleteWhere
     )
 import GHC.Generics (Generic)
 import Numeric.Natural (Natural)
@@ -41,9 +43,9 @@ import ImmortalQueue (ImmortalQueue(..))
 import Models
 import Models.PersistJSON (JSONValue(..))
 import Emails (EmailType, getEmailData)
-import Server (AppSQL)
 
 import qualified Data.Text as T
+import qualified Database.Esqueleto as E
 import qualified Emails
 
 
@@ -55,6 +57,7 @@ data Task
         FilePath
         -- ^ Destination Directory
     | SendEmail EmailType
+    | CleanDatabase
     deriving (Show, Generic)
 
 instance FromJSON Task
@@ -63,7 +66,7 @@ instance ToJSON Task
 
 -- | Enqueue a Task to be run asynchronously. An optional run time can be
 -- passed, otherwise it will execute immediately.
-enqueueTask :: Maybe UTCTime -> Task -> AppSQL ()
+enqueueTask :: MonadIO m => Maybe UTCTime -> Task -> SqlPersistT m ()
 enqueueTask runAt task = do
     time <- liftIO getCurrentTime
     insert_ Job
@@ -154,6 +157,8 @@ taskQueueConfig threadCount cfg@Config { getPool, getServerLogger } =
                 "Customer #" <> showSqlKey cId <> " Password Reset Succeeded Email"
             Emails.OrderPlaced oId ->
                 "Order #" <> showSqlKey oId <> " Placed Email"
+        CleanDatabase ->
+            "Clean Database"
 
     showSqlKey :: (ToBackendKey SqlBackend a) => Key a -> T.Text
     showSqlKey =
@@ -176,3 +181,27 @@ taskQueueConfig threadCount cfg@Config { getPool, getServerLogger } =
                         error $ T.unpack err
                     Right emailData ->
                         Emails.send cfg emailData
+            Success CleanDatabase ->
+                runSql cleanDatabase
+
+-- | Remove Expired Carts & PasswordResets, Deactivate Expired Coupons.
+cleanDatabase :: SqlPersistT IO ()
+cleanDatabase = do
+    currentTime <- lift getCurrentTime
+    deleteWhere [PasswordResetExpirationTime <. currentTime]
+    deleteWhere [CartExpirationTime <. Just currentTime]
+    deactivateCoupons currentTime
+    enqueueTask (Just $ addUTCTime 3600 currentTime) CleanDatabase
+  where
+    -- De-activate coupons whose expiration date has passed and coupons
+    -- that have reached their maximum number of uses.
+    deactivateCoupons :: UTCTime -> SqlPersistT IO ()
+    deactivateCoupons currentTime =
+        E.update $ \c -> do
+            E.set c [ CouponIsActive E.=. E.val False ]
+            let orderCount = E.sub_select $ E.from $ \o -> do
+                    E.where_ $ o E.^. OrderCouponId E.==. E.just (c E.^. CouponId)
+                    return E.countRows
+            E.where_ $
+                (orderCount E.>=. c E.^. CouponTotalUses E.&&. c E.^. CouponTotalUses E.!=. E.val 0)
+                E.||.  E.val currentTime E.>. c E.^. CouponExpirationDate
