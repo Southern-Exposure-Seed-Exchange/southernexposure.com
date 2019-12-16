@@ -6,6 +6,10 @@ CHANGELOG
 v1.03.00
 =========
 
+* Modify the StoneEdge integration so that Order exporting doesn't filter based
+  on the Status field. Previously, we would not export Orders that were already
+  exported by filtering out Orders without the PaymentReceived or OrderReceived
+  statuses.
 * Add a pool of asynchronous workers to the server for queueing & offloading
   non-critical tasks such as sending emails & resizing/optimizing images,
   allowing pages to return faster.

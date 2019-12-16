@@ -194,9 +194,7 @@ downloadOrdersRoute DownloadOrdersRequest { dorLastOrder, dorStartNumber, dorBat
             E.on (o E.^. OrderBillingAddressId E.==. ba E.?. AddressId)
             E.on (o E.^. OrderShippingAddressId E.==. sa E.^. AddressId)
             E.on (o E.^. OrderCustomerId E.==. c E.^. CustomerId)
-            E.where_ $
-                o E.^. OrderStatus `E.in_` E.valList [PaymentReceived, OrderReceived]
-                E.&&. orderIdFilter o
+            E.where_ $ orderIdFilter o
             E.orderBy [E.asc $ o E.^. OrderId]
             limitAndOffset
             return (o, c, sa, ba, cp)
