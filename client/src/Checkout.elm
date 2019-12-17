@@ -20,7 +20,7 @@ import Html.Attributes as A exposing (alt, attribute, checked, class, colspan, f
 import Html.Events exposing (onCheck, onClick, onInput, onSubmit)
 import Json.Decode as Decode
 import Json.Encode as Encode exposing (Value)
-import Locations exposing (AddressLocations, Region)
+import Locations exposing (AddressLocations)
 import Models.Fields exposing (Cents(..), centsFromString, centsMap, centsMap2, imageToSrcSet, imgSrcFallback, lotSizeToString)
 import OrderDetails
 import PageData exposing (LineItemType(..))
@@ -468,7 +468,8 @@ refreshDetails authStatus maybeSessionToken forceUpdate oldModel newModel =
                         newModel.priorityShipping
 
         shouldUpdate =
-            addressChanged || forceUpdate
+            (addressChanged && hasMinimumAddress)
+                || forceUpdate
 
         addressChanged =
             case ( oldModel.shippingAddress, newModel.shippingAddress ) of
@@ -482,10 +483,22 @@ refreshDetails authStatus maybeSessionToken forceUpdate oldModel newModel =
                                 False
 
                             ( oldState, newState ) ->
-                                oldState /= newState
+                                (oldState /= newState)
+                                    || (oldForm.model.street /= newForm.model.street)
+                                    || (oldForm.model.zipCode /= newForm.model.zipCode)
 
                     else
                         True
+
+                _ ->
+                    True
+
+        hasMinimumAddress =
+            case newModel.shippingAddress of
+                NewAddress addrForm ->
+                    not <|
+                        List.any String.isEmpty
+                            [ addrForm.model.street, addrForm.model.zipCode ]
 
                 _ ->
                     True

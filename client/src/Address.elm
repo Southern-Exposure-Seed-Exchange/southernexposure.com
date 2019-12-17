@@ -20,6 +20,7 @@ import Dict
 import Html exposing (..)
 import Html.Attributes exposing (class, classList, for, id, name, required, selected, type_, value)
 import Html.Events exposing (on, onInput, targetValue)
+import Html.Events.Extra exposing (onChange)
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode exposing (Value)
 import Locations exposing (AddressLocations, Location, Region(..), regionDecoder, regionEncoder)
@@ -349,23 +350,23 @@ form { model, errors } inputPrefix locations =
                     selectField stateCode State locations.provinces "Province" "state"
 
                 _ ->
-                    field stateCode State "State / Province" "state" "address-level1" True
+                    field stateCode (ChangeMsg State) "State / Province" "state" "address-level1" True
 
         stateCode =
             .state >> Locations.fromRegion
     in
     div []
         [ generalErrors
-        , field .firstName FirstName "First Name" "firstName" "given-name" True
-        , field .lastName LastName "Last Name" "lastName" "family-name" True
-        , field .companyName CompanyName "Company Name" "companyName" "organization" False
-        , field .street Street "Street Address" "addressOne" "address-line1" True
-        , field .addressTwo AddressTwo "Address Line 2" "addressTwo" "address-line2" False
-        , field .city City "City" "city" "address-level2" True
+        , field .firstName (InputMsg FirstName) "First Name" "firstName" "given-name" True
+        , field .lastName (InputMsg LastName) "Last Name" "lastName" "family-name" True
+        , field .companyName (InputMsg CompanyName) "Company Name" "companyName" "organization" False
+        , field .street (ChangeMsg Street) "Street Address" "addressOne" "address-line1" True
+        , field .addressTwo (InputMsg AddressTwo) "Address Line 2" "addressTwo" "address-line2" False
+        , field .city (InputMsg City) "City" "city" "address-level2" True
         , regionField
-        , field .zipCode ZipCode "Zip Code" "zipCode" "postal-code" True
+        , field .zipCode (ChangeMsg ZipCode) "Zip Code" "zipCode" "postal-code" True
         , selectField .country Country locations.countries "Country" "country"
-        , field .phoneNumber PhoneNumber "Phone Number" "phoneNumber" "tel" True
+        , field .phoneNumber (InputMsg PhoneNumber) "Phone Number" "phoneNumber" "tel" True
         ]
 
 
@@ -422,10 +423,15 @@ horizontalForm { model, errors } locations =
     ]
 
 
+type FieldMsg msg
+    = InputMsg (String -> msg)
+    | ChangeMsg (String -> msg)
+
+
 {-| TODO: Refactor into separate Views.Form module. Turn parameters into a Config type.
 -}
-inputField : Api.FormErrors -> String -> String -> (String -> msg) -> String -> String -> String -> Bool -> Html msg
-inputField errors prefix inputValue inputMsg labelText inputName autocompleteType isRequired =
+inputField : Api.FormErrors -> String -> String -> FieldMsg msg -> String -> String -> String -> Bool -> Html msg
+inputField errors prefix inputValue fieldMsg labelText inputName autocompleteType isRequired =
     let
         fieldLabel =
             label
@@ -461,6 +467,14 @@ inputField errors prefix inputValue inputMsg labelText inputName autocompleteTyp
 
         fieldErrors =
             Dict.get inputName errors |> Maybe.withDefault []
+
+        msgAttribute =
+            case fieldMsg of
+                InputMsg msg ->
+                    onInput msg
+
+                ChangeMsg msg ->
+                    onChange msg
     in
     div [ class "form-group mb-2" ]
         [ fieldLabel
@@ -474,7 +488,7 @@ inputField errors prefix inputValue inputMsg labelText inputName autocompleteTyp
             , name inputName
             , type_ "text"
             , required isRequired
-            , onInput inputMsg
+            , msgAttribute
             , value inputValue
             , addressAutocomplete autocompleteType
             ]
