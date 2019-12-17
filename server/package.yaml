@@ -167,6 +167,17 @@ executables:
             - wai-extra
             - warp
 
+    clean-carts:
+        main: CleanCarts.hs
+        <<: *script-defaults
+        other-modules: []
+        dependencies:
+            - sese-website
+            - esqueleto
+            - monad-logger
+            - persistent-postgresql
+            - text
+
     export-odd-weights:
         main: ExportOddWeights.hs
         <<: *script-defaults

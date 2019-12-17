@@ -10,7 +10,7 @@ module Routes.Admin.Products
     ) where
 
 import Control.Concurrent.STM (readTVarIO)
-import Control.Monad (forM_)
+import Control.Monad (forM_, unless)
 import Control.Monad.Reader (asks, liftIO, lift)
 import Data.Aeson ((.=), (.:), ToJSON(..), FromJSON(..), Value(Object), object, withObject)
 import Data.Maybe (mapMaybe, listToMaybe, fromMaybe)
@@ -500,7 +500,7 @@ editProductRoute = validateAdminAndParameters $ \_ EditProductParameters {..} ->
             case vdId of
                 Nothing ->
                     insert_ $ makeVariant eppId variant
-                Just variantId ->
+                Just variantId -> do
                     update variantId
                         [ ProductVariantProductId =. eppId
                         , ProductVariantSkuSuffix =. vdSkuSuffix
@@ -509,6 +509,8 @@ editProductRoute = validateAdminAndParameters $ \_ EditProductParameters {..} ->
                         , ProductVariantLotSize =. vdLotSize
                         , ProductVariantIsActive =. vdIsActive
                         ]
+                    unless vdIsActive $
+                        deleteWhere [CartItemProductVariantId ==. variantId]
     return eppId
 
 
