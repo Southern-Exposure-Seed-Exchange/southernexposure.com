@@ -185,7 +185,7 @@ downloadOrdersRoute DownloadOrdersRequest { dorLastOrder, dorStartNumber, dorBat
         limitAndOffset =
             case (,) <$> dorBatchSize <*> dorStartNumber of
                 Just (limit, offset) ->
-                    E.limit (fromIntegral limit) >> E.offset (fromIntegral offset)
+                    E.limit (fromIntegral limit) >> E.offset (fromIntegral offset - 1)
                 Nothing ->
                     return ()
     rawOrderData <- runDB $ do
