@@ -33,6 +33,7 @@ import Update.Utils exposing (nothingAndNoCommand)
 import User exposing (AuthStatus)
 import Views.Aria as Aria
 import Views.Format as Format
+import Views.HorizontalForm exposing (genericErrorText)
 import Views.Utils exposing (decimalInput, emailInput, icon, pageOverlay, routeLinkAttributes)
 
 
@@ -1065,6 +1066,7 @@ view model authStatus locations checkoutDetails =
     , hr [] []
     , form [ onSubmit Submit ]
         [ processingOverlay
+        , genericErrorText <| not <| Dict.isEmpty model.errors
         , generalErrors
         , registrationCard
         , div [ class "row mb-3" ]
