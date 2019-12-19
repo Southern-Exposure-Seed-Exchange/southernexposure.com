@@ -6,6 +6,12 @@ CHANGELOG
 v1.03.00
 =========
 
+* Fix a bug causing the generic error message from appearing on the Checkout
+  page.
+* Fix a bug causing the sending of Order Placed emails to fail when an Order
+  included a discount.
+* Fix a bug causing off-by-one errors when exporting batches of orders to
+  StoneEdge.
 * Add an integration with the Avalara AvaTax API along with configuration
   options for disabling the integration, only reporting orders for the testing
   period, or using the integration for all tax functionality. This is
