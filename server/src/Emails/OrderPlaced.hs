@@ -238,7 +238,11 @@ orderTable productData lineItems =
                 (H.td H.! alignLeft) . H.text . formatCents $ total
           discountRow =
               maybe (return ())
-                (\l -> lineRow $ l { orderLineItemAmount = negate $ orderLineItemAmount l })
+                (\item ->
+                    H.tr $ do
+                        H.th H.! A.colspan "4" H.! alignRight $ H.text $ orderLineItemDescription item
+                        (H.th H.! alignLeft) . H.text . ("-" <>) . formatCents $ orderLineItemAmount item
+                )
           lineRow item =
                 H.tr $ do
                     H.th H.! A.colspan "4" H.! alignRight $ H.text $ orderLineItemDescription item
