@@ -625,11 +625,12 @@ remoteFailureView error =
             ]
 
         Http.BadBody errorMsg ->
-            [ h1 [] [ text "Unexpected Response" ]
+            [ h1 [] [ text "Unexpected Response - Please Refresh Page" ]
             , p []
                 [ text <|
                     "Our server responded with data that we were not expecting. "
-                        ++ "If this problem continues, please contact us with the following information:"
+                        ++ "Please refresh the page to get the latest version of our website. "
+                        ++ "If the problem continues, please contact us with the following information:"
                 , pre [] [ text errorMsg ]
                 ]
             ]

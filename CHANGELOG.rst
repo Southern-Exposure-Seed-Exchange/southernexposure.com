@@ -6,6 +6,9 @@ CHANGELOG
 v1.03.01
 =========
 
+* Improve the error message shown when the client receives an unexpected
+  response from the server, suggesting to customers that they try refreshing
+  the page to load the latest website code.
 * Fix a bug causing errors in parsing of the Avalara Location Code during
   server configuration/initialization.
 * Fix a bug preventing enqueued Avalara Transaction Creation tasks from being
