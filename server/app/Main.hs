@@ -72,7 +72,7 @@ main = do
     avalaraConfig <- makeAvalaraConfig
     avalaraCompanyId <- Avalara.CompanyId <$> lookupSetting "AVATAX_COMPANY_ID" 0
     avalaraCompanyCode <- Avalara.CompanyCode . T.pack <$> requireSetting "AVATAX_COMPANY_CODE"
-    avalaraSourceLocation <- lookupSetting "AVATAX_LOCATION_CODE" "DEFAULT"
+    avalaraSourceLocation <- T.pack . fromMaybe "DEFAULT" <$> lookupEnv "AVATAX_LOCATION_CODE"
     dbPool <- makePool env
     log "Initialized database pool."
     cache <- runSqlPool initializeCaches dbPool >>= newTVarIO

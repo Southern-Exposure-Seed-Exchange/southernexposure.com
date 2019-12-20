@@ -6,6 +6,8 @@ CHANGELOG
 v1.03.01
 =========
 
+* Fix a bug causing errors in parsing of the Avalara Location Code during
+  server configuration/initialization.
 * Fix a bug preventing enqueued Avalara Transaction Creation tasks from being
   voided when the Avalara integration is in testing mode.
 
