@@ -23,6 +23,7 @@ module Workers
 
 import Control.Concurrent (threadDelay)
 import Control.Exception.Safe (Exception(..), throwM)
+import Control.Monad (when)
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Monad.Reader (runReaderT, asks, lift)
 import Control.Monad.Trans.Control (MonadBaseControl)
@@ -45,7 +46,7 @@ import Avalara
     ( RefundTransactionRequest(..), VoidTransactionRequest(..), VoidReason(..)
     , CommitTransactionRequest(..)
     )
-import Config (Config(..))
+import Config (Config(..), AvalaraStatus(AvalaraTesting))
 import Emails (EmailType, getEmailData)
 import Images (makeImageConfig, scaleExistingImage, optimizeImage)
 import ImmortalQueue (ImmortalQueue(..))
@@ -236,8 +237,6 @@ taskQueueConfig threadCount cfg@Config { getPool, getServerLogger } =
                 performAvalaraTask task
 
     -- Perform an Avalara-specific action.
-    --
-    -- TODO: Use an exception instead of `error`
     performAvalaraTask :: AvalaraTask -> IO ()
     performAvalaraTask = \case
         RefundTransaction code refundType refundPercent -> do
@@ -273,6 +272,9 @@ taskQueueConfig threadCount cfg@Config { getPool, getServerLogger } =
                         Nothing ->
                             throwM TransactionCreationFailed
                         Just transaction -> do
+                            when (getAvalaraStatus cfg == AvalaraTesting) $
+                                enqueueTask Nothing . Avalara
+                                    $ VoidTransaction transaction
                             companyCode <- lift $ asks getAvalaraCompanyCode
                             update orderId
                                 [ OrderAvalaraTransactionCode =.
