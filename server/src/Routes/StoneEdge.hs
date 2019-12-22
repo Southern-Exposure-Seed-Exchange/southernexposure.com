@@ -158,16 +158,14 @@ sendVersionRoute :: SendVersionRequest -> App SendVersionResponse
 sendVersionRoute = const . return $ SendVersionResponse integrationVersion
 
 
--- | Count the Orders with Payments or No Payments necessary that have IDs
--- above the last order StoneEdge imported.
+-- | Count the Orders that have IDs above the last order StoneEdge imported.
 orderCountRoute :: OrderCountRequest -> App OrderCountResponse
 orderCountRoute OrderCountRequest { ocrLastOrder } = do
     let orderFilter = case ocrLastOrder of
             NoOrderNumber ->
-                [OrderStatus <-. [PaymentReceived, OrderReceived]]
+                []
             LastOrderNumber orderNum ->
                 [ OrderId >. toSqlKey (fromIntegral orderNum)
-                , OrderStatus <-. [PaymentReceived, OrderReceived]
                 ]
     OrderCountResponse . fromIntegral <$> runDB (count orderFilter)
 
