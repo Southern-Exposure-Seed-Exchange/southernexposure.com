@@ -6,6 +6,7 @@ CHANGELOG
 v1.03.01
 =========
 
+* Add a note about seasonal item shipping times to the Order Placed email.
 * Improve the error message shown when the client receives an unexpected
   response from the server, suggesting to customers that they try refreshing
   the page to load the latest website code.

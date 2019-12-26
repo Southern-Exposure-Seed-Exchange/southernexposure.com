@@ -107,10 +107,11 @@ render shippingAddress billingAddress (Entity orderId order) productData lineIte
             H.body $ do
                 H.p . H.text $ "Dear " <> customerName <> ","
                 H.p $
-                    "Thanks for ordering from Southern Exposure Seed Exchange! Your items " <>
-                    "will be shipped via the US Postal Service, most likely within the next " <>
-                    "four days. When your order is shipped, you will receive a second e-mail " <>
-                    "from us.\n\n"
+                    "Thanks for ordering from Southern Exposure Seed Exchange! Your seeds " <>
+                    "will be shipped via the US Postal Service, most likely in 1-4 days." <>
+                    "Mushrooms, sweet potatoes, garlic bulbs, and other seasonal items will " <>
+                    "ship separately. When your order is shipped, you will receive a second " <>
+                    "e-mail from us.\n\n"
                 H.p $
                     "If you have questions about your order, please reply to this e-mail or " <>
                     "call us at 540-894-9480.\n\n"
