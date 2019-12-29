@@ -3,8 +3,14 @@ CHANGELOG
 =========
 
 
-v 1.03.02
-==========
+v1.03.03
+=========
+
+* Fix a bug causing HTML entities in Page names to be rendered incorrectly.
+
+
+v1.03.02
+=========
 
 * Add a note about seasonal item shipping times to the Order Placed email.
 * Align the ordercount function for the StoneEdge integration with the

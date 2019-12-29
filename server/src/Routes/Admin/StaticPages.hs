@@ -143,7 +143,7 @@ newPageRoute = validateAdminAndParameters $ \_ NewPageParameters {..} -> do
     time <- liftIO getCurrentTime
     let newPage =
             Page
-                { pageName = sanitize nppTitle
+                { pageName = nppTitle
                 , pageSlug = slugify nppSlug
                 , pageContent = sanitize nppContent
                 , pageUpdatedAt = time
