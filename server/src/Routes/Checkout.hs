@@ -641,7 +641,7 @@ instance FromJSON AnonymousPlaceOrderParameters where
 
 instance Validation AnonymousPlaceOrderParameters where
     validators parameters = do
-        emailDoesntExist <- V.noMatches [CustomerEmail ==. T.toLower (apopEmail parameters)]
+        emailDoesntExist <- V.uniqueCustomer $ apopEmail parameters
         shippingValidators <- validators $ apopShippingAddress parameters
         billingValidators <- maybe (return []) validators
             $ apopBillingAddress parameters

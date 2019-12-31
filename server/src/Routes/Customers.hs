@@ -192,7 +192,7 @@ instance FromJSON RegistrationParameters where
 instance Validation RegistrationParameters where
     -- TODO: Better validation, validate emails, compare to Zencart
     validators parameters = do
-        emailDoesntExist <- V.noMatches [CustomerEmail ==. T.toLower (rpEmail parameters)]
+        emailDoesntExist <- V.uniqueCustomer $ rpEmail parameters
         return
             [ ( "email"
               , [ V.required $ rpEmail parameters
@@ -610,8 +610,7 @@ instance FromJSON EditDetailsParameters where
 
 instance Validation (EditDetailsParameters, Customer) where
     validators (parameters, customer) = do
-        maybeEmailDoesntExist <- mapM (\e -> V.noMatches [CustomerEmail ==. T.toLower e])
-            $ edpEmail parameters
+        maybeEmailDoesntExist <- mapM V.uniqueCustomer $ edpEmail parameters
         return
             [ ( "email"
               , [ ( "An Account with this Email already exists."

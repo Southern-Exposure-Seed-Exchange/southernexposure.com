@@ -6,6 +6,7 @@ CHANGELOG
 v1.03.03
 =========
 
+* Fix case-insensitive validation of unique emails.
 * Fix double charging for tax when Avalara is in testing mode.
 * Revert the changes to the Order Placed & Password Reset emails so they send
   synchronously. There seems to be a bug where emails are not getting sent out

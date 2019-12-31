@@ -10,6 +10,7 @@ module Validation
     , required
     , doesntExist
     , noMatches
+    , uniqueCustomer
     , exists
     , uniqueExists
     , minimumLength
@@ -28,10 +29,12 @@ import Database.Persist.Sql (SqlBackend, Key)
 import Servant (err422, errBody)
 
 import Server
+import Models (EntityField(CustomerEmail))
 
 import qualified Data.Text as T
 import qualified Data.HashMap.Strict as HM
 import qualified Data.Map.Strict as M
+import qualified Database.Esqueleto as E
 
 
 -- | Force the server to return a 422 HTTP Validation Error with a JSON body.
@@ -107,6 +110,13 @@ noMatches :: (PersistEntityBackend e ~ SqlBackend, PersistEntity e)
           => [Filter e] -> App Bool
 noMatches filters =
     isJust <$> runDB (selectFirst filters [])
+
+-- | Ensure a a Customer with the given email doesn't exist.
+uniqueCustomer :: T.Text -> App Bool
+uniqueCustomer email =
+    fmap (not . null) . runDB $ E.select $ E.from $ \c -> do
+        E.where_ $ E.lower_ (c E.^. CustomerEmail) E.==. E.val (T.toLower email)
+        return c
 
 exists :: (PersistEntityBackend r ~ SqlBackend, PersistEntity r)
        => Key r -> App Bool
