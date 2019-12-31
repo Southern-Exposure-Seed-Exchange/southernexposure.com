@@ -13,7 +13,7 @@ import Control.Applicative ((<|>))
 import Control.Arrow (first)
 import Control.Exception.Safe (MonadThrow, MonadCatch, Exception, throwM, try)
 import Control.Monad ((>=>), (<=<), when, unless, void)
-import Control.Monad.Reader (asks, lift, liftIO)
+import Control.Monad.Reader (asks, ask, lift, liftIO)
 import Data.Aeson ((.:), (.:?), (.=), FromJSON(..), ToJSON(..), withObject, object)
 import Data.Foldable (asum)
 import Data.Int (Int64)
@@ -50,7 +50,7 @@ import Routes.CommonData
 import Routes.AvalaraUtils (createAvalaraTransaction, createAvalaraCustomer)
 import Routes.Utils (hashPassword, generateUniqueToken)
 import Validation (Validation(..))
-import Workers (Task(SendEmail, Avalara), AvalaraTask(..), enqueueTask)
+import Workers (Task(Avalara), AvalaraTask(..), enqueueTask)
 
 import qualified Avalara
 import qualified Data.Text as T
@@ -540,7 +540,9 @@ customerPlaceOrderRoute = validateCookieAndParameters $ \ce@(Entity customerId c
                         throwM StripeTokenRequired
         deleteCart cartId
         return orderId
-    runDB $ enqueueTask Nothing $ SendEmail $ Emails.OrderPlaced orderId
+    cfg <- ask
+    runDB (Emails.getEmailData $ Emails.OrderPlaced orderId)
+        >>= either (const $ return ()) (liftIO . Emails.send cfg)
     (orderLines, products) <- runDB $ (,)
         <$> selectList [OrderLineItemOrderId ==. orderId] []
         <*> getCheckoutProducts orderId
@@ -748,7 +750,9 @@ anonymousPlaceOrderRoute = validate >=> \parameters -> do
                 , apodAuthorizationData = toAuthorizationData $ Entity customerId customer
                 }
             )
-    runDB $ enqueueTask Nothing $ SendEmail $ Emails.OrderPlaced orderId
+    cfg <- ask
+    runDB (Emails.getEmailData $ Emails.OrderPlaced orderId)
+        >>= either (const $ return ()) (liftIO . Emails.send cfg)
     addSessionCookie temporarySession (AuthToken authToken) orderData
 
 

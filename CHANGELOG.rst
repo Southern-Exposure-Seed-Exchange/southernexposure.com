@@ -6,6 +6,9 @@ CHANGELOG
 v1.03.03
 =========
 
+* Revert the changes to the Order Placed & Password Reset emails so they send
+  synchronously. There seems to be a bug where emails are not getting sent out
+  asynchronously and these are the most important emails we send.
 * Fix a bug causing HTML entities in Page names to be rendered incorrectly.
 
 
