@@ -850,7 +850,11 @@ withAvalaraTransaction order@(Entity orderId _) preTaxTotal storeCredit c@(Entit
                         Left (err :: PlaceOrderError) ->
                             throwM err
                 Just taxTransaction -> do
-                    let taxTotal = maybe 0 fromDollars (Avalara.tTotalTax taxTransaction)
+                    let taxTotal =
+                            if status == AvalaraEnabled then
+                                maybe 0 fromDollars (Avalara.tTotalTax taxTransaction)
+                            else
+                                0
                         appliedCredit = min storeCredit taxTotal
                         orderTotal = taxTotal + preTaxTotal - appliedCredit
                     when (appliedCredit > customerStoreCredit customer) $
