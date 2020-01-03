@@ -16,7 +16,7 @@ module Routes.Customers
 import Control.Exception.Safe (throwM, Exception, try)
 import Control.Monad ((>=>), (<=<), when, void)
 import Control.Monad.IO.Class (liftIO)
-import Control.Monad.Reader (lift, ask)
+import Control.Monad.Reader (ask)
 import Data.Aeson (ToJSON(..), FromJSON(..), (.=), (.:), (.:?), withObject, object)
 import Data.Digest.Pure.MD5 (md5)
 import Data.Int (Int64)
