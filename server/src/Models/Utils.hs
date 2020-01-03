@@ -257,6 +257,7 @@ insertOrActivateAddress newAddress = do
                     , AddressState ==. addressState address
                     , AddressZipCode ==. addressZipCode address
                     , AddressCountry ==. addressCountry address
+                    , AddressPhoneNumber ==. addressPhoneNumber address
                     , AddressType ==. addressType address
                     , AddressCustomerId ==. addressCustomerId address
                     ]

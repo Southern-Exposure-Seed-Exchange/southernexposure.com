@@ -3,6 +3,12 @@ CHANGELOG
 =========
 
 
+v1.03.04
+=========
+
+* Fix a bug causing Address updates of only phone numbers from taking effect.
+
+
 v1.03.03
 =========
 
