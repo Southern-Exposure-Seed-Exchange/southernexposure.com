@@ -6,6 +6,8 @@ CHANGELOG
 v1.03.04
 =========
 
+* Fix server errors when synchronous email sending fails, adding a retry
+  mechanism.
 * Fix SQL errors caused by password reset uniqueness.
 * Fix 404 errors when attempting to load the homepage at ``/index.html``
   instead of an empty path.

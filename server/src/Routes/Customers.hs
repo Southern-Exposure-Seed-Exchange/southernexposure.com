@@ -434,7 +434,7 @@ resetRequestRoute = validate >=> \parameters -> do
                 insert passwordReset
             cfg <- ask
             runDB (Emails.getEmailData (Emails.PasswordReset customerId resetId))
-                >>= either (const $ return ()) (liftIO . Emails.send cfg)
+                >>= either (const $ return ()) (liftIO . Emails.sendWithRetries cfg)
 
 
 data ResetPasswordParameters =

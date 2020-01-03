@@ -2,16 +2,20 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE Rank2Types #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies #-}
 module Emails
     ( EmailType(..)
     , EmailData
     , getEmailData
     , send
+    , sendWithRetries
     )
     where
 
-import Control.Monad ((<=<))
+import Control.Concurrent (threadDelay)
+import Control.Exception (SomeException, try)
+import Control.Monad ((<=<), when)
 import Control.Monad.IO.Class (MonadIO)
 import Data.Aeson (ToJSON, FromJSON)
 import Data.Monoid ((<>))
@@ -92,6 +96,20 @@ customerServiceAddress =
         , addressEmail = "gardens@southernexposure.com"
         }
 
+
+-- | Send an email, catching errors & retrying up to 5 times.
+sendWithRetries :: Config -> EmailData -> IO ()
+sendWithRetries cfg email =
+    sendEmail 5
+  where
+    sendEmail :: Int -> IO ()
+    sendEmail retries =
+        try (send cfg email) >>= \case
+            Left (_ :: SomeException) ->
+                when (retries > 0) $
+                    threadDelay (1000 * 500) >> sendEmail (retries - 1)
+            Right _ ->
+                return ()
 
 
 send :: Config -> EmailData -> IO ()
