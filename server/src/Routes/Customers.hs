@@ -421,7 +421,6 @@ resetRequestRoute = validate >=> \parameters -> do
             >> (addUTCTime (15 * 60) <$> liftIO getCurrentTime)
             >> return ()
         Just (Entity customerId _) -> do
-            runDB $ deleteWhere [PasswordResetCustomerId ==. customerId]
             resetCode <- UUID.toText <$> liftIO UUID4.nextRandom
             expirationTime <- addUTCTime (15 * 60) <$> liftIO getCurrentTime
             let passwordReset =
@@ -430,11 +429,12 @@ resetRequestRoute = validate >=> \parameters -> do
                         , passwordResetExpirationTime = expirationTime
                         , passwordResetCode = resetCode
                         }
-            runDB $ do
-                resetId <- insert passwordReset
-                cfg <- lift ask
-                Emails.getEmailData (Emails.PasswordReset customerId resetId)
-                    >>= either (const $ return ()) (liftIO . Emails.send cfg)
+            resetId <- runDB $ do
+                deleteWhere [PasswordResetCustomerId ==. customerId]
+                insert passwordReset
+            cfg <- ask
+            runDB (Emails.getEmailData (Emails.PasswordReset customerId resetId))
+                >>= either (const $ return ()) (liftIO . Emails.send cfg)
 
 
 data ResetPasswordParameters =
