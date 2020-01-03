@@ -169,6 +169,7 @@ parseRoute =
         routeParser =
             Url.oneOf
                 [ Url.map (PageDetails "home" Nothing) Url.top
+                , Url.map (PageDetails "home" Nothing) (Url.s "index.html")
                 , Url.map ProductDetails (Url.s "products" </> Url.string)
                 , Url.map CategoryDetails (Url.s "categories" </> Url.string)
                     |> Pagination.fromQueryString

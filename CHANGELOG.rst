@@ -6,6 +6,8 @@ CHANGELOG
 v1.03.04
 =========
 
+* Fix 404 errors when attempting to load the homepage at ``/index.html``
+  instead of an empty path.
 * Fix a bug causing Address updates of only phone numbers from taking effect.
 
 
