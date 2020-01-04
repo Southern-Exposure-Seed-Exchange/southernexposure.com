@@ -6,6 +6,8 @@ CHANGELOG
 v1.03.04
 =========
 
+* Default the State/Province dropdown fields in the address forms to a blank
+  option instead of the first item in the list(e.g., Alabama).
 * Don't create Tax line items when no tax is due.
 * Fix Avalara refund amounts when completely refunding an Order with multiple
   refunds.
