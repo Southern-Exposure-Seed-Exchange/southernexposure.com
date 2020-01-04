@@ -6,6 +6,7 @@ CHANGELOG
 v1.03.04
 =========
 
+* Don't create Tax line items when no tax is due.
 * Fix Avalara refund amounts when completely refunding an Order with multiple
   refunds.
 * Fix encoding of Full/Percentage Avalara refunds.

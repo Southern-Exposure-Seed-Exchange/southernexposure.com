@@ -870,7 +870,7 @@ withAvalaraTransaction order@(Entity orderId _) preTaxTotal storeCredit c@(Entit
                             let transactionCode = AvalaraTransactionCode companyCode
                                     <$> Avalara.tCode taxTransaction
                             update orderId [OrderAvalaraTransactionCode =. transactionCode]
-                            when (status == AvalaraEnabled) $
+                            when (status == AvalaraEnabled && taxTotal > 0) $
                                 insert_ OrderLineItem
                                     { orderLineItemOrderId = orderId
                                     , orderLineItemType = TaxLine
