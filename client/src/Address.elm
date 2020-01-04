@@ -45,7 +45,7 @@ type alias Model =
     , street : String
     , addressTwo : String
     , city : String
-    , state : Region
+    , state : Maybe Region
     , zipCode : String
     , country : String
     , phoneNumber : String
@@ -62,7 +62,7 @@ initial =
     , street = ""
     , addressTwo = ""
     , city = ""
-    , state = USState "AL"
+    , state = Nothing
     , zipCode = ""
     , country = "US"
     , phoneNumber = ""
@@ -80,7 +80,7 @@ decoder =
         (Decode.field "addressOne" Decode.string)
         (Decode.field "addressTwo" Decode.string)
         (Decode.field "city" Decode.string)
-        (Decode.field "state" regionDecoder)
+        (Decode.field "state" <| Decode.map Just regionDecoder)
         |> Decode.andThen
             (\constr ->
                 Decode.map4 constr
@@ -113,7 +113,8 @@ encode : Form -> Value
 encode { model } =
     let
         encodedState =
-            regionEncoder model.state
+            Maybe.map regionEncoder model.state
+                |> Maybe.withDefault Encode.null
     in
     [ ( "firstName", model.firstName )
     , ( "lastName", model.lastName )
@@ -183,37 +184,23 @@ updateModel msg model =
             case model.country of
                 "US" ->
                     if List.member str Locations.armedForcesCodes then
-                        { model | state = ArmedForces str }
+                        { model | state = Just <| ArmedForces str }
 
                     else
-                        { model | state = USState str }
+                        { model | state = Just <| USState str }
 
                 "CA" ->
-                    { model | state = CAProvince str }
+                    { model | state = Just <| CAProvince str }
 
                 _ ->
-                    { model | state = Custom str }
+                    { model | state = Just <| Custom str }
 
         ZipCode str ->
             { model | zipCode = str }
 
         Country str ->
-            let
-                newRegion =
-                    if str == "US" then
-                        USState "AL"
-
-                    else if str == "CA" then
-                        CAProvince "AB"
-
-                    else if model.country == "CA" || model.country == "US" then
-                        Custom ""
-
-                    else
-                        model.state
-            in
             if model.country /= str then
-                { model | country = str, state = newRegion }
+                { model | country = str, state = Nothing }
 
             else
                 model
@@ -237,7 +224,8 @@ card address locations =
                 Nothing
 
         stateString =
-            Locations.regionName locations address.state
+            address.state
+                |> Maybe.andThen (Locations.regionName locations)
                 |> Maybe.withDefault ""
 
         countryHtml =
@@ -353,7 +341,7 @@ form { model, errors } inputPrefix locations =
                     field stateCode (ChangeMsg State) "State / Province" "state" "address-level1" True
 
         stateCode =
-            .state >> Locations.fromRegion
+            .state >> Maybe.map Locations.fromRegion >> Maybe.withDefault ""
     in
     div []
         [ generalErrors
@@ -386,11 +374,11 @@ horizontalForm { model, errors } locations =
             Form.selectRow Ok
 
         countrySelect =
-            List.map (locationToOption .country) locations.countries
+            List.map (locationToOption (Just << .country)) locations.countries
                 |> selectRow Country "Country" True
 
         locationToOption selector { code, name } =
-            option [ value code, selected <| selector model == code ]
+            option [ value code, selected <| selector model == Just code ]
                 [ text name ]
 
         regionField =
@@ -402,13 +390,13 @@ horizontalForm { model, errors } locations =
                     regionSelect "Province" locations.provinces
 
                 _ ->
-                    requiredField stateCode State "State / Province" "state" "state" "address-level1"
+                    requiredField (stateCode >> Maybe.withDefault "") State "State / Province" "state" "state" "address-level1"
 
         regionSelect labelText =
             List.map (locationToOption stateCode) >> selectRow State labelText True
 
         stateCode =
-            .state >> Locations.fromRegion
+            .state >> Maybe.map Locations.fromRegion
     in
     [ Api.getErrorHtml "" errors
     , requiredField .firstName FirstName "First Name" "firstName" "text" "given-name"
@@ -515,6 +503,13 @@ locationSelect errors prefix selectedValue selectMsg locations labelText inputNa
         onSelect =
             on "change" (targetValue |> Decode.map selectMsg)
 
+        blankOption =
+            if selectedValue == "" then
+                [ { code = "", name = "" } ]
+
+            else
+                []
+
         errorHtml =
             if fieldHasErrors then
                 fieldErrors
@@ -536,7 +531,7 @@ locationSelect errors prefix selectedValue selectMsg locations labelText inputNa
     in
     div [ class "form-group mb-2" ]
         [ fieldLabel
-        , List.map toOption locations
+        , List.map toOption (blankOption ++ locations)
             |> Html.select
                 [ id inputId
                 , classList

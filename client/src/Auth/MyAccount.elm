@@ -124,7 +124,10 @@ orderTable zone locations orderSummaries =
                 , br [] []
                 , text city
                 , text ", "
-                , Locations.regionName locations state |> Maybe.map text |> Maybe.withDefault (text "")
+                , state
+                    |> Maybe.andThen (Locations.regionName locations)
+                    |> Maybe.map text
+                    |> Maybe.withDefault (text "")
                 , text " "
                 , text zipCode
                 ]

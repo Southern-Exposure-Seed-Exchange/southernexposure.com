@@ -261,18 +261,7 @@ update msg model authStatus maybeSessionToken checkoutDetails =
             { model | comment = comment } |> nothingAndNoCommand
 
         Submit ->
-            if model.password /= model.passwordConfirm then
-                ( { model
-                    | errors =
-                        Dict.update "passwordConfirm"
-                            (always <| Just [ "Your passwords do not match." ])
-                            model.errors
-                  }
-                , Nothing
-                , Ports.scrollToTop
-                )
-
-            else
+            validateForm model <|
                 case checkoutDetails of
                     RemoteData.Success details ->
                         let
@@ -480,7 +469,7 @@ refreshDetails authStatus maybeSessionToken forceUpdate oldModel newModel =
                 ( NewAddress oldForm, NewAddress newForm ) ->
                     if oldForm.model.country == newForm.model.country then
                         case ( oldForm.model.state, newForm.model.state ) of
-                            ( Locations.Custom _, Locations.Custom _ ) ->
+                            ( Just (Locations.Custom _), Just (Locations.Custom _) ) ->
                                 False
 
                             ( oldState, newState ) ->
@@ -548,6 +537,73 @@ getFinalTotal checkoutDetails storeCreditString =
 
         Just credit ->
             centsMap2 (\total c -> total - c) grandTotal (limitStoreCredit checkoutDetails credit)
+
+
+{-| Take the Form & a set of values to return when valid, checking that the
+passwords match & the state dropdowns have been selected.
+-}
+validateForm : Form -> ( Form, Maybe OutMsg, Cmd Msg ) -> ( Form, Maybe OutMsg, Cmd Msg )
+validateForm model validResult =
+    let
+        hasErrors =
+            not <|
+                Dict.isEmpty modelErrors
+                    && Dict.isEmpty billingErrors
+                    && Dict.isEmpty shippingErrors
+
+        modelErrors =
+            if model.password /= model.passwordConfirm then
+                Dict.update "passwordConfirm"
+                    (always <| Just [ "Your passwords do not match." ])
+                    model.errors
+
+            else
+                model.errors
+
+        shippingErrors =
+            checkAddressRegion model.shippingAddress
+
+        billingErrors =
+            if not model.billingSameAsShipping then
+                checkAddressRegion model.billingAddress
+
+            else
+                Dict.empty
+
+        checkAddressRegion addr =
+            case addr of
+                ExistingAddress _ ->
+                    Dict.empty
+
+                NewAddress addrForm ->
+                    if addrForm.model.state == Nothing then
+                        Dict.update "state"
+                            (always <| Just [ "Please select a State." ])
+                            addrForm.errors
+
+                    else
+                        Dict.update "state" (always Nothing) addrForm.errors
+
+        setAddressErrors addr errors =
+            case addr of
+                ExistingAddress _ ->
+                    addr
+
+                NewAddress addrForm ->
+                    NewAddress { addrForm | errors = errors }
+    in
+    if hasErrors then
+        ( { model
+            | errors = modelErrors
+            , billingAddress = setAddressErrors model.billingAddress billingErrors
+            , shippingAddress = setAddressErrors model.shippingAddress shippingErrors
+          }
+        , Nothing
+        , Ports.scrollToTop
+        )
+
+    else
+        validResult
 
 
 {-| Limit the amount of store credit applied so the checkout total is never
@@ -840,6 +896,20 @@ view model authStatus locations checkoutDetails =
         generalErrors =
             Api.getErrorHtml "" model.errors
 
+        hasErrors =
+            not <|
+                Dict.isEmpty model.errors
+                    && Dict.isEmpty (addrErrors model.billingAddress)
+                    && Dict.isEmpty (addrErrors model.shippingAddress)
+
+        addrErrors addr =
+            case addr of
+                ExistingAddress _ ->
+                    Dict.empty
+
+                NewAddress addrForm ->
+                    addrForm.errors
+
         registrationCard =
             case authStatus of
                 User.Authorized _ ->
@@ -1066,7 +1136,7 @@ view model authStatus locations checkoutDetails =
     , hr [] []
     , form [ onSubmit Submit ]
         [ processingOverlay
-        , genericErrorText <| not <| Dict.isEmpty model.errors
+        , genericErrorText hasErrors
         , generalErrors
         , registrationCard
         , div [ class "row mb-3" ]
