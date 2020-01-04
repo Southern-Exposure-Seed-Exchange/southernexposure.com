@@ -6,6 +6,9 @@ CHANGELOG
 v1.03.04
 =========
 
+* Fix Avalara refund amounts when completely refunding an Order with multiple
+  refunds.
+* Fix encoding of Full/Percentage Avalara refunds.
 * Fix server errors when synchronous email sending fails, adding a retry
   mechanism.
 * Fix SQL errors caused by password reset uniqueness.

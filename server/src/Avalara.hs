@@ -415,12 +415,18 @@ data RefundTransactionRequest =
 
 instance ToJSON RefundTransactionRequest where
     toJSON RefundTransactionRequest {..} =
+        let
+            refundLines =
+                if rtrType == PartialRefund then
+                    Just rtrLines
+                else Nothing
+        in
         object
             [ "refundTransactionCode" .= rtrTransctionCode
             , "refundDate" .= formatAvalaraTime rtrDate
             , "refundType" .= rtrType
             , "refundPercentage" .= rtrPercentage
-            , "refundLines" .= rtrLines
+            , "refundLines" .= refundLines
             , "referenceCode" .= rtrReferenceCode
             ]
 

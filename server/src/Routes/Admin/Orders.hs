@@ -424,7 +424,7 @@ orderRefundRoute = validateAdminAndParameters $ \_ parameters -> do
     getRefundDateDescription :: MonadIO m => m T.Text
     getRefundDateDescription =
         T.pack . formatTime defaultTimeLocale "%m/%d/%y" <$> getCurrentLocalTime
-    -- | Make a partial or full Avalara Refund for the Order.
+    -- | Make an Avalara Refund for the Order.
     makeAvalaraRefund :: Entity Order -> Cents -> AppSQL ()
     makeAvalaraRefund (Entity orderId order) refundAmount =
         case orderAvalaraTransactionCode order of
@@ -442,13 +442,10 @@ orderRefundRoute = validateAdminAndParameters $ \_ parameters -> do
                 let originalTotal =
                         orderTotal + fromIntegral (fromCents refunds)
                     (refundType, refundPercent) =
-                        if orderTotal == 0 then
-                            (Avalara.FullRefund, Nothing)
-                        else
-                            ( Avalara.RefundPercentage
-                            , Just $ makeScientific $
-                                toInteger (fromCents refundAmount) % originalTotal
-                            )
+                        ( Avalara.RefundPercentage
+                        , Just $ makeScientific $
+                            toInteger (fromCents refundAmount) % originalTotal
+                        )
                     request =
                         RefundTransactionRequest
                             { rtrTransctionCode = Nothing
