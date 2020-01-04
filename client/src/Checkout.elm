@@ -261,22 +261,25 @@ update msg model authStatus maybeSessionToken checkoutDetails =
             { model | comment = comment } |> nothingAndNoCommand
 
         Submit ->
-            validateForm model <|
-                case checkoutDetails of
-                    RemoteData.Success details ->
-                        let
-                            (Cents finalTotal) =
-                                getFinalTotal details model.storeCredit
+            case checkoutDetails of
+                RemoteData.Success details ->
+                    let
+                        (Cents finalTotal) =
+                            getFinalTotal details model.storeCredit
 
-                            customerEmail =
-                                case authStatus of
-                                    User.Authorized user ->
-                                        user.email
+                        freeCheckout =
+                            PageData.isFreeCheckout checkoutDetails || finalTotal == 0
 
-                                    User.Anonymous ->
-                                        model.email
-                        in
-                        if PageData.isFreeCheckout checkoutDetails || finalTotal == 0 then
+                        customerEmail =
+                            case authStatus of
+                                User.Authorized user ->
+                                    user.email
+
+                                User.Anonymous ->
+                                    model.email
+                    in
+                    validateForm model (not freeCheckout) <|
+                        if freeCheckout then
                             ( { model | isProcessing = True }
                             , Nothing
                             , placeOrder model authStatus maybeSessionToken Nothing checkoutDetails
@@ -285,8 +288,8 @@ update msg model authStatus maybeSessionToken checkoutDetails =
                         else
                             ( model, Nothing, Ports.collectStripeToken ( customerEmail, finalTotal ) )
 
-                    _ ->
-                        ( model, Nothing, Cmd.none )
+                _ ->
+                    ( model, Nothing, Cmd.none )
 
         TokenReceived stripeTokenId ->
             ( { model | isProcessing = True }
@@ -542,8 +545,8 @@ getFinalTotal checkoutDetails storeCreditString =
 {-| Take the Form & a set of values to return when valid, checking that the
 passwords match & the state dropdowns have been selected.
 -}
-validateForm : Form -> ( Form, Maybe OutMsg, Cmd Msg ) -> ( Form, Maybe OutMsg, Cmd Msg )
-validateForm model validResult =
+validateForm : Form -> Bool -> ( Form, Maybe OutMsg, Cmd Msg ) -> ( Form, Maybe OutMsg, Cmd Msg )
+validateForm model validateBilling validResult =
     let
         hasErrors =
             not <|
@@ -564,7 +567,7 @@ validateForm model validResult =
             checkAddressRegion model.shippingAddress
 
         billingErrors =
-            if not model.billingSameAsShipping then
+            if not model.billingSameAsShipping && validateBilling then
                 checkAddressRegion model.billingAddress
 
             else

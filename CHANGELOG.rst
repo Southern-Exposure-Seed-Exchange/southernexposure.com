@@ -3,6 +3,12 @@ CHANGELOG
 =========
 
 
+v1.03.05
+=========
+
+* Fix Checkout validation when billing details are not required.
+
+
 v1.03.04
 =========
 
