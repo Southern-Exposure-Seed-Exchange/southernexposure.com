@@ -1,4 +1,9 @@
-module Views.Aria exposing (..)
+module Views.Aria exposing
+    ( label, labelledby, role, current
+    , haspopup, expanded
+    , controls, disabled, live
+    , boolToString
+    )
 
 {-| This module defines `aria-*` attributes we use for marking up elements to improve accessibility.
 
