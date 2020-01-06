@@ -380,7 +380,11 @@ withPlaceOrderErrors shippingAddress =
         handle :: PlaceOrderError -> App a
         handle = \case
             CartNotFound ->
-                serverError err404
+                V.singleError
+                    $ "We couldn't find any items in your Cart. This usually means "
+                    <> "that your Order has been successfully submitted but we "
+                    <> "encountered an error while sending your confirmation email, please "
+                    <> "check yur Order History to verify and contact us if needed."
             NoShippingMethod ->
                 case shippingAddress of
                     ExistingAddress _ _ ->
