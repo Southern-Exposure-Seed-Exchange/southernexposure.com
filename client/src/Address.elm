@@ -113,8 +113,21 @@ encode : Form -> Value
 encode { model } =
     let
         encodedState =
-            Maybe.map regionEncoder model.state
-                |> Maybe.withDefault Encode.null
+            regionEncoder <|
+                case model.state of
+                    Nothing ->
+                        case model.country of
+                            "US" ->
+                                USState "AL"
+
+                            "CA" ->
+                                USState "AB"
+
+                            _ ->
+                                Custom ""
+
+                    Just region ->
+                        region
     in
     [ ( "firstName", model.firstName )
     , ( "lastName", model.lastName )

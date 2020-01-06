@@ -3,6 +3,12 @@ CHANGELOG
 =========
 
 
+v1.03.06
+=========
+
+* Fix issue with loading Checkout page for anonymous Customers.
+
+
 v1.03.05
 =========
 
