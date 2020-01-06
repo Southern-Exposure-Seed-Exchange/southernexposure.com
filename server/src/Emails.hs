@@ -14,6 +14,7 @@ module Emails
     where
 
 import Control.Concurrent (threadDelay)
+import Control.Concurrent.Async (Async, async)
 import Control.Exception (SomeException, try)
 import Control.Monad ((<=<), when)
 import Control.Monad.IO.Class (MonadIO)
@@ -98,9 +99,9 @@ customerServiceAddress =
 
 
 -- | Send an email, catching errors & retrying up to 5 times.
-sendWithRetries :: Config -> EmailData -> IO ()
+sendWithRetries :: Config -> EmailData -> IO (Async ())
 sendWithRetries cfg email =
-    sendEmail 5
+    async $ sendEmail 5
   where
     sendEmail :: Int -> IO ()
     sendEmail retries =

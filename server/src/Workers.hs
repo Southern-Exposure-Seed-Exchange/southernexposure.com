@@ -22,6 +22,7 @@ module Workers
     ) where
 
 import Control.Concurrent (threadDelay)
+import Control.Concurrent.Async (wait)
 import Control.Exception.Safe (Exception(..), throwM)
 import Control.Monad (when)
 import Control.Monad.IO.Class (MonadIO, liftIO)
@@ -230,7 +231,7 @@ taskQueueConfig threadCount cfg@Config { getPool, getServerLogger } =
                     Left err ->
                         error $ T.unpack err
                     Right emailData ->
-                        Emails.send cfg emailData
+                        Emails.sendWithRetries cfg emailData >>= wait
             Success CleanDatabase ->
                 runSql cleanDatabase
             Success (Avalara task) ->

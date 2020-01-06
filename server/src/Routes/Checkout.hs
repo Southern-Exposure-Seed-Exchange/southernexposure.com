@@ -542,7 +542,7 @@ customerPlaceOrderRoute = validateCookieAndParameters $ \ce@(Entity customerId c
         return orderId
     cfg <- ask
     runDB (Emails.getEmailData $ Emails.OrderPlaced orderId)
-        >>= either (const $ return ()) (liftIO . Emails.sendWithRetries cfg)
+        >>= either (const $ return ()) (void . liftIO . Emails.sendWithRetries cfg)
     (orderLines, products) <- runDB $ (,)
         <$> selectList [OrderLineItemOrderId ==. orderId] []
         <*> getCheckoutProducts orderId
@@ -752,7 +752,7 @@ anonymousPlaceOrderRoute = validate >=> \parameters -> do
             )
     cfg <- ask
     runDB (Emails.getEmailData $ Emails.OrderPlaced orderId)
-        >>= either (const $ return ()) (liftIO . Emails.sendWithRetries cfg)
+        >>= either (const $ return ()) (void . liftIO . Emails.sendWithRetries cfg)
     addSessionCookie temporarySession (AuthToken authToken) orderData
 
 
