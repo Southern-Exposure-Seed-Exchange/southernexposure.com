@@ -6,6 +6,7 @@ CHANGELOG
 v1.03.06
 =========
 
+* Disable Grammarly on all textarea elements.
 * Fix issue with loading Checkout page for anonymous Customers.
 
 

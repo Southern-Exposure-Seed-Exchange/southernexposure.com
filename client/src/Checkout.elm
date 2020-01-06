@@ -34,7 +34,7 @@ import User exposing (AuthStatus)
 import Views.Aria as Aria
 import Views.Format as Format
 import Views.HorizontalForm exposing (genericErrorText)
-import Views.Utils exposing (decimalInput, emailInput, icon, pageOverlay, routeLinkAttributes)
+import Views.Utils exposing (decimalInput, disableGrammarly, emailInput, icon, pageOverlay, routeLinkAttributes)
 
 
 
@@ -1183,6 +1183,7 @@ view model authStatus locations checkoutDetails =
                 , rows 4
                 , onInput Comment
                 , value model.comment
+                , disableGrammarly
                 ]
                 []
             , p [ class "text-muted" ]

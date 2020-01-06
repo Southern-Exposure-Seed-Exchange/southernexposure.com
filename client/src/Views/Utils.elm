@@ -1,6 +1,7 @@
 module Views.Utils exposing
     ( autocomplete
     , decimalInput
+    , disableGrammarly
     , emailInput
     , htmlOrBlank
     , icon
@@ -33,6 +34,11 @@ routeLinkAttributes route =
 onIntInput : (Int -> msg) -> Attribute msg
 onIntInput msg =
     targetValueInt |> Decode.map msg |> on "input"
+
+
+disableGrammarly : Attribute msg
+disableGrammarly =
+    attribute "data-gramm_editor" "false"
 
 
 htmlOrBlank : (a -> Html msg) -> Maybe a -> Html msg

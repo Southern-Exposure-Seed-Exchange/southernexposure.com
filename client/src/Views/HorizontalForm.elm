@@ -15,7 +15,7 @@ import Html exposing (..)
 import Html.Attributes exposing (checked, class, for, id, name, required, rows, type_, value)
 import Html.Events exposing (on, onCheck, onInput, targetValue)
 import Json.Decode as Decode
-import Views.Utils exposing (autocomplete)
+import Views.Utils exposing (autocomplete, disableGrammarly)
 
 
 genericErrorText : Bool -> Html msg
@@ -126,6 +126,7 @@ textareaRow errors inputValue inputMsg isRequired labelText errorField rowCount 
         , required isRequired
         , onInput inputMsg
         , rows rowCount
+        , disableGrammarly
         ]
         [ text inputValue ]
         |> (\i -> [ i, errorHtml ])
