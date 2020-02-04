@@ -111,8 +111,14 @@ Models.Fields as well.
 milligramsToString : Milligrams -> String
 milligramsToString ((Milligrams i) as m) =
     case i of
+        84000 ->
+            "3 oz"
+
         114000 ->
             "¼ lb"
+
+        171000 ->
+            "6 oz"
 
         228000 ->
             "½ lb"
@@ -133,6 +139,9 @@ milligramsToString ((Milligrams i) as m) =
             "2 lbs"
 
         1135000 ->
+            "2½ lbs"
+
+        1140000 ->
             "2½ lbs"
 
         1816000 ->

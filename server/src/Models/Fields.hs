@@ -99,8 +99,12 @@ instance Read Milligrams where
 renderMilligrams :: Milligrams -> T.Text
 renderMilligrams (Milligrams mg) =
     case mg of
+        84000 ->
+            "3 oz"
         114000 ->
             "¼ lb"
+        171000 ->
+            "6 oz"
         228000 ->
             "½ lb"
         342000 ->
@@ -114,6 +118,8 @@ renderMilligrams (Milligrams mg) =
         908000 ->
             "2 lbs"
         1135000 ->
+            "2½ lbs"
+        1140000 ->
             "2½ lbs"
         1816000 ->
             "4 lbs"
