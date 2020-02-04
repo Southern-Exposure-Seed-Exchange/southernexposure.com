@@ -49,6 +49,7 @@ type alias Model =
     , checkoutForm : Checkout.Form
     , newCategoryForm : CategoryAdmin.NewForm
     , editCategoryForm : CategoryAdmin.EditForm
+    , pageListForm : StaticPageAdmin.ListForm
     , newPageForm : StaticPageAdmin.NewForm
     , editPageForm : StaticPageAdmin.EditForm
     , orderSearchForm : OrderAdmin.SearchForm
@@ -95,6 +96,7 @@ initial key route =
     , checkoutForm = Checkout.initial
     , newCategoryForm = CategoryAdmin.initialNewForm
     , editCategoryForm = CategoryAdmin.initialEditForm
+    , pageListForm = StaticPageAdmin.initialListForm
     , newPageForm = StaticPageAdmin.initialNewForm
     , editPageForm = StaticPageAdmin.initialEditForm
     , orderSearchForm = OrderAdmin.initialSearchForm

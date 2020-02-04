@@ -1022,6 +1022,11 @@ update msg ({ pageData, key } as model) =
                 |> Tuple.mapFirst (\form -> { model | newPageForm = form })
                 |> Tuple.mapSecond (Cmd.map NewPageMsg)
 
+        PageListMsg subMsg ->
+            StaticPageAdmin.updateListForm subMsg model.pageListForm
+                |> (\form -> { model | pageListForm = form })
+                |> noCommand
+
         EditPageMsg subMsg ->
             StaticPageAdmin.updateEditForm model.key pageData.adminEditPage subMsg model.editPageForm
                 |> Tuple.mapFirst (\form -> { model | editPageForm = form })

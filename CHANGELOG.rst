@@ -6,6 +6,7 @@ CHANGELOG
 v1.03.07
 =========
 
+* Add a search input to the Pages list in the Admin.
 * Fix checkout shipping error message to say we only ship to United States,
   instead of North America.
 

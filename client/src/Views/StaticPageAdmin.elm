@@ -1,14 +1,18 @@
 module Views.StaticPageAdmin exposing
     ( EditForm
     , EditMsg
+    , ListForm
+    , ListMsg
     , NewForm
     , NewMsg
     , edit
     , initialEditForm
+    , initialListForm
     , initialNewForm
     , list
     , new
     , updateEditForm
+    , updateListForm
     , updateNewForm
     )
 
@@ -35,8 +39,28 @@ import Views.Utils exposing (htmlOrBlank, rawHtml, routeLinkAttributes)
 -- LIST
 
 
-list : PageData.AdminPageListData -> List (Html msg)
-list { pages, homePageId } =
+type alias ListForm =
+    { query : String }
+
+
+initialListForm : ListForm
+initialListForm =
+    { query = "" }
+
+
+type ListMsg
+    = InputQuery String
+
+
+updateListForm : ListMsg -> ListForm -> ListForm
+updateListForm msg model =
+    case msg of
+        InputQuery val ->
+            { model | query = val }
+
+
+list : ListForm -> PageData.AdminPageListData -> List (Html ListMsg)
+list listForm { pages, homePageId } =
     let
         renderPage { name, slug, id } =
             tr []
@@ -58,19 +82,30 @@ list { pages, homePageId } =
             htmlOrBlank
                 (\id ->
                     a
-                        (class "ml-3 mb-3 btn btn-secondary"
+                        (class "ml-3 btn btn-secondary"
                             :: routeLinkAttributes (Admin <| PageEdit id)
                         )
                         [ text "Edit Homepage" ]
                 )
                 homePageId
+
+        ( searchInput, filterPages ) =
+            Admin.searchInput InputQuery (\p t -> iContains t p.name) listForm
+
+        iContains s1 s2 =
+            String.contains s1 (String.toLower s2)
     in
-    [ a (class "mb-3 btn btn-primary" :: routeLinkAttributes (Admin PageNew))
-        [ text "New Page" ]
-    , editHomepageButton
+    [ div [ class "row" ]
+        [ div [ class "col-md-8 mb-3" ]
+            [ a (class "btn btn-primary" :: routeLinkAttributes (Admin PageNew))
+                [ text "New Page" ]
+            , editHomepageButton
+            ]
+        , div [ class "col-md-4 text-md-right mb-3" ] [ searchInput ]
+        ]
     , table [ class "table table-sm table-striped" ]
         [ thead [] [ tr [] headerCells ]
-        , tbody [] <| List.map renderPage pages
+        , tbody [] <| List.map renderPage <| filterPages pages
         ]
     ]
 

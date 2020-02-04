@@ -67,6 +67,7 @@ type Msg
     | CheckoutMsg Checkout.Msg
     | NewCategoryMsg CategoryAdmin.NewMsg
     | EditCategoryMsg CategoryAdmin.EditMsg
+    | PageListMsg StaticPageAdmin.ListMsg
     | NewPageMsg StaticPageAdmin.NewMsg
     | EditPageMsg StaticPageAdmin.EditMsg
     | OrderSearchMsg OrderAdmin.SearchMsg

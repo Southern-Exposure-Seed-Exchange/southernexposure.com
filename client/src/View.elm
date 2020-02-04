@@ -186,7 +186,8 @@ view ({ route, pageData, navigationData, zone } as model) =
                         |> List.map (Html.map EditCategoryMsg)
 
                 Admin PageList ->
-                    withIntermediateText StaticPageAdmin.list pageData.adminPageList
+                    withIntermediateText (StaticPageAdmin.list model.pageListForm) pageData.adminPageList
+                        |> List.map (Html.map PageListMsg)
 
                 Admin PageNew ->
                     StaticPageAdmin.new model.newPageForm
