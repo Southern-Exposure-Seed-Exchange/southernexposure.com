@@ -358,6 +358,7 @@ derivePersistField "AddressType"
 
 newtype StripeCustomerId =
     StripeCustomerId { fromStripeCustomerId :: Stripe.CustomerId }
+    deriving (Show)
 
 instance PersistField StripeCustomerId where
     toPersistValue (StripeCustomerId (Stripe.CustomerId customerId)) =
@@ -367,6 +368,10 @@ instance PersistField StripeCustomerId where
 
 instance PersistFieldSql StripeCustomerId where
     sqlType _ = SqlString
+
+instance ToJSON StripeCustomerId where
+    toJSON (StripeCustomerId (Stripe.CustomerId customerId)) =
+        toJSON customerId
 
 
 newtype StripeChargeId =

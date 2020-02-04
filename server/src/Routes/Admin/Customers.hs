@@ -22,7 +22,7 @@ import Servant
 
 import Auth (Cookied, WrappedAuthToken, withAdminCookie, validateAdminAndParameters)
 import Models (CustomerId, Customer(..), Address(..), EntityField(..), Unique(..))
-import Models.Fields (Cents)
+import Models.Fields (Cents, StripeCustomerId)
 import Routes.Utils (extractRowCount, buildWhereQuery, hashPassword, generateUniqueToken, mapUpdate)
 import Server (App, AppSQL, runDB, serverError)
 import Validation (Validation(..))
@@ -179,6 +179,7 @@ data CustomerEditData =
         , cedEmail :: T.Text
         , cedStoreCredit :: Cents
         , cedIsAdmin :: Bool
+        , cedStripeId :: Maybe StripeCustomerId
         } deriving (Show)
 
 instance ToJSON CustomerEditData where
@@ -188,6 +189,7 @@ instance ToJSON CustomerEditData where
             , "email" .= cedEmail
             , "storeCredit" .= cedStoreCredit
             , "isAdmin" .= cedIsAdmin
+            , "stripeId" .= cedStripeId
             ]
 
 customerEditDataRoute :: WrappedAuthToken -> CustomerId -> App (Cookied CustomerEditData)
@@ -201,6 +203,7 @@ customerEditDataRoute t customerId = withAdminCookie t $ \_ ->
                 , cedEmail = customerEmail customer
                 , cedStoreCredit = customerStoreCredit customer
                 , cedIsAdmin = customerIsAdmin customer
+                , cedStripeId = customerStripeId customer
                 }
 
 

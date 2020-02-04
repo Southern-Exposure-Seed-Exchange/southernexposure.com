@@ -824,14 +824,16 @@ orderDataDecoder =
 type alias AdminOrderDetails =
     { details : OrderDetails
     , adminComments : List AdminComment
+    , stripeId : Maybe String
     }
 
 
 adminOrderDetailsDecoder : Decoder AdminOrderDetails
 adminOrderDetailsDecoder =
-    Decode.map2 AdminOrderDetails
+    Decode.map3 AdminOrderDetails
         (Decode.field "details" orderDetailsDecoder)
         (Decode.field "adminComments" <| Decode.list adminCommentDecoder)
+        (Decode.field "stripeId" <| Decode.nullable Decode.string)
 
 
 type alias AdminComment =
@@ -888,16 +890,18 @@ type alias AdminEditCustomerData =
     , email : String
     , storeCredit : Cents
     , isAdmin : Bool
+    , stripeId : Maybe String
     }
 
 
 adminEditCustomerDataDecoder : Decoder AdminEditCustomerData
 adminEditCustomerDataDecoder =
-    Decode.map4 AdminEditCustomerData
+    Decode.map5 AdminEditCustomerData
         (Decode.field "id" Decode.int)
         (Decode.field "email" Decode.string)
         (Decode.field "storeCredit" centsDecoder)
         (Decode.field "isAdmin" Decode.bool)
+        (Decode.field "stripeId" <| Decode.nullable Decode.string)
 
 
 

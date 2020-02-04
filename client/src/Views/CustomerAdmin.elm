@@ -14,7 +14,7 @@ module Views.CustomerAdmin exposing
 import Api
 import Dict
 import Html exposing (Html, a, div, form, td, text, th, thead, tr)
-import Html.Attributes exposing (class)
+import Html.Attributes exposing (class, href, target)
 import Html.Events exposing (onSubmit)
 import Json.Decode as Decode
 import Json.Encode as Encode
@@ -28,7 +28,7 @@ import Views.Admin as Admin exposing (equalsOriginal, updateEditField)
 import Views.Format as Format
 import Views.HorizontalForm as Form
 import Views.Pager as Pager
-import Views.Utils exposing (routeLinkAttributes)
+import Views.Utils exposing (htmlOrBlank, routeLinkAttributes)
 
 
 
@@ -265,7 +265,19 @@ edit model original =
         inputRow modelSelector originalSelector =
             Form.inputRow model.errors (valueWithFallback modelSelector originalSelector)
     in
-    [ form [ class (Admin.formSavingClass model), onSubmit Submit ]
+    [ htmlOrBlank
+        (\stripeId ->
+            div [ class "text-right mb-4" ]
+                [ a
+                    [ href <| "https://dashboard.stripe.com/customers/" ++ stripeId
+                    , target "_blank"
+                    , class "btn btn-sm btn-secondary"
+                    ]
+                    [ text "View on Stripe" ]
+                ]
+        )
+        original.stripeId
+    , form [ class (Admin.formSavingClass model), onSubmit Submit ]
         [ Form.genericErrorText <| not <| Dict.isEmpty model.errors
         , Api.generalFormErrors model
         , inputRow .email .email InputEmail True "Email" "email" "email" "off"

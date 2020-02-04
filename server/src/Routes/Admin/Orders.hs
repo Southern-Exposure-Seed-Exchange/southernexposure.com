@@ -231,6 +231,7 @@ data AdminOrderDetails =
     AdminOrderDetails
         { aodDetails :: OrderDetails
         , aodAdminComments :: [AdminOrderComment]
+        , aodStripeId :: Maybe StripeChargeId
         } deriving (Show)
 
 instance ToJSON AdminOrderDetails where
@@ -238,6 +239,7 @@ instance ToJSON AdminOrderDetails where
         object
             [ "details" .= aodDetails
             , "adminComments" .= aodAdminComments
+            , "stripeId" .= aodStripeId
             ]
 
 orderDetailsRoute :: WrappedAuthToken -> OrderId -> App (Cookied AdminOrderDetails)
@@ -257,6 +259,7 @@ orderDetailsRoute token orderId = withAdminCookie token $ \_ -> runDB $ do
     return AdminOrderDetails
         { aodDetails = details
         , aodAdminComments = sortOn adminCommentTime $ orderAdminComments order
+        , aodStripeId = orderStripeChargeId order
         }
 
 

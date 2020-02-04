@@ -14,7 +14,7 @@ module Views.OrderAdmin exposing
 import Api
 import Dict
 import Html exposing (Html, a, div, form, h4, hr, li, td, text, th, thead, tr, ul)
-import Html.Attributes exposing (class)
+import Html.Attributes exposing (class, href, target)
 import Html.Events exposing (onSubmit)
 import Json.Decode as Decode
 import Json.Encode as Encode
@@ -31,7 +31,7 @@ import Views.Admin as Admin
 import Views.Format as Format
 import Views.HorizontalForm as Form
 import Views.Pager as Pager
-import Views.Utils exposing (routeLinkAttributes)
+import Views.Utils exposing (htmlOrBlank, routeLinkAttributes)
 
 
 
@@ -258,6 +258,14 @@ updateDetailsForm key orderDetails msg model =
 details : Zone -> Int -> DetailsForm -> AddressLocations -> PageData.AdminOrderDetails -> List (Html DetailsMsg)
 details zone orderId model locations orderDetails =
     [ div [] <| OrderDetails.view zone orderId locations orderDetails.details
+    , htmlOrBlank
+        (\stripeId ->
+            div [ class "text-right" ]
+                [ a [ href <| "https://dashboard.stripe.com/payments/" ++ stripeId, target "_blank", class "btn btn-sm btn-secondary" ]
+                    [ text "View Stripe Charge" ]
+                ]
+        )
+        orderDetails.stripeId
     , hr [] []
     , h4 [] [ text "Admin Comments" ]
     , Form.genericErrorText <| not <| Dict.isEmpty model.commentErrors
