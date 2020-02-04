@@ -23,6 +23,7 @@ module Avalara
     , commitTransaction
     , refundTransaction
     , voidTransaction
+    , unvoidTransaction
     , createCustomers
       -- * Types
       -- ** Errors
@@ -223,6 +224,15 @@ voidTransaction :: (MonadIO m, MonadCatch m) => CompanyCode -> TransactionCode -
 voidTransaction companyCode transactionCode =
     makePostRequest $ VoidTransaction companyCode transactionCode
 
+-- | An unvoidTransaction request will remove the @Void@ status of
+-- a transaction.
+--
+-- API Docs:
+-- https://developer.avalara.com/api-reference/avatax/rest/v2/methods/Transactions/UnvoidTransaction/
+unvoidTransaction :: (MonadIO m, MonadCatch m) => CompanyCode -> TransactionCode -> ReaderT Config m (WithError Transaction)
+unvoidTransaction companyCode transactionCode =
+    makeEmptyPostRequest $ UnvoidTransaction companyCode transactionCode
+
 
 -- | A createCustomers request lets you create new Customers for a Company.
 --
@@ -245,6 +255,7 @@ data Endpoint
     | CommitTransaction CompanyCode TransactionCode
     | RefundTransaction CompanyCode TransactionCode
     | VoidTransaction CompanyCode TransactionCode
+    | UnvoidTransaction CompanyCode TransactionCode
     deriving (Show, Read, Eq)
 
 endpointPath :: Monad m => Endpoint -> ReaderT Config m (Url 'Https)
@@ -263,6 +274,8 @@ endpointPath endpoint = do
             ["companies", companyCode, "transactions", transCode, "refund"]
         VoidTransaction (CompanyCode companyCode) (TransactionCode transCode) ->
             ["companies", companyCode, "transactions", transCode, "void"]
+        UnvoidTransaction (CompanyCode companyCode) (TransactionCode transCode) ->
+            ["companies", companyCode, "transactions", transCode, "unvoid"]
   where
     joinPaths :: Url 'Https -> [T.Text] -> Url 'Https
     joinPaths =
@@ -991,6 +1004,12 @@ makePostRequest
     => Endpoint -> a -> ReaderT Config m (WithError b)
 makePostRequest endpoint body =
     makeRequest endpoint POST $ ReqBodyJson body
+
+makeEmptyPostRequest
+    :: (FromJSON b, MonadIO m, MonadCatch m)
+    => Endpoint -> ReaderT Config m (WithError b)
+makeEmptyPostRequest endpoint =
+    makeRequest endpoint POST NoReqBody
 
 makeRequest
     :: ( FromJSON a, HttpMethod method, HttpBody body, MonadIO m, MonadCatch m
