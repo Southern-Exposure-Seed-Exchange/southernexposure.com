@@ -23,7 +23,7 @@ import Array exposing (Array)
 import Category exposing (CategoryId(..))
 import Dict
 import File exposing (File)
-import Html exposing (Html, a, br, button, div, fieldset, form, h3, hr, img, input, label, option, select, span, table, tbody, td, text, th, thead, tr)
+import Html exposing (Html, a, br, button, div, fieldset, form, h3, hr, img, input, label, option, select, table, tbody, td, text, th, thead, tr)
 import Html.Attributes as A exposing (checked, class, for, id, name, required, selected, src, step, type_, value)
 import Html.Events exposing (on, onCheck, onClick, onInput, onSubmit, targetValue)
 import Json.Decode as Decode exposing (Decoder)
@@ -92,19 +92,6 @@ list listForm { products } =
                     ]
                 ]
 
-        searchInput =
-            div [ class "input-group mr-4" ]
-                [ div [ class "input-group-prepend" ] [ span [ class "input-group-text" ] [ icon "search" ] ]
-                , input
-                    [ type_ "search"
-                    , name "search"
-                    , value listForm.query
-                    , onInput InputQuery
-                    , class "form-control"
-                    ]
-                    []
-                ]
-
         onlyActiveInput =
             div [ class "flex-shrink-0 form-check form-check-inline" ]
                 [ input
@@ -119,26 +106,19 @@ list listForm { products } =
                     [ text "Only Active Products" ]
                 ]
 
-        filterProduct p =
-            List.foldr
-                (\t b ->
-                    b
-                        && (iContains t p.name
-                                || iContains t p.baseSku
-                                || iContains t ((\(ProductId i) -> String.fromInt i) p.id)
-                                || List.any (iContains t) p.categories
-                           )
-                        && (p.isActive || not listForm.onlyActive)
-                )
-                True
-                queryTerms
+        ( searchInput, filterProducts ) =
+            Admin.searchInput InputQuery matchProduct listForm
+
+        matchProduct p t =
+            (iContains t p.name
+                || iContains t p.baseSku
+                || iContains t ((\(ProductId i) -> String.fromInt i) p.id)
+                || List.any (iContains t) p.categories
+            )
+                && (p.isActive || not listForm.onlyActive)
 
         iContains s1 s2 =
             String.contains s1 (String.toLower s2)
-
-        queryTerms =
-            String.words listForm.query
-                |> List.map String.toLower
     in
     [ a (class "mb-2 btn btn-primary" :: (routeLinkAttributes <| Admin ProductNew))
         [ text "New Product" ]
@@ -155,7 +135,7 @@ list listForm { products } =
                 , th [] []
                 ]
             ]
-        , tbody [] <| List.map renderProduct <| List.filter filterProduct products
+        , tbody [] <| List.map renderProduct <| filterProducts products
         ]
     ]
 

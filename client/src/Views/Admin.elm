@@ -6,6 +6,7 @@ module Views.Admin exposing
     , equalsOriginal
     , formSavingClass
     , imageSelectRow
+    , searchInput
     , searchableTable
     , slugFrom
     , submitOrSavingButton
@@ -17,8 +18,8 @@ module Views.Admin exposing
 
 import Base64
 import File exposing (File)
-import Html exposing (Html, button, div, form, img, input, table, tbody, text)
-import Html.Attributes exposing (class, disabled, src, type_, value)
+import Html exposing (Html, button, div, form, img, input, span, table, tbody, text)
+import Html.Attributes exposing (class, disabled, name, src, type_, value)
 import Html.Events exposing (onClick, onInput, onSubmit)
 import Models.Utils exposing (slugify)
 import Paginate exposing (Paginated)
@@ -111,6 +112,45 @@ searchableTable cfg items =
     , renderedTable
     , cfg.pager.viewBottom ()
     ]
+
+
+{-| A re-usesable view for Admin pages with client-side searching functionality.
+
+It takes a message constructor for updating the query string, a function for
+matching an item against a single search term, and a model containing the current
+search query.
+
+It returns an HTML element for rendering the search input and a function for
+filtering the items.
+
+-}
+searchInput :
+    (String -> msg)
+    -> (a -> String -> Bool)
+    -> { model | query : String }
+    -> ( Html msg, List a -> List a )
+searchInput inputMsg queryMatcher { query } =
+    let
+        queryTerms =
+            String.words query
+
+        matcher item =
+            List.foldr (\term bool -> bool && queryMatcher item term) True queryTerms
+
+        searchInput_ =
+            div [ class "input-group mr-4" ]
+                [ div [ class "input-group-prepend" ] [ span [ class "input-group-text" ] [ icon "search" ] ]
+                , input
+                    [ type_ "search"
+                    , name "search"
+                    , value query
+                    , onInput inputMsg
+                    , class "form-control"
+                    ]
+                    []
+                ]
+    in
+    ( searchInput_, List.filter matcher )
 
 
 {-| Return the class to indicate form saving if the saving state is True.
