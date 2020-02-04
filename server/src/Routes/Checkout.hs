@@ -388,9 +388,9 @@ withPlaceOrderErrors shippingAddress =
             NoShippingMethod ->
                 case shippingAddress of
                     ExistingAddress _ _ ->
-                        V.singleFieldError "shipping-" "Sorry, we only ship to North America."
+                        V.singleFieldError "shipping-" "Sorry, we only ship to the United States."
                     NewAddress _ ->
-                        V.singleFieldError "shipping-country" "Sorry, we only ship to North America."
+                        V.singleFieldError "shipping-country" "Sorry, we only ship to the United States."
             AddressNotFound Shipping ->
                 V.singleFieldError "shipping-"
                     "Please choose again or try adding a new address."

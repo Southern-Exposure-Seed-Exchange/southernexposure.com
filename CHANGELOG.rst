@@ -3,6 +3,13 @@ CHANGELOG
 =========
 
 
+v1.03.07
+=========
+
+* Fix checkout shipping error message to say we only ship to United States,
+  instead of North America.
+
+
 v1.03.06
 =========
 
