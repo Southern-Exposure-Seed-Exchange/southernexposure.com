@@ -228,7 +228,7 @@ list routeConstructor pagination addToCartForms products =
 
 
 renderMobileProductBlock : CartFormData -> ( Product, Dict Int ProductVariant, Maybe SeedAttribute ) -> Html Msg
-renderMobileProductBlock { maybeSelectedVariantId, maybeSelectedVariant, variantSelect, selectedItemNumber, quantity, isOutOfStock, isLimitedAvailablity, requestFeedback } ( product, variants, maybeSeedAttribute ) =
+renderMobileProductBlock { maybeSelectedVariantId, maybeSelectedVariant, variantSelect, selectedItemNumber, quantity, isOutOfStock, requestFeedback } ( product, variants, maybeSeedAttribute ) =
     let
         formAttributes =
             (::) (class "row product-block") <|
@@ -267,9 +267,6 @@ renderMobileProductBlock { maybeSelectedVariantId, maybeSelectedVariant, variant
         availabilityBadge =
             if isOutOfStock then
                 outOfStockBadge
-
-            else if isLimitedAvailablity then
-                limitedAvailabilityBadge
 
             else
                 text ""
@@ -349,7 +346,7 @@ limitedAvailabilityBadge =
 
 
 cartForm : CartFormData -> Product -> Html Msg
-cartForm { maybeSelectedVariant, maybeSelectedVariantId, quantity, isOutOfStock, isLimitedAvailablity, variantSelect, selectedItemNumber, offersMeta, requestFeedback } product =
+cartForm { maybeSelectedVariant, maybeSelectedVariantId, quantity, isOutOfStock, variantSelect, selectedItemNumber, offersMeta, requestFeedback } product =
     let
         formAttributes =
             (::) (class "add-to-cart-form") <|
@@ -388,9 +385,6 @@ cartForm { maybeSelectedVariant, maybeSelectedVariantId, quantity, isOutOfStock,
         availabilityBadge =
             if isOutOfStock then
                 outOfStockBadge
-
-            else if isLimitedAvailablity then
-                limitedAvailabilityBadge
 
             else
                 text ""
@@ -491,6 +485,13 @@ cartFormData addToCartForms ( product, variants ) =
                     else
                         [ s, Format.cents <| variantPrice variant ]
 
+                appendOoS l =
+                    if variant.quantity <= 0 then
+                        l ++ [ "OoS" ]
+
+                    else
+                        l
+
                 -- Disable the option unless the entire product is
                 -- out-of-stock.
                 disabledAttr =
@@ -503,12 +504,14 @@ cartFormData addToCartForms ( product, variants ) =
             Maybe.map lotSizeToString variant.lotSize
                 |> Maybe.withDefault (product.baseSKU ++ variant.skuSuffix)
                 |> appendPrice
+                |> appendOoS
                 |> String.join " - "
                 |> text
                 |> List.singleton
                 |> option
                     ([ value <| String.fromInt <| fromVariantId variant.id
                      , selected (Just variant == maybeSelectedVariant)
+                     , A.classList [ ( "out-of-stock", variant.quantity <= 0 ) ]
                      ]
                         ++ disabledAttr
                     )

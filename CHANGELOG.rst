@@ -6,6 +6,8 @@ CHANGELOG
 v1.03.07
 =========
 
+* Replace "Limited Availability" badges in Add to Cart forms with "OoS" text in
+  dropdowns.
 * Reduce size of Sub-Category images.
 * Add links to relevant Stripe pages on the Customer & Order Admin pages.
 * Add additional breakpoints for prettified weights(3oz, 6oz, 2.5lbs).
