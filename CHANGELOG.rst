@@ -6,6 +6,9 @@ CHANGELOG
 v1.03.07
 =========
 
+* Add a "Search Keywords" field to the Products New/Edit Admin Pages, allowing
+  admins to specify additional words that can be matched when searching from
+  the frontend.
 * Replace "Limited Availability" badges in Add to Cart forms with "OoS" text in
   dropdowns.
 * Reduce size of Sub-Category images.

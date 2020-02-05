@@ -12,7 +12,7 @@ module Routes.Admin.Products
 import Control.Concurrent.STM (readTVarIO)
 import Control.Monad (forM_, unless)
 import Control.Monad.Reader (asks, liftIO, lift)
-import Data.Aeson ((.=), (.:), ToJSON(..), FromJSON(..), Value(Object), object, withObject)
+import Data.Aeson ((.=), (.:), (.:?), ToJSON(..), FromJSON(..), Value(Object), object, withObject)
 import Data.Maybe (mapMaybe, listToMaybe, fromMaybe)
 import Data.Monoid ((<>))
 import Data.Text.Encoding (encodeUtf8)
@@ -192,6 +192,7 @@ data ProductParameters =
         , ppImageData :: BS.ByteString
         -- ^ Base64 Encoded
         , ppImageName :: T.Text
+        , ppKeywords :: T.Text
         , ppVariantData :: [VariantData]
         , ppSeedAttribute :: Maybe SeedData
         } deriving (Show)
@@ -205,6 +206,7 @@ instance FromJSON ProductParameters where
         ppLongDescription <- v .: "longDescription"
         ppImageData <- encodeUtf8 <$> v .: "imageData"
         ppImageName <- v .: "imageName"
+        ppKeywords <- fromMaybe "" <$> (v .:? "keywords")
         ppVariantData <- v .: "variants"
         ppSeedAttribute <- v .: "seedAttributes"
         return ProductParameters {..}
@@ -329,6 +331,7 @@ newProductRoute = validateAdminAndParameters $ \_ p@ProductParameters {..} -> do
                     , productShortDescription = ""
                     , productLongDescription = sanitize ppLongDescription
                     , productImageUrl = imageUrl
+                    , productKeywords = ppKeywords
                     , productCreatedAt = time
                     , productUpdatedAt = time
                     }
@@ -355,6 +358,7 @@ data EditProductData =
         , epdBaseSku :: T.Text
         , epdLongDescription :: T.Text
         , epdImageUrl :: T.Text
+        , epdKeywords :: T.Text
         , epdVariantData :: [VariantData]
         , epdSeedAttribute :: Maybe SeedData
         } deriving (Show)
@@ -369,6 +373,7 @@ instance ToJSON EditProductData where
             , "baseSku" .= epdBaseSku
             , "longDescription" .= epdLongDescription
             , "imageUrl" .= epdImageUrl
+            , "keywords" .= epdKeywords
             , "variants" .= epdVariantData
             , "seedAttributes" .= epdSeedAttribute
             ]
@@ -394,6 +399,7 @@ editProductDataRoute t productId = withAdminCookie t $ \_ ->
                 , epdBaseSku = productBaseSku
                 , epdLongDescription = productLongDescription
                 , epdImageUrl = productImageUrl
+                , epdKeywords = productKeywords
                 , epdVariantData = variants
                 , epdSeedAttribute = seedAttr
                 }
@@ -479,6 +485,7 @@ editProductRoute = validateAdminAndParameters $ \_ EditProductParameters {..} ->
             , ProductMainCategory =. mainCategory
             , ProductBaseSku =. ppBaseSku
             , ProductLongDescription =. sanitize ppLongDescription
+            , ProductKeywords =. ppKeywords
             , ProductUpdatedAt =. time
             ] ++ imageUpdate
         deleteWhere [ProductToCategoryProductId ==. eppId]

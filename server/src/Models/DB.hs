@@ -40,6 +40,7 @@ Product
     imageUrl T.Text
     createdAt UTCTime
     updatedAt UTCTime
+    keywords T.Text default=''
     UniqueProductSlug slug
     UniqueBaseSku baseSku
     deriving Show

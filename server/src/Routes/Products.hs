@@ -176,10 +176,12 @@ productsSearchRoute maybeSort maybePage maybePerPage parameters = runDB $ do
           nameOrDescriptionOrSku p w =
                 (p E.^. ProductName) `fuzzyILike` w E.||.
                 (p E.^. ProductLongDescription) `fuzzyILike` w E.||.
-                (p E.^. ProductBaseSku) `maybeFuzzyILike` numericSku w
+                (p E.^. ProductBaseSku) `maybeFuzzyILike` numericSku w E.||.
+                (p E.^. ProductKeywords) `fuzzyILike` w
           nameOrSku p w =
                 (p E.^. ProductName) `fuzzyILike` w E.||.
-                (p E.^. ProductBaseSku) `maybeFuzzyILike` numericSku w
+                (p E.^. ProductBaseSku) `maybeFuzzyILike` numericSku w E.||.
+                (p E.^. ProductKeywords) `fuzzyILike` w
           attributeFilter selector attribute sa =
               if selector parameters then
                 sa E.?. attribute E.==. E.just (E.val True)

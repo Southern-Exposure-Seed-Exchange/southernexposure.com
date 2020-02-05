@@ -338,6 +338,7 @@ type alias Form =
     , isHeirloom : Bool
     , isSmallGrower : Bool
     , isRegional : Bool
+    , keywords : String
     , errors : Api.FormErrors
     , isSaving : Bool
 
@@ -360,6 +361,7 @@ initialForm =
     , isHeirloom = False
     , isSmallGrower = False
     , isRegional = False
+    , keywords = ""
     , errors = Api.initialErrors
     , isSaving = False
     , imageUrl = ""
@@ -392,6 +394,7 @@ encodeForm model validVariants maybeProductId =
         , ( "longDescription", Encode.string model.description )
         , ( "imageName", Encode.string model.imageName )
         , ( "imageData", Encode.string model.imageData )
+        , ( "keywords", Encode.string model.keywords )
         , ( "seedAttributes", encodedSeedAttribues )
         , ( "variants", Encode.list variantEncoder validVariants )
         , ( "id", Maybe.withDefault Encode.null <| Maybe.map Product.idEncoder maybeProductId )
@@ -420,6 +423,7 @@ formDecoder =
         |> fromAttribute "heirloom"
         |> fromAttribute "smallGrower"
         |> fromAttribute "regional"
+        |> Decode.required "keywords" Decode.string
         |> Decode.hardcoded Api.initialErrors
         |> Decode.hardcoded False
         |> Decode.required "imageUrl" Decode.string
@@ -522,6 +526,7 @@ type FormMsg
     | ToggleHeirloom Bool
     | ToggleSmallGrower Bool
     | ToggleRegional Bool
+    | InputKeywords String
     | SelectImage
     | ImageUploaded File
     | ImageEncoded String
@@ -577,6 +582,9 @@ updateForm msg model =
 
         ToggleRegional val ->
             noCommand { model | isRegional = val }
+
+        InputKeywords val ->
+            noCommand { model | keywords = val }
 
         SelectImage ->
             ( model, selectImageFile ImageUploaded )
@@ -755,6 +763,7 @@ formView buttonText submitMsg msgWrapper model { categories } =
             , categorySelects model categories
             , inputRow .baseSku InputBaseSku True "Base SKU" "baseSku" "text" "off"
             , Form.textareaRow model.errors model.description InputDescription False "Description" "description" 10
+            , inputRow .keywords InputKeywords False "Search Keywords" "keywords" "text" "off"
             , Form.checkboxRow model.isOrganic ToggleOrganic "Is Organic" "isOrganic"
             , Form.checkboxRow model.isHeirloom ToggleHeirloom "Is Heirloom" "isHeirloom"
             , Form.checkboxRow model.isSmallGrower ToggleSmallGrower "Is Small Grower" "isSmallGrower"
