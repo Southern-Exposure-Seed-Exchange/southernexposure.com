@@ -6,6 +6,7 @@ CHANGELOG
 v1.03.07
 =========
 
+* Reduce size of Sub-Category images.
 * Add links to relevant Stripe pages on the Customer & Order Admin pages.
 * Add additional breakpoints for prettified weights(3oz, 6oz, 2.5lbs).
 * Add a search input to the Pages list in the Admin.

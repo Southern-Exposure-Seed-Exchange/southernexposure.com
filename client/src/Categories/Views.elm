@@ -44,16 +44,7 @@ details pagination addToCartForms products =
                     [ div [ class "h-100 text-center" ]
                         [ img
                             [ class "img-fluid mx-auto"
-                            , src <| imgSrcFallback subCategory.image
-                            , imageToSrcSet subCategory.image
-                            , attribute "sizes" <|
-                                String.join ", "
-                                    [ "(max-width: 575px) 257px"
-                                    , "(max-width: 767px) 160px"
-                                    , "(max-width: 991px) 115px"
-                                    , "(max-width: 1199px) 160px"
-                                    , "225px"
-                                    ]
+                            , src subCategory.image.original
                             , alt <| "Category Image for " ++ subCategory.name
                             ]
                             []
