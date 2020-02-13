@@ -39,7 +39,7 @@ import Auth (WrappedAuthToken, Cookied, withAdminCookie, validateAdminAndParamet
 import Avalara (RefundTransactionRequest(..))
 import Models
     ( OrderId, Order(..), OrderProduct(..), OrderLineItem(..), Customer(customerEmail)
-    , Address(..), EntityField(..)
+    , Address(..), EntityField(..), CustomerId
     )
 import Models.Fields
     ( OrderStatus, Region, Cents(..), LineItemType(..), StripeChargeId(..)
@@ -232,6 +232,7 @@ data AdminOrderDetails =
         { aodDetails :: OrderDetails
         , aodAdminComments :: [AdminOrderComment]
         , aodStripeId :: Maybe StripeChargeId
+        , aodCustomerId :: CustomerId
         } deriving (Show)
 
 instance ToJSON AdminOrderDetails where
@@ -240,6 +241,7 @@ instance ToJSON AdminOrderDetails where
             [ "details" .= aodDetails
             , "adminComments" .= aodAdminComments
             , "stripeId" .= aodStripeId
+            , "customerId" .= aodCustomerId
             ]
 
 orderDetailsRoute :: WrappedAuthToken -> OrderId -> App (Cookied AdminOrderDetails)
@@ -260,6 +262,7 @@ orderDetailsRoute token orderId = withAdminCookie token $ \_ -> runDB $ do
         { aodDetails = details
         , aodAdminComments = sortOn adminCommentTime $ orderAdminComments order
         , aodStripeId = orderStripeChargeId order
+        , aodCustomerId = orderCustomerId order
         }
 
 

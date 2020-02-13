@@ -6,6 +6,7 @@ CHANGELOG
 v1.03.07
 =========
 
+* Add a link to the Edit Customer page on the Admin's View Order page.
 * Reduce variant quantities when an order is placed.
 * Add a "Search Keywords" field to the Products New/Edit Admin Pages, allowing
   admins to specify additional words that can be matched when searching from

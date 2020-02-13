@@ -825,15 +825,17 @@ type alias AdminOrderDetails =
     { details : OrderDetails
     , adminComments : List AdminComment
     , stripeId : Maybe String
+    , customerId : Int
     }
 
 
 adminOrderDetailsDecoder : Decoder AdminOrderDetails
 adminOrderDetailsDecoder =
-    Decode.map3 AdminOrderDetails
+    Decode.map4 AdminOrderDetails
         (Decode.field "details" orderDetailsDecoder)
         (Decode.field "adminComments" <| Decode.list adminCommentDecoder)
         (Decode.field "stripeId" <| Decode.nullable Decode.string)
+        (Decode.field "customerId" Decode.int)
 
 
 type alias AdminComment =

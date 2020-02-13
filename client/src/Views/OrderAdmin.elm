@@ -258,14 +258,24 @@ updateDetailsForm key orderDetails msg model =
 details : Zone -> Int -> DetailsForm -> AddressLocations -> PageData.AdminOrderDetails -> List (Html DetailsMsg)
 details zone orderId model locations orderDetails =
     [ div [] <| OrderDetails.view zone orderId locations orderDetails.details
-    , htmlOrBlank
-        (\stripeId ->
-            div [ class "text-right" ]
-                [ a [ href <| "https://dashboard.stripe.com/payments/" ++ stripeId, target "_blank", class "btn btn-sm btn-secondary" ]
+    , div [ class "text-right" ]
+        [ htmlOrBlank
+            (\stripeId ->
+                a
+                    [ href <| "https://dashboard.stripe.com/payments/" ++ stripeId
+                    , target "_blank"
+                    , class "btn btn-sm btn-secondary"
+                    ]
                     [ text "View Stripe Charge" ]
-                ]
-        )
-        orderDetails.stripeId
+            )
+            orderDetails.stripeId
+        , a
+            (class "btn btn-sm btn-secondary ml-2"
+                :: target "_blank"
+                :: routeLinkAttributes (Admin <| CustomerEdit orderDetails.customerId)
+            )
+            [ text "View Customer" ]
+        ]
     , hr [] []
     , h4 [] [ text "Admin Comments" ]
     , Form.genericErrorText <| not <| Dict.isEmpty model.commentErrors
