@@ -8,21 +8,27 @@ module Routes.Admin.Customers
     , customerRoutes
     ) where
 
-import Control.Monad (unless)
+import Control.Monad (unless, forM)
 import Data.Aeson ((.=), (.:), ToJSON(..), FromJSON(..), object, withObject)
 import Data.Maybe (fromMaybe, catMaybes)
 import Data.Monoid ((<>))
 import Database.Persist
     ( (=.), (==.), Entity(..), Filter, Update, count, selectFirst, get, update
+    , selectList
     )
+import Data.Time (UTCTime)
 import Servant
     ( (:<|>)(..), (:>), AuthProtect, QueryParam, Capture, ReqBody, Get, Patch
     , JSON, err404
     )
 
 import Auth (Cookied, WrappedAuthToken, withAdminCookie, validateAdminAndParameters)
-import Models (CustomerId, Customer(..), Address(..), EntityField(..), Unique(..))
-import Models.Fields (Cents, StripeCustomerId)
+import Models
+    ( CustomerId, Customer(..), Address(..), EntityField(..), Unique(..)
+    , Order(..), OrderId, getOrderTotal
+    )
+import Models.Fields (Cents, StripeCustomerId, OrderStatus)
+import Routes.CommonData (AddressData, toAddressData)
 import Routes.Utils (extractRowCount, buildWhereQuery, hashPassword, generateUniqueToken, mapUpdate)
 import Server (App, AppSQL, runDB, serverError)
 import Validation (Validation(..))
@@ -180,6 +186,7 @@ data CustomerEditData =
         , cedStoreCredit :: Cents
         , cedIsAdmin :: Bool
         , cedStripeId :: Maybe StripeCustomerId
+        , cedOrders :: [OrderData]
         } deriving (Show)
 
 instance ToJSON CustomerEditData where
@@ -190,6 +197,26 @@ instance ToJSON CustomerEditData where
             , "storeCredit" .= cedStoreCredit
             , "isAdmin" .= cedIsAdmin
             , "stripeId" .= cedStripeId
+            , "orders" .= cedOrders
+            ]
+
+data OrderData =
+    OrderData
+        { odId :: OrderId
+        , odDate :: UTCTime
+        , odStatus :: OrderStatus
+        , odShipping :: AddressData
+        , odTotal :: Cents
+        } deriving (Show)
+
+instance ToJSON OrderData where
+    toJSON OrderData {..} =
+        object
+            [ "id" .= odId
+            , "date" .= odDate
+            , "status" .= odStatus
+            , "shipping" .= odShipping
+            , "total" .= odTotal
             ]
 
 customerEditDataRoute :: WrappedAuthToken -> CustomerId -> App (Cookied CustomerEditData)
@@ -197,13 +224,35 @@ customerEditDataRoute t customerId = withAdminCookie t $ \_ ->
     runDB (get customerId) >>= \case
         Nothing ->
             serverError err404
-        Just customer ->
+        Just customer -> do
+            orders <- getOrders
             return CustomerEditData
                 { cedId = customerId
                 , cedEmail = customerEmail customer
                 , cedStoreCredit = customerStoreCredit customer
                 , cedIsAdmin = customerIsAdmin customer
                 , cedStripeId = customerStripeId customer
+                , cedOrders = orders
+                }
+  where
+    getOrders :: App [OrderData]
+    getOrders = runDB $ do
+        os <- E.select $ E.from $ \(o `E.InnerJoin` sa) -> do
+            E.on $ sa E.^. AddressId E.==. o E.^. OrderShippingAddressId
+            E.where_ $ o E.^. OrderCustomerId E.==. E.val customerId
+            E.orderBy [E.desc $ o E.^. OrderCreatedAt]
+            return (o, sa)
+        forM os $ \(Entity oId order, sa) -> do
+            total <-
+                getOrderTotal
+                    <$> (map entityVal <$> selectList [OrderLineItemOrderId ==. oId] [])
+                    <*> (map entityVal <$> selectList [OrderProductOrderId ==. oId] [])
+            return OrderData
+                { odId = oId
+                , odDate = orderCreatedAt order
+                , odStatus = orderStatus order
+                , odShipping = toAddressData sa
+                , odTotal = total
                 }
 
 

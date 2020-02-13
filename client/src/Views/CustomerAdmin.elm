@@ -11,18 +11,21 @@ module Views.CustomerAdmin exposing
     , updateSearchForm
     )
 
+import Address
 import Api
 import Dict
-import Html exposing (Html, a, div, form, td, text, th, thead, tr)
+import Html exposing (Html, a, div, form, h2, hr, table, tbody, td, text, th, thead, tr)
 import Html.Attributes exposing (class, href, target)
 import Html.Events exposing (onSubmit)
 import Json.Decode as Decode
 import Json.Encode as Encode
+import Locations exposing (AddressLocations)
 import Models.Fields exposing (Cents(..), centsFromString)
-import PageData exposing (CustomerData)
+import PageData exposing (CustomerData, statusText)
 import Paginate exposing (Paginated)
 import RemoteData exposing (WebData)
 import Routing exposing (AdminRoute(..), Route(..))
+import Time exposing (Zone)
 import Update.Utils exposing (noCommand)
 import Views.Admin as Admin exposing (equalsOriginal, updateEditField)
 import Views.Format as Format
@@ -256,14 +259,24 @@ updateEditForm key original msg model =
                     noCommand model
 
 
-edit : EditForm -> PageData.AdminEditCustomerData -> List (Html EditMsg)
-edit model original =
+edit : Zone -> EditForm -> AddressLocations -> PageData.AdminEditCustomerData -> List (Html EditMsg)
+edit zone model locations original =
     let
         valueWithFallback s1 s2 =
             s1 model |> Maybe.withDefault (s2 original)
 
         inputRow modelSelector originalSelector =
             Form.inputRow model.errors (valueWithFallback modelSelector originalSelector)
+
+        orderRow order =
+            tr []
+                [ td [] [ text <| String.fromInt order.id ]
+                , td [] [ text <| Format.date zone order.date ]
+                , td [] [ text <| statusText order.status ]
+                , td [] [ Address.card order.shipping locations ]
+                , td [] [ text <| Format.cents order.total ]
+                , td [] [ a (routeLinkAttributes <| Admin <| AdminOrderDetails order.id) [ text "View Order" ] ]
+                ]
     in
     [ htmlOrBlank
         (\stripeId ->
@@ -297,5 +310,20 @@ edit model original =
             "IsAdmin"
         , div [ class "form-group" ]
             [ Admin.submitOrSavingButton model "Update Customer" ]
+        ]
+    , hr [] []
+    , h2 [] [ text "Order History" ]
+    , table [ class "table table-sm table-striped" ]
+        [ thead []
+            [ tr []
+                [ th [] [ text "Order #" ]
+                , th [] [ text "Date" ]
+                , th [] [ text "Status" ]
+                , th [] [ text "Address" ]
+                , th [] [ text "Total" ]
+                , th [] [ text "" ]
+                ]
+            ]
+        , tbody [] <| List.map orderRow original.orders
         ]
     ]

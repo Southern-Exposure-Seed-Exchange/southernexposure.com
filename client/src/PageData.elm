@@ -893,17 +893,38 @@ type alias AdminEditCustomerData =
     , storeCredit : Cents
     , isAdmin : Bool
     , stripeId : Maybe String
+    , orders : List CustomerOrderData
     }
 
 
 adminEditCustomerDataDecoder : Decoder AdminEditCustomerData
 adminEditCustomerDataDecoder =
-    Decode.map5 AdminEditCustomerData
+    Decode.map6 AdminEditCustomerData
         (Decode.field "id" Decode.int)
         (Decode.field "email" Decode.string)
         (Decode.field "storeCredit" centsDecoder)
         (Decode.field "isAdmin" Decode.bool)
         (Decode.field "stripeId" <| Decode.nullable Decode.string)
+        (Decode.field "orders" <| Decode.list customerOrderDataDecoder)
+
+
+type alias CustomerOrderData =
+    { id : Int
+    , date : Posix
+    , status : OrderStatus
+    , shipping : Address.Model
+    , total : Cents
+    }
+
+
+customerOrderDataDecoder : Decoder CustomerOrderData
+customerOrderDataDecoder =
+    Decode.map5 CustomerOrderData
+        (Decode.field "id" Decode.int)
+        (Decode.field "date" Iso8601.decoder)
+        (Decode.field "status" orderStatusDecoder)
+        (Decode.field "shipping" Address.decoder)
+        (Decode.field "total" centsDecoder)
 
 
 

@@ -219,7 +219,8 @@ view ({ route, pageData, navigationData, zone } as model) =
                         |> List.map (Html.map CustomerSearchMsg)
 
                 Admin (CustomerEdit _) ->
-                    withIntermediateText (CustomerAdmin.edit model.editCustomerForm) pageData.adminEditCustomer
+                    RemoteData.map2 Tuple.pair pageData.locations pageData.adminEditCustomer
+                        |> withIntermediateText (apply <| CustomerAdmin.edit zone model.editCustomerForm)
                         |> List.map (Html.map EditCustomerMsg)
 
                 Admin ProductList ->

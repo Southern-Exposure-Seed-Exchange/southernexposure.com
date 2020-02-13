@@ -336,9 +336,9 @@ fetchDataForRoute ({ route, pageData, key } as model) =
                         |> Tuple.mapSecond (Cmd.map AdminCustomerPaginationMsg)
 
                 Admin (CustomerEdit customerId) ->
-                    ( { pageData | adminEditCustomer = RemoteData.Loading }
-                    , getAdminEditCustomerData customerId
-                    )
+                    { pageData | adminEditCustomer = RemoteData.Loading }
+                        |> fetchLocationsOnce
+                        |> batchCommand (getAdminEditCustomerData customerId)
 
                 Admin ProductList ->
                     ( { pageData | adminProductList = RemoteData.Loading }
