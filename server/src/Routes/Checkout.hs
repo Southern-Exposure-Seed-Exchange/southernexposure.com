@@ -543,6 +543,7 @@ customerPlaceOrderRoute = validateCookieAndParameters $ \ce@(Entity customerId c
                     (_, Nothing) ->
                         throwM StripeTokenRequired
         deleteCart cartId
+        reduceQuantities orderId
         return orderId
     cfg <- ask
     runDB (Emails.getEmailData $ Emails.OrderPlaced orderId)
@@ -743,6 +744,7 @@ anonymousPlaceOrderRoute = validate >=> \parameters -> do
                     (_, Nothing) ->
                         throwM StripeTokenRequired
         deleteCart cartId
+        reduceQuantities orderId
         orderLines <- selectList [OrderLineItemOrderId ==. orderId] []
         products <- getCheckoutProducts orderId
         return
@@ -1116,6 +1118,16 @@ createProducts items orderId =
                 , orderProductQuantity = cidQuantity
                 , orderProductPrice = getVariantPrice cidVariant
                 }
+
+
+-- | Reduce the quantities of purchased products.
+reduceQuantities :: OrderId -> AppSQL ()
+reduceQuantities orderId =
+    selectList [OrderProductOrderId ==. orderId] [] >>=
+    mapM_ (\(Entity _ p) ->
+        update (orderProductProductVariantId p)
+            [ProductVariantQuantity -=. fromIntegral (orderProductQuantity p)]
+    )
 
 
 -- SUCCESS DETAILS
