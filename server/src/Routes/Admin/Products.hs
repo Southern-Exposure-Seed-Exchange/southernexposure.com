@@ -26,14 +26,17 @@ import Text.HTML.SanitizeXSS (sanitize)
 
 import Auth (WrappedAuthToken, Cookied, withAdminCookie, validateAdminAndParameters)
 import Config (Config(getCaches))
-import Cache (Caches(getCategoryPredecessorCache), CategoryPredecessorCache, queryCategoryPredecessorCache)
+import Cache (Caches(getCategoryPredecessorCache))
 import Models
     ( EntityField(..), Product(..), ProductId, ProductVariant(..), ProductVariantId
     , SeedAttribute(..), Category(..), CategoryId, Unique(..), slugify
     , ProductToCategory(..)
     )
 import Models.Fields (LotSize, Cents)
-import Routes.CommonData (getAdditionalCategories)
+import Routes.CommonData
+    ( AdminCategorySelect(acsName), makeAdminCategorySelect, validateCategorySelect
+    , getAdditionalCategories
+    )
 import Routes.Utils (activeVariantExists, makeImageFromBase64)
 import Server (App, AppSQL, runDB, serverError)
 import Validation (Validation(validators))
@@ -139,47 +142,19 @@ type SharedProductDataRoute =
 
 newtype SharedProductData =
     SharedProductData
-        { spdCategories :: [ProductCategory]
+        { spdCategories :: [AdminCategorySelect]
         } deriving (Show)
 
 instance ToJSON SharedProductData where
     toJSON SharedProductData {..} =
         object [ "categories" .= spdCategories ]
 
-data ProductCategory =
-    ProductCategory
-        { pcId :: CategoryId
-        , pcName :: T.Text
-        } deriving (Show)
-
-instance ToJSON ProductCategory where
-    toJSON ProductCategory {..} =
-        object
-            [ "id" .= pcId
-            , "name" .= pcName
-            ]
-
 sharedProductDataRoute :: WrappedAuthToken -> App (Cookied SharedProductData)
 sharedProductDataRoute t = withAdminCookie t $ \_ -> do
-    categories <- fmap (map makeProductCategory) . runDB $ selectList [] []
+    categories <- runDB $ selectList [] []
     categoryCache <- asks getCaches >>= fmap getCategoryPredecessorCache . liftIO . readTVarIO
-    return . SharedProductData . L.sortOn pcName $ map (prependParentNames categoryCache) categories
-  where
-    makeProductCategory :: Entity Category -> ProductCategory
-    makeProductCategory (Entity cId cat) =
-        ProductCategory
-            { pcId = cId
-            , pcName = categoryName cat
-            }
-    prependParentNames :: CategoryPredecessorCache -> ProductCategory -> ProductCategory
-    prependParentNames cache pc =
-        let predecessors = queryCategoryPredecessorCache (pcId pc) cache
-            newName =
-                T.intercalate " > "
-                    $ (++ [pcName pc])
-                    $ map (categoryName . entityVal)
-                    $ reverse predecessors
-        in pc { pcName = newName}
+    return . SharedProductData . L.sortOn acsName
+        $ map (makeAdminCategorySelect categoryCache) categories
 
 
 data ProductParameters =
@@ -215,7 +190,7 @@ instance Validation ProductParameters where
     validators ProductParameters {..} = do
         slugDoesntExist <- V.doesntExist $ UniqueProductSlug ppSlug
         skuDoesntExist <- V.doesntExist $ UniqueBaseSku ppBaseSku
-        categoryValidations <- getCategoryErrors ppCategories
+        categoryValidations <- validateCategorySelect ppCategories
         return $
             [ ( ""
               , [ ("At least one Variant is required.", null ppVariantData) ]
@@ -447,7 +422,7 @@ instance Validation EditProductParameters where
     validators EditProductParameters {..} = do
         let ProductParameters {..} = eppProduct
         productExists <- V.exists eppId
-        categoryValidations <- getCategoryErrors ppCategories
+        categoryValidations <- validateCategorySelect ppCategories
         return $
             [ ( ""
               , [ ("Could not find this product in the database.", productExists)
@@ -564,27 +539,3 @@ getDuplicateSuffixErrors variants =
                     )
                 )
                 duplicateIndexes
-
-
-getCategoryErrors :: [CategoryId] -> App [(T.Text, [(T.Text, Bool)])]
-getCategoryErrors categories =
-    if null categories then
-        return [ ("", [ ("At least one Category is required.", True) ]) ]
-    else
-        mapMWithIndex validateCategory categories
-  where
-    validateCategory :: Int -> CategoryId -> App (T.Text, [(T.Text, Bool)])
-    validateCategory index categoryId = do
-        let fieldName = "category-" <> T.pack (show index)
-        exists <- V.exists categoryId
-        return   ( fieldName, [ ("Could not find this Category in the database.", exists) ])
-    mapMWithIndex action =
-        go 0
-      where
-        go index = \case
-            [] ->
-                return []
-            next : rest ->
-                (:)
-                    <$> action index next
-                    <*> go (index + 1) rest

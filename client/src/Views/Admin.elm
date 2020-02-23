@@ -2,6 +2,7 @@ module Views.Admin exposing
     ( SearchableTableConfig
     , activeIcon
     , base64ImagePreview
+    , categorySelects
     , encodeImageData
     , equalsOriginal
     , formSavingClass
@@ -16,12 +17,17 @@ module Views.Admin exposing
 {-| Helper functions for the Admin views.
 -}
 
+import Api
+import Array exposing (Array)
 import Base64
+import Category exposing (CategoryId(..))
 import File exposing (File)
-import Html exposing (Html, button, div, form, img, input, span, table, tbody, text)
-import Html.Attributes exposing (class, disabled, name, src, type_, value)
-import Html.Events exposing (onClick, onInput, onSubmit)
+import Html exposing (Html, button, div, form, img, input, option, select, span, table, tbody, text)
+import Html.Attributes exposing (class, disabled, name, selected, src, type_, value)
+import Html.Events exposing (on, onClick, onInput, onSubmit, targetValue)
+import Json.Decode as Decode
 import Models.Utils exposing (slugify)
+import PageData
 import Paginate exposing (Paginated)
 import RemoteData exposing (WebData)
 import Task
@@ -162,6 +168,82 @@ formSavingClass { isSaving } =
 
     else
         ""
+
+
+{-| Render a Dropdown of Categories with buttons for removing & adding additional dropdowns.
+-}
+categorySelects :
+    (Int -> CategoryId -> msg)
+    -> msg
+    -> (Int -> msg)
+    -> { a | errors : Api.FormErrors, categories : Array CategoryId }
+    -> List PageData.AdminCategorySelect
+    -> Html msg
+categorySelects selectMsg addMsg removeMsg model categories =
+    let
+        renderSelect index category =
+            div [ class "mb-2 d-flex align-items-center" ]
+                [ select
+                    [ class "form-control d-inline-block  w-75"
+                    , onSelect index
+                    ]
+                  <|
+                    blankOption category
+                        ++ List.map (renderCategoryOption category) categories
+                , if index /= 0 then
+                    button
+                        [ class "btn btn-sm btn-danger ml-2"
+                        , onClick <| removeMsg index
+                        , type_ "button"
+                        ]
+                        [ icon "times" ]
+
+                  else
+                    text ""
+                , Api.getErrorHtml ("category-" ++ String.fromInt index) model.errors
+                ]
+
+        onSelect index =
+            targetValue
+                |> Decode.andThen decoder
+                |> Decode.map (selectMsg index)
+                |> on "change"
+
+        decoder str =
+            case Category.idParser str of
+                Ok x ->
+                    Decode.succeed x
+
+                Err e ->
+                    Decode.fail e
+
+        renderCategoryOption category { id, name } =
+            option
+                [ value <| (\(CategoryId i) -> String.fromInt i) id
+                , selected <| id == category
+                ]
+                [ text name ]
+
+        blankOption category =
+            if category == CategoryId 0 then
+                [ option [ value "", selected True ] [ text "" ] ]
+
+            else
+                []
+    in
+    Form.withLabel "Categories"
+        True
+    <|
+        [ div [] <|
+            Array.toList <|
+                Array.indexedMap renderSelect model.categories
+        , button
+            [ class "btn btn-sm btn-secondary"
+            , type_ "button"
+            , onClick addMsg
+            ]
+            [ text "Add Category" ]
+        ]
 
 
 {-| Check to see if the new value for an Edit Form's field is equal to the

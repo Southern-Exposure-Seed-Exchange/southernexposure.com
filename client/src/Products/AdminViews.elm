@@ -41,7 +41,7 @@ import Validation
 import Views.Admin as Admin
 import Views.HorizontalForm as Form
 import Views.Images exposing (media)
-import Views.Utils exposing (icon, routeLinkAttributes, selectImageFile)
+import Views.Utils exposing (routeLinkAttributes, selectImageFile)
 
 
 
@@ -760,7 +760,7 @@ formView buttonText submitMsg msgWrapper model { categories } =
             , h3 [] [ text "Base Product" ]
             , inputRow .name InputName True "Name" "name" "text" "off"
             , inputRow .slug InputSlug True "Slug" "slug" "text" "off"
-            , categorySelects model categories
+            , Admin.categorySelects SelectCategory AddCategory RemoveCategory model categories
             , inputRow .baseSku InputBaseSku True "Base SKU" "baseSku" "text" "off"
             , Form.textareaRow model.errors model.description InputDescription False "Description" "description" 10
             , inputRow .keywords InputKeywords False "Search Keywords" "keywords" "text" "off"
@@ -785,76 +785,6 @@ formView buttonText submitMsg msgWrapper model { categories } =
                     [ text "Add Variant" ]
                 ]
             ]
-
-
-{-| Render the category selection inputs.
--}
-categorySelects : Form -> List PageData.AdminProductCategory -> Html FormMsg
-categorySelects model categories =
-    let
-        renderSelect index category =
-            div [ class "mb-2 d-flex align-items-center" ]
-                [ select
-                    [ class "form-control d-inline-block  w-75"
-                    , onSelect index
-                    ]
-                  <|
-                    blankOption category
-                        ++ List.map (renderCategoryOption category) categories
-                , if index /= 0 then
-                    button
-                        [ class "btn btn-sm btn-danger ml-2"
-                        , onClick <| RemoveCategory index
-                        , type_ "button"
-                        ]
-                        [ icon "times" ]
-
-                  else
-                    text ""
-                , Api.getErrorHtml ("category-" ++ String.fromInt index) model.errors
-                ]
-
-        onSelect index =
-            targetValue
-                |> Decode.andThen decoder
-                |> Decode.map (SelectCategory index)
-                |> on "change"
-
-        decoder str =
-            case Category.idParser str of
-                Ok x ->
-                    Decode.succeed x
-
-                Err e ->
-                    Decode.fail e
-
-        renderCategoryOption category { id, name } =
-            option
-                [ value <| (\(CategoryId i) -> String.fromInt i) id
-                , selected <| id == category
-                ]
-                [ text name ]
-
-        blankOption category =
-            if category == CategoryId 0 then
-                [ option [ value "", selected True ] [ text "" ] ]
-
-            else
-                []
-    in
-    Form.withLabel "Categories"
-        True
-    <|
-        [ div [] <|
-            Array.toList <|
-                Array.indexedMap renderSelect model.categories
-        , button
-            [ class "btn btn-sm btn-secondary"
-            , type_ "button"
-            , onClick AddCategory
-            ]
-            [ text "Add Category" ]
-        ]
 
 
 {-| Render the sub-form for ProductVariants.

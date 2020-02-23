@@ -1,6 +1,7 @@
 module PageData exposing
     ( AddressDetails
     , AdminCategoryListData
+    , AdminCategorySelect
     , AdminComment
     , AdminCouponListData
     , AdminEditCategoryData
@@ -14,7 +15,6 @@ module PageData exposing
     , AdminNewCategoryData
     , AdminOrderDetails
     , AdminPageListData
-    , AdminProductCategory
     , AdminProductListData
     , AdminSharedProductData
     , AdvancedSearch
@@ -961,7 +961,7 @@ adminListProductDecoder =
 
 
 type alias AdminSharedProductData =
-    { categories : List AdminProductCategory
+    { categories : List AdminCategorySelect
     }
 
 
@@ -972,15 +972,15 @@ adminNewProductDataDecoder =
             Decode.list adminProductCategoryDecoder
 
 
-type alias AdminProductCategory =
+type alias AdminCategorySelect =
     { id : CategoryId
     , name : String
     }
 
 
-adminProductCategoryDecoder : Decoder AdminProductCategory
+adminProductCategoryDecoder : Decoder AdminCategorySelect
 adminProductCategoryDecoder =
-    Decode.map2 AdminProductCategory
+    Decode.map2 AdminCategorySelect
         (Decode.field "id" <| Decode.map CategoryId Decode.int)
         (Decode.field "name" Decode.string)
 

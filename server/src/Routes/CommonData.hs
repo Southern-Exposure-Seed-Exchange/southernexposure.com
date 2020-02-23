@@ -19,6 +19,9 @@ module Routes.CommonData
     , categoryToPredecessor
     , CategoryData(cdDescription)
     , makeCategoryData
+    , AdminCategorySelect(..)
+    , makeAdminCategorySelect
+    , validateCategorySelect
     , AuthorizationData
     , toAuthorizationData
     , CartItemData(..)
@@ -55,6 +58,7 @@ import Database.Persist ((==.), (>=.), (<=.), Entity(..), SelectOpt(Asc), select
 import Numeric.Natural (Natural)
 
 import Avalara (CreateTransactionRequest(..), AddressInfo(..))
+import Cache (CategoryPredecessorCache, queryCategoryPredecessorCache)
 import Config
 import Images
 import Models
@@ -312,6 +316,64 @@ makeCategoryData (Entity cId Category {..}) = do
         , cdOrder = categoryOrder
         }
 
+
+-- | Used in Category Select Dropdowns in the Admin site.
+data AdminCategorySelect =
+    AdminCategorySelect
+        { acsId :: CategoryId
+        , acsName :: T.Text
+        } deriving (Show)
+
+instance ToJSON AdminCategorySelect where
+    toJSON AdminCategorySelect {..} =
+        object
+            [ "id" .= acsId
+            , "name" .= acsName
+            ]
+
+-- | Build an AdminCategorySelect by prepending the parent category names
+-- to the main category name.
+makeAdminCategorySelect :: CategoryPredecessorCache -> Entity Category -> AdminCategorySelect
+makeAdminCategorySelect cache (Entity cId cat) =
+    prependParentNames AdminCategorySelect
+        { acsId = cId
+        , acsName = categoryName cat
+        }
+  where
+    prependParentNames :: AdminCategorySelect -> AdminCategorySelect
+    prependParentNames acs =
+        let predecessors = queryCategoryPredecessorCache (acsId acs) cache
+            newName =
+                T.intercalate " > "
+                    $ (++ [acsName acs])
+                    $ map (categoryName . entityVal)
+                    $ reverse predecessors
+        in acs { acsName = newName}
+
+-- | Validate a mutli-category select field by ensuring at least one
+-- category is selected & all the Categories exist in the database.
+validateCategorySelect :: [CategoryId] -> App [(T.Text, [(T.Text, Bool)])]
+validateCategorySelect categories =
+    if null categories then
+        return [ ("", [ ("At least one Category is required.", True) ]) ]
+    else
+        mapMWithIndex validateCategory categories
+  where
+    validateCategory :: Int -> CategoryId -> App (T.Text, [(T.Text, Bool)])
+    validateCategory index categoryId = do
+        let fieldName = "category-" <> T.pack (show index)
+        exists <- V.exists categoryId
+        return   ( fieldName, [ ("Could not find this Category in the database.", exists) ])
+    mapMWithIndex action =
+        go 0
+      where
+        go index = \case
+            [] ->
+                return []
+            next : rest ->
+                (:)
+                    <$> action index next
+                    <*> go (index + 1) rest
 
 
 -- Customers
