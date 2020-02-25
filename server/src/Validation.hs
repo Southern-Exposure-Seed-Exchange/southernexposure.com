@@ -7,6 +7,7 @@ module Validation
     , singleFieldError
     , validateMap
     , mapCheck
+    , prefixFields
     , required
     , doesntExist
     , noMatches
@@ -96,6 +97,10 @@ validateMap funcs =
 -- | Apply a validation to the inner value of a 'Maybe'.
 mapCheck :: Maybe a -> (a -> (FieldName, [(ErrorMessage, Bool)])) -> Maybe (FieldName, [(ErrorMessage, Bool)])
 mapCheck = flip fmap
+
+prefixFields :: T.Text -> [(FieldName, [(ErrorMessage, Bool)])] -> [(FieldName, [(ErrorMessage, Bool)])]
+prefixFields pfx =
+    map (\(fn, errs) -> (pfx <> fn, errs))
 
 required :: T.Text -> (T.Text, Bool)
 required text =

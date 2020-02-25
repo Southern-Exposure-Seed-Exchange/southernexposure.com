@@ -13,6 +13,7 @@ import Routes.Admin.Customers
 import Routes.Admin.Orders
 import Routes.Admin.Products
 import Routes.Admin.StaticPages
+import Routes.Admin.Surcharges
 import Server (App)
 
 type AdminAPI =
@@ -22,6 +23,7 @@ type AdminAPI =
     :<|> "customers" :> CustomerAPI
     :<|> "products" :> ProductAPI
     :<|> "coupons" :> CouponAPI
+    :<|> "surcharges" :> SurchargesAPI
 
 
 adminRoutes :: ServerT AdminAPI App
@@ -32,3 +34,4 @@ adminRoutes =
     :<|> customerRoutes
     :<|> productRoutes
     :<|> couponRoutes
+    :<|> surchargesRoutes
