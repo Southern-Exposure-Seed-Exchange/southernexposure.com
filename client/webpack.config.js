@@ -200,7 +200,7 @@ module.exports = {
       'frame-src': ["'self'", "https://checkout.stripe.com", "https://www.farmraiser.com"],
       'script-src': ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://www.googletagmanager.com", "https://www.google-analytics.com/", "https://checkout.stripe.com"],
       'img-src': ["'self'", "data:", "https://www.googletagmanager.com", "https://www.google-analytics.com/", "https://stats.g.doubleclick.net/", "https://www.google.com", "https://*.stripe.com"],
-      'font-src': ["'self'", "https://fonts.gstatic.com"],
+      'font-src': ["'self'", "data:", "https://fonts.gstatic.com"],
       'style-src': ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
     }, {
       hashEnabled: {
