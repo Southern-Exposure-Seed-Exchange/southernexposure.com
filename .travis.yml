@@ -2,7 +2,7 @@
 # Have Travis Setup Node, We Will Provide the Server Build Tools
 language: elm
 node_js:
-    - "12"
+    - "13"
 os: linux
 dist: bionic
 
