@@ -39,6 +39,7 @@ module PageData exposing
     , SearchResults
     , addressDetailsDecoder
     , adminCategoryListDataDecoder
+    , adminCategorySelectDecoder
     , adminCouponListDataDecoder
     , adminEditCategoryDataDecoder
     , adminEditCouponDataDecoder
@@ -969,7 +970,7 @@ adminNewProductDataDecoder : Decoder AdminSharedProductData
 adminNewProductDataDecoder =
     Decode.map AdminSharedProductData <|
         Decode.field "categories" <|
-            Decode.list adminProductCategoryDecoder
+            Decode.list adminCategorySelectDecoder
 
 
 type alias AdminCategorySelect =
@@ -978,8 +979,8 @@ type alias AdminCategorySelect =
     }
 
 
-adminProductCategoryDecoder : Decoder AdminCategorySelect
-adminProductCategoryDecoder =
+adminCategorySelectDecoder : Decoder AdminCategorySelect
+adminCategorySelectDecoder =
     Decode.map2 AdminCategorySelect
         (Decode.field "id" <| Decode.map CategoryId Decode.int)
         (Decode.field "name" Decode.string)

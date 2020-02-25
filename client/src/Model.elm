@@ -29,6 +29,7 @@ import Views.CouponAdmin as CouponAdmin
 import Views.CustomerAdmin as CustomerAdmin
 import Views.OrderAdmin as OrderAdmin
 import Views.StaticPageAdmin as StaticPageAdmin
+import Views.SurchargesAdmin as SurchargesAdmin
 
 
 type alias Model =
@@ -61,6 +62,7 @@ type alias Model =
     , editProductForm : ProductAdmin.EditForm
     , newCouponForm : CouponAdmin.NewForm
     , editCouponForm : CouponAdmin.EditForm
+    , surchargeForm : SurchargesAdmin.Form
     , cartItemCount : Int
     , maybeSessionToken : Maybe String
     , currentUser : AuthStatus
@@ -108,6 +110,7 @@ initial key route =
     , editProductForm = ProductAdmin.initialEditForm
     , newCouponForm = CouponAdmin.initialNewForm
     , editCouponForm = CouponAdmin.initialEditForm
+    , surchargeForm = SurchargesAdmin.initialForm
     , cartItemCount = 0
     , maybeSessionToken = Nothing
     , currentUser = User.unauthorized

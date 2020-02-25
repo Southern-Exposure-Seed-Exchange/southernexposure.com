@@ -48,6 +48,7 @@ import Views.CouponAdmin as CouponAdmin
 import Views.CustomerAdmin as CustomerAdmin
 import Views.OrderAdmin as OrderAdmin
 import Views.StaticPageAdmin as StaticPageAdmin
+import Views.SurchargesAdmin as SurchargesAdmin
 
 
 main : Program Flags Model Msg
@@ -369,6 +370,11 @@ fetchDataForRoute ({ route, pageData, key } as model) =
                 Admin (CouponEdit couponId) ->
                     ( { pageData | adminEditCoupon = RemoteData.Loading }
                     , getAdminEditCouponData couponId
+                    )
+
+                Admin Surcharges ->
+                    ( pageData
+                    , SurchargesAdmin.getSurcharges |> Cmd.map SurchargesMsg
                     )
 
                 Redirect path ->
@@ -1077,6 +1083,11 @@ update msg ({ pageData, key } as model) =
                 |> Tuple.mapFirst (\form -> { model | editCouponForm = form })
                 |> Tuple.mapSecond (Cmd.map EditCouponMsg)
 
+        SurchargesMsg subMsg ->
+            SurchargesAdmin.updateForm key subMsg model.surchargeForm
+                |> Tuple.mapFirst (\form -> { model | surchargeForm = form })
+                |> Tuple.mapSecond (Cmd.map SurchargesMsg)
+
         ReAuthorize response ->
             case response of
                 RemoteData.Success authStatus ->
@@ -1641,6 +1652,9 @@ runOnCurrentWebData runner { pageData, route } =
         Admin (CouponEdit _) ->
             justRunner pageData.adminEditCoupon
 
+        Admin Surcharges ->
+            runner <| Just <| RemoteData.Success ()
+
 
 {-| Update the current page number using the Paginated data.
 
@@ -1758,6 +1772,9 @@ resetForm oldRoute model =
 
                 CouponEdit _ ->
                     { model | editCouponForm = CouponAdmin.initialEditForm }
+
+                Surcharges ->
+                    { model | surchargeForm = SurchargesAdmin.initialForm }
     in
     case oldRoute of
         ProductDetails _ ->

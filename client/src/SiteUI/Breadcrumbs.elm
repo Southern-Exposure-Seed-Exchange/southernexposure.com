@@ -188,6 +188,9 @@ view route pageData =
                     , activeItem "Edit Coupon"
                     ]
 
+                Admin Surcharges ->
+                    singleItem "Surcharges"
+
                 Redirect _ ->
                     singleItem "Redirecting..."
 

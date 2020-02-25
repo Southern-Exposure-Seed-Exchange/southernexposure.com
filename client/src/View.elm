@@ -42,6 +42,7 @@ import Views.CouponAdmin as CouponAdmin
 import Views.CustomerAdmin as CustomerAdmin
 import Views.OrderAdmin as OrderAdmin
 import Views.StaticPageAdmin as StaticPageAdmin
+import Views.SurchargesAdmin as SurchargesAdmin
 import Views.Utils exposing (pageOverlay, rawHtml)
 
 
@@ -245,6 +246,10 @@ view ({ route, pageData, navigationData, zone } as model) =
                 Admin (CouponEdit _) ->
                     withIntermediateText (CouponAdmin.edit model.editCouponForm) pageData.adminEditCoupon
                         |> List.map (Html.map EditCouponMsg)
+
+                Admin Surcharges ->
+                    SurchargesAdmin.view model.surchargeForm
+                        |> List.map (Html.map SurchargesMsg)
 
         apply : (a -> b -> c) -> ( a, b ) -> c
         apply f ( a, b ) =
@@ -469,6 +474,9 @@ adminTitle ({ pageData } as model) adminRoute =
                 |> RemoteData.toMaybe
                 |> Maybe.withDefault ""
                 |> (\code -> "Edit Coupon" ++ code)
+
+        Surcharges ->
+            "Edit Surcharges"
 
 
 pageImage : Model -> Maybe String

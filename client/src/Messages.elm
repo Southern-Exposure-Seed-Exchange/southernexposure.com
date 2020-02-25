@@ -30,6 +30,7 @@ import Views.CouponAdmin as CouponAdmin
 import Views.CustomerAdmin as CustomerAdmin
 import Views.OrderAdmin as OrderAdmin
 import Views.StaticPageAdmin as StaticPageAdmin
+import Views.SurchargesAdmin as SurchargesAdmin
 
 
 type Msg
@@ -79,6 +80,7 @@ type Msg
     | EditProductMsg ProductAdmin.EditMsg
     | NewCouponMsg CouponAdmin.NewMsg
     | EditCouponMsg CouponAdmin.EditMsg
+    | SurchargesMsg SurchargesAdmin.Msg
       -- API Requests
     | ReAuthorize (WebData User.AuthStatus)
     | LogOutResponse (WebData ())
