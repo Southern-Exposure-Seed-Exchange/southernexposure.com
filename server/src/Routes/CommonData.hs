@@ -24,6 +24,8 @@ module Routes.CommonData
     , validateCategorySelect
     , AuthorizationData
     , toAuthorizationData
+    , LoginParameters(..)
+    , validatePassword
     , CartItemData(..)
     , getCartItems
     , CartCharges(..)
@@ -46,16 +48,22 @@ module Routes.CommonData
 import Prelude hiding (product)
 
 import Control.Monad.IO.Class (MonadIO, liftIO)
-import Control.Monad.Reader (MonadReader, lift, asks)
+import Control.Monad.Reader (MonadReader, lift, asks, void, when)
 import Data.Aeson ((.=), (.:), (.:?), ToJSON(..), FromJSON(..), object, withObject)
+import Data.Digest.Pure.MD5 (md5)
 import Data.Int (Int64)
 import Data.List (intersect)
 import Data.Maybe (mapMaybe, listToMaybe, fromMaybe, maybeToList)
 import Data.Monoid ((<>))
 import Data.Ratio ((%))
+import Data.Text.Encoding (encodeUtf8, decodeUtf8)
 import Data.Time (UTCTime, getCurrentTime)
-import Database.Persist ((==.), (>=.), (<=.), Entity(..), SelectOpt(Asc), selectList, getBy)
+import Database.Persist
+    ( (=.), (==.), (>=.), (<=.), Entity(..), SelectOpt(Asc), selectList, getBy
+    , update
+    )
 import Numeric.Natural (Natural)
+import Servant (errBody, err500)
 
 import Avalara (CreateTransactionRequest(..), AddressInfo(..))
 import Cache (CategoryPredecessorCache, queryCategoryPredecessorCache)
@@ -67,6 +75,8 @@ import Server
 import Validation (Validation(..))
 
 import qualified Avalara
+import qualified Crypto.BCrypt as BCrypt
+import qualified Data.ByteString.Lazy as LBS
 import qualified Data.ISO3166_CountryCodes as CountryCodes
 import qualified Data.StateCodes as StateCodes
 import qualified Data.List as L
@@ -400,6 +410,103 @@ toAuthorizationData (Entity customerId customer) =
         , adEmail = customerEmail customer
         , adIsAdmin = customerIsAdmin customer
         }
+
+
+data LoginParameters =
+    LoginParameters
+        { lpEmail :: T.Text
+        , lpPassword :: T.Text
+        , lpCartToken :: Maybe T.Text
+        , lpRemember :: Bool
+        }
+
+instance FromJSON LoginParameters where
+    parseJSON =
+        withObject "LoginParameters" $ \v ->
+            LoginParameters
+                <$> v .: "email"
+                <*> v .: "password"
+                <*> v .:? "sessionToken"
+                <*> v .: "remember"
+
+-- | Validate a login attempt by querying for a matching Customer and
+-- comparing password hashes.
+--
+-- If normal BCrypt hashing fails, we also attempt ZenCart's hashing
+-- scheme. If that passes, we upgrade the stored hash to BCrypt.
+--
+-- If the BCrypt hash matches but uses an outdated hashing policy, the
+-- password hash will be upgraded to the current
+-- 'BCrypt.slowerBcryptHashingPolicy'.
+--
+-- A 422 error will be thrown if the email/password are invalid. A 500
+-- error will be thrown if the hashing policy is invalid.
+validatePassword :: LoginParameters -> App (Entity Customer)
+validatePassword LoginParameters {..} = do
+    maybeCustomer <- runDB $ getCustomerByEmail lpEmail
+    case maybeCustomer of
+        Just e@(Entity customerId customer) -> do
+            when (T.null $ customerEncryptedPassword customer) resetRequiredError
+            let hashedPassword =
+                    encodeUtf8 $ customerEncryptedPassword customer
+                isValid =
+                    BCrypt.validatePassword hashedPassword
+                        (encodeUtf8 lpPassword)
+                usesPolicy =
+                    BCrypt.hashUsesPolicy BCrypt.slowerBcryptHashingPolicy
+                        hashedPassword
+            if isValid && usesPolicy then
+                return e
+            else if isValid then
+                makeNewPasswordHash customerId >> return e
+            else
+                validateZencartPassword e
+        Nothing ->
+            hashAnyways authorizationError
+  where
+    resetRequiredError =
+        void . hashAnyways $ V.singleError
+            "Sorry, you need to reset your password before logging in."
+    authorizationError =
+        V.singleError "Invalid Email or Password."
+    -- Hash the password without trying to validate it to prevent
+    -- mining of valid logins.
+    hashAnyways :: App a -> App a
+    hashAnyways returnValue = do
+        hash <- liftIO . BCrypt.hashPasswordUsingPolicy BCrypt.slowerBcryptHashingPolicy
+            $ encodeUtf8 lpPassword
+        const returnValue $! hash
+    -- Try to use Zencart's password hashing scheme to validate the
+    -- user's password. If it is valid, upgrade to the BCrypt hashing
+    -- scheme.
+    validateZencartPassword :: Entity Customer -> App (Entity Customer)
+    validateZencartPassword e@(Entity customerId customer) =
+        case T.splitOn ":" (customerEncryptedPassword customer) of
+            [passwordHash, salt] ->
+                if T.length salt == 2 then
+                    let isValid =
+                            T.pack (show . md5 . LBS.fromStrict . encodeUtf8 $ salt <> lpPassword)
+                                == passwordHash
+                    in
+                        if isValid then
+                            makeNewPasswordHash customerId >> return e
+                        else
+                            authorizationError
+                else
+                    authorizationError
+            _ ->
+                authorizationError
+    -- Upgrade the Customer's password by hashing it using the current
+    -- BCrypt hashing policy.
+    makeNewPasswordHash :: CustomerId -> App ()
+    makeNewPasswordHash customerId = do
+        maybeNewHash <- liftIO . BCrypt.hashPasswordUsingPolicy
+            BCrypt.slowerBcryptHashingPolicy
+            $ encodeUtf8 lpPassword
+        newHash <- maybe
+            (serverError $ err500 { errBody = "Misconfigured Hashing Policy" })
+            (return . decodeUtf8) maybeNewHash
+        runDB $ update customerId [CustomerEncryptedPassword =. newHash]
 
 
 -- Carts

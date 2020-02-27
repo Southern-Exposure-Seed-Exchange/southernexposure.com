@@ -18,12 +18,10 @@ import Control.Monad ((>=>), (<=<), when, void)
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Reader (ask)
 import Data.Aeson (ToJSON(..), FromJSON(..), (.=), (.:), (.:?), withObject, object)
-import Data.Digest.Pure.MD5 (md5)
 import Data.Int (Int64)
 import Data.List (partition)
 import Data.Maybe (fromMaybe)
 import Data.Monoid ((<>))
-import Data.Text.Encoding (encodeUtf8, decodeUtf8)
 import Data.Time.Clock (UTCTime, getCurrentTime, addUTCTime)
 import Data.Typeable (Typeable)
 import Database.Persist
@@ -32,7 +30,7 @@ import Database.Persist
     )
 import Database.Persist.Sql (toSqlKey)
 import Servant
-    ( (:>), (:<|>)(..), AuthProtect, ReqBody, JSON, Get, Post, Put, errBody
+    ( (:>), (:<|>)(..), AuthProtect, ReqBody, JSON, Get, Post, Put
     , err403, err404, err500, QueryParam, Capture, Delete
     )
 
@@ -42,15 +40,13 @@ import Models.Fields
     (ArmedForcesRegionCode, armedForcesRegion, Cents(..), creditLineItemTypes)
 import Routes.CommonData
     ( AuthorizationData, toAuthorizationData, AddressData(..), toAddressData
-    , fromAddressData
+    , fromAddressData, LoginParameters(..), validatePassword
     )
 import Routes.Utils (generateUniqueToken, hashPassword)
 import Server
 import Validation (Validation(..))
 import Workers (Task(..), enqueueTask)
 
-import qualified Crypto.BCrypt as BCrypt
-import qualified Data.ByteString.Lazy as LBS
 import qualified Data.CAProvinceCodes as CACodes
 import qualified Data.ISO3166_CountryCodes as CountryCodes
 import qualified Data.StateCodes as StateCodes
@@ -242,109 +238,17 @@ registrationRoute = validate >=> \parameters -> do
 -- LOGIN
 
 
-data LoginParameters =
-    LoginParameters
-        { lpEmail :: T.Text
-        , lpPassword :: T.Text
-        , lpCartToken :: Maybe T.Text
-        , lpRemember :: Bool
-        }
-
-instance FromJSON LoginParameters where
-    parseJSON =
-        withObject "LoginParameters" $ \v ->
-            LoginParameters
-                <$> v .: "email"
-                <*> v .: "password"
-                <*> v .:? "sessionToken"
-                <*> v .: "remember"
-
 type LoginRoute =
        ReqBody '[JSON] LoginParameters
     :> Post '[JSON] (Cookied AuthorizationData)
 
 loginRoute :: LoginParameters -> App (Cookied AuthorizationData)
-loginRoute LoginParameters { lpEmail, lpPassword, lpCartToken, lpRemember } =
-    let
-        authorizationError =
-            V.singleError "Invalid Email or Password."
-        resetRequiredError =
-            void . hashAnyways $ V.singleError
-                "Sorry, you need to reset your password before logging in."
-    in do
-        maybeCustomer <- runDB $ getCustomerByEmail lpEmail
-        case maybeCustomer of
-            Just e@(Entity customerId customer) -> do
-                isValid <- validatePassword e
-                when (customerEncryptedPassword customer == "") resetRequiredError
-                let sessionSettings = if lpRemember then permanentSession else temporarySession
-                if isValid then
-                    runDB (maybeMergeCarts customerId lpCartToken) >>
-                    addSessionCookie sessionSettings (makeToken customer)
-                        (toAuthorizationData e)
-                else
-                    authorizationError
-            Nothing ->
-                hashAnyways authorizationError
-    where
-        -- Hash the password without trying to validate it to prevent
-        -- mining of valid logins.
-        hashAnyways :: App a -> App a
-        hashAnyways returnValue = do
-            hash <- liftIO . BCrypt.hashPasswordUsingPolicy BCrypt.slowerBcryptHashingPolicy
-                $ encodeUtf8 lpPassword
-            const returnValue $! hash
-        -- Try to validate the customer's password via BCrypt, falling
-        -- back to ZenCart's hashing scheme on failure.
-        validatePassword :: Entity Customer -> App Bool
-        validatePassword c@(Entity customerId customer) =
-            let
-                hashedPassword =
-                    encodeUtf8 $ customerEncryptedPassword customer
-                isValid =
-                    BCrypt.validatePassword hashedPassword
-                        (encodeUtf8 lpPassword)
-                usesPolicy =
-                    BCrypt.hashUsesPolicy BCrypt.slowerBcryptHashingPolicy
-                        hashedPassword
-            in
-                if isValid && usesPolicy then
-                    return True
-                else if isValid then
-                    makeNewPasswordHash customerId >> return True
-                else
-                    validateZencartPassword c
-        -- Try to use Zencart's password hashing scheme to validate the
-        -- user's password. If it is valid, upgrade to the BCrypt hashing
-        -- scheme.
-        validateZencartPassword :: Entity Customer -> App Bool
-        validateZencartPassword (Entity customerId customer) =
-            case T.splitOn ":" (customerEncryptedPassword customer) of
-                [passwordHash, salt] ->
-                    if T.length salt == 2 then
-                        let isValid =
-                                T.pack (show . md5 . LBS.fromStrict . encodeUtf8 $ salt <> lpPassword)
-                                    == passwordHash
-                        in
-                            if isValid then
-                                makeNewPasswordHash customerId >> return True
-                            else
-                                return False
-                    else
-                        return False
-                _ ->
-                    return False
-        -- Upgrade the Customer's password by hashing it using the current
-        -- BCrypt hashing policy.
-        makeNewPasswordHash :: CustomerId -> App ()
-        makeNewPasswordHash customerId = do
-            maybeNewHash <- liftIO . BCrypt.hashPasswordUsingPolicy
-                BCrypt.slowerBcryptHashingPolicy
-                $ encodeUtf8 lpPassword
-            newHash <- maybe
-                (serverError $ err500 { errBody = "Misconfigured Hashing Policy" })
-                (return . decodeUtf8) maybeNewHash
-            runDB $ update customerId [CustomerEncryptedPassword =. newHash]
+loginRoute lp@LoginParameters { lpCartToken, lpRemember } = do
+    e@(Entity customerId customer) <- validatePassword lp
+    runDB $ maybeMergeCarts customerId lpCartToken
+    let sessionSettings = if lpRemember then permanentSession else temporarySession
+    addSessionCookie sessionSettings (makeToken customer)
+        $ toAuthorizationData e
 
 
 
