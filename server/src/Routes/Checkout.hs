@@ -14,7 +14,7 @@ import Control.Arrow (first)
 import Control.Exception.Safe (MonadThrow, MonadCatch, Exception, throwM, try)
 import Control.Monad ((>=>), (<=<), when, unless, void)
 import Control.Monad.Reader (asks, ask, lift, liftIO)
-import Data.Aeson ((.:), (.:?), (.=), FromJSON(..), ToJSON(..), withObject, object)
+import Data.Aeson ((.:), (.:?), (.=), FromJSON(..), ToJSON(..), Value(Object), withObject, object)
 import Data.Foldable (asum)
 import Data.Int (Int64)
 import Data.List (partition, find)
@@ -46,6 +46,7 @@ import Routes.CommonData
     , CartCharge(..), getCartItems, getCharges, AddressData(..), toAddressData
     , fromAddressData, ShippingCharge(..), VariantData(..), getVariantPrice
     , OrderDetails(..), toCheckoutOrder, getCheckoutProducts, CheckoutProduct
+    , LoginParameters(..), validatePassword
     )
 import Routes.AvalaraUtils (createAvalaraTransaction, createAvalaraCustomer)
 import Routes.Utils (hashPassword, generateUniqueToken)
@@ -66,6 +67,7 @@ type CheckoutAPI =
     :<|> "customer-place-order" :> CustomerPlaceOrderRoute
     :<|> "anonymous-details" :> AnonymousDetailsRoute
     :<|> "anonymous-place-order" :> AnonymousPlaceOrderRoute
+    :<|> "login" :> LoginRoute
     :<|> "success" :> SuccessRoute
 
 type CheckoutRoutes =
@@ -73,6 +75,7 @@ type CheckoutRoutes =
     :<|> (WrappedAuthToken -> CustomerPlaceOrderParameters -> App (Cookied PlaceOrderData))
     :<|> (AnonymousDetailsParameters -> App CheckoutDetailsData)
     :<|> (AnonymousPlaceOrderParameters -> App (Cookied AnonymousPlaceOrderData))
+    :<|> (CheckoutLoginParameters -> App (Cookied LoginData))
     :<|> (WrappedAuthToken -> SuccessParameters -> App (Cookied OrderDetails))
 
 checkoutRoutes :: CheckoutRoutes
@@ -81,6 +84,7 @@ checkoutRoutes =
     :<|> customerPlaceOrderRoute
     :<|> anonymousDetailsRoute
     :<|> anonymousPlaceOrderRoute
+    :<|> loginRoute
     :<|> customerSuccessRoute
 
 
@@ -192,29 +196,32 @@ type CustomerDetailsRoute =
     :> Post '[JSON] (Cookied CheckoutDetailsData)
 
 customerDetailsRoute :: WrappedAuthToken -> CustomerDetailsParameters -> App (Cookied CheckoutDetailsData)
-customerDetailsRoute token parameters = withValidatedCookie token $ \(Entity customerId customer) -> do
+customerDetailsRoute token parameters = withValidatedCookie token $ \customer ->
+    withCheckoutDetailsErrors . runDB $ getCustomerDetails customer parameters
+
+getCustomerDetails :: Entity Customer -> CustomerDetailsParameters -> AppSQL CheckoutDetailsData
+getCustomerDetails (Entity customerId customer) parameters = do
     let priorityShipping =
             cdpPriorityShipping parameters
     currentTime <- liftIO getCurrentTime
-    withCheckoutDetailsErrors . runDB $ do
-        customerAddresses <- selectList
-            [AddressCustomerId ==. customerId, AddressIsActive ==. True] []
-        let (shippingAddresses, billingAddresses) =
-                partition (\a -> addressType (entityVal a) == Shipping)
-                    customerAddresses
-        maybeShipping <- getShippingAddress parameters shippingAddresses
-        maybeCoupon <- mapException DetailsCouponError $ sequence
-            $ getCoupon currentTime (Just customerId) <$> cdpCouponCode parameters
-        items <- getCartItems $ \c ->
-            c E.^. CartCustomerId E.==. E.just (E.val customerId)
-        charges <- detailsCharges maybeShipping items maybeCoupon priorityShipping
-        return CheckoutDetailsData
-            { cddShippingAddresses = map toAddressData shippingAddresses
-            , cddBillingAddresses = map toAddressData billingAddresses
-            , cddItems = items
-            , cddCharges = charges
-            , cddStoreCredit = customerStoreCredit customer
-            }
+    customerAddresses <- selectList
+        [AddressCustomerId ==. customerId, AddressIsActive ==. True] []
+    let (shippingAddresses, billingAddresses) =
+            partition (\a -> addressType (entityVal a) == Shipping)
+                customerAddresses
+    maybeShipping <- getShippingAddress parameters shippingAddresses
+    maybeCoupon <- mapException DetailsCouponError $ sequence
+        $ getCoupon currentTime (Just customerId) <$> cdpCouponCode parameters
+    items <- getCartItems $ \c ->
+        c E.^. CartCustomerId E.==. E.just (E.val customerId)
+    charges <- detailsCharges maybeShipping items maybeCoupon priorityShipping
+    return CheckoutDetailsData
+        { cddShippingAddresses = map toAddressData shippingAddresses
+        , cddBillingAddresses = map toAddressData billingAddresses
+        , cddItems = items
+        , cddCharges = charges
+        , cddStoreCredit = customerStoreCredit customer
+        }
     where
         getShippingAddress :: CustomerDetailsParameters -> [Entity Address] -> AppSQL (Maybe AddressData)
         getShippingAddress ps addrs =
@@ -1128,6 +1135,55 @@ reduceQuantities orderId =
         update (orderProductProductVariantId p)
             [ProductVariantQuantity -=. fromIntegral (orderProductQuantity p)]
     )
+
+
+-- LOGIN
+
+data CheckoutLoginParameters =
+    CheckoutLoginParameters
+        { clpLogin :: LoginParameters
+        , clpDetails :: CustomerDetailsParameters
+        }
+
+instance FromJSON CheckoutLoginParameters where
+    parseJSON = withObject "CheckoutLoginParameters" $ \v ->
+        CheckoutLoginParameters
+            <$> parseJSON (Object v)
+            <*> parseJSON (Object v)
+
+data LoginData =
+    LoginData
+        { ldAuth :: AuthorizationData
+        , ldDetails :: CheckoutDetailsData
+        }
+
+instance ToJSON LoginData where
+    toJSON ld =
+        object
+            [ "authData" .= ldAuth ld
+            , "details" .= ldDetails ld
+            ]
+
+type LoginRoute =
+       ReqBody '[JSON] CheckoutLoginParameters
+    :> Post '[JSON] (Cookied LoginData)
+
+-- | Attempt to log the customer into their account. Note that this
+-- differs from the Customer's login route - this route removes the
+-- account's cart instead of merging the two together.
+loginRoute :: CheckoutLoginParameters -> App (Cookied LoginData)
+loginRoute CheckoutLoginParameters { clpLogin, clpDetails } = do
+    e@(Entity customerId customer) <- validatePassword clpLogin
+    runDB $ do
+        getBy (UniqueCustomerCart $ Just customerId) >>= mapM_ (E.deleteCascade . entityKey)
+        mapM_ (`mergeAnonymousCart` customerId) $ lpCartToken clpLogin
+    details <- withCheckoutDetailsErrors . runDB $ getCustomerDetails e clpDetails
+    let sessionSettings = if lpRemember clpLogin then permanentSession else temporarySession
+        authData = toAuthorizationData e
+    addSessionCookie sessionSettings (makeToken customer) $ LoginData
+            { ldAuth = authData
+            , ldDetails = details
+            }
 
 
 -- SUCCESS DETAILS
