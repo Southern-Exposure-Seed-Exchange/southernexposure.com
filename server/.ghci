@@ -1,0 +1,8 @@
+:set -XScopedTypeVariables -XOverloadedStrings -XFlexibleContexts
+
+import Control.Monad.Logger (runStdoutLoggingT)
+import Data.Pool (Pool)
+import Database.Persist.Postgresql 
+
+(psql :: Pool SqlBackend) <- runStdoutLoggingT $ createPostgresqlPool "dbname=sese-website" 2
+runSql = (`runSqlPool` psql)
