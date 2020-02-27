@@ -558,10 +558,10 @@ validateForm model validateBilling validResult =
             if model.password /= model.passwordConfirm then
                 Dict.update "passwordConfirm"
                     (always <| Just [ "Your passwords do not match." ])
-                    model.errors
+                    Api.initialErrors
 
             else
-                model.errors
+                Api.initialErrors
 
         shippingErrors =
             checkAddressRegion model.shippingAddress

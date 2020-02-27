@@ -3,6 +3,13 @@ CHANGELOG
 =========
 
 
+v1.03.08
+=========
+
+* Fix re-submitting the Checkout form when a Stripe error is present.
+* Add Admin page for adding, editing, & deleting Surcharges.
+
+
 v1.03.07
 =========
 
