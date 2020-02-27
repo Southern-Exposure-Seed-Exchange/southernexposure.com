@@ -18,6 +18,7 @@ import Dict
 import Html exposing (..)
 import Html.Attributes as A exposing (alt, attribute, checked, class, colspan, for, id, minlength, name, required, rows, src, step, type_, value)
 import Html.Events exposing (onCheck, onClick, onInput, onSubmit)
+import Html.Extra exposing (viewIf)
 import Json.Decode as Decode
 import Json.Encode as Encode exposing (Value)
 import Locations exposing (AddressLocations)
@@ -50,6 +51,8 @@ type alias Form =
     { email : String
     , password : String
     , passwordConfirm : String
+    , rememberMe : Bool
+    , isLoginForm : Bool
     , shippingAddress : CheckoutAddress
     , makeShippingDefault : Bool
     , billingAddress : CheckoutAddress
@@ -69,6 +72,8 @@ initial =
     { email = ""
     , password = ""
     , passwordConfirm = ""
+    , rememberMe = True
+    , isLoginForm = False
     , shippingAddress = NewAddress Address.initialForm
     , makeShippingDefault = False
     , billingAddress = NewAddress Address.initialForm
@@ -108,6 +113,8 @@ initialWithDefaults shippingAddresses billingAddresses =
     { email = ""
     , password = ""
     , passwordConfirm = ""
+    , rememberMe = True
+    , isLoginForm = False
     , shippingAddress = shippingAddress
     , makeShippingDefault = isNew shippingAddress
     , billingAddress = billingAddress
@@ -130,6 +137,8 @@ type Msg
     = Email String
     | Password String
     | PasswordConfirm String
+    | ToggleRememberMe Bool
+    | ToggleLoginForm Bool
     | SelectShipping Int
     | ToggleShippingDefault Bool
     | ShippingMsg Address.Msg
@@ -143,6 +152,8 @@ type Msg
     | Comment String
     | ApplyCoupon
     | RemoveCoupon
+    | LogIn
+    | LogInResponse Bool (WebData (Result Api.FormErrors { authStatus : AuthStatus, details : PageData.CheckoutDetails }))
     | Submit
     | TokenReceived String
     | SubmitResponse (WebData (Result Api.FormErrors CheckoutResponse))
@@ -179,6 +190,7 @@ type OutMsg
     = AnonymousOrderCompleted Int AuthStatus
     | CustomerOrderCompleted Int
     | DetailsRefreshed PageData.CheckoutDetails
+    | LoggedIn AuthStatus PageData.CheckoutDetails
 
 
 subscriptions : Sub Msg
@@ -197,6 +209,12 @@ update msg model authStatus maybeSessionToken checkoutDetails =
 
         PasswordConfirm passwordConfirm ->
             { model | passwordConfirm = passwordConfirm } |> nothingAndNoCommand
+
+        ToggleRememberMe val ->
+            { model | rememberMe = val } |> nothingAndNoCommand
+
+        ToggleLoginForm val ->
+            { model | isLoginForm = val } |> nothingAndNoCommand
 
         SelectShipping addressId ->
             { model
@@ -260,6 +278,75 @@ update msg model authStatus maybeSessionToken checkoutDetails =
         Comment comment ->
             { model | comment = comment } |> nothingAndNoCommand
 
+        LogIn ->
+            ( { model | isProcessing = True }
+            , Nothing
+            , logIn False model maybeSessionToken
+            )
+
+        LogInResponse followWithSubmission response ->
+            case response of
+                RemoteData.Success (Ok resp) ->
+                    let
+                        checkoutDetails_ =
+                            RemoteData.Success resp.details
+
+                        (Cents finalTotal) =
+                            getFinalTotal resp.details model.storeCredit
+
+                        freeCheckout =
+                            PageData.isFreeCheckout checkoutDetails_
+                                || (finalTotal == 0)
+
+                        customerEmail =
+                            case resp.authStatus of
+                                User.Authorized user ->
+                                    user.email
+
+                                User.Anonymous ->
+                                    model.email
+
+                        isProcessing =
+                            followWithSubmission && freeCheckout
+
+                        cmd =
+                            if freeCheckout && followWithSubmission then
+                                placeOrder model resp.authStatus maybeSessionToken Nothing checkoutDetails_
+
+                            else if followWithSubmission then
+                                Ports.collectStripeToken ( customerEmail, finalTotal )
+
+                            else
+                                Cmd.none
+                    in
+                    ( { model
+                        | isProcessing = isProcessing
+                        , email = ""
+                        , password = ""
+                        , passwordConfirm = ""
+                      }
+                    , Just <| LoggedIn resp.authStatus resp.details
+                    , cmd
+                    )
+
+                RemoteData.Success (Err errors) ->
+                    ( { model | isProcessing = False, errors = errors }
+                    , Nothing
+                    , Ports.scrollToTop
+                    )
+
+                RemoteData.Failure error ->
+                    ( { model
+                        | isProcessing = False
+                        , errors = Api.apiFailureToError error
+                      }
+                    , Nothing
+                    , Ports.scrollToTop
+                    )
+
+                _ ->
+                    { model | isProcessing = False } |> nothingAndNoCommand
+
         Submit ->
             case checkoutDetails of
                 RemoteData.Success details ->
@@ -277,9 +364,18 @@ update msg model authStatus maybeSessionToken checkoutDetails =
 
                                 User.Anonymous ->
                                     model.email
+
+                        isAnonymous =
+                            authStatus == User.unauthorized
                     in
                     validateForm model (not freeCheckout) <|
-                        if freeCheckout then
+                        if model.isLoginForm && isAnonymous then
+                            ( { model | isProcessing = True }
+                            , Nothing
+                            , logIn True model maybeSessionToken
+                            )
+
+                        else if freeCheckout then
                             ( { model | isProcessing = True }
                             , Nothing
                             , placeOrder model authStatus maybeSessionToken Nothing checkoutDetails
@@ -555,7 +651,7 @@ validateForm model validateBilling validResult =
                     && Dict.isEmpty shippingErrors
 
         modelErrors =
-            if model.password /= model.passwordConfirm then
+            if model.password /= model.passwordConfirm && not model.isLoginForm then
                 Dict.update "passwordConfirm"
                     (always <| Just [ "Your passwords do not match." ])
                     Api.initialErrors
@@ -678,6 +774,39 @@ encodeStringAsMaybe str =
 
     else
         Encode.string str
+
+
+logIn : Bool -> Form -> Maybe String -> Cmd Msg
+logIn followWithSubmission model maybeSessionToken =
+    let
+        encodedAddress =
+            case model.shippingAddress of
+                ExistingAddress _ ->
+                    Encode.null
+
+                NewAddress f ->
+                    Address.encode f
+
+        loginData =
+            Encode.object
+                [ ( "email", Encode.string model.email )
+                , ( "password", Encode.string model.password )
+                , ( "sessionToken", Maybe.withDefault Encode.null <| Maybe.map Encode.string maybeSessionToken )
+                , ( "remember", Encode.bool model.rememberMe )
+                , ( "address", encodedAddress )
+                , ( "couponCode", encodeStringAsMaybe model.couponCode )
+                , ( "priorityShipping", Encode.bool model.priorityShipping )
+                ]
+
+        responseDecoder =
+            Decode.map2 (\auth details -> { authStatus = auth, details = details })
+                (Decode.field "authData" User.decoder)
+                (Decode.field "details" PageData.checkoutDetailsDecoder)
+    in
+    Api.post Api.CheckoutLogin
+        |> Api.withJsonBody loginData
+        |> Api.withErrorHandler responseDecoder
+        |> Api.sendRequest (LogInResponse followWithSubmission)
 
 
 placeOrder : Form -> AuthStatus -> Maybe String -> Maybe String -> WebData PageData.CheckoutDetails -> Cmd Msg
@@ -919,15 +1048,24 @@ view model authStatus locations checkoutDetails =
                     text ""
 
                 User.Anonymous ->
+                    let
+                        ( titleText, buttonText ) =
+                            if model.isLoginForm then
+                                ( "Login", "Create an Account" )
+
+                            else
+                                ( "Create an Account", "Already have an Account?" )
+                    in
                     div [ class "mb-3" ]
                         [ div [ class "" ]
-                            [ h4 [ class "d-flex flex-wrap justify-content-between align-items-baseline" ]
-                                [ span [] [ text "Create an Account" ]
-                                , a
-                                    (class "font-weight-bold small mb-0"
-                                        :: routeLinkAttributes (Login <| Just <| Routing.reverse Cart)
-                                    )
-                                    [ text "Already have an Account?" ]
+                            [ h4 [ class "d-flex flex-wrap align-items-baseline" ]
+                                [ span [ class "mr-4" ] [ text titleText ]
+                                , button
+                                    [ class "btn-link btn font-weight-bold p-0"
+                                    , type_ "button"
+                                    , onClick <| ToggleLoginForm <| not model.isLoginForm
+                                    ]
+                                    [ text buttonText ]
                                 ]
                             , registrationForm model
                             ]
@@ -1273,6 +1411,20 @@ registrationForm model =
         confirmErrors =
             Dict.get "passwordConfirm" model.errors |> Maybe.withDefault []
 
+        rememberCheckbox =
+            div [ class "form-check d-inline-block" ]
+                [ label [ class "form-check-label" ]
+                    [ input
+                        [ class "form-check-input"
+                        , type_ "checkbox"
+                        , onCheck <| ToggleRememberMe
+                        , checked model.rememberMe
+                        ]
+                        []
+                    , text "Stay Signed In"
+                    ]
+                ]
+
         errorHtml errors =
             if List.isEmpty errors then
                 text ""
@@ -1304,13 +1456,27 @@ registrationForm model =
                 , errorHtml passwordErrors
                 ]
             ]
-        , div [ class "col-md-4" ]
-            [ wrapper
-                [ fieldLabel "passwordConfirmInput" "Confirm Password"
-                , passwordConfirmInput
-                , errorHtml confirmErrors
+        , viewIf (not model.isLoginForm) <|
+            div [ class "col-md-4" ]
+                [ wrapper
+                    [ fieldLabel "passwordConfirmInput" "Confirm Password"
+                    , passwordConfirmInput
+                    , errorHtml confirmErrors
+                    ]
                 ]
-            ]
+        , viewIf model.isLoginForm <|
+            div [ class "col-md-4 d-flex align-items-end" ]
+                [ div [ class "form-group w-100 mb-2" ]
+                    [ button [ class "btn btn-primary btn-block", type_ "button", onClick LogIn ]
+                        [ text "Log In" ]
+                    ]
+                ]
+        , viewIf model.isLoginForm <|
+            div [ class "col-12 justify-content-between mb-2 d-flex" ]
+                [ rememberCheckbox
+                , a (routeLinkAttributes <| ResetPassword Nothing)
+                    [ text "Forgot your password?" ]
+                ]
         ]
 
 

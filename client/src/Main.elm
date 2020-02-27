@@ -998,6 +998,19 @@ update msg ({ pageData, key } as model) =
                             , cmd
                             )
 
+                        Just (Checkout.LoggedIn newAuthStatus newDetails) ->
+                            let
+                                updatedPageData =
+                                    { pageData | checkoutDetails = RemoteData.Success newDetails }
+                            in
+                            ( { model_ | pageData = updatedPageData, currentUser = newAuthStatus }
+                            , Cmd.batch
+                                [ cmd
+                                , User.storeDetails newAuthStatus
+                                , Ports.removeCartSessionToken ()
+                                ]
+                            )
+
                         Nothing ->
                             ( model_, cmd )
             in
