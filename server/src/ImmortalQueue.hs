@@ -102,10 +102,9 @@ processImmortalQueue queue = do
                 return ()
             Right action ->
                 let flushInput = void $ takeMVar $ wdInputMVar workerData
-                    handleError = errorHandler action >=> const flushInput
+                    finalize = errorHandler action >=> const flushInput
                 in
-                Immortal.onFinish handleError $
-                    qHandler queue action >> flushInput
+                Immortal.onFinish finalize $ qHandler queue action
 
     -- Ignore successful results & run the error handler on any exceptions.
     errorHandler :: Exception e => a -> Either e () -> IO ()

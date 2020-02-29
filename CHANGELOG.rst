@@ -6,6 +6,7 @@ CHANGELOG
 v1.03.08
 =========
 
+* Fix a bug causing enqueued jobs to be dropped without processing.
 * Add login form to the Checkout page instead of redirecting user's to the
   login page. The form includes a "Forgot Password" link & can be used to log
   in before submitting the order if desired.
