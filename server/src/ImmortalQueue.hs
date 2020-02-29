@@ -19,7 +19,7 @@ module ImmortalQueue
 
 import Control.Concurrent
     ( MVar, newEmptyMVar, takeMVar, putMVar, threadDelay, readMVar
-    , tryReadMVar, tryTakeMVar
+    , tryPutMVar, tryTakeMVar
     )
 import Control.Concurrent.Async (Async, async, wait, race, cancel)
 import Control.Exception (Exception)
@@ -121,29 +121,29 @@ processImmortalQueue queue = do
         assignWork workers nextAction
         void $ takeMVar actionMVar
 
-    -- Find the next free worker & give it the current action. Retries
-    -- until a worker is available.
-    --
-    -- TODO: Could merge this & findFreeWorker into a single function using
-    -- tryPutMVar.
+    -- Assign the action to the first free worker, retrying until a worker
+    -- is available.
     assignWork :: [WorkerData a] -> a -> IO ()
-    assignWork workers action =
-        findFreeWorker workers >>= \case
-            Nothing ->
-                threadDelay (1000 * qPollWorkerTime queue)
-                    >> assignWork workers action
-            Just worker ->
-                putMVar (wdInputMVar worker) action
+    assignWork workers action = do
+        assigned <- assignToFreeWorker action workers
+        if assigned then
+            return ()
+        else
+            threadDelay (1000 * qPollWorkerTime queue)
+                >> assignWork workers action
 
-    -- Find the first worker with an empty input MVar.
-    findFreeWorker :: [WorkerData a] -> IO (Maybe (WorkerData a))
-    findFreeWorker [] = return Nothing
-    findFreeWorker (x : xs) =
-        tryReadMVar (wdInputMVar x) >>= \case
-            Nothing ->
-                return $ Just x
-            Just _ ->
-                findFreeWorker xs
+    -- Iterate through the workers, trying to assign the action & returning
+    -- whether assigning was successful or not.
+    assignToFreeWorker :: a -> [WorkerData a] -> IO Bool
+    assignToFreeWorker action = \case
+        [] ->
+            return False
+        worker : ws -> do
+            successfulPut <- tryPutMVar (wdInputMVar worker) action
+            if successfulPut then
+                return True
+            else
+                assignToFreeWorker action ws
 
 
 data WorkerData a =
