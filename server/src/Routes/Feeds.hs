@@ -17,13 +17,13 @@ import Data.Scientific (Scientific, scientific)
 import Data.Time (UTCTime, getCurrentTime)
 import Database.Persist ((==.), (>=.), (<=.), Entity(..), selectList)
 import Servant ((:<|>)(..), (:>), Get)
-
-import Cache (Caches(..), CategoryPredecessorCache, queryCategoryPredecessorCache)
-import Config (Config(getCaches))
-import Sitemap
+import Web.Sitemap.Gen
     ( Sitemap(..), SitemapUrl(..), ChangeFrequency(..), renderSitemap
     , SitemapIndex(..), IndexEntry(..), renderSitemapIndex
     )
+
+import Cache (Caches(..), CategoryPredecessorCache, queryCategoryPredecessorCache)
+import Config (Config(getCaches))
 import Models
 import Models.Fields (Milligrams(..), LotSize(..), renderLotSize, toDollars)
 import Routes.Utils (XML, activeVariantExists)

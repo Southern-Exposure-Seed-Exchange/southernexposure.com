@@ -6,8 +6,11 @@ packages:
     - .
 
 extra-deps:
-    - ca-province-codes-1.0.0.0
+    # In LTS 14.0
+    - ca-province-codes-1.0.0.0@sha256:52b52bfd3f43ce83dfd18276751c33f86b991922172226c04a194a3cf7eb4d0d,1800
     - servant-auth-cookie-0.6.0.3
+    # In LTS 15.0
+    - sitemap-gen-0.1.0.0@sha256:cc8ba0fb0a4387d1b0973cd95f1017b810c813913bc1d4066b92f1b1452d8574,1893
 
 flags: {}
 

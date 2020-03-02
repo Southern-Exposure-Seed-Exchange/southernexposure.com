@@ -10,7 +10,7 @@ packages:
       size: 381
       sha256: 4dce2b244ad940998a42297d479491c55fbeb3e92d92baaed317af6199157b5a
   original:
-    hackage: ca-province-codes-1.0.0.0
+    hackage: ca-province-codes-1.0.0.0@sha256:52b52bfd3f43ce83dfd18276751c33f86b991922172226c04a194a3cf7eb4d0d,1800
 - completed:
     hackage: servant-auth-cookie-0.6.0.3@sha256:06151cc6205eb1d5696ff4e282eda4e28f332bc8d03059a155b6ba2c46bf70b2,7513
     pantry-tree:
@@ -18,6 +18,13 @@ packages:
       sha256: 361532595d07dcbb13d2677dabeb6883afbe6fd119c431815546fe4fefc068f6
   original:
     hackage: servant-auth-cookie-0.6.0.3
+- completed:
+    hackage: sitemap-gen-0.1.0.0@sha256:cc8ba0fb0a4387d1b0973cd95f1017b810c813913bc1d4066b92f1b1452d8574,1893
+    pantry-tree:
+      size: 372
+      sha256: 9e4cbcdc45cd8bd3745c2c62f88b68f9b03502d8f4d74416b4ae7c646055de1b
+  original:
+    hackage: sitemap-gen-0.1.0.0@sha256:cc8ba0fb0a4387d1b0973cd95f1017b810c813913bc1d4066b92f1b1452d8574,1893
 snapshots:
 - completed:
     size: 569315

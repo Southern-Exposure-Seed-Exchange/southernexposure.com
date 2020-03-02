@@ -87,6 +87,7 @@ dependencies:
     - scientific
     - servant-auth-cookie
     - servant-server
+    - sitemap-gen
     - state-codes
     - stm
     - stripe-core
