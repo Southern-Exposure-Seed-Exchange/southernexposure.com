@@ -32,7 +32,7 @@ import Api
 import Auth (sessionEntropy, mkPersistentServerKey)
 import Cache (initializeCaches)
 import Config
-import ImmortalQueue (processImmortalQueue, killImmortalQueue)
+import ImmortalQueue (processImmortalQueue, closeImmortalQueue)
 import Models
 import Paths_sese_website (version)
 import StoneEdge (StoneEdgeCredentials(..))
@@ -109,7 +109,7 @@ main = do
     race_ (takeMVar shutdownMVar) (forever $ threadDelay maxBound)
     log "Received SIGTERM, starting clean shutdown."
     log "Waiting for worker queue to finish..."
-    killImmortalQueue workers
+    closeImmortalQueue workers
     log "Worker queue closed."
     cancel asyncWarp
     log "HTTP server stopped."

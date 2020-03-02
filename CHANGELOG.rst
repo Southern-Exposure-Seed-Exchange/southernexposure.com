@@ -6,6 +6,8 @@ CHANGELOG
 v1.03.08
 =========
 
+* Allow the asynchronous workers to finish processing before stopping the
+  job-processing pool.
 * Add timestamps to the server's log files.
 * Fix a bug causing enqueued jobs to be dropped without processing.
 * Add login form to the Checkout page instead of redirecting user's to the
