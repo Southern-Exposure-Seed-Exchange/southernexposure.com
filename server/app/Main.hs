@@ -22,8 +22,8 @@ import Network.Wai.Middleware.RequestLogger (logStdoutDev, logStdout)
 import System.Directory (getCurrentDirectory, createDirectoryIfMissing)
 import System.Environment (lookupEnv)
 import System.Log.FastLogger
-     ( LoggerSet, newStdoutLoggerSet, newFileLoggerSet, defaultBufSize
-     , pushLogStrLn, toLogStr, flushLogStr, rmLoggerSet
+     ( LogType(LogStdout, LogFile), FileLogSpec(..), TimedFastLogger
+     , newTimeCache, newTimedFastLogger, defaultBufSize
      )
 import System.Posix.Signals (installHandler, sigTERM, Handler(CatchOnce))
 import Web.Stripe.Client (StripeConfig(..), StripeKey(..))
@@ -52,8 +52,8 @@ import Prelude hiding (log)
 main :: IO ()
 main = do
     env <- lookupSetting "ENV" Development
-    (avalaraLogger, stripeLogger, serverLogger) <- makeLoggers env
-    let log s = logMsg serverLogger s >> flushLogStr serverLogger
+    (avalaraLogger, stripeLogger, serverLogger, cleanupLoggers) <- makeLoggers env
+    let log = logMsg serverLogger
     log "SESE API Server starting up."
     port <- lookupSetting "PORT" 3000
     mediaDir <- lookupDirectory "MEDIA" "/media/"
@@ -116,12 +116,9 @@ main = do
     destroyAllResources emailPool
     log "SMTP pool closed."
     destroyAllResources dbPool
-    log "PostgresQL pool closed."
-    rmLoggerSet avalaraLogger
-    rmLoggerSet stripeLogger
-    flushLogStr serverLogger
-    log "Logs flushed."
+    log "PostgreSQL pool closed."
     log "Shutdown completed successfully."
+    cleanupLoggers
     where lookupSetting env def =
             maybe def read <$> lookupEnv env
           requireSetting :: String -> IO String
@@ -150,7 +147,7 @@ main = do
               Warp.setServerName ""
               $ Warp.setOnException (exceptionHandler serverLogger)
               $ Warp.setPort port Warp.defaultSettings
-          exceptionHandler :: LoggerSet -> Maybe Request -> SomeException -> IO ()
+          exceptionHandler :: TimedFastLogger -> Maybe Request -> SomeException -> IO ()
           exceptionHandler logger mReq e =
             let reqString = flip (maybe "") mReq $ \req ->
                     decodeUtf8 $
@@ -168,9 +165,9 @@ main = do
                     , ": "
                     , T.pack $ displayException e
                     ]
-          logMsg :: LoggerSet -> T.Text -> IO ()
+          logMsg :: TimedFastLogger -> T.Text -> IO ()
           logMsg logger =
-            pushLogStrLn logger . toLogStr
+            logger . timedLogStr
           httpLogger env =
               case env of
                 Production ->
@@ -200,20 +197,25 @@ main = do
                     error $ "Invalid AVATAX_ENVIRONMENT: " ++ T.unpack rawEnvironment
                         ++ "\n\n\tValid value are `Production` or `Sandbox`"
             return Avalara.Config {..}
-          makeLoggers :: Environment -> IO (LoggerSet, LoggerSet, LoggerSet)
-          makeLoggers env =
+          makeLoggers :: Environment -> IO (TimedFastLogger, TimedFastLogger, TimedFastLogger, IO ())
+          makeLoggers env = do
+            timeCache <- newTimeCache "%Y-%m-%dT%T"
             case env of
-                Development ->
-                    (,,)
-                        <$> newStdoutLoggerSet defaultBufSize
-                        <*> newStdoutLoggerSet defaultBufSize
-                        <*> newStdoutLoggerSet defaultBufSize
+                Development -> do
+                    let makeLogger = newTimedFastLogger timeCache
+                    (avalara, aClean) <- makeLogger (LogStdout defaultBufSize)
+                    (stripe, stripeClean) <- makeLogger (LogStdout defaultBufSize)
+                    (server, servClean) <- makeLogger (LogStdout defaultBufSize)
+                    return (avalara, stripe, server, aClean >> stripeClean >> servClean)
                 Production -> do
                     logDir <- lookupDirectory "LOGS" "/logs/"
-                    (,,)
-                        <$> newFileLoggerSet defaultBufSize (logDir ++ "/avalara.log")
-                        <*> newFileLoggerSet defaultBufSize (logDir ++ "/stripe.log")
-                        <*> newFileLoggerSet defaultBufSize (logDir ++ "/server.log")
+                    let makeLogger fp = newTimedFastLogger timeCache
+                            $ LogFile (FileLogSpec fp (1024 * 1024 * 50) 5)
+                                defaultBufSize
+                    (avalara, aClean) <- makeLogger $ logDir ++ "/avalara.log"
+                    (stripe, stripeClean) <- makeLogger $ logDir ++ "/stripe.log"
+                    (server, servClean) <- makeLogger $ logDir ++ "/server.log"
+                    return (avalara, stripe, server, aClean >> stripeClean >> servClean)
           lookupDirectory :: String -> FilePath -> IO FilePath
           lookupDirectory envName defaultPath = do
                 dir <- lookupEnv envName

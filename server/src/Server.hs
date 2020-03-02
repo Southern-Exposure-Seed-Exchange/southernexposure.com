@@ -22,11 +22,10 @@ import Data.Aeson (FromJSON)
 import Data.Text (Text)
 import Database.Persist.Sql (SqlPersistT, runSqlPool)
 import Servant (Handler, throwError)
-import System.Log.FastLogger (pushLogStrLn, toLogStr)
 import Web.Stripe
 
 import Cache (Caches)
-import Config (Config(..))
+import Config (Config(..), timedLogStr)
 
 import qualified Avalara
 import qualified Data.Text as T
@@ -61,7 +60,7 @@ stripeRequest req = do
                     show (method req)
                         ++ " - " ++ T.unpack (endpoint req)
                         ++ " ? " ++ show (queryParams req)
-            liftIO . pushLogStrLn logger . toLogStr
+            liftIO . logger . timedLogStr
                 $ "StripeError from request(" ++ requestString ++ "): " ++ show e
             return result
         _ ->
@@ -82,18 +81,18 @@ avalaraRequest
 avalaraRequest req = do
     cfg <- asks getAvalaraConfig
     response <- tryAny $ liftIO $ runReaderT req cfg
-    loggerSet <- asks getAvalaraLogger
+    logger <- asks getAvalaraLogger
     case response of
         Left e -> do
-            liftIO . pushLogStrLn loggerSet . toLogStr $ show e
+            liftIO . logger . timedLogStr $ show e
             throwM e
         Right r@(Avalara.SuccessfulResponse _) ->
             return r
         Right r@(Avalara.ErrorResponse err) -> do
-            liftIO . pushLogStrLn loggerSet . toLogStr $ show err
+            liftIO . logger . timedLogStr $ show err
             return r
         Right r@(Avalara.HttpException err) -> do
-            liftIO . pushLogStrLn loggerSet . toLogStr $ displayException err
+            liftIO . logger . timedLogStr $ displayException err
             return r
 
 
@@ -106,14 +105,14 @@ serverError =
 -- | Log a message to the server log.
 logMsg :: Text -> App ()
 logMsg msg = do
-    loggerSet <- asks getServerLogger
-    liftIO . pushLogStrLn loggerSet $ toLogStr msg
+    logger <- asks getServerLogger
+    liftIO . logger $ timedLogStr msg
 
 -- | Produce a function for logging messages in the IO monad.
 msgLoggerIO :: App (Text -> IO ())
 msgLoggerIO = do
-    loggerSet <- asks getServerLogger
-    return (pushLogStrLn loggerSet . toLogStr)
+    logger <- asks getServerLogger
+    return (logger . timedLogStr)
 
 
 -- | Read a value from the available caches.

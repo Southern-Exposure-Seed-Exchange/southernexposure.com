@@ -41,13 +41,12 @@ import Database.Persist.Sql
     )
 import GHC.Generics (Generic)
 import Numeric.Natural (Natural)
-import System.Log.FastLogger (pushLogStrLn, toLogStr)
 
 import Avalara
     ( RefundTransactionRequest(..), VoidTransactionRequest(..), VoidReason(..)
     , CommitTransactionRequest(..)
     )
-import Config (Config(..), AvalaraStatus(AvalaraTesting))
+import Config (Config(..), AvalaraStatus(AvalaraTesting), timedLogStr)
 import Emails (EmailType, getEmailData)
 import Images (makeImageConfig, scaleExistingImage, optimizeImage)
 import ImmortalQueue (ImmortalQueue(..))
@@ -182,7 +181,7 @@ taskQueueConfig threadCount cfg@Config { getPool, getServerLogger } =
     -- Log a message to the server log.
     logMsg :: T.Text -> IO ()
     logMsg =
-        pushLogStrLn getServerLogger . toLogStr
+        getServerLogger . timedLogStr
 
     -- Describe the task for a log message.
     describeTask :: Task -> T.Text

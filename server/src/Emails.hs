@@ -29,7 +29,6 @@ import Network.Mail.Mime (Address(..), Mail(..), plainPart, htmlPart)
 import Text.Blaze.Html.Renderer.Text (renderHtml)
 import Text.Markdown (markdown, def)
 import Text.Pandoc (readHtml, writeMarkdown, runPure)
-import System.Log.FastLogger (pushLogStrLn, toLogStr)
 
 import Config
 import Models hiding (Address, PasswordReset)
@@ -176,7 +175,7 @@ send cfg email =
                 , mailParts = [[plainPart plainMessage, htmlPart htmlMessage]]
                 }
         logger =
-            pushLogStrLn (getServerLogger cfg) . toLogStr
+            getServerLogger cfg . timedLogStr
     in
     withResource (getSmtpPool cfg) $ \conn -> do
         let user = getSmtpUser cfg

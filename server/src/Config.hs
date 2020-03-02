@@ -4,16 +4,18 @@ module Config
     , AvalaraStatus(..)
     , Config(..)
     , defaultConfig
+    , timedLogStr
     , smtpPool
     ) where
 
 import Control.Concurrent.STM (TVar)
+import Data.Monoid ((<>))
 import Data.Pool (Pool, createPool)
 import Data.Text (Text)
 import Database.Persist.Sql (ConnectionPool)
 import Network.HaskellNet.SMTP.SSL (SMTPConnection, connectSMTPSTARTTLS, closeSMTP)
 import Servant.Server.Experimental.Auth.Cookie (PersistentServerKey, RandomSource)
-import System.Log.FastLogger (LoggerSet)
+import System.Log.FastLogger (TimedFastLogger, LogStr, FormattedTime, ToLogStr(..))
 import Web.Stripe.Client (StripeConfig)
 
 import Cache (Caches)
@@ -51,9 +53,9 @@ data Config
     , getAvalaraCompanyId :: Avalara.CompanyId
     , getAvalaraCompanyCode :: Avalara.CompanyCode
     , getAvalaraSourceLocationCode :: Text
-    , getAvalaraLogger :: LoggerSet
-    , getStripeLogger :: LoggerSet
-    , getServerLogger :: LoggerSet
+    , getAvalaraLogger :: TimedFastLogger
+    , getStripeLogger :: TimedFastLogger
+    , getServerLogger :: TimedFastLogger
     }
 
 defaultConfig :: Config
@@ -80,6 +82,8 @@ defaultConfig =
         , getServerLogger = undefined
         }
 
+timedLogStr :: ToLogStr a => a -> FormattedTime -> LogStr
+timedLogStr msg time = "[" <> toLogStr time <> "]: " <> toLogStr msg <> "\n"
 
 smtpPool :: String -> Int -> IO (Pool SMTPConnection)
 smtpPool serverName =
