@@ -2,7 +2,7 @@
 SESE E-Commerce Website
 =======================
 
-.. image:: https://travis-ci.org/Southern-Exposure-Seed-Exchange/southernexposure.com.svg?branch=master
+.. image:: https://travis-ci.org/Southern-Exposure-Seed-Exchange/southernexposure.com.svg?branch=develop
     :target: https://travis-ci.org/Southern-Exposure-Seed-Exchange/southernexposure.com
 
 
