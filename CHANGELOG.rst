@@ -6,6 +6,7 @@ CHANGELOG
 v1.03.08
 =========
 
+* Add hover text to the Product Variant dropdowns.
 * Add heading to Icon Legends on search & category pages.
 * Allow the asynchronous workers to finish processing before stopping the
   job-processing pool.

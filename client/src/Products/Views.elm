@@ -3,7 +3,7 @@ module Products.Views exposing (details, list)
 import BootstrapGallery as Gallery
 import Dict exposing (Dict)
 import Html exposing (..)
-import Html.Attributes as A exposing (alt, attribute, class, for, href, id, selected, src, type_, value)
+import Html.Attributes as A exposing (alt, attribute, class, for, href, id, selected, src, title, type_, value)
 import Html.Events exposing (on, onSubmit, targetValue)
 import Html.Extra exposing (viewIfLazy)
 import Html.Keyed as Keyed
@@ -458,6 +458,7 @@ cartFormData addToCartForms ( product, variants ) =
             select
                 [ id <| "inputVariant-" ++ String.fromInt (fromProductId product.id)
                 , class "variant-select form-control mb-1 mx-auto mr-sm-3 mx-md-auto"
+                , title "Choose a Size"
                 , onSelectInt <| ChangeCartFormVariantId product.id
                 , Aria.label <| "Select a Lot Size Variant for " ++ product.name
                 ]
