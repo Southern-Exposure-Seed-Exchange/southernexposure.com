@@ -7,6 +7,7 @@ import Control.Concurrent (newEmptyMVar, takeMVar, putMVar, threadDelay)
 import Control.Concurrent.Async (async, cancel, race_)
 import Control.Concurrent.STM.TVar (newTVarIO)
 import Control.Exception (Exception(..), SomeException)
+import Control.Immortal.Queue (processImmortalQueue, closeImmortalQueue)
 import Control.Monad (when, forever, void)
 import Control.Monad.IO.Class (MonadIO)
 import Control.Monad.Trans.Control (MonadBaseControl)
@@ -32,7 +33,6 @@ import Api
 import Auth (sessionEntropy, mkPersistentServerKey)
 import Cache (initializeCaches)
 import Config
-import ImmortalQueue (processImmortalQueue, closeImmortalQueue)
 import Models
 import Paths_sese_website (version)
 import StoneEdge (StoneEdgeCredentials(..))

@@ -25,6 +25,13 @@ packages:
       sha256: 9e4cbcdc45cd8bd3745c2c62f88b68f9b03502d8f4d74416b4ae7c646055de1b
   original:
     hackage: sitemap-gen-0.1.0.0@sha256:cc8ba0fb0a4387d1b0973cd95f1017b810c813913bc1d4066b92f1b1452d8574,1893
+- completed:
+    hackage: immortal-queue-0.1.0.0@sha256:e71a055be75718de5675630706f36a5ec1af2f8c89d02128cba7a4126bbf83de,2490
+    pantry-tree:
+      size: 441
+      sha256: 023019a7645dd1b0c8de336bfa8972056142745f6db20b51abccd4ecde5d7434
+  original:
+    hackage: immortal-queue-0.1.0.0@sha256:e71a055be75718de5675630706f36a5ec1af2f8c89d02128cba7a4126bbf83de,2490
 snapshots:
 - completed:
     size: 569315

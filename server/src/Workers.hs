@@ -10,7 +10,7 @@ performed by worker threads outside the scope of the HTTP request/response
 cycle.
 
 It uses the database as a queue, which isn't ideal but should be fine for
-our low volume of messages. It uses the 'ImmortalQueue' module to expose
+our low volume of messages. It uses the @immortal-queue@ package to expose
 a queue consumer with a pool of worker threads.
 
 -}
@@ -24,6 +24,7 @@ module Workers
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.Async (wait)
 import Control.Exception.Safe (Exception(..), throwM)
+import Control.Immortal.Queue (ImmortalQueue(..))
 import Control.Monad (when)
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Monad.Reader (runReaderT, asks, lift)
@@ -49,7 +50,6 @@ import Avalara
 import Config (Config(..), AvalaraStatus(AvalaraTesting), timedLogStr)
 import Emails (EmailType, getEmailData)
 import Images (makeImageConfig, scaleExistingImage, optimizeImage)
-import ImmortalQueue (ImmortalQueue(..))
 import Models
 import Models.PersistJSON (JSONValue(..))
 import Models.Fields (AvalaraTransactionCode(..))
