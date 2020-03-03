@@ -9,7 +9,7 @@ module SeedAttribute exposing
     , toDescription
     )
 
-import Html exposing (Html, div, img, li, span, text, ul)
+import Html exposing (Html, div, h4, img, li, span, text, ul)
 import Html.Attributes exposing (alt, class, src, title)
 import Json.Decode as Decode exposing (Decoder)
 import Product exposing (ProductId(..))
@@ -122,8 +122,10 @@ legend =
                     ]
             )
         |> (\items ->
-                div [ class "text-center" ]
-                    [ ul [ class "list-unstyled d-inline-block mb-0" ] items ]
+                div [ class "text-center mt-4 mb-2" ]
+                    [ h4 [] [ text "Icon Legend" ]
+                    , ul [ class "list-unstyled d-inline-block mb-0" ] items
+                    ]
            )
 
 

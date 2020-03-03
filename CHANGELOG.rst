@@ -6,6 +6,7 @@ CHANGELOG
 v1.03.08
 =========
 
+* Add heading to Icon Legends on search & category pages.
 * Allow the asynchronous workers to finish processing before stopping the
   job-processing pool.
 * Add timestamps to the server's log files.
