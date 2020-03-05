@@ -6,6 +6,7 @@ CHANGELOG
 v1.03.08
 =========
 
+* Change Slug & Title for Fundraisers page.
 * Add hover text to the Product Variant dropdowns.
 * Add heading to Icon Legends on search & category pages.
 * Allow the asynchronous workers to finish processing before stopping the

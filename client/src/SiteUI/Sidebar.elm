@@ -54,7 +54,7 @@ view route =
                             [ text "Blog" ]
                         ]
                     , staticPageLink "contact-us" "Contact Us"
-                    , staticPageLink "seeds-for-schools-fundraisers" "Fundraisers"
+                    , staticPageLink "fundraisers" "Fundraisers"
                     , specialSearchLink identity "All Products"
                     ]
                 ]
