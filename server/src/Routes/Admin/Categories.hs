@@ -20,14 +20,13 @@ import Database.Persist
     ( (=.), Entity(..), SelectOpt(Asc), Update, selectList, insert, get, update
     )
 import Servant ((:>), (:<|>)(..), AuthProtect, ReqBody, Capture, Get, Post, Patch, JSON, err404)
-import Text.HTML.SanitizeXSS (sanitize)
 
 import Auth (Cookied, WrappedAuthToken, withAdminCookie, validateAdminAndParameters)
 import Cache (Caches(..), syncCategoryPredecessorCache, queryCategoryPredecessorCache)
 import Config (Config(getCaches))
 import Images (ImageSourceSet, makeSourceSet)
 import Models (Category(..), CategoryId, EntityField(..), Unique(UniqueCategorySlug), slugify)
-import Routes.Utils (mapUpdate, mapUpdateWith, makeImageFromBase64)
+import Routes.Utils (mapUpdate, mapUpdateWith, makeImageFromBase64, sanitize)
 import Server (App, runDB, serverError)
 import Validation (Validation(..))
 

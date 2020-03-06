@@ -22,7 +22,6 @@ import Database.Persist
     , insert, insertMany_, insert_, update, get, getBy, deleteWhere
     )
 import Servant ((:<|>)(..), (:>), AuthProtect, ReqBody, Capture, Get, Post, JSON, err404)
-import Text.HTML.SanitizeXSS (sanitize)
 
 import Auth (WrappedAuthToken, Cookied, withAdminCookie, validateAdminAndParameters)
 import Config (Config(getCaches))
@@ -37,7 +36,7 @@ import Routes.CommonData
     ( AdminCategorySelect(acsName), makeAdminCategorySelect, validateCategorySelect
     , getAdditionalCategories
     )
-import Routes.Utils (activeVariantExists, makeImageFromBase64)
+import Routes.Utils (activeVariantExists, makeImageFromBase64, sanitize)
 import Server (App, AppSQL, runDB, serverError)
 import Validation (Validation(validators))
 

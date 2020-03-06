@@ -6,6 +6,7 @@ CHANGELOG
 v1.03.08
 =========
 
+* Allow ``<iframe>`` elements in HTML content of Pages, Products, & Categories.
 * Log in users if they try to register with an existing email address and valid
   password during checkout.
 * Change Slug & Title for Fundraisers page.

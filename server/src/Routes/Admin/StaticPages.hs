@@ -17,11 +17,10 @@ import Database.Persist
     , getBy
     )
 import Servant ((:<|>)(..), (:>), AuthProtect, ReqBody, Capture, Get, Post, Patch, JSON, err404)
-import Text.HTML.SanitizeXSS (sanitize)
 
 import Auth (WrappedAuthToken, Cookied, withAdminCookie, validateAdminAndParameters)
 import Models (Page(..), PageId, EntityField(..), Unique(UniquePageSlug), slugify)
-import Routes.Utils (mapUpdateWith)
+import Routes.Utils (mapUpdateWith, sanitize)
 import Server (App, runDB, serverError)
 import Validation (Validation(..))
 

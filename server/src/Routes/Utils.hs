@@ -17,13 +17,14 @@ module Routes.Utils
     , buildWhereQuery
     , mapUpdate
     , mapUpdateWith
+    , sanitize
     ) where
 
 import Control.Monad (void)
 import Control.Monad.Reader (asks)
 import Control.Monad.Trans (liftIO)
 import Data.Int (Int64)
-import Data.Maybe (fromMaybe, listToMaybe)
+import Data.Maybe (fromMaybe, listToMaybe, mapMaybe)
 import Data.Text.Encoding (encodeUtf8, decodeUtf8)
 import Database.Persist
     ( (=.), Entity(..), PersistEntityBackend, PersistEntity, Update, getBy
@@ -31,6 +32,8 @@ import Database.Persist
 import Database.Persist.Sql (SqlBackend)
 import Servant (Accept(..), MimeRender(..), errBody, err500)
 import System.FilePath ((</>), takeFileName)
+import Text.HTML.SanitizeXSS (filterTags, safeTagName, sanitizeAttribute)
+import Text.HTML.TagSoup (Tag(TagOpen, TagClose))
 
 import Config (Config(..))
 import Images (saveOriginalImage)
@@ -238,3 +241,31 @@ mapUpdate field =
 mapUpdateWith :: E.PersistField b => EntityField e b -> Maybe a -> (a -> b) -> Maybe (Update e)
 mapUpdateWith field param transform =
     mapUpdate field $ transform <$> param
+
+-- | Sanitize text to be displayed as HTML to prevent XSS vulnerabilities.
+--
+-- Extends the 'sanitize' function to allow @iframe@ elements.
+sanitize :: T.Text -> T.Text
+sanitize = filterTags $
+    safeTagsCustom (\n -> safeTagName n || customSafeTagName n) sanitizeAttribute
+  where
+    customSafeTagName :: T.Text -> Bool
+    customSafeTagName n =
+        n == "iframe"
+
+-- Lifted from v0.3.6 of the xss-santize package.
+-- TODO: Remove when upgrading to LTS 11.17+
+safeTagsCustom
+    :: (T.Text -> Bool)
+    -> ((T.Text, T.Text) -> Maybe (T.Text, T.Text))
+    -> [Tag T.Text]
+    -> [Tag T.Text]
+safeTagsCustom _ _ [] = []
+safeTagsCustom safeName sanitizeAttr (t@(TagClose name):tags)
+    | safeName name = t : safeTagsCustom safeName sanitizeAttr tags
+    | otherwise = safeTagsCustom safeName sanitizeAttr tags
+safeTagsCustom safeName sanitizeAttr (TagOpen name attributes:tags)
+  | safeName name = TagOpen name (mapMaybe sanitizeAttr attributes) :
+      safeTagsCustom safeName sanitizeAttr tags
+  | otherwise = safeTagsCustom safeName sanitizeAttr tags
+safeTagsCustom n a (t:tags) = t : safeTagsCustom n a tags
