@@ -123,8 +123,8 @@ searchableTable cfg items =
 {-| A re-usesable view for Admin pages with client-side searching functionality.
 
 It takes a message constructor for updating the query string, a function for
-matching an item against a single search term, and a model containing the current
-search query.
+matching an item against a single lowercase search term, and a model containing
+the current search query.
 
 It returns an HTML element for rendering the search input and a function for
 filtering the items.
@@ -138,7 +138,7 @@ searchInput :
 searchInput inputMsg queryMatcher { query } =
     let
         queryTerms =
-            String.words query
+            String.words <| String.toLower query
 
         matcher item =
             List.foldr (\term bool -> bool && queryMatcher item term) True queryTerms

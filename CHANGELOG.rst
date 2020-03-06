@@ -6,6 +6,7 @@ CHANGELOG
 v1.03.08
 =========
 
+* Fix case-insensitive searching on the Product & Page admin pages.
 * Allow ``<iframe>`` elements in HTML content of Pages, Products, & Categories.
 * Log in users if they try to register with an existing email address and valid
   password during checkout.
