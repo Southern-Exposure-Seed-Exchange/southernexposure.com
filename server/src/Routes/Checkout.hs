@@ -11,8 +11,8 @@ module Routes.Checkout
 
 import Control.Applicative ((<|>))
 import Control.Arrow (first)
-import Control.Exception.Safe (MonadThrow, MonadCatch, Exception, throwM, try)
-import Control.Monad ((>=>), (<=<), when, unless, void)
+import Control.Exception.Safe (MonadThrow, MonadCatch, Exception, throwM, try, handle)
+import Control.Monad ((>=>), when, unless, void)
 import Control.Monad.Reader (asks, ask, lift, liftIO)
 import Data.Aeson ((.:), (.:?), (.=), FromJSON(..), ToJSON(..), Value(Object), withObject, object)
 import Data.Foldable (asum)
@@ -144,14 +144,11 @@ instance Exception CheckoutDetailsError
 
 withCheckoutDetailsErrors :: App a -> App a
 withCheckoutDetailsErrors =
-    try >=> eitherM handle
-    where
-        handle :: CheckoutDetailsError -> App a
-        handle = \case
-            DetailsPriorityError priorityError ->
-                handlePriorityShippingErrors priorityError
-            DetailsCouponError couponError ->
-                handleCouponErrors couponError
+    handle $ \case
+        DetailsPriorityError priorityError ->
+            handlePriorityShippingErrors priorityError
+        DetailsCouponError couponError ->
+            handleCouponErrors couponError
 
 
 
@@ -382,50 +379,47 @@ instance Exception PlaceOrderError
 
 withPlaceOrderErrors :: CustomerAddress -> App a -> App a
 withPlaceOrderErrors shippingAddress =
-    try >=> eitherM handle
-    where
-        handle :: PlaceOrderError -> App a
-        handle = \case
-            CartNotFound ->
-                V.singleError
-                    $ "We couldn't find any items in your Cart. This usually means "
-                    <> "that your Order has been successfully submitted but we "
-                    <> "encountered an error while sending your confirmation email, please "
-                    <> "check yur Order History to verify and contact us if needed."
-            NoShippingMethod ->
-                case shippingAddress of
-                    ExistingAddress _ _ ->
-                        V.singleFieldError "shipping-" "Sorry, we only ship to the United States."
-                    NewAddress _ ->
-                        V.singleFieldError "shipping-country" "Sorry, we only ship to the United States."
-            AddressNotFound Shipping ->
-                V.singleFieldError "shipping-"
-                    "Please choose again or try adding a new address."
-            AddressNotFound Billing ->
-                V.singleFieldError "billing-"
-                    "Please choose again or try adding a new address."
-            BillingAddressRequired ->
-                V.singleFieldError "billing-"
-                    "A billing address is required with non-free orders."
-            StripeTokenRequired ->
-                V.singleFieldError "" $
-                    "An error occured when verifying your order total. " <>
-                    "Please refresh the page or contact us."
-            NotEnoughStoreCredit ->
-                V.singleFieldError "store-credit"
-                    "You cannot apply more store credit than you have."
-            StripeError stripeError ->
-                V.singleError $ Stripe.errorMsg stripeError
-            CardChargeError ->
-                V.singleError
-                    $ "An error occured while charging your card. Please try again or "
-                    <> "contact us for help."
-            PlaceOrderCouponError couponError ->
-                handleCouponErrors couponError
-            AvalaraNoTransactionCode ->
-                V.singleError
-                    $ "An error occured while calculating the sales tax due. Please try again or "
-                    <> "contact us for help. (Error ANTC: No Transction Code Returned)"
+    handle $ \case
+        CartNotFound ->
+            V.singleError
+                $ "We couldn't find any items in your Cart. This usually means "
+                <> "that your Order has been successfully submitted but we "
+                <> "encountered an error while sending your confirmation email, please "
+                <> "check yur Order History to verify and contact us if needed."
+        NoShippingMethod ->
+            case shippingAddress of
+                ExistingAddress _ _ ->
+                    V.singleFieldError "shipping-" "Sorry, we only ship to the United States."
+                NewAddress _ ->
+                    V.singleFieldError "shipping-country" "Sorry, we only ship to the United States."
+        AddressNotFound Shipping ->
+            V.singleFieldError "shipping-"
+                "Please choose again or try adding a new address."
+        AddressNotFound Billing ->
+            V.singleFieldError "billing-"
+                "Please choose again or try adding a new address."
+        BillingAddressRequired ->
+            V.singleFieldError "billing-"
+                "A billing address is required with non-free orders."
+        StripeTokenRequired ->
+            V.singleFieldError "" $
+                "An error occured when verifying your order total. " <>
+                "Please refresh the page or contact us."
+        NotEnoughStoreCredit ->
+            V.singleFieldError "store-credit"
+                "You cannot apply more store credit than you have."
+        StripeError stripeError ->
+            V.singleError $ Stripe.errorMsg stripeError
+        CardChargeError ->
+            V.singleError
+                $ "An error occured while charging your card. Please try again or "
+                <> "contact us for help."
+        PlaceOrderCouponError couponError ->
+            handleCouponErrors couponError
+        AvalaraNoTransactionCode ->
+            V.singleError
+                $ "An error occured while calculating the sales tax due. Please try again or "
+                <> "contact us for help. (Error ANTC: No Transction Code Returned)"
 
 
 
@@ -1207,7 +1201,7 @@ type SuccessRoute =
 
 customerSuccessRoute :: WrappedAuthToken -> SuccessParameters -> App (Cookied OrderDetails)
 customerSuccessRoute token parameters = withValidatedCookie token $ \(Entity customerId _) ->
-    eitherM handleError <=< try . runDB $ do
+    handle handleError . runDB $ do
         (e@(Entity orderId _), shipping, billing) <-
             getOrderAndAddress customerId (E.toSqlKey $ cspOrderId parameters)
                 >>= maybe (throwM OrderNotFound) return
