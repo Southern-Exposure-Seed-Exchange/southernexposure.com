@@ -46,7 +46,7 @@ import Routes.CommonData
     , CartCharge(..), getCartItems, getCharges, AddressData(..), toAddressData
     , fromAddressData, ShippingCharge(..), VariantData(..), getVariantPrice
     , OrderDetails(..), toCheckoutOrder, getCheckoutProducts, CheckoutProduct
-    , LoginParameters(..), validatePassword
+    , LoginParameters(..), validatePassword, handlePasswordValidationError
     )
 import Routes.AvalaraUtils (createAvalaraTransaction, createAvalaraCustomer)
 import Routes.Utils (hashPassword, generateUniqueToken)
@@ -1167,7 +1167,8 @@ type LoginRoute =
 -- account's cart instead of merging the two together.
 loginRoute :: CheckoutLoginParameters -> App (Cookied LoginData)
 loginRoute CheckoutLoginParameters { clpLogin, clpDetails } = do
-    e@(Entity customerId customer) <- validatePassword clpLogin
+    e@(Entity customerId customer) <- handle handlePasswordValidationError
+        $ runDB $ validatePassword (lpEmail clpLogin) (lpPassword clpLogin)
     runDB $ do
         getBy (UniqueCustomerCart $ Just customerId) >>= mapM_ (E.deleteCascade . entityKey)
         mapM_ (`mergeAnonymousCart` customerId) $ lpCartToken clpLogin

@@ -26,6 +26,8 @@ module Routes.CommonData
     , toAuthorizationData
     , LoginParameters(..)
     , validatePassword
+    , PasswordValidationError(..)
+    , handlePasswordValidationError
     , CartItemData(..)
     , getCartItems
     , CartCharges(..)
@@ -47,6 +49,7 @@ module Routes.CommonData
 
 import Prelude hiding (product)
 
+import Control.Exception.Safe (Exception, throw)
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Monad.Reader (MonadReader, lift, asks, void, when)
 import Data.Aeson ((.=), (.:), (.:?), ToJSON(..), FromJSON(..), object, withObject)
@@ -438,12 +441,9 @@ instance FromJSON LoginParameters where
 -- If the BCrypt hash matches but uses an outdated hashing policy, the
 -- password hash will be upgraded to the current
 -- 'BCrypt.slowerBcryptHashingPolicy'.
---
--- A 422 error will be thrown if the email/password are invalid. A 500
--- error will be thrown if the hashing policy is invalid.
-validatePassword :: LoginParameters -> App (Entity Customer)
-validatePassword LoginParameters {..} = do
-    maybeCustomer <- runDB $ getCustomerByEmail lpEmail
+validatePassword :: T.Text -> T.Text -> AppSQL (Entity Customer)
+validatePassword email password = do
+    maybeCustomer <- getCustomerByEmail email
     case maybeCustomer of
         Just e@(Entity customerId customer) -> do
             when (T.null $ customerEncryptedPassword customer) resetRequiredError
@@ -451,7 +451,7 @@ validatePassword LoginParameters {..} = do
                     encodeUtf8 $ customerEncryptedPassword customer
                 isValid =
                     BCrypt.validatePassword hashedPassword
-                        (encodeUtf8 lpPassword)
+                        (encodeUtf8 password)
                 usesPolicy =
                     BCrypt.hashUsesPolicy BCrypt.slowerBcryptHashingPolicy
                         hashedPassword
@@ -465,27 +465,26 @@ validatePassword LoginParameters {..} = do
             hashAnyways authorizationError
   where
     resetRequiredError =
-        void . hashAnyways $ V.singleError
-            "Sorry, you need to reset your password before logging in."
+        void . hashAnyways $ throw PasswordResetRequired
     authorizationError =
-        V.singleError "Invalid Email or Password."
+        throw AuthorizationError
     -- Hash the password without trying to validate it to prevent
     -- mining of valid logins.
-    hashAnyways :: App a -> App a
+    hashAnyways :: AppSQL a -> AppSQL a
     hashAnyways returnValue = do
         hash <- liftIO . BCrypt.hashPasswordUsingPolicy BCrypt.slowerBcryptHashingPolicy
-            $ encodeUtf8 lpPassword
+            $ encodeUtf8 password
         const returnValue $! hash
     -- Try to use Zencart's password hashing scheme to validate the
     -- user's password. If it is valid, upgrade to the BCrypt hashing
     -- scheme.
-    validateZencartPassword :: Entity Customer -> App (Entity Customer)
+    validateZencartPassword :: Entity Customer -> AppSQL (Entity Customer)
     validateZencartPassword e@(Entity customerId customer) =
         case T.splitOn ":" (customerEncryptedPassword customer) of
             [passwordHash, salt] ->
                 if T.length salt == 2 then
                     let isValid =
-                            T.pack (show . md5 . LBS.fromStrict . encodeUtf8 $ salt <> lpPassword)
+                            T.pack (show . md5 . LBS.fromStrict . encodeUtf8 $ salt <> password)
                                 == passwordHash
                     in
                         if isValid then
@@ -498,15 +497,36 @@ validatePassword LoginParameters {..} = do
                 authorizationError
     -- Upgrade the Customer's password by hashing it using the current
     -- BCrypt hashing policy.
-    makeNewPasswordHash :: CustomerId -> App ()
+    makeNewPasswordHash :: CustomerId -> AppSQL ()
     makeNewPasswordHash customerId = do
         maybeNewHash <- liftIO . BCrypt.hashPasswordUsingPolicy
             BCrypt.slowerBcryptHashingPolicy
-            $ encodeUtf8 lpPassword
+            $ encodeUtf8 password
         newHash <- maybe
-            (serverError $ err500 { errBody = "Misconfigured Hashing Policy" })
+            (throw MisconfiguredHashingPolicy)
             (return . decodeUtf8) maybeNewHash
-        runDB $ update customerId [CustomerEncryptedPassword =. newHash]
+        update customerId [CustomerEncryptedPassword =. newHash]
+
+data PasswordValidationError
+    = AuthorizationError
+    | PasswordResetRequired
+    | MisconfiguredHashingPolicy
+    deriving (Show)
+
+instance Exception PasswordValidationError
+
+-- | Handle a PasswordError by throwing HTTP errors.
+--
+-- A 422 error will be thrown if the email/password are invalid. A 500
+-- error will be thrown if the hashing policy is invalid.
+handlePasswordValidationError :: PasswordValidationError -> App a
+handlePasswordValidationError = \case
+    AuthorizationError ->
+        V.singleError "Invalid Email or Password."
+    PasswordResetRequired ->
+        V.singleError "Sorry, you need to reset your password before logging in."
+    MisconfiguredHashingPolicy ->
+        serverError $ err500 { errBody = "Misconfigured Hashing Policy" }
 
 
 -- Carts

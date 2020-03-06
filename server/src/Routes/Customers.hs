@@ -13,7 +13,7 @@ module Routes.Customers
     , customerRoutes
     ) where
 
-import Control.Exception.Safe (throwM, Exception, try)
+import Control.Exception.Safe (throwM, Exception, try, handle)
 import Control.Monad ((>=>), (<=<), when, void)
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Reader (ask)
@@ -40,7 +40,7 @@ import Models.Fields
     (ArmedForcesRegionCode, armedForcesRegion, Cents(..), creditLineItemTypes)
 import Routes.CommonData
     ( AuthorizationData, toAuthorizationData, AddressData(..), toAddressData
-    , fromAddressData, LoginParameters(..), validatePassword
+    , fromAddressData, LoginParameters(..), validatePassword, handlePasswordValidationError
     )
 import Routes.Utils (generateUniqueToken, hashPassword)
 import Server
@@ -243,8 +243,9 @@ type LoginRoute =
     :> Post '[JSON] (Cookied AuthorizationData)
 
 loginRoute :: LoginParameters -> App (Cookied AuthorizationData)
-loginRoute lp@LoginParameters { lpCartToken, lpRemember } = do
-    e@(Entity customerId customer) <- validatePassword lp
+loginRoute LoginParameters { lpEmail, lpPassword, lpCartToken, lpRemember } = do
+    e@(Entity customerId customer) <- handle handlePasswordValidationError
+        $ runDB $ validatePassword lpEmail lpPassword
     runDB $ maybeMergeCarts customerId lpCartToken
     let sessionSettings = if lpRemember then permanentSession else temporarySession
     addSessionCookie sessionSettings (makeToken customer)
