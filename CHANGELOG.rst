@@ -6,6 +6,8 @@ CHANGELOG
 v1.03.08
 =========
 
+* Log in users if they try to register with an existing email address and valid
+  password during checkout.
 * Change Slug & Title for Fundraisers page.
 * Add hover text to the Product Variant dropdowns.
 * Add heading to Icon Legends on search & category pages.

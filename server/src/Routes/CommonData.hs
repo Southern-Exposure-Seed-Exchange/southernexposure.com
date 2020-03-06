@@ -462,7 +462,7 @@ validatePassword email password = do
             else
                 validateZencartPassword e
         Nothing ->
-            hashAnyways authorizationError
+            hashAnyways $ throw NoCustomer
   where
     resetRequiredError =
         void . hashAnyways $ throw PasswordResetRequired
@@ -510,6 +510,7 @@ validatePassword email password = do
 data PasswordValidationError
     = AuthorizationError
     | PasswordResetRequired
+    | NoCustomer
     | MisconfiguredHashingPolicy
     deriving (Show)
 
@@ -522,6 +523,8 @@ instance Exception PasswordValidationError
 handlePasswordValidationError :: PasswordValidationError -> App a
 handlePasswordValidationError = \case
     AuthorizationError ->
+        V.singleError "Invalid Email or Password."
+    NoCustomer ->
         V.singleError "Invalid Email or Password."
     PasswordResetRequired ->
         V.singleError "Sorry, you need to reset your password before logging in."

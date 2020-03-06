@@ -47,6 +47,7 @@ import Routes.CommonData
     , fromAddressData, ShippingCharge(..), VariantData(..), getVariantPrice
     , OrderDetails(..), toCheckoutOrder, getCheckoutProducts, CheckoutProduct
     , LoginParameters(..), validatePassword, handlePasswordValidationError
+    , PasswordValidationError(..)
     )
 import Routes.AvalaraUtils (createAvalaraTransaction, createAvalaraCustomer)
 import Routes.Utils (hashPassword, generateUniqueToken)
@@ -558,15 +559,6 @@ customerPlaceOrderRoute = validateCookieAndParameters $ \ce@(Entity customerId c
         , podProducts = products
         }
     where
-          getOrCreateStripeCustomer :: Entity Customer -> T.Text -> AppSQL StripeCustomerId
-          getOrCreateStripeCustomer (Entity customerId customer) stripeToken =
-            case customerStripeId customer of
-                Just stripeId ->
-                    return stripeId
-                Nothing -> do
-                    newId <- createStripeCustomer (customerEmail customer) stripeToken
-                    update customerId [CustomerStripeId =. Just newId]
-                    return newId
           createAddressesAndOrder
             :: Entity Customer -> CustomerAddress -> Maybe CustomerAddress
             -> Maybe Cents -> Bool -> Maybe T.Text -> T.Text -> UTCTime
@@ -602,21 +594,6 @@ customerPlaceOrderRoute = validateCookieAndParameters $ \ce@(Entity customerId c
                         , AddressCustomerId ==. customerId ]
                         [ AddressIsDefault =. False ]
                 insertOrActivateAddress newAddress
-          setCustomerCard :: Customer -> StripeCustomerId -> Address -> T.Text -> AppSQL ()
-          setCustomerCard customer stripeCustomerId billingAddress stripeToken = do
-            stripeCardId <- case customerStripeId customer of
-                Nothing ->
-                    getFirstStripeCard stripeCustomerId
-                Just _ -> do
-                    -- Already Had Customer, Create New Card w/ Token
-                    requestResult <- lift . stripeRequest $
-                        createCustomerCardByToken (fromStripeCustomerId stripeCustomerId)
-                            (Stripe.TokenId stripeToken)
-                    either (throwM . StripeError) (return . Stripe.cardId) requestResult
-            updateCardAddress stripeCustomerId stripeCardId billingAddress
-            lift (stripeRequest (updateCustomer (fromStripeCustomerId stripeCustomerId)
-                -&- Stripe.DefaultCard stripeCardId))
-                >>= either (throwM . StripeError) (void . return)
 
 
 data AnonymousPlaceOrderParameters =
@@ -647,16 +624,12 @@ instance FromJSON AnonymousPlaceOrderParameters where
 
 instance Validation AnonymousPlaceOrderParameters where
     validators parameters = do
-        emailDoesntExist <- V.uniqueCustomer $ apopEmail parameters
         shippingValidators <- validators $ apopShippingAddress parameters
         billingValidators <- maybe (return []) validators
             $ apopBillingAddress parameters
         return $
             [ ( "email"
               , [ V.required $ apopEmail parameters
-                , ( "An Account with this Email already exists."
-                  , emailDoesntExist
-                  )
                 ]
               )
             , ( "password"
@@ -694,32 +667,61 @@ type AnonymousPlaceOrderRoute =
 -- A new Customer & Order is created & the Customer is charged.
 anonymousPlaceOrderRoute :: AnonymousPlaceOrderParameters -> App (Cookied AnonymousPlaceOrderData)
 anonymousPlaceOrderRoute = validate >=> \parameters -> do
-    encryptedPass <- hashPassword $ apopPassword parameters
-    authToken <- runDB $ generateUniqueToken UniqueToken
+    let email = apopEmail parameters
+        password = apopPassword parameters
+        shippingParam = apopShippingAddress parameters
+        billingParam = apopBillingAddress parameters
+        makeAvalaraCustomer = createAvalaraCustomer email
+            $ fromMaybe shippingParam billingParam
+    maybeCustomer <-
+        try (runDB $ validatePassword email password) >>= \case
+            Right e ->
+                return $ Just e
+            Left NoCustomer ->
+                return Nothing
+            Left e@MisconfiguredHashingPolicy ->
+                handlePasswordValidationError e
+            Left AuthorizationError ->
+                V.singleFieldError "email" "An Account with this Email already exists."
+            Left PasswordResetRequired ->
+                V.singleFieldError "email"
+                    "An Account with this Email exists, but a password reset is required."
+    authToken <- maybe (runDB $ generateUniqueToken UniqueToken)
+        (return . customerAuthToken . entityVal) maybeCustomer
     currentTime <- liftIO getCurrentTime
-    let shippingParameter = NewAddress $ apopShippingAddress parameters
-    (orderId, orderData) <- withPlaceOrderErrors shippingParameter . runDB $ do
-        avalaraCustomerCode <- createAvalaraCustomer (apopEmail parameters)
-            $ fromMaybe (apopShippingAddress parameters)
-            $ apopBillingAddress parameters
-        let customer = Customer
-                { customerEmail = apopEmail parameters
-                , customerStoreCredit = Cents 0
-                , customerMemberNumber = ""
-                , customerEncryptedPassword = encryptedPass
-                , customerAuthToken = authToken
-                , customerStripeId = Nothing
-                , customerAvalaraCode = avalaraCustomerCode
-                , customerIsAdmin = False
-                }
-        customerId <- insert customer
-        mergeAnonymousCart (apopCartToken parameters) customerId
+    (orderId, orderData) <- withPlaceOrderErrors (NewAddress shippingParam) . runDB $ do
+        c@(Entity customerId customer) <- case maybeCustomer of
+            Nothing -> do
+                encryptedPass <- lift . hashPassword $ apopPassword parameters
+                avalaraCustomerCode <- makeAvalaraCustomer
+                let customer = Customer
+                        { customerEmail = email
+                        , customerStoreCredit = Cents 0
+                        , customerMemberNumber = ""
+                        , customerEncryptedPassword = encryptedPass
+                        , customerAuthToken = authToken
+                        , customerStripeId = Nothing
+                        , customerAvalaraCode = avalaraCustomerCode
+                        , customerIsAdmin = False
+                        }
+                customerId <- insert customer
+                mergeAnonymousCart (apopCartToken parameters) customerId
+                return $ Entity customerId customer
+            Just c@(Entity customerId customer) -> do
+                overwriteCustomerCart customerId . Just $ apopCartToken parameters
+                case customerAvalaraCode customer of
+                    Just _ -> return c
+                    Nothing -> do
+                        avalaraCustomerCode <- makeAvalaraCustomer
+                        update customerId [CustomerAvalaraCode =. avalaraCustomerCode]
+                        return $ Entity customerId customer
+                            { customerAvalaraCode = avalaraCustomerCode }
         (Entity cartId _) <- getBy (UniqueCustomerCart $ Just customerId)
             >>= maybe (throwM CartNotFound) return
         let shippingAddress = fromAddressData Shipping customerId
-                $ apopShippingAddress parameters
+                shippingParam
             maybeBillingAddress = fromAddressData Billing customerId
-                <$> apopBillingAddress parameters
+                <$> billingParam
         shippingId <- insert shippingAddress
         billingId <- sequence $ insert <$> maybeBillingAddress
         let shippingEntity = Entity shippingId shippingAddress
@@ -734,11 +736,10 @@ anonymousPlaceOrderRoute = validate >=> \parameters -> do
             $ \orderTotal ->
                 case (maybeBillingAddress, apopStripeToken parameters) of
                     (Just billingAddress, Just stripeToken) -> do
-                        stripeCustomerId <- createStripeCustomer (apopEmail parameters)
+                        stripeCustomerId <- getOrCreateStripeCustomer c
                             stripeToken
                         update customerId [CustomerStripeId =. Just stripeCustomerId]
-                        stripeCardId <- getFirstStripeCard stripeCustomerId
-                        updateCardAddress stripeCustomerId stripeCardId billingAddress
+                        setCustomerCard customer stripeCustomerId billingAddress stripeToken
                         chargeCustomer stripeCustomerId orderId orderTotal
                     (Nothing, _) ->
                         throwM BillingAddressRequired
@@ -763,13 +764,49 @@ anonymousPlaceOrderRoute = validate >=> \parameters -> do
     addSessionCookie temporarySession (AuthToken authToken) orderData
 
 
+-- | Get the Customer's StripeCustomerId or create a new Stripe Customer.
+--
+-- Throws 'StripeError'.
+getOrCreateStripeCustomer :: Entity Customer -> T.Text -> AppSQL StripeCustomerId
+getOrCreateStripeCustomer (Entity customerId customer) stripeToken =
+    case customerStripeId customer of
+        Just stripeId ->
+            return stripeId
+        Nothing -> do
+            newId <- createStripeCustomer (customerEmail customer) stripeToken
+            update customerId [CustomerStripeId =. Just newId]
+            return newId
+
 -- | Create a Stripe Customer with an Email & Token.
+--
+-- Throws 'StripeError'.
 createStripeCustomer :: T.Text -> T.Text -> AppSQL StripeCustomerId
 createStripeCustomer email stripeToken =
     lift (stripeRequest $ createCustomer -&- Email email -&- Stripe.TokenId stripeToken)
         >>= either (throwM . StripeError)
             (return . StripeCustomerId . Stripe.customerId)
 
+-- | Set the Customer's default Stripe Card. Uses the first card if the
+-- customer had no StripeId before, or creates a new card using the
+-- StripeToken if the Stripe Customer existed. Sets the address of the Card
+-- to the Billing Address.
+--
+-- Throws 'StripeError'.
+setCustomerCard :: Customer -> StripeCustomerId -> Address -> T.Text -> AppSQL ()
+setCustomerCard customer stripeCustomerId billingAddress stripeToken = do
+    stripeCardId <- case customerStripeId customer of
+        Nothing ->
+            getFirstStripeCard stripeCustomerId
+        Just _ -> do
+            -- Already Had Customer, Create New Card w/ Token
+            requestResult <- lift . stripeRequest $
+                createCustomerCardByToken (fromStripeCustomerId stripeCustomerId)
+                    (Stripe.TokenId stripeToken)
+            either (throwM . StripeError) (return . Stripe.cardId) requestResult
+    updateCardAddress stripeCustomerId stripeCardId billingAddress
+    lift (stripeRequest (updateCustomer (fromStripeCustomerId stripeCustomerId)
+        -&- Stripe.DefaultCard stripeCardId))
+        >>= either (throwM . StripeError) (void . return)
 
 -- | Update the Name & Address of a Stripe Card.
 updateCardAddress :: StripeCustomerId -> Stripe.CardId -> Address -> AppSQL ()
@@ -1169,9 +1206,7 @@ loginRoute :: CheckoutLoginParameters -> App (Cookied LoginData)
 loginRoute CheckoutLoginParameters { clpLogin, clpDetails } = do
     e@(Entity customerId customer) <- handle handlePasswordValidationError
         $ runDB $ validatePassword (lpEmail clpLogin) (lpPassword clpLogin)
-    runDB $ do
-        getBy (UniqueCustomerCart $ Just customerId) >>= mapM_ (E.deleteCascade . entityKey)
-        mapM_ (`mergeAnonymousCart` customerId) $ lpCartToken clpLogin
+    runDB $ overwriteCustomerCart customerId $ lpCartToken clpLogin
     details <- withCheckoutDetailsErrors . runDB $ getCustomerDetails e clpDetails
     let sessionSettings = if lpRemember clpLogin then permanentSession else temporarySession
         authData = toAuthorizationData e
@@ -1179,6 +1214,13 @@ loginRoute CheckoutLoginParameters { clpLogin, clpDetails } = do
             { ldAuth = authData
             , ldDetails = details
             }
+
+-- | Delete the Customer's existing cart and move the anonymous cart to the
+-- Customer.
+overwriteCustomerCart :: CustomerId -> Maybe T.Text -> AppSQL ()
+overwriteCustomerCart customerId cartToken = do
+    getBy (UniqueCustomerCart $ Just customerId) >>= mapM_ (E.deleteCascade . entityKey)
+    mapM_ (`mergeAnonymousCart` customerId) cartToken
 
 
 -- SUCCESS DETAILS
