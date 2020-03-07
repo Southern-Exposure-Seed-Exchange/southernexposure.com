@@ -103,6 +103,7 @@ update key msg model maybeSessionToken =
                         [ Routing.newUrl key MyAccount
                         , Ports.scrollToTop
                         , User.storeDetails authStatus
+                        , Ports.removeCartSessionToken ()
                         ]
                     )
 
