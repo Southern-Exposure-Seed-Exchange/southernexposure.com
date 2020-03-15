@@ -894,18 +894,20 @@ type alias AdminEditCustomerData =
     , storeCredit : Cents
     , isAdmin : Bool
     , stripeId : Maybe String
+    , avalaraCode : Maybe String
     , orders : List CustomerOrderData
     }
 
 
 adminEditCustomerDataDecoder : Decoder AdminEditCustomerData
 adminEditCustomerDataDecoder =
-    Decode.map6 AdminEditCustomerData
+    Decode.map7 AdminEditCustomerData
         (Decode.field "id" Decode.int)
         (Decode.field "email" Decode.string)
         (Decode.field "storeCredit" centsDecoder)
         (Decode.field "isAdmin" Decode.bool)
         (Decode.field "stripeId" <| Decode.nullable Decode.string)
+        (Decode.field "avalaraCode" <| Decode.nullable Decode.string)
         (Decode.field "orders" <| Decode.list customerOrderDataDecoder)
 
 

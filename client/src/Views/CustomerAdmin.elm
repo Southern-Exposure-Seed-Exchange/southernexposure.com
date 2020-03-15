@@ -278,18 +278,28 @@ edit zone model locations original =
                 , td [] [ a (routeLinkAttributes <| Admin <| AdminOrderDetails order.id) [ text "View Order" ] ]
                 ]
     in
-    [ htmlOrBlank
-        (\stripeId ->
-            div [ class "text-right mb-4" ]
-                [ a
+    [ div [ class "text-right mb-4" ]
+        [ htmlOrBlank
+            (\stripeId ->
+                a
                     [ href <| "https://dashboard.stripe.com/customers/" ++ stripeId
                     , target "_blank"
                     , class "btn btn-sm btn-secondary"
                     ]
                     [ text "View on Stripe" ]
-                ]
-        )
-        original.stripeId
+            )
+            original.stripeId
+        , htmlOrBlank
+            (\avalaraCode ->
+                a
+                    [ href <| "https://admin.avalara.com/exemptions/customers?searchTerm=" ++ avalaraCode
+                    , target "_blank"
+                    , class "btn btn-sm btn-secondary ml-2"
+                    ]
+                    [ text "View on Avalara" ]
+            )
+            original.avalaraCode
+        ]
     , form [ class (Admin.formSavingClass model), onSubmit Submit ]
         [ Form.genericErrorText <| not <| Dict.isEmpty model.errors
         , Api.generalFormErrors model

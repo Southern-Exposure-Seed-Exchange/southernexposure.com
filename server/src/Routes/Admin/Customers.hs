@@ -27,7 +27,7 @@ import Models
     ( CustomerId, Customer(..), Address(..), EntityField(..), Unique(..)
     , Order(..), OrderId, getOrderTotal
     )
-import Models.Fields (Cents, StripeCustomerId, OrderStatus)
+import Models.Fields (Cents, StripeCustomerId, OrderStatus, AvalaraCustomerCode)
 import Routes.CommonData (AddressData, toAddressData)
 import Routes.Utils (extractRowCount, buildWhereQuery, hashPassword, generateUniqueToken, mapUpdate)
 import Server (App, AppSQL, runDB, serverError)
@@ -186,6 +186,7 @@ data CustomerEditData =
         , cedStoreCredit :: Cents
         , cedIsAdmin :: Bool
         , cedStripeId :: Maybe StripeCustomerId
+        , cedAvalaraCode :: Maybe AvalaraCustomerCode
         , cedOrders :: [OrderData]
         } deriving (Show)
 
@@ -197,6 +198,7 @@ instance ToJSON CustomerEditData where
             , "storeCredit" .= cedStoreCredit
             , "isAdmin" .= cedIsAdmin
             , "stripeId" .= cedStripeId
+            , "avalaraCode" .= cedAvalaraCode
             , "orders" .= cedOrders
             ]
 
@@ -232,6 +234,7 @@ customerEditDataRoute t customerId = withAdminCookie t $ \_ ->
                 , cedStoreCredit = customerStoreCredit customer
                 , cedIsAdmin = customerIsAdmin customer
                 , cedStripeId = customerStripeId customer
+                , cedAvalaraCode = customerAvalaraCode customer
                 , cedOrders = orders
                 }
   where

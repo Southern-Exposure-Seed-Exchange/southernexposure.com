@@ -408,6 +408,9 @@ newtype AvalaraCustomerCode =
     AvalaraCustomerCode { fromAvalaraCustomerCode :: Avalara.CustomerCode }
     deriving (Show, Read, Eq)
 
+instance ToJSON AvalaraCustomerCode where
+    toJSON = toJSON . fromAvalaraCustomerCode
+
 instance PersistField AvalaraCustomerCode where
     toPersistValue (AvalaraCustomerCode (Avalara.CustomerCode customerCode)) =
         toPersistValue customerCode

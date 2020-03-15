@@ -6,6 +6,8 @@ CHANGELOG
 v1.03.09
 =========
 
+* Add a "View on Avalara" button to the Edit Customer admin page if the
+  Customer has an associated Avalara Customer.
 * Tweak Priority Shipping text on the Checkout page.
 
 
