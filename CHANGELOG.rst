@@ -3,6 +3,12 @@ CHANGELOG
 =========
 
 
+v1.03.09
+=========
+
+* Tweak Priority Shipping text on the Checkout page.
+
+
 v1.03.08
 =========
 

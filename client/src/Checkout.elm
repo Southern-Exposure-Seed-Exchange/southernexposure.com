@@ -1161,9 +1161,11 @@ view model authStatus locations checkoutDetails =
                 , p []
                     [ b [] [ text "Rush my order!" ]
                     , text <|
-                        " Select this option to put your order at the top of our "
-                            ++ "stack and guarantee your order will be shipped "
-                            ++ "within 2 business days via USPS Priority Mail. "
+                        " Selecting this option will put your order at the top of our "
+                            ++ "stack and generally guarantee your order will be shipped "
+                            ++ "within 2 business days via USPS Priority Mail. This adds "
+                            ++ "an additional cost to your order: $5.00 plus 5% of your "
+                            ++ "order sub-total."
                     , text <|
                         Maybe.withDefault "" <|
                             Maybe.map priorityFeeCost priorityFee
