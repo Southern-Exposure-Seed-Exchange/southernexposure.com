@@ -34,7 +34,7 @@ data Parameters =
         , products :: ProductData
         }
 
-type ProductData = [(OrderProduct, Product, ProductVariant)]
+type ProductData = [(OrderProduct, Product, ProductVariant, Maybe SeedAttribute)]
 
 
 fetchData :: (Monad m, MonadIO m) => OrderId -> E.SqlReadT m (Maybe Parameters)
@@ -48,18 +48,19 @@ fetchData orderId = do
             return (c, o, sa, ba)
     lineItems <- map entityVal <$> P.selectList [OrderLineItemOrderId P.==. orderId] []
     productData <- fmap productDataFromEntities . E.select . E.from $
-        \(op `E.InnerJoin` pv `E.InnerJoin` p) -> do
+        \(op `E.InnerJoin` pv `E.InnerJoin` p `E.LeftOuterJoin` msa) -> do
+            E.on $ msa E.?. SeedAttributeProductId E.==. E.just (p E.^. ProductId)
             E.on $ p E.^. ProductId E.==. pv E.^. ProductVariantProductId
             E.on $ pv E.^. ProductVariantId E.==. op E.^. OrderProductProductVariantId
             E.where_ $ op E.^. OrderProductOrderId E.==. E.val orderId
-            return (op, p, pv)
+            return (op, p, pv, msa)
     return $ case maybeCustomerOrderAddresses of
         Nothing ->
             Nothing
         Just (Entity _ customer, order, Entity _ shipping, maybeBilling) ->
             Just $ Parameters customer (entityVal <$> maybeBilling) shipping order lineItems productData
     where productDataFromEntities =
-            map (\(a, b, c) -> (entityVal a, entityVal b, entityVal c))
+            map (\(a, b, c, d) -> (entityVal a, entityVal b, entityVal c, entityVal <$> d))
 
 
 get :: Parameters -> (String, L.Text)
@@ -75,7 +76,7 @@ showOrderId = show . E.unSqlBackendKey . unOrderKey
 render :: Address
        -> Maybe Address
        -> Entity Order
-       -> [(OrderProduct, Product, ProductVariant)]
+       -> [(OrderProduct, Product, ProductVariant, Maybe SeedAttribute)]
        -> [OrderLineItem]
        -> H.Html
 render shippingAddress billingAddress (Entity orderId order) productData lineItems =
@@ -108,7 +109,8 @@ render shippingAddress billingAddress (Entity orderId order) productData lineIte
                 H.p . H.text $ "Dear " <> customerName <> ","
                 H.p $
                     "Thanks for ordering from Southern Exposure Seed Exchange! Your seeds " <>
-                    "will be shipped via the US Postal Service, most likely in 1-4 days." <>
+                    "will be shipped via the US Postal Service. Seeds are generally shipped " <>
+                    "1-4 days after the order is placed. " <>
                     "Mushrooms, sweet potatoes, garlic bulbs, and other seasonal items will " <>
                     "ship separately. When your order is shipped, you will receive a second " <>
                     "e-mail from us.\n\n"
@@ -163,11 +165,11 @@ addressName addr =
 
 
 -- TODO: Pandoc doesn't convert the colspan to markdown nicely. Find a workaround.
-orderTable :: [(OrderProduct, Product, ProductVariant)] -> [OrderLineItem] -> H.Html
+orderTable :: [(OrderProduct, Product, ProductVariant, Maybe SeedAttribute)] -> [OrderLineItem] -> H.Html
 orderTable productData lineItems =
     let
         subTotal =
-            sum $ map (\(op, _, _) -> orderProductPrice op * Cents (orderProductQuantity op))
+            sum $ map (\(op, _, _, _) -> orderProductPrice op * Cents (orderProductQuantity op))
                 productData
         maybeTaxLine =
             listToMaybe $ filter ((== TaxLine) . orderLineItemType) lineItems
@@ -197,19 +199,20 @@ orderTable productData lineItems =
 
             ) (Nothing, Nothing, Nothing, Nothing, Nothing, [], []) lineItems
         total =
-            getOrderTotal lineItems $ map (\(op, _, _) -> op) productData
+            getOrderTotal lineItems $ map (\(op, _, _, _) -> op) productData
     in
         H.table $ do
             H.thead $ H.tr $ do
                 H.th "SKU"
                 H.th "Name"
+                H.th "Organic"
                 H.th "Price"
-                H.th H.! A.style "text-align: center;" $ "Quantity"
+                H.th H.! alignCenter $ "Quantity"
                 H.th "Total"
             H.tbody $ mapM_ productRow productData
             H.tfoot $ do
                 H.tr $ do
-                    H.th H.! alignRight H.! A.colspan "4" $ "Sub-Total"
+                    H.th H.! alignRight H.! footerColspan $ "Sub-Total"
                     H.th . H.text $ formatCents subTotal
                 maybe (return ()) lineRow maybeShippingLine
                 maybe (return ()) lineRow maybePriorityCharge
@@ -220,31 +223,38 @@ orderTable productData lineItems =
                 discountRow maybeCouponDiscount
                 mapM_ (discountRow . Just) refunds
                 H.tr $ do
-                    H.th H.! A.colspan "4" H.! alignRight $ "Total"
+                    H.th H.! footerColspan H.! alignRight $ "Total"
                     H.th H.! alignLeft $ H.text $ formatCents total
     where alignRight =
             A.style "text-align:right;"
           alignLeft =
             A.style "text-align:left;"
-          productRow (orderProd, prod, variant) =
+          alignCenter =
+            A.style "text-align:center;"
+          footerColspan =
+            A.colspan "5"
+          productRow (orderProd, prod, variant, mAttr) =
             H.tr $ do
                 let price = orderProductPrice orderProd
                     quantity = orderProductQuantity orderProd
                     total = price * Cents quantity
+                    isOrganic = flip (maybe "") mAttr $ \attr ->
+                        if seedAttributeIsOrganic attr then "✔" else ""
                 H.td . H.text $ productBaseSku prod <> productVariantSkuSuffix variant
                 -- TODO: Add Variant Description, Category, & Link to Product
                 H.td . H.text $ productName prod
+                H.td H.! alignCenter $ H.text isOrganic
                 H.td . H.text . formatCents $ price
-                H.td H.! A.style "text-align: center;" $ H.text . T.pack . show $ quantity
+                H.td H.! alignCenter $ H.text . T.pack . show $ quantity
                 (H.td H.! alignLeft) . H.text . formatCents $ total
           discountRow =
               maybe (return ())
                 (\item ->
                     H.tr $ do
-                        H.th H.! A.colspan "4" H.! alignRight $ H.text $ orderLineItemDescription item
+                        H.th H.! footerColspan H.! alignRight $ H.text $ orderLineItemDescription item
                         (H.th H.! alignLeft) . H.text . ("-" <>) . formatCents $ orderLineItemAmount item
                 )
           lineRow item =
                 H.tr $ do
-                    H.th H.! A.colspan "4" H.! alignRight $ H.text $ orderLineItemDescription item
+                    H.th H.! footerColspan H.! alignRight $ H.text $ orderLineItemDescription item
                     (H.th H.! alignLeft) . H.text . formatCents $ orderLineItemAmount item
