@@ -21,7 +21,7 @@ import PageData
 import Ports
 import RemoteData exposing (WebData)
 import Routing exposing (AdminRoute(..), Route(..))
-import Update.Utils exposing (noCommand)
+import Update.Utils exposing (noCommand, removeIndex, updateArray)
 import Validation exposing (FormValidation)
 import Views.Admin as Admin
 import Views.HorizontalForm as Form
@@ -212,24 +212,6 @@ updateForm key msg model =
 
                 _ ->
                     noCommand { model | isSaving = False }
-
-
-{-| TODO: Dupe in Products.AdminViews
--}
-updateArray : Int -> (a -> a) -> Array a -> Array a
-updateArray index updater arr =
-    Array.get index arr
-        |> Maybe.map (\v -> Array.set index (updater v) arr)
-        |> Maybe.withDefault arr
-
-
-{-| TODO: Dupe in Products.AdminViews
--}
-removeIndex : Int -> Array a -> Array a
-removeIndex index arr =
-    Array.append
-        (Array.slice 0 index arr)
-        (Array.slice (index + 1) (Array.length arr) arr)
 
 
 getSurcharges : Cmd Msg

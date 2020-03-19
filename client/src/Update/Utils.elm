@@ -1,13 +1,23 @@
 module Update.Utils exposing
-    ( batchCommand
-    , discardCommand
-    , extraCommand
-    , maybeCommand
-    , noCommand
-    , nothingAndNoCommand
-    , updateAndCommand
-    , withCommand
+    ( noCommand, withCommand, batchCommand, maybeCommand, extraCommand, updateAndCommand, discardCommand, nothingAndNoCommand
+    , updateArray, removeIndex
     )
+
+{-|
+
+
+# Update Helpers
+
+@docs noCommand, withCommand, batchCommand, maybeCommand, extraCommand, updateAndCommand, discardCommand, nothingAndNoCommand
+
+
+# Array Updaters
+
+@docs updateArray, removeIndex
+
+-}
+
+import Array exposing (Array)
 
 
 noCommand : model -> ( model, Cmd msg )
@@ -49,3 +59,21 @@ discardCommand updater ( model, _ ) =
 nothingAndNoCommand : model -> ( model, Maybe a, Cmd msg )
 nothingAndNoCommand model =
     ( model, Nothing, Cmd.none )
+
+
+{-| Update the item at the given array index
+-}
+updateArray : Int -> (a -> a) -> Array a -> Array a
+updateArray index updater arr =
+    Array.get index arr
+        |> Maybe.map (\v -> Array.set index (updater v) arr)
+        |> Maybe.withDefault arr
+
+
+{-| Remove the item at the index of the given array.
+-}
+removeIndex : Int -> Array a -> Array a
+removeIndex index arr =
+    Array.append
+        (Array.slice 0 index arr)
+        (Array.slice (index + 1) (Array.length arr) arr)
