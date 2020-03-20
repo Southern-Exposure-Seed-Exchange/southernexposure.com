@@ -3,6 +3,12 @@ CHANGELOG
 =========
 
 
+v1.03.11
+=========
+
+* Re-enable ability to place orders.
+
+
 v1.03.10
 =========
 
