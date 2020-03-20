@@ -470,6 +470,9 @@ instance Validation CustomerPlaceOrderParameters where
         return $
             ( "", [ ( "There was an error processing your payment, please try again."
                     , whenJust T.null $ cpopStripeToken parameters )
+                  , ( "Sorry, we have temporarily stopped accepting Orders due to a large influx in Order volume. Please check our Homepage for updates."
+                    , True
+                    )
                   ] )
             : map (first $ T.append "shipping-") shippingValidators
             ++ map (first $ T.append "billing-") billingValidators
@@ -635,6 +638,12 @@ instance Validation AnonymousPlaceOrderParameters where
             , ( "password"
               , [ V.required $ apopPassword parameters
                 , V.minimumLength 8 $ apopPassword parameters
+                ]
+              )
+            , ( ""
+              , [ ( "Sorry, we have temporarily stopped accepting Orders due to a large influx in Order volume. Please check our Homepage for updates."
+                  , True
+                  )
                 ]
               )
             ]

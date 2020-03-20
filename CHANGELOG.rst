@@ -3,6 +3,13 @@ CHANGELOG
 =========
 
 
+v1.03.10
+=========
+
+* Temporarily stop accepting new orders because of overwhelming order volume
+  due to the novel coronavirus.
+
+
 v1.03.09
 =========
 

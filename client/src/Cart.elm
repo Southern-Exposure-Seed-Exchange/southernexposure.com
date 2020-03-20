@@ -298,13 +298,23 @@ view ({ quantities } as form_) ({ items, charges } as cartDetails) =
     if not (List.isEmpty items) then
         [ h1 [] [ text "Shopping Cart" ]
         , hr [] []
+        , -- TODO: Remove when restoring checkout
+          div [ class "alert alert-primary" ]
+            [ p [] [ text "Dear Valued Customers," ]
+            , p [] [ text "As the coronavirus pandemic has developed, Southern Exposure Seed Exchange has been inundated with orders for seeds. Our shipping is a few days behind. We are working as hard as we can to get seeds out in a timely way to our customers who want them." ]
+            , p [] [ text "So as not to disappoint you with delayed shipping, we are currently not accepting new orders. As soon as we are caught up on our shipping backlog, we will be happy to take your order and process it promptly. We estimate this may occur by Monday afternoon, March 23. Please check back to this website over the next few days and see how we are doing." ]
+            , p [] [ text "Of course we are grateful that so many customers value our seeds in these troubled times. We thank you for your patience as we deal with this temporary problem. If you prefer not to wait, you might consider ordering from one of the  fine seed companies listed on our homepage." ]
+            ]
+        , hr [] []
         , p [ class "text-center font-weight-bold" ]
             [ text <| "Total Items: " ++ String.fromInt itemCount ++ " Amount: " ++ Format.cents totals.total
             ]
         , form [ class "mb-4", onSubmit Submit ]
             [ cartTable
             , mobileCartTable form_ cartDetails totals
-            , buttons
+
+            -- TODO: Bring back checkout functinality
+            -- , buttons
             ]
         ]
 
