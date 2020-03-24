@@ -6,6 +6,7 @@ CHANGELOG
 v1.03.11
 =========
 
+* Properly render Store Credit errors on the Checkout page.
 * Add Admin page for adding, editing, & deleting the available Shipping
   Methods.
 * Fix cleanup of expired anonymous carts.

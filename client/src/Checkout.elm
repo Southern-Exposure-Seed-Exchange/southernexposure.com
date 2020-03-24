@@ -1142,6 +1142,9 @@ view model authStatus locations checkoutDetails =
                                 ]
                                 []
                             ]
+                        , Dict.get "store-credit" model.errors
+                            |> Maybe.map (\errs -> p [] [ small [] [ Api.errorHtml errs ] ])
+                            |> Maybe.withDefault (text "")
                         ]
 
         maximumStoreCredit =
