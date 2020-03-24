@@ -1,25 +1,29 @@
 module Api exposing
-    ( Endpoint(..)
-    , FormErrors
-    , addError
-    , apiFailureToError
-    , delete
-    , errorHtml
-    , formErrorsDecoder
-    , generalFormErrors
-    , get
-    , getErrorHtml
-    , initialErrors
-    , patch
-    , post
-    , put
+    ( Endpoint(..), get, post, put, patch, delete
+    , withJsonBody, withStringResponse, withJsonResponse, withStringErrorHandler, withErrorHandler
     , sendRequest
-    , withErrorHandler
-    , withJsonBody
-    , withJsonResponse
-    , withStringErrorHandler
-    , withStringResponse
+    , FormErrors, initialErrors, addError, prefixedArrayErrors
+    , apiFailureToError, formErrorsDecoder
+    , errorHtml, generalFormErrors, getErrorHtml
     )
+
+{-|
+
+
+# Requests
+
+@docs Endpoint, get, post, put, patch, delete
+@docs withJsonBody, withStringResponse, withJsonResponse, withStringErrorHandler, withErrorHandler
+@docs sendRequest
+
+
+# Errors
+
+@docs FormErrors, initialErrors, addError, prefixedArrayErrors
+@docs apiFailureToError, formErrorsDecoder
+@docs errorHtml, generalFormErrors, getErrorHtml
+
+-}
 
 import Category exposing (CategoryId(..))
 import Dict exposing (Dict)
@@ -502,6 +506,40 @@ addError field message errors =
 
                 Just es ->
                     Just <| message :: es
+
+
+{-| Filter the FormErrors, keeping only errors for the given prefix & array
+index. The prefix is stripped from the remaining field names.
+-}
+prefixedArrayErrors : String -> Int -> FormErrors -> FormErrors
+prefixedArrayErrors prefix index errs =
+    let
+        fullPrefix =
+            prefix ++ "-" ++ String.fromInt index
+
+        prefixLength =
+            String.length fullPrefix
+
+        isArrayError field =
+            String.startsWith fullPrefix field
+
+        stripPrefix field =
+            if String.startsWith (fullPrefix ++ "-") field then
+                String.dropLeft (prefixLength + 1) field
+
+            else
+                String.dropLeft prefixLength field
+    in
+    Dict.foldl
+        (\k v acc ->
+            if isArrayError k then
+                Dict.insert (stripPrefix k) v acc
+
+            else
+                acc
+        )
+        Dict.empty
+        errs
 
 
 {-| Render a field's error messages in red text.
