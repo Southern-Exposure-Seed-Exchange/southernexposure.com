@@ -38,7 +38,7 @@ import Data.Time (UTCTime, getCurrentTime, addUTCTime)
 import Database.Persist.Sql
     ( (=.), (==.), (<=.), (<.), Entity(..), SelectOpt(..), ToBackendKey, SqlBackend
     , SqlPersistT, runSqlPool, selectFirst, delete, insert_, fromSqlKey
-    , deleteWhere, update
+    , deleteWhere, deleteCascadeWhere, update
     )
 import GHC.Generics (Generic)
 import Numeric.Natural (Natural)
@@ -317,7 +317,7 @@ cleanDatabase :: SqlPersistT IO ()
 cleanDatabase = do
     currentTime <- lift getCurrentTime
     deleteWhere [PasswordResetExpirationTime <. currentTime]
-    deleteWhere [CartExpirationTime <. Just currentTime]
+    deleteCascadeWhere [CartExpirationTime <. Just currentTime]
     deactivateCoupons currentTime
     enqueueTask (Just $ addUTCTime 3600 currentTime) CleanDatabase
   where

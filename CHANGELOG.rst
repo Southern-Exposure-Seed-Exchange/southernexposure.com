@@ -6,6 +6,7 @@ CHANGELOG
 v1.03.11
 =========
 
+* Fix cleanup of expired anonymous carts.
 * Temporarily remove the Priority Shipping option from the Checkout page.
 * Re-enable ability to place orders.
 
