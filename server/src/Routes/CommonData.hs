@@ -365,9 +365,9 @@ makeAdminCategorySelect cache (Entity cId cat) =
 
 -- | Validate a mutli-category select field by ensuring at least one
 -- category is selected & all the Categories exist in the database.
-validateCategorySelect :: [CategoryId] -> App [(T.Text, [(T.Text, Bool)])]
-validateCategorySelect categories =
-    if null categories then
+validateCategorySelect :: Bool -> [CategoryId] -> App [(T.Text, [(T.Text, Bool)])]
+validateCategorySelect isRequired categories =
+    if null categories && isRequired then
         return [ ("", [ ("At least one Category is required.", True) ]) ]
     else
         mapMWithIndex validateCategory categories

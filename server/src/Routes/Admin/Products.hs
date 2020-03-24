@@ -189,7 +189,7 @@ instance Validation ProductParameters where
     validators ProductParameters {..} = do
         slugDoesntExist <- V.doesntExist $ UniqueProductSlug ppSlug
         skuDoesntExist <- V.doesntExist $ UniqueBaseSku ppBaseSku
-        categoryValidations <- validateCategorySelect ppCategories
+        categoryValidations <- validateCategorySelect True ppCategories
         return $
             [ ( ""
               , [ ("At least one Variant is required.", null ppVariantData) ]
@@ -421,7 +421,7 @@ instance Validation EditProductParameters where
     validators EditProductParameters {..} = do
         let ProductParameters {..} = eppProduct
         productExists <- V.exists eppId
-        categoryValidations <- validateCategorySelect ppCategories
+        categoryValidations <- validateCategorySelect True ppCategories
         return $
             [ ( ""
               , [ ("Could not find this product in the database.", productExists)

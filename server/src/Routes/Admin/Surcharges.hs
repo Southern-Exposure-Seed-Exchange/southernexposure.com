@@ -143,7 +143,7 @@ instance Validation SurchagesUpdateParameters where
         validateSurcharge :: Int -> SurchargeData -> App [(T.Text, [(T.Text, Bool)])]
         validateSurcharge index SurchargeData {..} =
             V.prefixFields ("surcharge-" <> T.pack (show index) <> "-")
-                <$> validateCategorySelect sdCategories
+                <$> validateCategorySelect True sdCategories
         mapMWithIndex action =
             go 0
           where
