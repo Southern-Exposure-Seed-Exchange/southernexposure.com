@@ -1,8 +1,8 @@
 module Validation exposing
     ( FormValidation, formValidation, mapFormErrors, mergeFormValidation, addFormError, indexedValidation
     , FormErrors, mapFieldNames
-    , Validation, succeed, map, apply, applyMaybe, fromMaybe
-    , int, natural, cents, milligrams, date
+    , Validation, succeed, map, apply, applyMaybe, applyValidation, fromMaybe
+    , int, natural, cents, milligrams, date, array
     )
 
 {-| This module allows us to validate & transform strings received from input
@@ -21,9 +21,9 @@ elements.
 
 # Field Validation
 
-@docs Validation, succeed, map, apply, applyMaybe, fromMaybe
+@docs Validation, succeed, map, apply, applyMaybe, applyValidation, fromMaybe
 
-@docs int, natural, cents, milligrams, date
+@docs int, natural, cents, milligrams, date, array
 
 TODO: Move the FormErrors types & manipulation functions from the Api module to
 here.
@@ -31,6 +31,7 @@ here.
 -}
 
 import Api
+import Array exposing (Array)
 import Dict
 import Iso8601
 import Models.Fields exposing (Cents, Milligrams, centsFromString, milligramsFromString)
@@ -60,6 +61,28 @@ mapFormErrors updater =
 mapFormValidation : (a -> b) -> FormValidation a -> FormValidation b
 mapFormValidation =
     Result.map
+
+
+map2FormValidation : (a -> b -> c) -> FormValidation a -> FormValidation b -> FormValidation c
+map2FormValidation f fv1 fv2 =
+    case ( fv1, fv2 ) of
+        ( Err e1, Err e2 ) ->
+            Err <|
+                Dict.merge Dict.insert
+                    (\k v1 v2 acc -> Dict.insert k (v1 ++ v2) acc)
+                    Dict.insert
+                    e1
+                    e2
+                    Dict.empty
+
+        ( Err e, Ok _ ) ->
+            Err e
+
+        ( Ok _, Err e ) ->
+            Err e
+
+        ( Ok a, Ok b ) ->
+            Ok <| f a b
 
 
 {-| Turn a list of valiated forms in a form of validation lists.
@@ -121,7 +144,7 @@ addFormError toAdd current =
 indexedValidation : String -> (a -> FormValidation b) -> List a -> FormValidation (List b)
 indexedValidation prefix validator =
     let
-        prefixFields index =
+        prefixFields_ index =
             mapFormErrors <|
                 mapFieldNames <|
                     \name ->
@@ -131,7 +154,7 @@ indexedValidation prefix validator =
         << List.indexedMap
             (\index item ->
                 validator item
-                    |> prefixFields index
+                    |> prefixFields_ index
             )
 
 
@@ -146,6 +169,13 @@ type alias FormErrors =
 mapFieldNames : (String -> String) -> FormErrors -> FormErrors
 mapFieldNames updater =
     Dict.foldr (\k v errs -> Dict.insert (updater k) v errs) Dict.empty
+
+
+prefixFields : String -> FormErrors -> FormErrors
+prefixFields prefix =
+    mapFieldNames <|
+        \name ->
+            prefix ++ "-" ++ name
 
 
 {-| A validation has an error message or the validated value.
@@ -196,6 +226,22 @@ applyMaybe fieldName validator maybeVal result =
 
         Just val ->
             apply fieldName (map Just <| validator val) result
+
+
+applyValidation : FormValidation a -> FormValidation (a -> b) -> FormValidation b
+applyValidation validation result =
+    case ( validation, result ) of
+        ( Err msgs, Err r ) ->
+            addFormError (Err msgs) (Err r)
+
+        ( Err msgs, Ok _ ) ->
+            Err msgs
+
+        ( Ok _, Err r ) ->
+            Err r
+
+        ( Ok a, Ok aToB ) ->
+            Ok <| aToB a
 
 
 {-| Validate a String is a whole number.
@@ -249,3 +295,22 @@ fromMaybe : String -> Maybe a -> Validation a
 fromMaybe msg =
     Maybe.map Ok
         >> Maybe.withDefault (Err msg)
+
+
+{-| Build a FormValidation from a validator and an Array, prefixing the error
+fields with `<prefix>-<index>-`.
+-}
+array : String -> (a -> FormValidation b) -> Array a -> FormValidation (Array b)
+array prefix validator arr =
+    let
+        validations =
+            Array.indexedMap
+                (\i v -> mapFormErrors (prefixFields <| prefix ++ "-" ++ String.fromInt i) <| validator v)
+                arr
+
+        sequenceArray : Array (FormValidation b) -> FormValidation (Array b)
+        sequenceArray =
+            Array.foldl (\v acc -> map2FormValidation Array.push v acc)
+                (formValidation Array.empty)
+    in
+    sequenceArray validations
