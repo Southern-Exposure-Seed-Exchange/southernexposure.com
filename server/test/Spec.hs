@@ -27,6 +27,7 @@ import Web.FormUrlEncoded (FromForm(..), urlDecodeForm, fromEntriesByKey)
 import Avalara
 import Models
 import Models.Fields
+import Routes.Admin.ShippingMethods
 import Routes.CommonData
 import Routes.StoneEdge
 import StoneEdge
@@ -47,6 +48,7 @@ tests =
          , stoneEdge
          , routesStoneEdge
          , avalara
+         , routesAdminShipping
          ]
 
 
@@ -55,6 +57,7 @@ modelsFields =
     testGroup "Models.Fields Module"
         [ testProperty "LotSize Aeson Instances" $ testJSON genLotSize
         , testProperty "CouponType Aeson Instances" $ testJSON genCouponType
+        , testProperty "Country Aeson Instances" $ testJSON genCountry
         ]
 
 modelsUtils :: TestTree
@@ -712,6 +715,42 @@ avalara = testGroup "Avalara Module"
             ]
 
 
+-- ROUTES.ADMIN.SHIPPINGMETHODS
+routesAdminShipping :: TestTree
+routesAdminShipping = testGroup "Routes.Admin.ShippingMethods Module"
+    [ aesonTests
+    ]
+  where
+    aesonTests :: TestTree
+    aesonTests = testGroup "Aeson Instances"
+        [ testProperty "MethodData" $ testJSON genMethodData
+        , testProperty "RateData" $ testJSON genRateData
+        , testProperty "RateType" $ testJSON genRateType
+        ]
+    genRateType :: Gen RateType
+    genRateType =
+        Gen.choice [ return FlatRate, return PercentRate ]
+    genRateData :: Gen RateData
+    genRateData =
+        RateData
+            <$> genCents
+            <*> Gen.integral (Range.linear 0 100)
+            <*> genRateType
+    genMethodData :: Gen MethodData
+    genMethodData =
+        MethodData
+            <$> Gen.maybe genEntityKey
+            <*> genText
+            <*> Gen.list (Range.linear 1 10) genCountry
+            <*> Gen.list (Range.linear 1 10) genRateData
+            <*> genCents
+            <*> Gen.integral (Range.linear 0 100)
+            <*> Gen.list (Range.linear 1 10) genEntityKey
+            <*> Gen.list (Range.linear 1 10) genEntityKey
+            <*> Gen.integral (Range.linear 1 1000)
+            <*> Gen.bool
+
+
 
 -- UTILITIES
 
@@ -861,3 +900,6 @@ genUTCTime =
 
 genDay :: Gen Day
 genDay = ModifiedJulianDay <$> Gen.integral (Range.linear 0 999999)
+
+genCountry :: Gen Country
+genCountry = Country <$> Gen.enumBounded

@@ -114,6 +114,7 @@ library:
         - Images
         - Models
         - Models.Fields
+        - Routes.Admin.ShippingMethods
         - Routes.CommonData
         - Routes.StoneEdge
         - StoneEdge
