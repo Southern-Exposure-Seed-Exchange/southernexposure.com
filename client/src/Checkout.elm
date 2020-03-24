@@ -1306,7 +1306,11 @@ view model authStatus locations checkoutDetails =
                 billingCard
             ]
         , div [ class "row mb-3" ]
-            [ storeCreditForm, priorityShippingForm, mobileCouponCodeForm ]
+            [ storeCreditForm
+
+            -- , priorityShippingForm
+            , mobileCouponCodeForm
+            ]
         , div [ class "mb-3" ]
             [ h4 [] [ text "Order Summary" ]
             , summaryTable checkoutDetails
