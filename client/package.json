@@ -1,6 +1,6 @@
 {
     "name": "sese-website",
-    "version": "1.03.10",
+    "version": "1.03.11",
     "description": "An E-Commerce Website for Southern Exposure Seed Exchange",
     "main": "src/index.js",
     "scripts": {
