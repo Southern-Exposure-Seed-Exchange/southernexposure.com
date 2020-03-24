@@ -297,7 +297,8 @@ surchargeForm errors categories index model =
         [ inputRow model.description InputDescription True "Description" "description" "text" "none"
         , inputRow model.singleFee InputSingleFee True "Single-Item Fee" "singleFee" "text" "none"
         , inputRow model.multipleFee InputMultipleFee True "Multiple-Item Fee" "multipleFee" "text" "none"
-        , Admin.categorySelects SelectCategory
+        , Admin.categorySelects True
+            SelectCategory
             AddCategory
             RemoveCategory
             { errors = errors, categories = model.categories }

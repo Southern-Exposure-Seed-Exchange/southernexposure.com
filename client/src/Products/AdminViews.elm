@@ -760,7 +760,7 @@ formView buttonText submitMsg msgWrapper model { categories } =
             , h3 [] [ text "Base Product" ]
             , inputRow .name InputName True "Name" "name" "text" "off"
             , inputRow .slug InputSlug True "Slug" "slug" "text" "off"
-            , Admin.categorySelects SelectCategory AddCategory RemoveCategory model categories
+            , Admin.categorySelects True SelectCategory AddCategory RemoveCategory model categories
             , inputRow .baseSku InputBaseSku True "Base SKU" "baseSku" "text" "off"
             , Form.textareaRow model.errors model.description InputDescription False "Description" "description" 10
             , inputRow .keywords InputKeywords False "Search Keywords" "keywords" "text" "off"

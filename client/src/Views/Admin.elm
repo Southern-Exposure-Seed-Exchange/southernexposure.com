@@ -1,5 +1,7 @@
 module Views.Admin exposing
-    ( SearchableTableConfig
+    ( MultiSelectConfig
+    , MultiSelectItem
+    , SearchableTableConfig
     , activeIcon
     , base64ImagePreview
     , categorySelects
@@ -7,6 +9,7 @@ module Views.Admin exposing
     , equalsOriginal
     , formSavingClass
     , imageSelectRow
+    , multiSelect
     , searchInput
     , searchableTable
     , slugFrom
@@ -170,80 +173,128 @@ formSavingClass { isSaving } =
         ""
 
 
-{-| Render a Dropdown of Categories with buttons for removing & adding additional dropdowns.
--}
-categorySelects :
-    (Int -> CategoryId -> msg)
-    -> msg
-    -> (Int -> msg)
-    -> { a | errors : Api.FormErrors, categories : Array CategoryId }
-    -> List PageData.AdminCategorySelect
-    -> Html msg
-categorySelects selectMsg addMsg removeMsg model categories =
+type alias MultiSelectItem a =
+    { name : String
+    , value : a
+    }
+
+
+type alias MultiSelectConfig msg a =
+    { isRequired : Bool
+    , selectMsg : Int -> a -> msg
+    , addMsg : msg
+    , removeMsg : Int -> msg
+    , errors : Api.FormErrors
+    , selected : Array a
+    , items : List (MultiSelectItem a)
+    , toValue : a -> String
+    , fromValue : String -> Result String a
+    , blankOption : MultiSelectItem a
+    , prefix : String
+    , label : String
+    , addLabel : String
+    }
+
+
+multiSelect : MultiSelectConfig msg a -> Html msg
+multiSelect cfg =
     let
-        renderSelect index category =
+        renderSelect index item =
             div [ class "mb-2 d-flex align-items-center" ]
                 [ select
                     [ class "form-control d-inline-block  w-75"
                     , onSelect index
                     ]
                   <|
-                    blankOption category
-                        ++ List.map (renderCategoryOption category) categories
-                , if index /= 0 then
+                    blankOption item
+                        ++ List.map (renderOption item) cfg.items
+                , if index /= 0 || not cfg.isRequired then
                     button
                         [ class "btn btn-sm btn-danger ml-2"
-                        , onClick <| removeMsg index
+                        , onClick <| cfg.removeMsg index
                         , type_ "button"
                         ]
                         [ icon "times" ]
 
                   else
                     text ""
-                , Api.getErrorHtml ("category-" ++ String.fromInt index) model.errors
+                , Api.getErrorHtml (cfg.prefix ++ "-" ++ String.fromInt index) cfg.errors
                 ]
 
         onSelect index =
             targetValue
                 |> Decode.andThen decoder
-                |> Decode.map (selectMsg index)
+                |> Decode.map (cfg.selectMsg index)
                 |> on "change"
 
         decoder str =
-            case Category.idParser str of
+            case cfg.fromValue str of
                 Ok x ->
                     Decode.succeed x
 
                 Err e ->
                     Decode.fail e
 
-        renderCategoryOption category { id, name } =
+        renderOption current opt =
             option
-                [ value <| (\(CategoryId i) -> String.fromInt i) id
-                , selected <| id == category
+                [ value <| cfg.toValue opt.value
+                , selected <| opt.value == current
                 ]
-                [ text name ]
+                [ text opt.name ]
 
-        blankOption category =
-            if category == CategoryId 0 then
-                [ option [ value "", selected True ] [ text "" ] ]
+        blankOption item =
+            if item == cfg.blankOption.value then
+                [ option
+                    [ value <| cfg.toValue cfg.blankOption.value
+                    , selected True
+                    ]
+                    [ text cfg.blankOption.name ]
+                ]
 
             else
                 []
     in
-    Form.withLabel "Categories"
-        True
+    Form.withLabel cfg.label
+        cfg.isRequired
     <|
         [ div [] <|
             Array.toList <|
-                Array.indexedMap renderSelect model.categories
+                Array.indexedMap renderSelect cfg.selected
         , button
             [ class "btn btn-sm btn-secondary"
             , type_ "button"
-            , onClick addMsg
+            , onClick cfg.addMsg
             ]
-            [ text "Add Category" ]
+            [ text <| "Add " ++ cfg.addLabel ]
         ]
+
+
+{-| Render a Dropdown of Categories with buttons for removing & adding additional dropdowns.
+-}
+categorySelects :
+    Bool
+    -> (Int -> CategoryId -> msg)
+    -> msg
+    -> (Int -> msg)
+    -> { a | errors : Api.FormErrors, categories : Array CategoryId }
+    -> List PageData.AdminCategorySelect
+    -> Html msg
+categorySelects isRequired selectMsg addMsg removeMsg model categories =
+    multiSelect
+        { isRequired = isRequired
+        , selectMsg = selectMsg
+        , addMsg = addMsg
+        , removeMsg = removeMsg
+        , errors = model.errors
+        , selected = model.categories
+        , items = List.map (\c -> { name = c.name, value = c.id }) categories
+        , toValue = \(CategoryId i) -> String.fromInt i
+        , fromValue = Category.idParser
+        , blankOption = { name = "", value = CategoryId 0 }
+        , prefix = "category"
+        , label = "Categories"
+        , addLabel = "Category"
+        }
 
 
 {-| Check to see if the new value for an Edit Form's field is equal to the
