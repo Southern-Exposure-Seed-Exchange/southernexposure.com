@@ -327,7 +327,7 @@ type Percent = Natural
 
 data ShippingRate
     = Flat Threshold Cents
-    | Percentage Threshold Percent -- ^ Percent field is 1/10 of a percent(`53 == 5.3%`).
+    | Percentage Threshold Percent -- ^ Percent field is a whole percent(`5 == 5%`).
     deriving (Show, Read, Generic)
 
 derivePersistField "ShippingRate"
