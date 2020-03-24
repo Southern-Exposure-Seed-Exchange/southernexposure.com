@@ -370,23 +370,12 @@ validateCategorySelect isRequired categories =
     if null categories && isRequired then
         return [ ("", [ ("At least one Category is required.", True) ]) ]
     else
-        mapMWithIndex validateCategory categories
+        V.indexedValidator "category" validateCategory categories
   where
-    validateCategory :: Int -> CategoryId -> App (T.Text, [(T.Text, Bool)])
-    validateCategory index categoryId = do
-        let fieldName = "category-" <> T.pack (show index)
+    validateCategory :: CategoryId -> App [(T.Text, Bool)]
+    validateCategory categoryId = do
         exists <- V.exists categoryId
-        return   ( fieldName, [ ("Could not find this Category in the database.", exists) ])
-    mapMWithIndex action =
-        go 0
-      where
-        go index = \case
-            [] ->
-                return []
-            next : rest ->
-                (:)
-                    <$> action index next
-                    <*> go (index + 1) rest
+        return [("Could not find this Category in the database.", exists)]
 
 
 -- Customers

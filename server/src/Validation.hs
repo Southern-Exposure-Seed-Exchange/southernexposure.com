@@ -1,5 +1,7 @@
-{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TupleSections #-}
 module Validation
     ( Validators
     , Validation(..)
@@ -8,6 +10,8 @@ module Validation
     , validateMap
     , mapCheck
     , prefixFields
+    , indexedValidation
+    , indexedValidator
     , required
     , doesntExist
     , noMatches
@@ -102,6 +106,26 @@ prefixFields :: T.Text -> [(FieldName, [(ErrorMessage, Bool)])] -> [(FieldName, 
 prefixFields pfx =
     map (\(fn, errs) -> (pfx <> fn, errs))
 
+-- | Valiate a list of items by prepending a prefix & index to items' field
+-- names.
+indexedValidation :: T.Text -> (a -> App Validators) -> [a] -> App Validators
+indexedValidation prefix validation items =
+    fmap concat . flip indexedMapM items $ \index item ->
+        prefixFields (prefix <> "-" <> T.pack (show index) <> "-")
+            <$> validation item
+
+-- | Validate a field containing a list, suffixing the fieldnames with each
+-- item's index.
+--
+-- Note this differs from the `indexedValidation` function, as that applies
+-- to nested structures with multiple sub-fields while this applies to
+-- a single repeated field.
+indexedValidator :: T.Text -> (a -> App [(ErrorMessage, Bool)]) -> [a] -> App Validators
+indexedValidator fieldName_ validation =
+    indexedMapM $ \index item ->
+        let fieldName = fieldName_ <> "-" <> T.pack (show index)
+        in  (fieldName, ) <$> validation item
+
 required :: T.Text -> (T.Text, Bool)
 required text =
     ("This field is required.", T.null text)
@@ -140,3 +164,16 @@ minimumLength minLength text =
 zeroOrPositive :: (Num a, Ord a) => a -> (T.Text, Bool)
 zeroOrPositive i =
     ("Must be zero or higher.", i < 0)
+
+
+-- UTILS
+
+-- | `mapM` over a list including the index.
+indexedMapM :: Monad m => (Int -> a -> m b) -> [a] -> m [b]
+indexedMapM action =
+    go 0
+  where
+    go index = \case
+        [] -> return []
+        next : rest ->
+            (:) <$> action index next <*> go (succ index) rest

@@ -1,19 +1,16 @@
 {-# LANGUAGE DataKinds #-}
-{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TypeOperators #-}
 module Routes.Admin.Surcharges
     ( SurchargesAPI
     , surchargesRoutes
-    , SurchagesUpdateParameters(..) -- TODO temp for pedantic builds
     ) where
 
 import Control.Concurrent.STM.TVar (readTVarIO)
 import Control.Monad.Reader (asks, liftIO)
 import Data.Aeson (ToJSON(..), FromJSON(..), (.=), (.:), withObject, object)
 import Data.Maybe (isNothing, mapMaybe)
-import Data.Monoid ((<>))
 import Database.Persist ((/<-.), Entity(..), replace, selectList, deleteWhere, insertMany_)
 import Servant ((:<|>)(..), (:>), AuthProtect, ReqBody, Get, Post, JSON)
 
@@ -138,22 +135,11 @@ instance FromJSON SurchagesUpdateParameters where
 
 instance Validation SurchagesUpdateParameters where
     validators SurchagesUpdateParameters {..} =
-        concat <$> mapMWithIndex validateSurcharge supSurcharges
+        V.indexedValidation "surcharge" validateSurcharge supSurcharges
       where
-        validateSurcharge :: Int -> SurchargeData -> App [(T.Text, [(T.Text, Bool)])]
-        validateSurcharge index SurchargeData {..} =
-            V.prefixFields ("surcharge-" <> T.pack (show index) <> "-")
-                <$> validateCategorySelect True sdCategories
-        mapMWithIndex action =
-            go 0
-          where
-            go index = \case
-                [] ->
-                    return []
-                next : rest ->
-                    (:)
-                        <$> action index next
-                        <*> go (index + 1) rest
+        validateSurcharge :: SurchargeData -> App [(T.Text, [(T.Text, Bool)])]
+        validateSurcharge SurchargeData {..} =
+            validateCategorySelect True sdCategories
 
 surchargesUpdateRoute :: WrappedAuthToken -> SurchagesUpdateParameters -> App (Cookied ())
 surchargesUpdateRoute = validateAdminAndParameters $ \_ SurchagesUpdateParameters {..} -> do
