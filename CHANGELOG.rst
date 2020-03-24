@@ -6,6 +6,8 @@ CHANGELOG
 v1.03.11
 =========
 
+* Add Admin page for adding, editing, & deleting the available Shipping
+  Methods.
 * Fix cleanup of expired anonymous carts.
 * Temporarily remove the Priority Shipping option from the Checkout page.
 * Re-enable ability to place orders.

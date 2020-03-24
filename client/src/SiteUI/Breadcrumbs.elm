@@ -191,6 +191,9 @@ view route pageData =
                 Admin Surcharges ->
                     singleItem "Surcharges"
 
+                Admin ShippingMethods ->
+                    singleItem "Shipping Methods"
+
                 Redirect _ ->
                     singleItem "Redirecting..."
 

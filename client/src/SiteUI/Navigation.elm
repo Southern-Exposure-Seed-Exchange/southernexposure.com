@@ -301,6 +301,9 @@ adminView route =
                         ( Surcharges, _ ) ->
                             False
 
+                        ( ShippingMethods, _ ) ->
+                            False
+
                 _ ->
                     False
     in
@@ -326,6 +329,7 @@ adminView route =
                     , navItem "Customers" <| CustomerList { page = 1, perPage = 50, query = "" }
                     , navItem "Coupons" CouponList
                     , navItem "Surcharges" Surcharges
+                    , navItem "Shipping" ShippingMethods
                     ]
                 ]
             ]

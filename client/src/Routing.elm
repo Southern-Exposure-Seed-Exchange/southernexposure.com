@@ -84,6 +84,7 @@ type AdminRoute
     | CouponNew
     | CouponEdit Int
     | Surcharges
+    | ShippingMethods
 
 
 parseRoute : Url -> Route
@@ -141,6 +142,7 @@ parseRoute =
                 , Url.map CouponNew (Url.s "coupons" </> Url.s "new")
                 , Url.map CouponEdit (Url.s "coupons" </> Url.s "edit" </> Url.int)
                 , Url.map Surcharges (Url.s "surcharges")
+                , Url.map ShippingMethods (Url.s "shipping-methods")
                 ]
 
         adminPaginationQueryParser =
@@ -396,6 +398,9 @@ reverseAdmin route =
                 Surcharges ->
                     [ "surcharges" ]
 
+                ShippingMethods ->
+                    [ "shipping-methods" ]
+
         queryStrings =
             case route of
                 Dashboard ->
@@ -450,6 +455,9 @@ reverseAdmin route =
                     []
 
                 Surcharges ->
+                    []
+
+                ShippingMethods ->
                     []
 
         recordToQueryParams { page, perPage, query } =

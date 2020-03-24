@@ -47,6 +47,7 @@ import View exposing (view)
 import Views.CouponAdmin as CouponAdmin
 import Views.CustomerAdmin as CustomerAdmin
 import Views.OrderAdmin as OrderAdmin
+import Views.ShippingAdmin as ShippingAdmin
 import Views.StaticPageAdmin as StaticPageAdmin
 import Views.SurchargesAdmin as SurchargesAdmin
 
@@ -376,6 +377,11 @@ fetchDataForRoute ({ route, pageData, key } as model) =
                     ( pageData
                     , SurchargesAdmin.getSurcharges |> Cmd.map SurchargesMsg
                     )
+
+                Admin ShippingMethods ->
+                    pageData
+                        |> fetchLocationsOnce
+                        |> batchCommand (ShippingAdmin.getShippingMethods |> Cmd.map ShippingMsg)
 
                 Redirect path ->
                     ( pageData
@@ -1101,6 +1107,11 @@ update msg ({ pageData, key } as model) =
                 |> Tuple.mapFirst (\form -> { model | surchargeForm = form })
                 |> Tuple.mapSecond (Cmd.map SurchargesMsg)
 
+        ShippingMsg subMsg ->
+            ShippingAdmin.update key subMsg model.shippingMethodForm
+                |> Tuple.mapFirst (\form -> { model | shippingMethodForm = form })
+                |> Tuple.mapSecond (Cmd.map ShippingMsg)
+
         ReAuthorize response ->
             case response of
                 RemoteData.Success authStatus ->
@@ -1668,6 +1679,9 @@ runOnCurrentWebData runner { pageData, route } =
         Admin Surcharges ->
             runner <| Just <| RemoteData.Success ()
 
+        Admin ShippingMethods ->
+            runner <| Just <| RemoteData.Success ()
+
 
 {-| Update the current page number using the Paginated data.
 
@@ -1788,6 +1802,9 @@ resetForm oldRoute model =
 
                 Surcharges ->
                     { model | surchargeForm = SurchargesAdmin.initialForm }
+
+                ShippingMethods ->
+                    { model | shippingMethodForm = ShippingAdmin.initialForm }
     in
     case oldRoute of
         ProductDetails _ ->

@@ -41,6 +41,7 @@ import Views.Aria as Aria
 import Views.CouponAdmin as CouponAdmin
 import Views.CustomerAdmin as CustomerAdmin
 import Views.OrderAdmin as OrderAdmin
+import Views.ShippingAdmin as ShippingAdmin
 import Views.StaticPageAdmin as StaticPageAdmin
 import Views.SurchargesAdmin as SurchargesAdmin
 import Views.Utils exposing (pageOverlay, rawHtml)
@@ -250,6 +251,11 @@ view ({ route, pageData, navigationData, zone } as model) =
                 Admin Surcharges ->
                     SurchargesAdmin.view model.surchargeForm
                         |> List.map (Html.map SurchargesMsg)
+
+                Admin ShippingMethods ->
+                    withIntermediateText (.countries >> ShippingAdmin.view model.shippingMethodForm)
+                        pageData.locations
+                        |> List.map (Html.map ShippingMsg)
 
         apply : (a -> b -> c) -> ( a, b ) -> c
         apply f ( a, b ) =
@@ -477,6 +483,9 @@ adminTitle ({ pageData } as model) adminRoute =
 
         Surcharges ->
             "Edit Surcharges"
+
+        ShippingMethods ->
+            "Edit Shipping Methods"
 
 
 pageImage : Model -> Maybe String

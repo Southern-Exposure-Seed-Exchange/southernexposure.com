@@ -103,6 +103,8 @@ type Endpoint
     | AdminEditCoupon
     | AdminSurchargesData
     | AdminSurcharges
+    | AdminShippingData
+    | AdminShipping
 
 
 toUrl : Endpoint -> String
@@ -303,6 +305,12 @@ toUrl endpoint =
 
                 AdminSurcharges ->
                     joinPath [ "admin", "surcharges", "update" ]
+
+                AdminShippingData ->
+                    joinPath [ "admin", "shipping", "data" ]
+
+                AdminShipping ->
+                    joinPath [ "admin", "shipping", "update" ]
     in
     "/api" ++ endpointUrl
 

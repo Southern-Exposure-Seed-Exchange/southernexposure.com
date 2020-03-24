@@ -568,3 +568,13 @@ div.admin#navigation
     border-radius: $border-radius-lg
     padding-top: 1rem
     padding-right: 1rem
+    legend
+      margin-left: 1rem
+      padding: 0 1rem
+      width: auto
+  // Fix inputs spacing inside shipping method's rate table
+  .rate-table
+    .form-group
+      margin-bottom: 0
+      input, select
+        @extend .form-control-sm
