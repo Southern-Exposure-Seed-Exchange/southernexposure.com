@@ -3,6 +3,13 @@ CHANGELOG
 =========
 
 
+v1.03.12
+=========
+
+* Temporarily stop accepting orders again. We will add this functionality to
+  the Admin site so we don't need code changes to do this in the future.
+
+
 v1.03.11
 =========
 
