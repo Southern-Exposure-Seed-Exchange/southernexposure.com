@@ -1,14 +1,17 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
 module Models.DB where
 
+import Control.Monad.IO.Class (MonadIO)
 import Data.Int (Int64)
 import Data.Time.Clock (UTCTime)
+import Database.Persist.Sql (SqlPersistT, Entity(..), selectList, insertEntity, delete, replace)
 import Database.Persist.TH
 import Numeric.Natural (Natural)
 
@@ -229,4 +232,42 @@ Job
     runAt UTCTime Maybe
     retries Int
     deriving Show
+
+
+Settings
+    disableCheckout Bool
+    disabledCheckoutMessage T.Text
+    deriving Show
 |]
+
+
+-- Global Settings
+
+-- | Settings to fallback to if none exist in the database.
+defaultSettings :: Settings
+defaultSettings = Settings
+    { settingsDisableCheckout = False
+    , settingsDisabledCheckoutMessage = T.pack ""
+    }
+
+-- | Fetch settngs from the database, ensuring only one set of values
+-- exists, and inserting the default settings if none exist.
+getSettings :: MonadIO m => SqlPersistT m (Entity Settings)
+getSettings =
+    selectList [] [] >>= \case
+        [] ->
+            insertEntity defaultSettings
+        settings : rest ->
+            mapM_ (delete . entityKey) rest >> return settings
+
+-- | Update the 'Settings' in the database, ensuring only one set of values
+-- exists, and inserting the new value if none exist.
+updateSettings :: MonadIO m => Settings -> SqlPersistT m (Entity Settings)
+updateSettings newValue =
+    selectList [] [] >>= \case
+        [] ->
+            insertEntity newValue
+        Entity settingsId _ : rest ->
+            mapM_ (delete . entityKey) rest
+                >> replace settingsId newValue
+                >> return (Entity settingsId newValue)

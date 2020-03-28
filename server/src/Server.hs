@@ -11,10 +11,12 @@ module Server
     , msgLoggerIO
     , readCache
     , writeCache
+    , writeSetting
     ) where
 
-import Control.Concurrent.STM (atomically, readTVarIO, modifyTVar)
+import Control.Concurrent.STM (atomically, readTVarIO, modifyTVar, readTVar, writeTVar)
 import Control.Exception.Safe (MonadCatch, displayException, tryAny, throwM)
+import Control.Monad (void)
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Monad.Reader (MonadReader, ReaderT, asks, lift, runReaderT)
 import Control.Monad.Except (MonadError)
@@ -24,8 +26,9 @@ import Database.Persist.Sql (SqlPersistT, runSqlPool)
 import Servant (Handler, throwError)
 import Web.Stripe
 
-import Cache (Caches)
+import Cache (Caches(..))
 import Config (Config(..), timedLogStr)
+import Models.DB (Settings, updateSettings)
 
 import qualified Avalara
 import qualified Data.Text as T
@@ -124,3 +127,16 @@ readCache selector =
 writeCache :: (Caches -> Caches) -> App ()
 writeCache updater =
     asks getCaches >>= liftIO . atomically . flip modifyTVar updater
+
+-- | Apply some updater function to the settings cache, updating the
+-- database value as well.
+writeSetting :: (Settings -> Settings) -> App ()
+writeSetting updater = do
+    cacheTVar <- asks getCaches
+    settings <- liftIO . atomically $ do
+        cache <- readTVar cacheTVar
+        let newSettings = updater $ getSettingsCache cache
+            newCache = cache { getSettingsCache = newSettings }
+        writeTVar cacheTVar newCache
+        return newSettings
+    void . runDB $ updateSettings settings

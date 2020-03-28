@@ -17,25 +17,26 @@ import Data.Maybe (fromMaybe, maybeToList)
 import Database.Persist (Entity(..), selectList)
 import Database.Persist.Sql (SqlPersistT)
 
-import Models.DB (Category(..), CategoryId)
+import Models.DB (Category(..), CategoryId, Settings, defaultSettings, getSettings)
 
 import qualified Data.Map.Strict as M
 
 -- | Each cache is available as a field of the Caches type.
-newtype Caches
+data Caches
     = Caches
         { getCategoryPredecessorCache :: CategoryPredecessorCache
+        , getSettingsCache :: Settings
         }
 
 -- | An empty set of caches.
 emptyCache :: Caches
 emptyCache =
-    Caches (CategoryPredecessorCache M.empty)
+    Caches (CategoryPredecessorCache M.empty) defaultSettings
 
 -- | Build all the caches.
 initializeCaches :: MonadIO m => SqlPersistT m Caches
 initializeCaches =
-    Caches <$> syncCategoryPredecessorCache
+    Caches <$> syncCategoryPredecessorCache <*> (entityVal <$> getSettings)
 
 
 
