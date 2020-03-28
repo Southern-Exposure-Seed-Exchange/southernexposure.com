@@ -35,7 +35,7 @@ import User exposing (AuthStatus)
 import Views.Aria as Aria
 import Views.Format as Format
 import Views.HorizontalForm exposing (genericErrorText)
-import Views.Utils exposing (decimalInput, disableGrammarly, emailInput, icon, pageOverlay, routeLinkAttributes)
+import Views.Utils exposing (decimalInput, disableGrammarly, emailInput, icon, pageOverlay, rawHtml, routeLinkAttributes)
 
 
 
@@ -1280,85 +1280,77 @@ view model authStatus locations checkoutDetails =
     in
     [ h1 [] [ text "Checkout" ]
     , hr [] []
-    , -- TODO: Remove when restoring checkout
-      div [ class "alert alert-danger" ]
-        [ p [] [ text "Dear Valued Customers," ]
-        , p [] [ text "As the coronavirus pandemic has developed, Southern Exposure Seed Exchange has been inundated with orders for seeds. Our shipping is a few days behind. We are working as hard as we can to get seeds out in a timely way to our customers who want them." ]
-        , p []
-            [ text "So as not to disappoint you with delayed shipping, "
-            , b [] [ text "we are currently not accepting new orders" ]
-            , text ". As soon as we are caught up on our shipping backlog, we will be happy to take your order and process it promptly. Please check back to this website over the next few days and see how we are doing."
+    , if checkoutDetails.isDisabled then
+        div [ class "alert alert-danger" ]
+            [ rawHtml checkoutDetails.disabledMessage ]
+
+      else
+        form [ onSubmit Submit ]
+            [ processingOverlay
+            , genericErrorText hasErrors
+            , generalErrors
+            , registrationCard
+            , div [ class "row mb-3" ]
+                [ addressForm
+                    { cardTitle = "Shipping Details"
+                    , msg = ShippingMsg
+                    , selectMsg = SelectShipping
+                    , defaultMsg = ToggleShippingDefault
+                    , model = model.shippingAddress
+                    , makeDefault = model.makeShippingDefault
+                    , billingSameAsShipping = model.billingSameAsShipping
+                    , prefix = "shipping"
+                    , locations = locations
+                    , selectAddresses = checkoutDetails.shippingAddresses
+                    , generalErrors =
+                        Dict.get "shipping" model.errors
+                            |> Maybe.withDefault []
+                    , fullWidth = freeCheckout
+                    }
+                , if freeCheckout then
+                    text ""
+
+                  else
+                    billingCard
+                ]
+            , div [ class "row mb-3" ]
+                [ storeCreditForm
+
+                -- , priorityShippingForm
+                , mobileCouponCodeForm
+                ]
+            , div [ class "mb-3" ]
+                [ h4 [] [ text "Order Summary" ]
+                , summaryTable checkoutDetails
+                    model.storeCredit
+                    model.couponCode
+                    (Dict.get "coupon" model.errors)
+                ]
+            , div [ class "form-group" ]
+                [ label [ class "h4", for "commentsTextarea" ]
+                    [ text "Additional Comments" ]
+                , textarea
+                    [ id "commentsTextarea"
+                    , class "form-control"
+                    , rows 4
+                    , onInput Comment
+                    , value model.comment
+                    , disableGrammarly
+                    ]
+                    []
+                , p [ class "text-muted" ]
+                    [ small [] [ text "Please include any special shipping requirements you may have." ]
+                    ]
+                ]
+            , div [ class "form-group text-right" ]
+                [ button
+                    [ class "btn btn-primary"
+                    , type_ "submit"
+                    , A.disabled model.isProcessing
+                    ]
+                    buttonContents
+                ]
             ]
-        , p [] [ text "Of course we are grateful that so many customers value our seeds in these troubled times. We thank you for your patience as we deal with this temporary problem. If you prefer not to wait, you might consider ordering from one of the fine seed companies listed on our homepage." ]
-        ]
-
-    {- , form [ onSubmit Submit ]
-       [ processingOverlay
-       , genericErrorText hasErrors
-       , generalErrors
-       , registrationCard
-       , div [ class "row mb-3" ]
-           [ addressForm
-               { cardTitle = "Shipping Details"
-               , msg = ShippingMsg
-               , selectMsg = SelectShipping
-               , defaultMsg = ToggleShippingDefault
-               , model = model.shippingAddress
-               , makeDefault = model.makeShippingDefault
-               , billingSameAsShipping = model.billingSameAsShipping
-               , prefix = "shipping"
-               , locations = locations
-               , selectAddresses = checkoutDetails.shippingAddresses
-               , generalErrors =
-                   Dict.get "shipping" model.errors
-                       |> Maybe.withDefault []
-               , fullWidth = freeCheckout
-               }
-           , if freeCheckout then
-               text ""
-
-             else
-               billingCard
-           ]
-       , div [ class "row mb-3" ]
-           [ storeCreditForm
-
-           -- , priorityShippingForm
-           , mobileCouponCodeForm
-           ]
-       , div [ class "mb-3" ]
-           [ h4 [] [ text "Order Summary" ]
-           , summaryTable checkoutDetails
-               model.storeCredit
-               model.couponCode
-               (Dict.get "coupon" model.errors)
-           ]
-       , div [ class "form-group" ]
-           [ label [ class "h4", for "commentsTextarea" ]
-               [ text "Additional Comments" ]
-           , textarea
-               [ id "commentsTextarea"
-               , class "form-control"
-               , rows 4
-               , onInput Comment
-               , value model.comment
-               , disableGrammarly
-               ]
-               []
-           , p [ class "text-muted" ]
-               [ small [] [ text "Please include any special shipping requirements you may have." ]
-               ]
-           ]
-       , div [ class "form-group text-right" ]
-           [ button
-               [ class "btn btn-primary"
-               , type_ "submit"
-               , A.disabled model.isProcessing
-               ]
-               buttonContents
-           ]
-       ]
-    -}
     ]
 
 

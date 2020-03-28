@@ -50,7 +50,7 @@ import Routes.CommonData
     , PasswordValidationError(..)
     )
 import Routes.AvalaraUtils (createAvalaraTransaction, createAvalaraCustomer)
-import Routes.Utils (hashPassword, generateUniqueToken)
+import Routes.Utils (hashPassword, generateUniqueToken, getDisabledCheckoutDetails)
 import Validation (Validation(..))
 import Workers (Task(Avalara), AvalaraTask(..), enqueueTask)
 
@@ -176,6 +176,8 @@ data CheckoutDetailsData =
         , cddItems :: [CartItemData]
         , cddCharges :: CartCharges
         , cddStoreCredit :: Cents
+        , cddIsDisabled :: Bool
+        , cddDisabledMessage :: T.Text
         }
 
 instance ToJSON CheckoutDetailsData where
@@ -186,6 +188,8 @@ instance ToJSON CheckoutDetailsData where
             , "items" .= cddItems details
             , "charges" .= cddCharges details
             , "storeCredit" .= cddStoreCredit details
+            , "disabled" .= cddIsDisabled details
+            , "disabledMessage" .= cddDisabledMessage details
             ]
 
 type CustomerDetailsRoute =
@@ -201,6 +205,7 @@ getCustomerDetails :: Entity Customer -> CustomerDetailsParameters -> AppSQL Che
 getCustomerDetails (Entity customerId customer) parameters = do
     let priorityShipping =
             cdpPriorityShipping parameters
+    (isDisabled, disabledMsg) <- lift getDisabledCheckoutDetails
     currentTime <- liftIO getCurrentTime
     customerAddresses <- selectList
         [AddressCustomerId ==. customerId, AddressIsActive ==. True] []
@@ -219,6 +224,8 @@ getCustomerDetails (Entity customerId customer) parameters = do
         , cddItems = items
         , cddCharges = charges
         , cddStoreCredit = customerStoreCredit customer
+        , cddIsDisabled = isDisabled
+        , cddDisabledMessage = disabledMsg
         }
     where
         getShippingAddress :: CustomerDetailsParameters -> [Entity Address] -> AppSQL (Maybe AddressData)
@@ -274,6 +281,7 @@ anonymousDetailsRoute parameters =
             adpPriorityShipping parameters
     in
         withCheckoutDetailsErrors . runDB $ do
+            (isDisabled, disabledMsg) <- lift getDisabledCheckoutDetails
             currentTime <- liftIO getCurrentTime
             maybeCoupon <- mapException DetailsCouponError $ sequence
                 $ getCoupon currentTime Nothing <$> adpCouponCode parameters
@@ -286,6 +294,8 @@ anonymousDetailsRoute parameters =
                 , cddItems = items
                 , cddCharges = charges
                 , cddStoreCredit = 0
+                , cddIsDisabled = isDisabled
+                , cddDisabledMessage = disabledMsg
                 }
 
 
@@ -467,11 +477,13 @@ instance Validation CustomerPlaceOrderParameters where
     validators parameters = do
         shippingValidators <- validateAddress $ cpopShippingAddress parameters
         billingValidators <- maybeValidate validateAddress $ cpopBillingAddress parameters
+        checkoutDisabled <- fst <$> getDisabledCheckoutDetails
         return $
             ( "", [ ( "There was an error processing your payment, please try again."
                     , whenJust T.null $ cpopStripeToken parameters )
-                  , ( "Sorry, we have temporarily stopped accepting Orders due to a large influx in volume. Please check our Homepage for updates."
-                    , True
+                  , ( "Sorry, we have temporarily stopped accepting Orders. "
+                        <> "Please check our Homepage for updates."
+                    , checkoutDisabled
                     )
                   ] )
             : map (first $ T.append "shipping-") shippingValidators
@@ -630,6 +642,7 @@ instance Validation AnonymousPlaceOrderParameters where
         shippingValidators <- validators $ apopShippingAddress parameters
         billingValidators <- maybe (return []) validators
             $ apopBillingAddress parameters
+        checkoutDisabled <- fst <$> getDisabledCheckoutDetails
         return $
             [ ( "email"
               , [ V.required $ apopEmail parameters
@@ -641,8 +654,9 @@ instance Validation AnonymousPlaceOrderParameters where
                 ]
               )
             , ( ""
-              , [ ( "Sorry, we have temporarily stopped accepting Orders due to a large influx in Order volume. Please check our Homepage for updates."
-                  , True
+              , [ ( "Sorry, we have temporarily stopped accepting Orders. "
+                        <> "Please check our Homepage for updates."
+                  , checkoutDisabled
                   )
                 ]
               )

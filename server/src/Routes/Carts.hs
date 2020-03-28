@@ -11,6 +11,7 @@ module Routes.Carts
 
 import Control.Monad ((>=>), void, when)
 import Control.Monad.IO.Class (liftIO)
+import Control.Monad.Trans (lift)
 import Data.Aeson ((.:), (.:?), (.=), FromJSON(..), ToJSON(..), object, withObject)
 import Data.Int (Int64)
 import Data.Maybe (fromMaybe, listToMaybe)
@@ -27,7 +28,7 @@ import Auth
 import Models
 import Models.Fields (AddressType(..))
 import Routes.CommonData (CartItemData(..), CartCharges(..), getCartItems, getCharges, toAddressData)
-import Routes.Utils (generateUniqueToken)
+import Routes.Utils (generateUniqueToken, getDisabledCheckoutDetails)
 import Server
 import Validation (Validation(..))
 
@@ -103,12 +104,16 @@ data CartDetailsData =
     CartDetailsData
         { cddItems :: [ CartItemData ]
         , cddCharges :: CartCharges
+        , cddIsDisabled :: Bool
+        , cddDisabledMessage :: T.Text
         }
 
 instance ToJSON CartDetailsData where
     toJSON details =
         object [ "items" .= cddItems details
                , "charges" .= cddCharges details
+               , "disabled" .= cddIsDisabled details
+               , "disabledMessage" .= cddDisabledMessage details
                ]
 
 
@@ -248,11 +253,12 @@ customerDetailsRoute token = withValidatedCookie token getCustomerCartDetails
 getCustomerCartDetails :: Entity Customer -> App CartDetailsData
 getCustomerCartDetails (Entity customerId _) =
     runDB $ do
+        (checkoutDisabled, disabledMsg) <- lift getDisabledCheckoutDetails
         shippingAddress <- getShipping
         items <- getCartItems $ \c ->
             c E.^. CartCustomerId E.==. E.just (E.val customerId)
         charges <- getCharges shippingAddress items Nothing False False
-        return $ CartDetailsData items charges
+        return $ CartDetailsData items charges checkoutDisabled disabledMsg
     where getShipping =
             fmap toAddressData . listToMaybe
                     <$> P.selectList
@@ -281,10 +287,11 @@ type AnonymousDetailsRoute =
 anonymousDetailsRoute :: AnonymousDetailsParameters -> App CartDetailsData
 anonymousDetailsRoute parameters =
     runDB $ do
+        (checkoutDisabled, disabledMsg) <- lift getDisabledCheckoutDetails
         items <- getCartItems $ \c ->
             c E.^. CartSessionToken E.==. E.just (E.val $ adpCartToken parameters)
         charges <- getCharges Nothing items Nothing False False
-        return $ CartDetailsData items charges
+        return $ CartDetailsData items charges checkoutDisabled disabledMsg
 
 
 

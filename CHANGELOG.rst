@@ -3,6 +3,14 @@ CHANGELOG
 =========
 
 
+v1.03.13
+=========
+
+* Re-enable the checkout process, adding the ability to dynamically disable
+  checkouts with custom messages instead of the previous system of code changes
+  and hardcoded messages.
+
+
 v1.03.12
 =========
 

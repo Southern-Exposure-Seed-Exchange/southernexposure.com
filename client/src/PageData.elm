@@ -329,6 +329,8 @@ addressDetailsDecoder =
 type alias CartDetails =
     { items : List CartItem
     , charges : CartCharges
+    , isDisabled : Bool
+    , disabledMessage : String
     }
 
 
@@ -342,13 +344,17 @@ blankCartDetails =
             Nothing
             (Cents 0)
         )
+        False
+        ""
 
 
 cartDetailsDecoder : Decoder CartDetails
 cartDetailsDecoder =
-    Decode.map2 CartDetails
+    Decode.map4 CartDetails
         (Decode.field "items" <| Decode.list cartItemDecoder)
         (Decode.field "charges" cartChargesDecoder)
+        (Decode.field "disabled" Decode.bool)
+        (Decode.field "disabledMessage" Decode.string)
 
 
 cartTotals : { a | items : List CartItem, charges : CartCharges } -> { subTotal : Cents, total : Cents }
@@ -407,17 +413,21 @@ type alias CheckoutDetails =
     , items : List CartItem
     , charges : CartCharges
     , storeCredit : Cents
+    , isDisabled : Bool
+    , disabledMessage : String
     }
 
 
 checkoutDetailsDecoder : Decoder CheckoutDetails
 checkoutDetailsDecoder =
-    Decode.map5 CheckoutDetails
+    Decode.map7 CheckoutDetails
         (Decode.field "shippingAddresses" <| Decode.list Address.decoder)
         (Decode.field "billingAddresses" <| Decode.list Address.decoder)
         (Decode.field "items" <| Decode.list cartItemDecoder)
         (Decode.field "charges" cartChargesDecoder)
         (Decode.field "storeCredit" centsDecoder)
+        (Decode.field "disabled" Decode.bool)
+        (Decode.field "disabledMessage" Decode.string)
 
 
 isFreeCheckout : WebData CheckoutDetails -> Bool

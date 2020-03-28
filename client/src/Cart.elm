@@ -12,6 +12,7 @@ import Dict exposing (Dict)
 import Html exposing (..)
 import Html.Attributes as A exposing (alt, class, colspan, disabled, src, step, type_, value)
 import Html.Events exposing (onClick, onSubmit)
+import Html.Extra exposing (viewIf)
 import Html.Keyed as Keyed
 import Json.Encode as Encode
 import Models.Fields exposing (Cents(..), centsMap, imageToSrcSet, imgSrcFallback, lotSizeToString)
@@ -298,18 +299,9 @@ view ({ quantities } as form_) ({ items, charges } as cartDetails) =
     if not (List.isEmpty items) then
         [ h1 [] [ text "Shopping Cart" ]
         , hr [] []
-        , -- TODO: Remove when restoring checkout
-          div [ class "alert alert-danger" ]
-            [ p [] [ text "Dear Valued Customers," ]
-            , p [] [ text "As the coronavirus pandemic has developed, Southern Exposure Seed Exchange has been inundated with orders for seeds. Our shipping is a few days behind. We are working as hard as we can to get seeds out in a timely way to our customers who want them." ]
-            , p []
-                [ text "So as not to disappoint you with delayed shipping, "
-                , b [] [ text "we are currently not accepting new orders" ]
-                , text ". As soon as we are caught up on our shipping backlog, we will be happy to take your order and process it promptly. Please check back to this website over the next few days and see how we are doing."
-                ]
-            , p [] [ text "Of course we are grateful that so many customers value our seeds in these troubled times. We thank you for your patience as we deal with this temporary problem. If you prefer not to wait, you might consider ordering from one of the fine seed companies listed on our homepage." ]
-            ]
-        , hr [] []
+        , viewIf cartDetails.isDisabled <|
+            div [ class "alert alert-danger" ]
+                [ rawHtml cartDetails.disabledMessage ]
         , p [ class "text-center font-weight-bold" ]
             [ text <| "Total Items: " ++ String.fromInt itemCount ++ " Amount: " ++ Format.cents totals.total
             ]

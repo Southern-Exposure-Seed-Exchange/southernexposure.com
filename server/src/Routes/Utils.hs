@@ -8,6 +8,8 @@ module Routes.Utils
       -- * Customers
     , generateUniqueToken
     , hashPassword
+      -- * Checkout
+    , getDisabledCheckoutDetails
       -- * Images
     , makeImageFromBase64
       -- * Servant
@@ -35,6 +37,7 @@ import System.FilePath ((</>), takeFileName)
 import Text.HTML.SanitizeXSS (filterTags, safeTagName, sanitizeAttribute)
 import Text.HTML.TagSoup (Tag(TagOpen, TagClose))
 
+import Cache (Caches(getSettingsCache))
 import Config (Config(..))
 import Images (saveOriginalImage)
 import Models
@@ -158,6 +161,18 @@ hashPassword password = do
             serverError $ err500 { errBody = "Misconfigured Hashing Policy" }
         Just pass ->
             return $ decodeUtf8 pass
+
+
+-- CHECKOUT
+
+-- | Get the disabled status & message for the Details Routes.
+getDisabledCheckoutDetails :: App (Bool, T.Text)
+getDisabledCheckoutDetails = do
+    settings <- readCache getSettingsCache
+    return
+        ( settingsDisableCheckout settings
+        , settingsDisabledCheckoutMessage settings
+        )
 
 
 -- IMAGES
