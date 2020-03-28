@@ -13,6 +13,7 @@ import Servant ((:<|>)(..), (:>), AuthProtect, ReqBody, Get, Post, JSON)
 import Auth (WrappedAuthToken, Cookied, withAdminCookie)
 import Cache (Caches(getSettingsCache))
 import Models
+import Routes.Utils (sanitize)
 import Server (App, readCache, writeSetting)
 
 
@@ -73,4 +74,8 @@ type SettingsUpdateRoute =
 
 settingsUpdateRoute :: WrappedAuthToken -> SettingsData -> App (Cookied ())
 settingsUpdateRoute t SettingsData {..} = withAdminCookie t $ \_ ->
-    writeSetting $ const fromSettingsData
+    writeSetting $ const $
+        fromSettingsData
+            { settingsDisabledCheckoutMessage =
+                sanitize $ settingsDisabledCheckoutMessage fromSettingsData
+            }
