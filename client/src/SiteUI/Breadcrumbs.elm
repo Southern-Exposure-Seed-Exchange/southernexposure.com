@@ -194,6 +194,9 @@ view route pageData =
                 Admin ShippingMethods ->
                     singleItem "Shipping Methods"
 
+                Admin Settings ->
+                    singleItem "Settings"
+
                 Redirect _ ->
                     singleItem "Redirecting..."
 

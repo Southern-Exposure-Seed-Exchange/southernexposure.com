@@ -47,6 +47,7 @@ import View exposing (view)
 import Views.CouponAdmin as CouponAdmin
 import Views.CustomerAdmin as CustomerAdmin
 import Views.OrderAdmin as OrderAdmin
+import Views.SettingsAdmin as SettingsAdmin
 import Views.ShippingAdmin as ShippingAdmin
 import Views.StaticPageAdmin as StaticPageAdmin
 import Views.SurchargesAdmin as SurchargesAdmin
@@ -382,6 +383,11 @@ fetchDataForRoute ({ route, pageData, key } as model) =
                     pageData
                         |> fetchLocationsOnce
                         |> batchCommand (ShippingAdmin.getShippingMethods |> Cmd.map ShippingMsg)
+
+                Admin Settings ->
+                    ( pageData
+                    , SettingsAdmin.getSettings |> Cmd.map SettingsMsg
+                    )
 
                 Redirect path ->
                     ( pageData
@@ -1112,6 +1118,11 @@ update msg ({ pageData, key } as model) =
                 |> Tuple.mapFirst (\form -> { model | shippingMethodForm = form })
                 |> Tuple.mapSecond (Cmd.map ShippingMsg)
 
+        SettingsMsg subMsg ->
+            SettingsAdmin.update key subMsg model.settingsForm
+                |> Tuple.mapFirst (\form -> { model | settingsForm = form })
+                |> Tuple.mapSecond (Cmd.map SettingsMsg)
+
         ReAuthorize response ->
             case response of
                 RemoteData.Success authStatus ->
@@ -1682,6 +1693,9 @@ runOnCurrentWebData runner { pageData, route } =
         Admin ShippingMethods ->
             runner <| Just <| RemoteData.Success ()
 
+        Admin Settings ->
+            runner <| Just <| RemoteData.Success ()
+
 
 {-| Update the current page number using the Paginated data.
 
@@ -1805,6 +1819,9 @@ resetForm oldRoute model =
 
                 ShippingMethods ->
                     { model | shippingMethodForm = ShippingAdmin.initialForm }
+
+                Settings ->
+                    { model | settingsForm = SettingsAdmin.initialForm }
     in
     case oldRoute of
         ProductDetails _ ->

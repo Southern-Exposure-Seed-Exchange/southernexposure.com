@@ -8,7 +8,8 @@ v1.03.13
 
 * Re-enable the checkout process, adding the ability to dynamically disable
   checkouts with custom messages instead of the previous system of code changes
-  and hardcoded messages.
+  and hardcoded messages. A new Settings admin page allows managers to set
+  these values.
 
 
 v1.03.12

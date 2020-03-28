@@ -304,6 +304,9 @@ adminView route =
                         ( ShippingMethods, _ ) ->
                             False
 
+                        ( Settings, _ ) ->
+                            False
+
                 _ ->
                     False
     in
@@ -330,6 +333,7 @@ adminView route =
                     , navItem "Coupons" CouponList
                     , navItem "Surcharges" Surcharges
                     , navItem "Shipping" ShippingMethods
+                    , navItem "Settings" Settings
                     ]
                 ]
             ]
