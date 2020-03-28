@@ -237,6 +237,7 @@ Job
 Settings
     disableCheckout Bool
     disabledCheckoutMessage T.Text
+    orderPlacedEmailMessage T.Text default=''
     deriving Show
 |]
 
@@ -248,6 +249,7 @@ defaultSettings :: Settings
 defaultSettings = Settings
     { settingsDisableCheckout = False
     , settingsDisabledCheckoutMessage = T.pack ""
+    , settingsOrderPlacedEmailMessage = T.pack ""
     }
 
 -- | Fetch settngs from the database, ensuring only one set of values

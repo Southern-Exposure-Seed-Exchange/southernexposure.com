@@ -22,6 +22,7 @@ import Views.HorizontalForm as Form
 type alias Form =
     { disableCheckout : Bool
     , disabledCheckoutMessage : String
+    , orderPlacedEmailMessage : String
     , errors : Api.FormErrors
     , isSaving : Bool
     }
@@ -31,6 +32,7 @@ initialForm : Form
 initialForm =
     { disableCheckout = False
     , disabledCheckoutMessage = ""
+    , orderPlacedEmailMessage = ""
     , errors = Api.initialErrors
     , isSaving = False
     }
@@ -38,9 +40,10 @@ initialForm =
 
 formDecoder : Decoder Form
 formDecoder =
-    Decode.map4 Form
+    Decode.map5 Form
         (Decode.field "disableCheckout" Decode.bool)
         (Decode.field "disabledCheckoutMessage" Decode.string)
+        (Decode.field "orderPlacedEmailMessage" Decode.string)
         (Decode.succeed Api.initialErrors)
         (Decode.succeed False)
 
@@ -50,6 +53,7 @@ formEncoder model =
     Encode.object
         [ ( "disableCheckout", Encode.bool model.disableCheckout )
         , ( "disabledCheckoutMessage", Encode.string model.disabledCheckoutMessage )
+        , ( "orderPlacedEmailMessage", Encode.string model.orderPlacedEmailMessage )
         ]
 
 
@@ -60,6 +64,7 @@ formEncoder model =
 type Msg
     = ToggleDisableCheckout Bool
     | InputDisableCheckoutMessage String
+    | InputOrderPlacedEmailMessage String
     | GetSettingsData (WebData Form)
     | Submit
     | SubmitResponse (WebData (Result Api.FormErrors ()))
@@ -73,6 +78,9 @@ update key msg model =
 
         InputDisableCheckoutMessage v ->
             { model | disabledCheckoutMessage = v } |> noCommand
+
+        InputOrderPlacedEmailMessage v ->
+            { model | orderPlacedEmailMessage = v } |> noCommand
 
         GetSettingsData resp ->
             case resp of
@@ -130,6 +138,7 @@ view model =
         [ Form.genericErrorText <| not <| Dict.isEmpty model.errors
         , Api.generalFormErrors model
         , fieldset [ class "form-group" ] <| checkoutSettings model
+        , fieldset [ class "form-group" ] <| emailSettings model
         , div [ class "form-group mb-4" ]
             [ Admin.submitOrSavingButton model "Update Settings"
             ]
@@ -151,4 +160,17 @@ checkoutSettings model =
         "Disabled Checkout Message"
         "disabled-checkout-message"
         12
+    ]
+
+
+emailSettings : Form -> List (Html Msg)
+emailSettings model =
+    [ legend [] [ text "Email" ]
+    , Form.textareaRow model.errors
+        model.orderPlacedEmailMessage
+        InputOrderPlacedEmailMessage
+        False
+        "Order Confirmation Message"
+        "order-placed-email-message"
+        6
     ]

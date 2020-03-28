@@ -45,12 +45,14 @@ instance ToJSON SettingsData where
         object
             [ "disableCheckout" .= settingsDisableCheckout
             , "disabledCheckoutMessage" .= settingsDisabledCheckoutMessage
+            , "orderPlacedEmailMessage" .= settingsOrderPlacedEmailMessage
             ]
 
 instance FromJSON SettingsData where
     parseJSON = withObject "SettingsData" $ \v -> do
         settingsDisableCheckout <- v .: "disableCheckout"
         settingsDisabledCheckoutMessage <- v .: "disabledCheckoutMessage"
+        settingsOrderPlacedEmailMessage <- v .: "orderPlacedEmailMessage"
         return . SettingsData $ Settings {..}
 
 
@@ -78,4 +80,6 @@ settingsUpdateRoute t SettingsData {..} = withAdminCookie t $ \_ ->
         fromSettingsData
             { settingsDisabledCheckoutMessage =
                 sanitize $ settingsDisabledCheckoutMessage fromSettingsData
+            , settingsOrderPlacedEmailMessage =
+                sanitize $ settingsOrderPlacedEmailMessage fromSettingsData
             }

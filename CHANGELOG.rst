@@ -6,6 +6,8 @@ CHANGELOG
 v1.03.13
 =========
 
+* Add configurable setting for the text in the Order Confirmation email before
+  the Order Summary tables.
 * Re-enable the checkout process, adding the ability to dynamically disable
   checkouts with custom messages instead of the previous system of code changes
   and hardcoded messages. A new Settings admin page allows managers to set

@@ -9,7 +9,7 @@ import Control.Monad.IO.Class (MonadIO)
 import Data.Maybe (listToMaybe, fromMaybe, isJust)
 import Data.Monoid ((<>))
 import Data.Time (formatTime, defaultTimeLocale, hoursToTimeZone, utcToZonedTime)
-import Database.Persist (Entity(..))
+import Database.Persist (Entity(..), selectFirst)
 import Text.Blaze.Renderer.Text (renderMarkup)
 
 import Models
@@ -32,6 +32,7 @@ data Parameters =
         , order :: Entity Order
         , lineItems :: [OrderLineItem]
         , products :: ProductData
+        , messageText :: T.Text
         }
 
 type ProductData = [(OrderProduct, Product, ProductVariant, Maybe SeedAttribute)]
@@ -39,6 +40,8 @@ type ProductData = [(OrderProduct, Product, ProductVariant, Maybe SeedAttribute)
 
 fetchData :: (Monad m, MonadIO m) => OrderId -> E.SqlReadT m (Maybe Parameters)
 fetchData orderId = do
+    messageText <- maybe "" (settingsOrderPlacedEmailMessage . entityVal)
+        <$> selectFirst [] []
     maybeCustomerOrderAddresses <- fmap listToMaybe . E.select . E.from $
         \(o `E.InnerJoin` c `E.InnerJoin` sa `E.LeftOuterJoin` ba) -> do
             E.on $ ba E.?. AddressId E.==. o E.^. OrderBillingAddressId
@@ -58,15 +61,15 @@ fetchData orderId = do
         Nothing ->
             Nothing
         Just (Entity _ customer, order, Entity _ shipping, maybeBilling) ->
-            Just $ Parameters customer (entityVal <$> maybeBilling) shipping order lineItems productData
+            Just $ Parameters customer (entityVal <$> maybeBilling) shipping order lineItems productData messageText
     where productDataFromEntities =
             map (\(a, b, c, d) -> (entityVal a, entityVal b, entityVal c, entityVal <$> d))
 
 
 get :: Parameters -> (String, L.Text)
-get Parameters { shippingAddress, billingAddress, order, products, lineItems } =
+get Parameters { shippingAddress, billingAddress, order, products, lineItems, messageText } =
     ( "Southern Exposure Seed Exchange - Order #" <> showOrderId (entityKey order) <> " Confirmation"
-    , renderMarkup $ render shippingAddress billingAddress order products lineItems
+    , renderMarkup $ render shippingAddress billingAddress order products lineItems messageText
     )
 
 showOrderId :: OrderId -> String
@@ -78,8 +81,9 @@ render :: Address
        -> Entity Order
        -> [(OrderProduct, Product, ProductVariant, Maybe SeedAttribute)]
        -> [OrderLineItem]
+       -> T.Text
        -> H.Html
-render shippingAddress billingAddress (Entity orderId order) productData lineItems =
+render shippingAddress billingAddress (Entity orderId order) productData lineItems preamble =
     let
         customerName =
             addressName $ fromMaybe shippingAddress billingAddress
@@ -107,16 +111,7 @@ render shippingAddress billingAddress (Entity orderId order) productData lineIte
                     <> "address p { margin: 0; }"
             H.body $ do
                 H.p . H.text $ "Dear " <> customerName <> ","
-                H.p $
-                    "Thanks for ordering from Southern Exposure Seed Exchange! Your seeds " <>
-                    "will be shipped via the US Postal Service. Seeds are generally shipped " <>
-                    "1-4 days after the order is placed. " <>
-                    "Mushrooms, sweet potatoes, garlic bulbs, and other seasonal items will " <>
-                    "ship separately. When your order is shipped, you will receive a second " <>
-                    "e-mail from us.\n\n"
-                H.p $
-                    "If you have questions about your order, please reply to this e-mail or " <>
-                    "call us at 540-894-9480.\n\n"
+                H.preEscapedText preamble
                 H.h3 . H.text $
                     "Order Number " <> orderNumber <> ", placed at " <> orderDate
                 customerComments
