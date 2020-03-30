@@ -389,6 +389,11 @@ fetchDataForRoute ({ route, pageData, key } as model) =
                     , SettingsAdmin.getSettings |> Cmd.map SettingsMsg
                     )
 
+                Admin ProductSaleList ->
+                    ( { pageData | adminProductSalesList = RemoteData.Loading }
+                    , getAdminProductSaleList
+                    )
+
                 Redirect path ->
                     ( pageData
                     , Browser.Navigation.load path
@@ -701,6 +706,13 @@ getAdminEditCouponData couponId =
     Api.get (Api.AdminEditCouponData couponId)
         |> Api.withJsonResponse PageData.adminEditCouponDataDecoder
         |> Api.sendRequest GetAdminEditCouponData
+
+
+getAdminProductSaleList : Cmd Msg
+getAdminProductSaleList =
+    Api.get Api.AdminProductSaleList
+        |> Api.withJsonResponse PageData.adminProductSaleListDataDecoder
+        |> Api.sendRequest GetAdminProductSaleList
 
 
 
@@ -1449,6 +1461,13 @@ update msg ({ pageData, key } as model) =
             in
             ( { model | pageData = updatedPageData }, Cmd.none )
 
+        GetAdminProductSaleList response ->
+            let
+                updatedPageData =
+                    { pageData | adminProductSalesList = response }
+            in
+            ( { model | pageData = updatedPageData }, Cmd.none )
+
 
 {-| Wrap the normal update function, checking to see if the page has finished
 loading all it's dependent data. If so, run ports that should fire once a page
@@ -1696,6 +1715,9 @@ runOnCurrentWebData runner { pageData, route } =
         Admin Settings ->
             runner <| Just <| RemoteData.Success ()
 
+        Admin ProductSaleList ->
+            justRunner pageData.adminProductSalesList
+
 
 {-| Update the current page number using the Paginated data.
 
@@ -1822,6 +1844,9 @@ resetForm oldRoute model =
 
                 Settings ->
                     { model | settingsForm = SettingsAdmin.initialForm }
+
+                ProductSaleList ->
+                    model
     in
     case oldRoute of
         ProductDetails _ ->

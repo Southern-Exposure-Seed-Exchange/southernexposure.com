@@ -107,6 +107,7 @@ type Endpoint
     | AdminShipping
     | AdminSettingsData
     | AdminSettings
+    | AdminProductSaleList
 
 
 toUrl : Endpoint -> String
@@ -319,6 +320,9 @@ toUrl endpoint =
 
                 AdminSettings ->
                     joinPath [ "admin", "settings", "update" ]
+
+                AdminProductSaleList ->
+                    joinPath [ "admin", "product-sales", "list" ]
     in
     "/api" ++ endpointUrl
 

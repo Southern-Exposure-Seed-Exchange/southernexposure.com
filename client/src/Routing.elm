@@ -86,6 +86,7 @@ type AdminRoute
     | Surcharges
     | ShippingMethods
     | Settings
+    | ProductSaleList
 
 
 parseRoute : Url -> Route
@@ -145,6 +146,7 @@ parseRoute =
                 , Url.map Surcharges (Url.s "surcharges")
                 , Url.map ShippingMethods (Url.s "shipping-methods")
                 , Url.map Settings (Url.s "settings")
+                , Url.map ProductSaleList (Url.s "product-sales")
                 ]
 
         adminPaginationQueryParser =
@@ -406,6 +408,9 @@ reverseAdmin route =
                 Settings ->
                     [ "settings" ]
 
+                ProductSaleList ->
+                    [ "product-sales" ]
+
         queryStrings =
             case route of
                 Dashboard ->
@@ -466,6 +471,9 @@ reverseAdmin route =
                     []
 
                 Settings ->
+                    []
+
+                ProductSaleList ->
                     []
 
         recordToQueryParams { page, perPage, query } =

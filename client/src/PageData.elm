@@ -16,6 +16,7 @@ module PageData exposing
     , AdminOrderDetails
     , AdminPageListData
     , AdminProductListData
+    , AdminProductSaleListData
     , AdminSharedProductData
     , AdvancedSearch
     , CartDetails
@@ -51,6 +52,7 @@ module PageData exposing
     , adminOrderDetailsDecoder
     , adminPageListDataDecoder
     , adminProductListDataDecoder
+    , adminProductSaleListDataDecoder
     , advancedSearchDecoder
     , blankCartDetails
     , cartDetailsDecoder
@@ -123,6 +125,7 @@ type alias PageData =
     , adminSharedProduct : WebData AdminSharedProductData
     , adminCouponList : WebData AdminCouponListData
     , adminEditCoupon : WebData AdminEditCouponData
+    , adminProductSalesList : WebData AdminProductSaleListData
     }
 
 
@@ -175,6 +178,7 @@ initial =
     , adminSharedProduct = RemoteData.NotAsked
     , adminCouponList = RemoteData.NotAsked
     , adminEditCoupon = RemoteData.NotAsked
+    , adminProductSalesList = RemoteData.NotAsked
     }
 
 
@@ -1111,6 +1115,75 @@ adminEditCouponDataDecoder =
                     (Decode.field "totalUses" Decode.int)
                     (Decode.field "usesPerCustomer" Decode.int)
             )
+
+
+
+-- Product Sales Admin
+
+
+type alias AdminProductSaleListData =
+    { sales : List AdminListProductSale
+    , variants : Dict Int SaleProductData
+    }
+
+
+adminProductSaleListDataDecoder : Decoder AdminProductSaleListData
+adminProductSaleListDataDecoder =
+    let
+        transformKeys : Dict String SaleProductData -> Dict Int SaleProductData
+        transformKeys =
+            Dict.foldl
+                (\k v acc ->
+                    case String.toInt k of
+                        Nothing ->
+                            acc
+
+                        Just id ->
+                            Dict.insert id v acc
+                )
+                Dict.empty
+    in
+    Decode.map2 AdminProductSaleListData
+        (Decode.field "sales" <| Decode.list adminListProductSaleDecoder)
+        (Decode.field "variants" <| Decode.map transformKeys <| Decode.dict saleProductDataDecoder)
+
+
+type alias AdminListProductSale =
+    { id : Int
+    , variant : ProductVariantId
+    , price : Cents
+    , start : Posix
+    , end : Posix
+    }
+
+
+adminListProductSaleDecoder : Decoder AdminListProductSale
+adminListProductSaleDecoder =
+    Decode.map5 AdminListProductSale
+        (Decode.field "id" Decode.int)
+        (Decode.field "variant" <| Decode.map ProductVariantId Decode.int)
+        (Decode.field "price" centsDecoder)
+        (Decode.field "start" Iso8601.decoder)
+        (Decode.field "end" Iso8601.decoder)
+
+
+type alias SaleProductData =
+    { id : Int
+    , name : String
+    , sku : String
+    , lotSize : Maybe LotSize
+    , isActive : Bool
+    }
+
+
+saleProductDataDecoder : Decoder SaleProductData
+saleProductDataDecoder =
+    Decode.map5 SaleProductData
+        (Decode.field "id" Decode.int)
+        (Decode.field "name" Decode.string)
+        (Decode.field "sku" Decode.string)
+        (Decode.field "lotSize" <| Decode.nullable lotSizeDecoder)
+        (Decode.field "active" Decode.bool)
 
 
 

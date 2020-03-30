@@ -12,6 +12,7 @@ import Routes.Admin.Coupons
 import Routes.Admin.Customers
 import Routes.Admin.Orders
 import Routes.Admin.Products
+import Routes.Admin.ProductSales
 import Routes.Admin.Settings
 import Routes.Admin.ShippingMethods
 import Routes.Admin.StaticPages
@@ -28,6 +29,7 @@ type AdminAPI =
     :<|> "surcharges" :> SurchargesAPI
     :<|> "shipping" :> ShippingMethodsAPI
     :<|> "settings" :> SettingsAPI
+    :<|> "product-sales" :> ProductSalesAPI
 
 
 adminRoutes :: ServerT AdminAPI App
@@ -41,3 +43,4 @@ adminRoutes =
     :<|> surchargesRoutes
     :<|> shippingMethodsRoutes
     :<|> settingsRoutes
+    :<|> productSalesRoutes

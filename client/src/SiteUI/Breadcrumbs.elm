@@ -197,6 +197,9 @@ view route pageData =
                 Admin Settings ->
                     singleItem "Settings"
 
+                Admin ProductSaleList ->
+                    singleItem "Product Sales"
+
                 Redirect _ ->
                     singleItem "Redirecting..."
 

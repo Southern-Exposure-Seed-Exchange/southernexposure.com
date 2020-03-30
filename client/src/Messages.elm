@@ -115,3 +115,4 @@ type Msg
     | GetAdminEditProductData (WebData ( ProductAdmin.Form, ProductId ))
     | GetAdminCouponList (WebData PageData.AdminCouponListData)
     | GetAdminEditCouponData (WebData PageData.AdminEditCouponData)
+    | GetAdminProductSaleList (WebData PageData.AdminProductSaleListData)

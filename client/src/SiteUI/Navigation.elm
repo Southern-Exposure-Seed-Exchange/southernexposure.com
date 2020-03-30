@@ -307,6 +307,9 @@ adminView route =
                         ( Settings, _ ) ->
                             False
 
+                        ( ProductSaleList, _ ) ->
+                            False
+
                 _ ->
                     False
     in
@@ -334,6 +337,7 @@ adminView route =
                     , navItem "Surcharges" Surcharges
                     , navItem "Shipping" ShippingMethods
                     , navItem "Settings" Settings
+                    , navItem "Product Sales" ProductSaleList
                     ]
                 ]
             ]
