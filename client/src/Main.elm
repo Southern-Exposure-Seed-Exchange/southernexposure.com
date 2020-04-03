@@ -47,6 +47,7 @@ import View exposing (view)
 import Views.CouponAdmin as CouponAdmin
 import Views.CustomerAdmin as CustomerAdmin
 import Views.OrderAdmin as OrderAdmin
+import Views.ProductSalesAdmin as ProductSalesAdmin
 import Views.SettingsAdmin as SettingsAdmin
 import Views.ShippingAdmin as ShippingAdmin
 import Views.StaticPageAdmin as StaticPageAdmin
@@ -394,6 +395,11 @@ fetchDataForRoute ({ route, pageData, key } as model) =
                     , getAdminProductSaleList
                     )
 
+                Admin ProductSaleNew ->
+                    ( { pageData | adminProductSaleNew = RemoteData.Loading }
+                    , getAdminProductSaleNew
+                    )
+
                 Redirect path ->
                     ( pageData
                     , Browser.Navigation.load path
@@ -713,6 +719,13 @@ getAdminProductSaleList =
     Api.get Api.AdminProductSaleList
         |> Api.withJsonResponse PageData.adminProductSaleListDataDecoder
         |> Api.sendRequest GetAdminProductSaleList
+
+
+getAdminProductSaleNew : Cmd Msg
+getAdminProductSaleNew =
+    Api.get Api.AdminProductSaleNew
+        |> Api.withJsonResponse PageData.adminProductSaleNewDataDecoder
+        |> Api.sendRequest GetAdminProductSaleNew
 
 
 
@@ -1135,6 +1148,11 @@ update msg ({ pageData, key } as model) =
                 |> Tuple.mapFirst (\form -> { model | settingsForm = form })
                 |> Tuple.mapSecond (Cmd.map SettingsMsg)
 
+        NewProductSaleMsg subMsg ->
+            ProductSalesAdmin.updateNewForm subMsg model.newProductSaleForm
+                |> Tuple.mapFirst (\form -> { model | newProductSaleForm = form })
+                |> Tuple.mapSecond (Cmd.map NewProductSaleMsg)
+
         ReAuthorize response ->
             case response of
                 RemoteData.Success authStatus ->
@@ -1468,6 +1486,13 @@ update msg ({ pageData, key } as model) =
             in
             ( { model | pageData = updatedPageData }, Cmd.none )
 
+        GetAdminProductSaleNew response ->
+            let
+                updatedPageData =
+                    { pageData | adminProductSaleNew = response }
+            in
+            ( { model | pageData = updatedPageData }, Cmd.none )
+
 
 {-| Wrap the normal update function, checking to see if the page has finished
 loading all it's dependent data. If so, run ports that should fire once a page
@@ -1718,6 +1743,9 @@ runOnCurrentWebData runner { pageData, route } =
         Admin ProductSaleList ->
             justRunner pageData.adminProductSalesList
 
+        Admin ProductSaleNew ->
+            justRunner pageData.adminProductSaleNew
+
 
 {-| Update the current page number using the Paginated data.
 
@@ -1847,6 +1875,9 @@ resetForm oldRoute model =
 
                 ProductSaleList ->
                     model
+
+                ProductSaleNew ->
+                    { model | newProductSaleForm = ProductSalesAdmin.initialNewForm }
     in
     case oldRoute of
         ProductDetails _ ->

@@ -200,6 +200,11 @@ view route pageData =
                 Admin ProductSaleList ->
                     singleItem "Product Sales"
 
+                Admin ProductSaleNew ->
+                    [ inactiveItem "Product Sales" <| Admin ProductSaleList
+                    , activeItem "New Sale"
+                    ]
+
                 Redirect _ ->
                     singleItem "Redirecting..."
 

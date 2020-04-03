@@ -17,6 +17,7 @@ module PageData exposing
     , AdminPageListData
     , AdminProductListData
     , AdminProductSaleListData
+    , AdminProductSaleNewData
     , AdminSharedProductData
     , AdvancedSearch
     , CartDetails
@@ -37,6 +38,7 @@ module PageData exposing
     , PredecessorCategory
     , ProductData
     , ProductDetails
+    , SaleProductData
     , SearchResults
     , addressDetailsDecoder
     , adminCategoryListDataDecoder
@@ -53,6 +55,7 @@ module PageData exposing
     , adminPageListDataDecoder
     , adminProductListDataDecoder
     , adminProductSaleListDataDecoder
+    , adminProductSaleNewDataDecoder
     , advancedSearchDecoder
     , blankCartDetails
     , cartDetailsDecoder
@@ -126,6 +129,7 @@ type alias PageData =
     , adminCouponList : WebData AdminCouponListData
     , adminEditCoupon : WebData AdminEditCouponData
     , adminProductSalesList : WebData AdminProductSaleListData
+    , adminProductSaleNew : WebData AdminProductSaleNewData
     }
 
 
@@ -179,6 +183,7 @@ initial =
     , adminCouponList = RemoteData.NotAsked
     , adminEditCoupon = RemoteData.NotAsked
     , adminProductSalesList = RemoteData.NotAsked
+    , adminProductSaleNew = RemoteData.NotAsked
     }
 
 
@@ -1173,17 +1178,28 @@ type alias SaleProductData =
     , sku : String
     , lotSize : Maybe LotSize
     , isActive : Bool
+    , price : Cents
     }
 
 
 saleProductDataDecoder : Decoder SaleProductData
 saleProductDataDecoder =
-    Decode.map5 SaleProductData
+    Decode.map6 SaleProductData
         (Decode.field "id" Decode.int)
         (Decode.field "name" Decode.string)
         (Decode.field "sku" Decode.string)
         (Decode.field "lotSize" <| Decode.nullable lotSizeDecoder)
         (Decode.field "active" Decode.bool)
+        (Decode.field "price" centsDecoder)
+
+
+type alias AdminProductSaleNewData =
+    List SaleProductData
+
+
+adminProductSaleNewDataDecoder : Decoder AdminProductSaleNewData
+adminProductSaleNewDataDecoder =
+    Decode.list saleProductDataDecoder
 
 
 

@@ -29,6 +29,7 @@ import User
 import Views.CouponAdmin as CouponAdmin
 import Views.CustomerAdmin as CustomerAdmin
 import Views.OrderAdmin as OrderAdmin
+import Views.ProductSalesAdmin as ProductSalesAdmin
 import Views.SettingsAdmin as SettingsAdmin
 import Views.ShippingAdmin as ShippingAdmin
 import Views.StaticPageAdmin as StaticPageAdmin
@@ -85,6 +86,7 @@ type Msg
     | SurchargesMsg SurchargesAdmin.Msg
     | ShippingMsg ShippingAdmin.Msg
     | SettingsMsg SettingsAdmin.Msg
+    | NewProductSaleMsg ProductSalesAdmin.NewMsg
       -- API Requests
     | ReAuthorize (WebData User.AuthStatus)
     | LogOutResponse (WebData ())
@@ -116,3 +118,4 @@ type Msg
     | GetAdminCouponList (WebData PageData.AdminCouponListData)
     | GetAdminEditCouponData (WebData PageData.AdminEditCouponData)
     | GetAdminProductSaleList (WebData PageData.AdminProductSaleListData)
+    | GetAdminProductSaleNew (WebData PageData.AdminProductSaleNewData)

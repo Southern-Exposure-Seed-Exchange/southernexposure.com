@@ -28,6 +28,7 @@ import User exposing (AuthStatus)
 import Views.CouponAdmin as CouponAdmin
 import Views.CustomerAdmin as CustomerAdmin
 import Views.OrderAdmin as OrderAdmin
+import Views.ProductSalesAdmin as ProductSalesAdmin
 import Views.SettingsAdmin as SettingsAdmin
 import Views.ShippingAdmin as ShippingAdmin
 import Views.StaticPageAdmin as StaticPageAdmin
@@ -66,6 +67,7 @@ type alias Model =
     , editCouponForm : CouponAdmin.EditForm
     , surchargeForm : SurchargesAdmin.Form
     , shippingMethodForm : ShippingAdmin.Form
+    , newProductSaleForm : ProductSalesAdmin.NewForm
     , settingsForm : SettingsAdmin.Form
     , cartItemCount : Int
     , maybeSessionToken : Maybe String
@@ -116,6 +118,7 @@ initial key route =
     , editCouponForm = CouponAdmin.initialEditForm
     , surchargeForm = SurchargesAdmin.initialForm
     , shippingMethodForm = ShippingAdmin.initialForm
+    , newProductSaleForm = ProductSalesAdmin.initialNewForm
     , settingsForm = SettingsAdmin.initialForm
     , cartItemCount = 0
     , maybeSessionToken = Nothing
