@@ -1,5 +1,6 @@
 module Views.HorizontalForm exposing
     ( checkboxRow
+    , dateRow
     , genericErrorText
     , inputRow
     , selectElement
@@ -195,6 +196,41 @@ selectElement name_ classes parser msg options =
         , onSelect
         ]
         options
+
+
+dateRow : Api.FormErrors -> String -> (String -> msg) -> Bool -> String -> String -> Html msg
+dateRow errors date msg isRequired labelText errorField =
+    let
+        dateId =
+            String.filter (\c -> c /= ' ') labelText
+
+        fieldErrors =
+            Dict.get errorField errors |> Maybe.withDefault []
+
+        errorHtml =
+            if List.isEmpty fieldErrors then
+                text ""
+
+            else
+                fieldErrors
+                    |> List.map text
+                    |> List.intersperse (br [] [])
+                    |> div [ class "invalid-feedback" ]
+    in
+    withLabel labelText
+        isRequired
+        [ input
+            [ id <| "input" ++ dateId
+            , name dateId
+            , required isRequired
+            , value date
+            , type_ "date"
+            , onInput msg
+            , class "form-control"
+            ]
+            []
+        , errorHtml
+        ]
 
 
 withLabel : String -> Bool -> List (Html msg) -> Html msg

@@ -393,42 +393,9 @@ couponTypeRow errors selectedType enteredAmount selectMsg inputMsg =
         ]
 
 
-{-| TODO: Will probably re-use when we make the Sales admin. At that point we
-should move this to the HorizontalForm module.
--}
 dateRow : FormErrors -> String -> (String -> msg) -> Html msg
 dateRow errors date msg =
-    let
-        dateId =
-            "Expires"
-
-        fieldErrors =
-            Dict.get "expires" errors |> Maybe.withDefault []
-
-        errorHtml =
-            if List.isEmpty fieldErrors then
-                text ""
-
-            else
-                fieldErrors
-                    |> List.map text
-                    |> List.intersperse (br [] [])
-                    |> div [ class "invalid-feedback" ]
-    in
-    Form.withLabel "Expiration Date"
-        True
-        [ input
-            [ id <| "input" ++ dateId
-            , name dateId
-            , required True
-            , value date
-            , type_ "date"
-            , onInput msg
-            , class "form-control"
-            ]
-            []
-        , errorHtml
-        ]
+    Form.dateRow errors date msg True "Expiration Date" "expires"
 
 
 
