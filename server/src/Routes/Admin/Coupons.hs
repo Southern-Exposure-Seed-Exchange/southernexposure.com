@@ -10,7 +10,7 @@ module Routes.Admin.Coupons
 
 import Control.Monad (unless)
 import Control.Monad.IO.Class (liftIO)
-import Data.Aeson (ToJSON(..), FromJSON(..), Value(..), (.=), (.:), object, withObject, withText)
+import Data.Aeson (ToJSON(..), FromJSON(..), (.=), (.:), object, withObject)
 import Data.Maybe (catMaybes)
 import Data.Time
     ( UTCTime, LocalTime(..), Day, localTimeToUTC, getCurrentTimeZone
@@ -29,7 +29,7 @@ import Auth (Cookied, WrappedAuthToken, withAdminCookie, validateAdminAndParamet
 import Models (EntityField(..), Unique(..), Coupon(..), CouponId)
 import Models.Fields (Cents, CouponType(..))
 import Server (App, runDB, serverError)
-import Routes.Utils (mapUpdate)
+import Routes.Utils (mapUpdate, parseLocalTime, parseMaybeLocalTime)
 import Validation (Validation(..))
 
 import qualified Data.Text as T
@@ -139,15 +139,10 @@ instance FromJSON NewCouponParameters where
         ncpIsActive <- v .: "isActive"
         ncpDiscount <- v .: "discount"
         ncpMinimumOrder <- v .: "minimumOrder"
-        ncpExpirationDate <- v .: "expires" >>= parseExpires
+        ncpExpirationDate <- v .: "expires" >>= parseLocalTime
         ncpTotalUses <- v .: "totalUses"
         ncpUsesPerCustomer <- v .: "usesPerCustomer"
         return NewCouponParameters {..}
-      where
-        -- Drop the trailing `Z` from the ISO8601 UTC datetime so the
-        -- parsing of LocalTime will succeed.
-        parseExpires =
-            withText "expires" (parseJSON . String . T.dropEnd 1)
 
 instance Validation NewCouponParameters where
     validators NewCouponParameters {..} = do
@@ -267,19 +262,10 @@ instance FromJSON EditCouponParameters where
         ecpIsActive <- v .: "isActive"
         ecpDiscount <- v .: "discount"
         ecpMinimumOrder <- v .: "minimumOrder"
-        ecpExpirationDate <- v .: "expires" >>= parseExpires
+        ecpExpirationDate <- v .: "expires" >>= parseMaybeLocalTime
         ecpTotalUses <- v .: "totalUses"
         ecpUsesPerCustomer <- v .: "usesPerCustomer"
         return EditCouponParameters {..}
-      where
-        -- Drop the trailing `Z` from the ISO8601 UTC datetime so the
-        -- parsing of LocalTime will succeed.
-        parseExpires =
-            \case
-                Null ->
-                    return Nothing
-                val ->
-                    Just <$> withText "expires" (parseJSON . String . T.dropEnd 1) val
 
 instance Validation EditCouponParameters where
     validators EditCouponParameters {..} = do

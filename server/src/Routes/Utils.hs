@@ -1,3 +1,4 @@
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeFamilies #-}
@@ -20,14 +21,19 @@ module Routes.Utils
     , mapUpdate
     , mapUpdateWith
     , sanitize
+    , parseLocalTime
+    , parseMaybeLocalTime
     ) where
 
 import Control.Monad (void)
 import Control.Monad.Reader (asks)
 import Control.Monad.Trans (liftIO)
+import Data.Aeson (Value(Null, String), withText, parseJSON)
+import Data.Aeson.Types (Parser)
 import Data.Int (Int64)
 import Data.Maybe (fromMaybe, listToMaybe, mapMaybe)
 import Data.Text.Encoding (encodeUtf8, decodeUtf8)
+import Data.Time (LocalTime)
 import Database.Persist
     ( (=.), Entity(..), PersistEntityBackend, PersistEntity, Update, getBy
     )
@@ -284,3 +290,18 @@ safeTagsCustom safeName sanitizeAttr (TagOpen name attributes:tags)
       safeTagsCustom safeName sanitizeAttr tags
   | otherwise = safeTagsCustom safeName sanitizeAttr tags
 safeTagsCustom n a (t:tags) = t : safeTagsCustom n a tags
+
+-- | Parse a 'LocalTime' by dropping the @Z@ at the end of an ISO8601 UTC
+-- DateTime.
+parseLocalTime :: Value -> Parser LocalTime
+parseLocalTime =
+    withText "expires" (parseJSON . String . T.dropEnd 1)
+
+-- | Like 'parseLocalTime', but returns 'Nothing' if the value is 'Null'.
+parseMaybeLocalTime :: Value -> Parser (Maybe LocalTime)
+parseMaybeLocalTime =
+    \case
+        Null ->
+            return Nothing
+        val ->
+            Just <$> parseLocalTime val
