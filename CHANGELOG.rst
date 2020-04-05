@@ -2,6 +2,11 @@
 CHANGELOG
 =========
 
+v1.03.14
+=========
+
+* Bump copyright year in footer.
+
 
 v1.03.13
 =========

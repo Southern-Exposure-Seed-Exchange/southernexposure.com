@@ -91,7 +91,7 @@ view =
                 , footerBlock "Important Links" "col-10 col-sm-auto d-print-none" importantLinks
                 , footerBlock "Contact Us" "col-10 col-md-5 col-lg-auto" contactBlock
                 , div [ class "col-12 text-center" ]
-                    [ text "Copyright © 2019 Southern Exposure Seed Exchange" ]
+                    [ text "Copyright © 2020 Southern Exposure Seed Exchange" ]
                 ]
             ]
         ]
