@@ -549,7 +549,7 @@ updateEditForm key original msg model =
                     )
 
                 RemoteData.Success (Err errors) ->
-                    ( { model | errors = errors }
+                    ( { model | errors = errors, isSaving = False }
                     , Ports.scrollToErrorMessage
                     )
 
