@@ -7,9 +7,10 @@ module Routes.Admin.ProductSales
     , productSalesRoutes
     ) where
 
+import Control.Monad.Trans (liftIO)
 import Data.Aeson ((.=), (.:), ToJSON(..), FromJSON(..), object, withObject)
 import Data.Monoid ((<>))
-import Data.Time (UTCTime)
+import Data.Time (LocalTime, TimeZone, getCurrentTimeZone, localTimeToUTC)
 import Database.Persist (Entity(..), SelectOpt(Desc), selectList, insert)
 import Database.Persist.Sql (fromSqlKey)
 import Servant ((:<|>)(..), (:>), AuthProtect, Get, Post, JSON, ReqBody)
@@ -17,6 +18,7 @@ import Servant ((:<|>)(..), (:>), AuthProtect, Get, Post, JSON, ReqBody)
 import Auth (Cookied, WrappedAuthToken, withAdminCookie, validateAdminAndParameters)
 import Models
 import Models.Fields (Cents, LotSize)
+import Routes.Utils (parseLocalTime)
 import Server (App, AppSQL, runDB)
 import Validation (Validation(..))
 
@@ -164,16 +166,16 @@ data ProductSalesNewParameters =
     ProductSalesNewParameters
         { psnpPrice :: Cents
         , psnpVariant :: ProductVariantId
-        , psnpStart :: UTCTime
-        , psnpEnd :: UTCTime
+        , psnpStart :: LocalTime
+        , psnpEnd :: LocalTime
         } deriving (Show)
 
 instance FromJSON ProductSalesNewParameters where
     parseJSON = withObject "ProductSalesNewParameters" $ \v -> do
         psnpPrice <- v .: "price"
         psnpVariant <- v .: "variant"
-        psnpStart <- v .: "start"
-        psnpEnd <- v .: "end"
+        psnpStart <- v .: "start" >>= parseLocalTime
+        psnpEnd <- v .: "end" >>= parseLocalTime
         return ProductSalesNewParameters {..}
 
 instance Validation ProductSalesNewParameters where
@@ -187,14 +189,15 @@ instance Validation ProductSalesNewParameters where
             ]
 
 productSalesNewRoute :: WrappedAuthToken -> ProductSalesNewParameters -> App (Cookied ProductSaleId)
-productSalesNewRoute = validateAdminAndParameters $ \_ ->
-    runDB . insert . makeSale
+productSalesNewRoute = validateAdminAndParameters $ \_ params -> do
+    timeZone <- liftIO getCurrentTimeZone
+    runDB . insert $ makeSale timeZone params
   where
-    makeSale :: ProductSalesNewParameters -> ProductSale
-    makeSale ProductSalesNewParameters {..} =
+    makeSale :: TimeZone -> ProductSalesNewParameters -> ProductSale
+    makeSale timeZone ProductSalesNewParameters {..} =
         ProductSale
             { productSalePrice = psnpPrice
             , productSaleProductVariantId = psnpVariant
-            , productSaleStartDate = psnpStart
-            , productSaleEndDate = psnpEnd
+            , productSaleStartDate = localTimeToUTC timeZone psnpStart
+            , productSaleEndDate = localTimeToUTC timeZone psnpEnd
             }
