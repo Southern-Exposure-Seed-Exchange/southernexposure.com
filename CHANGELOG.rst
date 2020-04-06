@@ -5,6 +5,7 @@ CHANGELOG
 v1.03.14
 =========
 
+* Add Admin pages for listing, creating, & editing Product Sales.
 * Bump copyright year in footer.
 
 

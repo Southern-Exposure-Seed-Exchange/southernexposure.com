@@ -68,6 +68,7 @@ type alias Model =
     , surchargeForm : SurchargesAdmin.Form
     , shippingMethodForm : ShippingAdmin.Form
     , newProductSaleForm : ProductSalesAdmin.NewForm
+    , editProductSaleForm : ProductSalesAdmin.EditForm
     , settingsForm : SettingsAdmin.Form
     , cartItemCount : Int
     , maybeSessionToken : Maybe String
@@ -119,6 +120,7 @@ initial key route =
     , surchargeForm = SurchargesAdmin.initialForm
     , shippingMethodForm = ShippingAdmin.initialForm
     , newProductSaleForm = ProductSalesAdmin.initialNewForm
+    , editProductSaleForm = ProductSalesAdmin.initialEditForm
     , settingsForm = SettingsAdmin.initialForm
     , cartItemCount = 0
     , maybeSessionToken = Nothing

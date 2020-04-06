@@ -271,6 +271,11 @@ view ({ route, pageData, navigationData, zone } as model) =
                         pageData.adminProductSaleNew
                         |> List.map (Html.map NewProductSaleMsg)
 
+                Admin (ProductSaleEdit _) ->
+                    withIntermediateText (ProductSalesAdmin.edit model.editProductSaleForm)
+                        pageData.adminEditProductSale
+                        |> List.map (Html.map EditProductSaleMsg)
+
         apply : (a -> b -> c) -> ( a, b ) -> c
         apply f ( a, b ) =
             f a b
@@ -509,6 +514,9 @@ adminTitle ({ pageData } as model) adminRoute =
 
         ProductSaleNew ->
             "New Product Sale"
+
+        ProductSaleEdit _ ->
+            "Edit Product Sale"
 
 
 pageImage : Model -> Maybe String

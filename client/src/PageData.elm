@@ -8,6 +8,7 @@ module PageData exposing
     , AdminEditCouponData
     , AdminEditCustomerData
     , AdminEditPageData
+    , AdminEditProductSaleData
     , AdminListCategory(..)
     , AdminListCoupon
     , AdminListPage
@@ -48,6 +49,7 @@ module PageData exposing
     , adminEditCouponDataDecoder
     , adminEditCustomerDataDecoder
     , adminEditPageDataDecoder
+    , adminEditProductSaleDataDecoder
     , adminListPageDecoder
     , adminNewCategoryDataDecoder
     , adminNewProductDataDecoder
@@ -130,6 +132,7 @@ type alias PageData =
     , adminEditCoupon : WebData AdminEditCouponData
     , adminProductSalesList : WebData AdminProductSaleListData
     , adminProductSaleNew : WebData AdminProductSaleNewData
+    , adminEditProductSale : WebData AdminEditProductSaleData
     }
 
 
@@ -184,6 +187,7 @@ initial =
     , adminEditCoupon = RemoteData.NotAsked
     , adminProductSalesList = RemoteData.NotAsked
     , adminProductSaleNew = RemoteData.NotAsked
+    , adminEditProductSale = RemoteData.NotAsked
     }
 
 
@@ -1127,7 +1131,7 @@ adminEditCouponDataDecoder =
 
 
 type alias AdminProductSaleListData =
-    { sales : List AdminListProductSale
+    { sales : List AdminProductSale
     , variants : Dict Int SaleProductData
     }
 
@@ -1149,11 +1153,11 @@ adminProductSaleListDataDecoder =
                 Dict.empty
     in
     Decode.map2 AdminProductSaleListData
-        (Decode.field "sales" <| Decode.list adminListProductSaleDecoder)
+        (Decode.field "sales" <| Decode.list adminProductSaleDecoder)
         (Decode.field "variants" <| Decode.map transformKeys <| Decode.dict saleProductDataDecoder)
 
 
-type alias AdminListProductSale =
+type alias AdminProductSale =
     { id : Int
     , variant : ProductVariantId
     , price : Cents
@@ -1162,9 +1166,9 @@ type alias AdminListProductSale =
     }
 
 
-adminListProductSaleDecoder : Decoder AdminListProductSale
-adminListProductSaleDecoder =
-    Decode.map5 AdminListProductSale
+adminProductSaleDecoder : Decoder AdminProductSale
+adminProductSaleDecoder =
+    Decode.map5 AdminProductSale
         (Decode.field "id" Decode.int)
         (Decode.field "variant" <| Decode.map ProductVariantId Decode.int)
         (Decode.field "price" centsDecoder)
@@ -1200,6 +1204,19 @@ type alias AdminProductSaleNewData =
 adminProductSaleNewDataDecoder : Decoder AdminProductSaleNewData
 adminProductSaleNewDataDecoder =
     Decode.list saleProductDataDecoder
+
+
+type alias AdminEditProductSaleData =
+    { sale : AdminProductSale
+    , variants : List SaleProductData
+    }
+
+
+adminEditProductSaleDataDecoder : Decoder AdminEditProductSaleData
+adminEditProductSaleDataDecoder =
+    Decode.map2 AdminEditProductSaleData
+        (Decode.field "sale" adminProductSaleDecoder)
+        (Decode.field "variants" <| Decode.list saleProductDataDecoder)
 
 
 

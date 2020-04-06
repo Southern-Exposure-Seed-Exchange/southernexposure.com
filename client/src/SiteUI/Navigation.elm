@@ -316,6 +316,12 @@ adminView route =
                         ( ProductSaleNew, _ ) ->
                             False
 
+                        ( ProductSaleEdit _, ProductSaleList ) ->
+                            True
+
+                        ( ProductSaleEdit _, _ ) ->
+                            False
+
                 _ ->
                     False
     in

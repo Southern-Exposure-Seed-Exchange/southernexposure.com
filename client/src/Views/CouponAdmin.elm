@@ -21,6 +21,7 @@ import Iso8601
 import Json.Decode as Decode
 import Json.Encode as Encode exposing (Value)
 import Models.Fields exposing (Cents, centsEncoder, centsToString)
+import Models.Utils exposing (posixToDateString)
 import PageData exposing (CouponType(..))
 import Ports
 import RemoteData exposing (WebData)
@@ -656,13 +657,6 @@ edit model original =
 
 
 -- UTILS
-
-
-{-| Returns just the `YYYY-MM-DD` portion of the time's ISO8601 string.
--}
-posixToDateString : Posix -> String
-posixToDateString =
-    Iso8601.fromTime >> String.left 10
 
 
 couponToType : CouponType -> DiscountType

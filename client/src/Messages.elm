@@ -87,6 +87,7 @@ type Msg
     | ShippingMsg ShippingAdmin.Msg
     | SettingsMsg SettingsAdmin.Msg
     | NewProductSaleMsg ProductSalesAdmin.NewMsg
+    | EditProductSaleMsg ProductSalesAdmin.EditMsg
       -- API Requests
     | ReAuthorize (WebData User.AuthStatus)
     | LogOutResponse (WebData ())
@@ -119,3 +120,4 @@ type Msg
     | GetAdminEditCouponData (WebData PageData.AdminEditCouponData)
     | GetAdminProductSaleList (WebData PageData.AdminProductSaleListData)
     | GetAdminProductSaleNew (WebData PageData.AdminProductSaleNewData)
+    | GetAdminEditProductSaleData (WebData PageData.AdminEditProductSaleData)

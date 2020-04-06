@@ -1,4 +1,16 @@
-module Views.ProductSalesAdmin exposing (NewForm, NewMsg, initialNewForm, list, new, updateNewForm)
+module Views.ProductSalesAdmin exposing
+    ( EditForm
+    , EditMsg
+    , NewForm
+    , NewMsg
+    , edit
+    , initialEditForm
+    , initialNewForm
+    , list
+    , new
+    , updateEditForm
+    , updateNewForm
+    )
 
 import Api
 import Dict
@@ -8,8 +20,9 @@ import Html.Events exposing (onSubmit)
 import Iso8601
 import Json.Decode as Decode
 import Json.Encode as Encode exposing (Value)
-import Models.Fields exposing (Cents, centsEncoder, lotSizeToString)
-import PageData exposing (AdminProductSaleListData, AdminProductSaleNewData, SaleProductData)
+import Models.Fields exposing (Cents, centsEncoder, centsToString, lotSizeToString)
+import Models.Utils exposing (posixToDateString)
+import PageData exposing (AdminEditProductSaleData, AdminProductSaleListData, AdminProductSaleNewData, SaleProductData)
 import Ports
 import Product exposing (ProductVariantId(..))
 import RemoteData exposing (WebData)
@@ -17,7 +30,7 @@ import Routing exposing (AdminRoute(..), Route(..))
 import Time exposing (Posix, Zone)
 import Update.Utils exposing (noCommand)
 import Validation exposing (formValidation)
-import Views.Admin as Admin
+import Views.Admin as Admin exposing (updateEditField)
 import Views.Format as Format
 import Views.HorizontalForm as Form
 import Views.Utils exposing (routeLinkAttributes)
@@ -30,7 +43,7 @@ import Views.Utils exposing (routeLinkAttributes)
 list : Zone -> AdminProductSaleListData -> List (Html msg)
 list zone { sales, variants } =
     let
-        renderSale { variant, price, start, end } =
+        renderSale { id, variant, price, start, end } =
             let
                 (ProductVariantId rawVariantId) =
                     variant
@@ -53,9 +66,7 @@ list zone { sales, variants } =
                 , td [ class "text-right" ] [ text <| Format.cents price ]
                 , td [ class "text-center" ] [ text <| Format.date zone start ]
                 , td [ class "text-center" ] [ text <| Format.date zone end ]
-
-                -- TODO: Make Link
-                , td [] [ text "Edit" ]
+                , td [] [ a (routeLinkAttributes <| Admin <| ProductSaleEdit id) [ text "Edit" ] ]
                 ]
     in
     [ div [ class "form-group mb-4" ]
@@ -148,8 +159,8 @@ type NewMsg
     | NewSubmitResponse (WebData (Result Api.FormErrors Int))
 
 
-updateNewForm : NewMsg -> NewForm -> ( NewForm, Cmd NewMsg )
-updateNewForm msg model =
+updateNewForm : Routing.Key -> NewMsg -> NewForm -> ( NewForm, Cmd NewMsg )
+updateNewForm key msg model =
     case msg of
         NewSelectVariant v ->
             { model | variant = v } |> noCommand
@@ -180,10 +191,9 @@ updateNewForm msg model =
 
         NewSubmitResponse resp ->
             case resp of
-                RemoteData.Success (Ok _) ->
+                RemoteData.Success (Ok saleId) ->
                     ( initialNewForm
-                      -- TODO: Redirect to Edit Page
-                    , Cmd.none
+                    , Routing.newUrl key <| Admin <| ProductSaleEdit saleId
                     )
 
                 RemoteData.Success (Err errors) ->
@@ -202,23 +212,11 @@ updateNewForm msg model =
 
 new : NewForm -> AdminProductSaleNewData -> List (Html NewMsg)
 new model variants =
-    let
-        selectedVariant =
-            List.filter (\v -> v.id == (\(ProductVariantId i) -> i) model.variant) variants |> List.head
-
-        priceRow =
-            selectedVariant
-                |> Maybe.map (.price >> Format.cents)
-                |> Maybe.withDefault "Select a Product"
-                |> text
-                |> List.singleton
-                |> Form.withLabel "Normal Price" True
-    in
     [ form [ class <| Admin.formSavingClass model, onSubmit NewSubmit ]
         [ Form.genericErrorText <| not <| Dict.isEmpty model.errors
         , Api.generalFormErrors model
         , variantSelect model.variant NewSelectVariant variants
-        , priceRow
+        , normalPriceRow model.variant variants
         , Form.inputRow model.errors model.price NewInputPrice True "Sale Price" "price" "text" "off"
         , Form.dateRow model.errors model.start NewInputStart True "Start Date" "start"
         , Form.dateRow model.errors model.end NewInputEnd True "End Date" "end"
@@ -269,3 +267,193 @@ variantSelect variant msg variants =
                     ]
     in
     Form.selectRow idParser msg "Product" True options
+
+
+
+-- EDIT
+
+
+type alias EditForm =
+    { price : Maybe String
+    , variant : Maybe ProductVariantId
+    , start : Maybe String
+    , end : Maybe String
+    , errors : Api.FormErrors
+    , isSaving : Bool
+    }
+
+
+initialEditForm : EditForm
+initialEditForm =
+    { price = Nothing
+    , variant = Nothing
+    , start = Nothing
+    , end = Nothing
+    , errors = Api.initialErrors
+    , isSaving = False
+    }
+
+
+type alias ValidEditForm =
+    { id : Int
+    , price : Maybe Cents
+    , variant : Maybe ProductVariantId
+    , start : Maybe Posix
+    , end : Maybe Posix
+    }
+
+
+validateEditForm : Int -> EditForm -> Result Api.FormErrors ValidEditForm
+validateEditForm saleId model =
+    formValidation
+        (\price start end ->
+            { id = saleId
+            , price = price
+            , start = start
+            , end = end
+            , variant = model.variant
+            }
+        )
+        |> Validation.applyMaybe "price" Validation.cents model.price
+        |> Validation.applyMaybe "start" Validation.date model.start
+        |> Validation.applyMaybe "end" Validation.date model.end
+
+
+encodeEditForm : ValidEditForm -> Value
+encodeEditForm model =
+    let
+        encodeMaybe encoder =
+            Maybe.map encoder >> Maybe.withDefault Encode.null
+    in
+    Encode.object
+        [ ( "id", Encode.int model.id )
+        , ( "price", encodeMaybe centsEncoder model.price )
+        , ( "variant", encodeMaybe (\(ProductVariantId i) -> Encode.int i) model.variant )
+        , ( "start", encodeMaybe Iso8601.encode model.start )
+        , ( "end", encodeMaybe Iso8601.encode model.end )
+        ]
+
+
+type EditMsg
+    = EditSelectVariant ProductVariantId
+    | EditInputPrice String
+    | EditInputStart String
+    | EditInputEnd String
+    | EditSubmit
+    | EditSubmitResponse (WebData (Result Api.FormErrors ()))
+
+
+updateEditForm : Routing.Key -> WebData AdminEditProductSaleData -> EditMsg -> EditForm -> ( EditForm, Cmd EditMsg )
+updateEditForm key original msg model =
+    let
+        sale =
+            RemoteData.map .sale original
+    in
+    case msg of
+        EditSelectVariant val ->
+            noCommand <| { model | variant = Just val }
+
+        EditInputPrice val ->
+            noCommand <|
+                updateEditField val sale (.price >> centsToString) <|
+                    \v -> { model | price = v }
+
+        EditInputStart val ->
+            noCommand <|
+                updateEditField val sale (.start >> posixToDateString) <|
+                    \v -> { model | start = v }
+
+        EditInputEnd val ->
+            noCommand <|
+                updateEditField val sale (.end >> posixToDateString) <|
+                    \v -> { model | end = v }
+
+        EditSubmit ->
+            case RemoteData.map .id sale |> RemoteData.toMaybe of
+                Nothing ->
+                    noCommand model
+
+                Just saleId ->
+                    case validateEditForm saleId model of
+                        Err e ->
+                            ( { model | errors = e }
+                            , Ports.scrollToErrorMessage
+                            )
+
+                        Ok validForm ->
+                            ( { model | errors = Api.initialErrors, isSaving = True }
+                            , Api.patch Api.AdminEditProductSale
+                                |> Api.withJsonBody (encodeEditForm validForm)
+                                |> Api.withErrorHandler (Decode.succeed ())
+                                |> Api.sendRequest EditSubmitResponse
+                            )
+
+        EditSubmitResponse response ->
+            case response of
+                RemoteData.Success (Ok ()) ->
+                    ( initialEditForm
+                    , Routing.newUrl key <| Admin ProductSaleList
+                    )
+
+                RemoteData.Success (Err errors) ->
+                    ( { model | errors = errors, isSaving = False }
+                    , Ports.scrollToErrorMessage
+                    )
+
+                RemoteData.Failure error ->
+                    ( { model | errors = Api.apiFailureToError error, isSaving = False }
+                    , Ports.scrollToErrorMessage
+                    )
+
+                _ ->
+                    noCommand { model | isSaving = False }
+
+
+edit : EditForm -> AdminEditProductSaleData -> List (Html EditMsg)
+edit model { sale, variants } =
+    let
+        valueWithFallback s1 s2 =
+            s1 model |> Maybe.withDefault (s2 sale)
+
+        inputRow s1 s2 =
+            Form.inputRow model.errors (valueWithFallback s1 s2)
+    in
+    [ form [ class (Admin.formSavingClass model), onSubmit EditSubmit ]
+        [ Form.genericErrorText <| not <| Dict.isEmpty model.errors
+        , Api.generalFormErrors model
+        , variantSelect (valueWithFallback .variant .variant) EditSelectVariant variants
+        , normalPriceRow (valueWithFallback .variant .variant) variants
+        , inputRow .price (.price >> centsToString) EditInputPrice True "Sale Price" "price" "text" "off"
+        , Form.dateRow model.errors
+            (valueWithFallback .start (.start >> posixToDateString))
+            EditInputStart
+            True
+            "Start Date"
+            "start"
+        , Form.dateRow model.errors
+            (valueWithFallback .end (.end >> posixToDateString))
+            EditInputEnd
+            True
+            "End Date"
+            "end"
+        , div [ class "form-group" ]
+            [ Admin.submitOrSavingButton model "Update Sale" ]
+        ]
+    ]
+
+
+
+-- UTILS
+
+
+{-| Render a form row showing the normal price of the selected variant.
+-}
+normalPriceRow : ProductVariantId -> List SaleProductData -> Html msg
+normalPriceRow (ProductVariantId selectedId) variants =
+    List.filter (\v -> v.id == selectedId) variants
+        |> List.head
+        |> Maybe.map (.price >> Format.cents)
+        |> Maybe.withDefault "Select a Product"
+        |> text
+        |> List.singleton
+        |> Form.withLabel "Normal Price" True
