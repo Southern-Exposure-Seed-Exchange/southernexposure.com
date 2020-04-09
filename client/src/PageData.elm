@@ -1,6 +1,8 @@
 module PageData exposing
     ( AddressDetails
     , AdminCategoryListData
+    , AdminCategorySale
+    , AdminCategorySaleListData
     , AdminCategorySelect
     , AdminComment
     , AdminCouponListData
@@ -40,9 +42,11 @@ module PageData exposing
     , ProductData
     , ProductDetails
     , SaleProductData
+    , SaleType(..)
     , SearchResults
     , addressDetailsDecoder
     , adminCategoryListDataDecoder
+    , adminCategorySaleListDataDecoder
     , adminCategorySelectDecoder
     , adminCouponListDataDecoder
     , adminEditCategoryDataDecoder
@@ -133,6 +137,7 @@ type alias PageData =
     , adminProductSalesList : WebData AdminProductSaleListData
     , adminProductSaleNew : WebData AdminProductSaleNewData
     , adminEditProductSale : WebData AdminEditProductSaleData
+    , adminCategorySaleList : WebData AdminCategorySaleListData
     }
 
 
@@ -188,6 +193,7 @@ initial =
     , adminProductSalesList = RemoteData.NotAsked
     , adminProductSaleNew = RemoteData.NotAsked
     , adminEditProductSale = RemoteData.NotAsked
+    , adminCategorySaleList = RemoteData.NotAsked
     }
 
 
@@ -1217,6 +1223,74 @@ adminEditProductSaleDataDecoder =
     Decode.map2 AdminEditProductSaleData
         (Decode.field "sale" adminProductSaleDecoder)
         (Decode.field "variants" <| Decode.list saleProductDataDecoder)
+
+
+
+-- Category Sales Admin
+
+
+type alias AdminCategorySaleListData =
+    { categories : Dict Int String
+    , sales : List AdminCategorySale
+    }
+
+
+adminCategorySaleListDataDecoder : Decoder AdminCategorySaleListData
+adminCategorySaleListDataDecoder =
+    let
+        makeCategories =
+            List.foldr
+                (\category ->
+                    Dict.insert ((\(CategoryId i) -> i) category.id) category.name
+                )
+                Dict.empty
+    in
+    Decode.map2 AdminCategorySaleListData
+        (Decode.field "categories" <| Decode.map makeCategories <| Decode.list adminCategorySelectDecoder)
+        (Decode.field "sales" <| Decode.list adminCategorySaleDecoder)
+
+
+type alias AdminCategorySale =
+    { id : Int
+    , name : String
+    , saleType : SaleType
+    , start : Posix
+    , end : Posix
+    , categories : List CategoryId
+    }
+
+
+adminCategorySaleDecoder : Decoder AdminCategorySale
+adminCategorySaleDecoder =
+    Decode.map6 AdminCategorySale
+        (Decode.field "id" Decode.int)
+        (Decode.field "name" Decode.string)
+        (Decode.field "type" saleTypeDecoder)
+        (Decode.field "start" Iso8601.decoder)
+        (Decode.field "end" Iso8601.decoder)
+        (Decode.field "categories" <| Decode.list Category.idDecoder)
+
+
+type SaleType
+    = FlatSale Cents
+    | PercentSale Int
+
+
+saleTypeDecoder : Decoder SaleType
+saleTypeDecoder =
+    Decode.field "type" Decode.string
+        |> Decode.andThen
+            (\type_ ->
+                case type_ of
+                    "flat" ->
+                        Decode.map FlatSale (Decode.field "amount" centsDecoder)
+
+                    "percent" ->
+                        Decode.map PercentSale (Decode.field "amount" Decode.int)
+
+                    _ ->
+                        Decode.fail <| "Unexpected SaleType: " ++ type_
+            )
 
 
 

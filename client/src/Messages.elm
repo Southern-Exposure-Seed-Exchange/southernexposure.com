@@ -121,3 +121,4 @@ type Msg
     | GetAdminProductSaleList (WebData PageData.AdminProductSaleListData)
     | GetAdminProductSaleNew (WebData PageData.AdminProductSaleNewData)
     | GetAdminEditProductSaleData (WebData PageData.AdminEditProductSaleData)
+    | GetAdminCategorySaleList (WebData PageData.AdminCategorySaleListData)

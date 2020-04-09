@@ -405,6 +405,11 @@ fetchDataForRoute ({ route, pageData, key } as model) =
                     , getAdminEditProductSaleData saleId
                     )
 
+                Admin CategorySaleList ->
+                    ( { pageData | adminCategorySaleList = RemoteData.Loading }
+                    , getAdminCategorySaleList
+                    )
+
                 Redirect path ->
                     ( pageData
                     , Browser.Navigation.load path
@@ -738,6 +743,13 @@ getAdminEditProductSaleData saleId =
     Api.get (Api.AdminEditProductSaleData saleId)
         |> Api.withJsonResponse PageData.adminEditProductSaleDataDecoder
         |> Api.sendRequest GetAdminEditProductSaleData
+
+
+getAdminCategorySaleList : Cmd Msg
+getAdminCategorySaleList =
+    Api.get Api.AdminCategorySaleList
+        |> Api.withJsonResponse PageData.adminCategorySaleListDataDecoder
+        |> Api.sendRequest GetAdminCategorySaleList
 
 
 
@@ -1517,6 +1529,13 @@ update msg ({ pageData, key } as model) =
             in
             ( { model | pageData = updatedPageData }, Cmd.none )
 
+        GetAdminCategorySaleList response ->
+            let
+                updatedPageData =
+                    { pageData | adminCategorySaleList = response }
+            in
+            ( { model | pageData = updatedPageData }, Cmd.none )
+
 
 {-| Wrap the normal update function, checking to see if the page has finished
 loading all it's dependent data. If so, run ports that should fire once a page
@@ -1773,6 +1792,9 @@ runOnCurrentWebData runner { pageData, route } =
         Admin (ProductSaleEdit _) ->
             justRunner pageData.adminEditProductSale
 
+        Admin CategorySaleList ->
+            justRunner pageData.adminCategorySaleList
+
 
 {-| Update the current page number using the Paginated data.
 
@@ -1908,6 +1930,9 @@ resetForm oldRoute model =
 
                 ProductSaleEdit _ ->
                     { model | editProductSaleForm = ProductSalesAdmin.initialEditForm }
+
+                CategorySaleList ->
+                    model
     in
     case oldRoute of
         ProductDetails _ ->

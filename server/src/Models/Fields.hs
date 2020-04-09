@@ -554,6 +554,28 @@ instance ToJSON AdminOrderComment where
 data SaleType
     = FlatSale Cents
     | PercentSale Percent       -- ^ Percent field is whole percentage(`5 == 5%`)
-    deriving (Show, Read, Generic)
+    deriving (Show, Read, Generic, Eq)
 
 derivePersistField "SaleType"
+
+instance ToJSON SaleType where
+    toJSON sale =
+        let
+            (type_, amount) =
+                case sale of
+                    FlatSale discount ->
+                        ("flat" :: T.Text, fromCents discount)
+                    PercentSale percent ->
+                        ("percent", percent)
+        in
+            object ["type" .= type_, "amount" .= amount]
+
+instance FromJSON SaleType where
+    parseJSON = withObject "SaleType" $ \v ->
+        v .: "type" >>= \case
+            "flat" ->
+                FlatSale <$> v .: "amount"
+            "percent" ->
+                PercentSale <$> v .: "amount"
+            unexpected ->
+                fail $ "Unexpected SaleType type: " ++ T.unpack unexpected

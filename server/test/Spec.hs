@@ -58,6 +58,7 @@ modelsFields =
         [ testProperty "LotSize Aeson Instances" $ testJSON genLotSize
         , testProperty "CouponType Aeson Instances" $ testJSON genCouponType
         , testProperty "Country Aeson Instances" $ testJSON genCountry
+        , testProperty "SaleType Aeson Instances" $ testJSON genSaleType
         ]
 
 modelsUtils :: TestTree
@@ -903,3 +904,10 @@ genDay = ModifiedJulianDay <$> Gen.integral (Range.linear 0 999999)
 
 genCountry :: Gen Country
 genCountry = Country <$> Gen.enumBounded
+
+genSaleType :: Gen SaleType
+genSaleType =
+    Gen.choice
+        [ FlatSale <$> genCents
+        , PercentSale <$> genWholePercentage
+        ]

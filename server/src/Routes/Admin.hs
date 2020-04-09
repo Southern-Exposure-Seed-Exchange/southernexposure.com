@@ -8,6 +8,7 @@ module Routes.Admin
 import Servant ((:<|>)(..), (:>), ServerT)
 
 import Routes.Admin.Categories
+import Routes.Admin.CategorySales
 import Routes.Admin.Coupons
 import Routes.Admin.Customers
 import Routes.Admin.Orders
@@ -30,6 +31,7 @@ type AdminAPI =
     :<|> "shipping" :> ShippingMethodsAPI
     :<|> "settings" :> SettingsAPI
     :<|> "product-sales" :> ProductSalesAPI
+    :<|> "category-sales" :> CategrySalesAPI
 
 
 adminRoutes :: ServerT AdminAPI App
@@ -44,3 +46,4 @@ adminRoutes =
     :<|> shippingMethodsRoutes
     :<|> settingsRoutes
     :<|> productSalesRoutes
+    :<|> categorySalesRoutes

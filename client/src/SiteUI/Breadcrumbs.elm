@@ -210,6 +210,9 @@ view route pageData =
                     , activeItem "Edit Sale"
                     ]
 
+                Admin CategorySaleList ->
+                    singleItem "Category Sales"
+
                 Redirect _ ->
                     singleItem "Redirecting..."
 

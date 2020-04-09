@@ -38,6 +38,7 @@ import SiteUI.Sidebar as SiteSidebar
 import StaticPage exposing (StaticPage)
 import User
 import Views.Aria as Aria
+import Views.CategorySalesAdmin as CategorySalesAdmin
 import Views.CouponAdmin as CouponAdmin
 import Views.CustomerAdmin as CustomerAdmin
 import Views.OrderAdmin as OrderAdmin
@@ -275,6 +276,9 @@ view ({ route, pageData, navigationData, zone } as model) =
                     withIntermediateText (ProductSalesAdmin.edit model.editProductSaleForm)
                         pageData.adminEditProductSale
                         |> List.map (Html.map EditProductSaleMsg)
+
+                Admin CategorySaleList ->
+                    withIntermediateText (CategorySalesAdmin.list zone) pageData.adminCategorySaleList
 
         apply : (a -> b -> c) -> ( a, b ) -> c
         apply f ( a, b ) =
@@ -517,6 +521,9 @@ adminTitle ({ pageData } as model) adminRoute =
 
         ProductSaleEdit _ ->
             "Edit Product Sale"
+
+        CategorySaleList ->
+            "Category Sales"
 
 
 pageImage : Model -> Maybe String

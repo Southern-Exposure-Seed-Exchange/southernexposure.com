@@ -322,6 +322,9 @@ adminView route =
                         ( ProductSaleEdit _, _ ) ->
                             False
 
+                        ( CategorySaleList, _ ) ->
+                            False
+
                 _ ->
                     False
     in
@@ -350,6 +353,7 @@ adminView route =
                     , navItem "Shipping" ShippingMethods
                     , navItem "Settings" Settings
                     , navItem "Product Sales" ProductSaleList
+                    , navItem "Category Sales" CategorySaleList
                     ]
                 ]
             ]
