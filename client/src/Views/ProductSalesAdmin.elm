@@ -82,7 +82,7 @@ list zone { sales, variants } =
                 , th [ class "text-right" ] [ text "Sale Price" ]
                 , th [ class "text-center" ] [ text "Start Date" ]
                 , th [ class "text-center" ] [ text "End Date" ]
-                , td [] []
+                , th [] []
                 ]
             ]
         , tbody [] <| List.map renderSale sales
