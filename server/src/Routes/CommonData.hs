@@ -254,8 +254,9 @@ getCategorySales (Entity productId product) = do
     currentTime <- liftIO getCurrentTime
     secondaryCategories <- map (productToCategoryCategoryId . entityVal)
         <$> getAdditionalCategories productId
-    categories <- lift $ map entityKey . concat <$>
-        mapM getParentCategories (productMainCategory product : secondaryCategories)
+    categories <- lift $ concat <$>
+        mapM (\c -> (c :) . map entityKey <$> getParentCategories c)
+            (productMainCategory product : secondaryCategories)
     activeSales <- map entityVal <$> selectList
         [ CategorySaleStartDate <=. currentTime
         , CategorySaleEndDate >=. currentTime

@@ -5,6 +5,8 @@ CHANGELOG
 v1.03.14
 =========
 
+* Fix a bug causing Category Sales to only apply if they match a Product's
+  parent Categories instead of it's Category or any parent Categories.
 * Add Admin pages for listing, creating, & editing Product Sales.
 * Bump copyright year in footer.
 
