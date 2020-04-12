@@ -12,8 +12,6 @@ github:
     Southern-Exposure-Seed-Exchange/southernexposure.com
 license:
     GPL-3.0
-license-file:
-    ../LICENSE
 author:
     "Pavan Rikhi"
 maintainer:
@@ -29,10 +27,6 @@ description: >
     routing. It is paired with an Elm frontend available in the same
     repository.
 
-extra-source-files:
-    - ../README.rst
-    - ../LICENSE
-
 
 ghc-options:
     - -Wall
@@ -40,9 +34,7 @@ ghc-options:
     - -Wincomplete-record-updates
     - -Wincomplete-uni-patterns
     - -Wredundant-constraints
-    - -with-rtsopts "-N -T"
     - -O2
-    - -threaded
 
 # TODO: Split up between lib/exe sections unless used throughout
 dependencies:
@@ -157,7 +149,7 @@ executables:
         ghc-options:
             - -threaded
             - -rtsopts
-            - -with-rtsopts=-N
+            - '"-with-rtsopts=-T -N"'
         dependencies:
             - sese-website
             - fast-logger
