@@ -220,3 +220,16 @@ executables:
             - persistent-postgresql
             - text
             - vector
+
+    import-category-keywords:
+        main: ImportCategoryKeywords.hs
+        <<: *script-defaults
+        other-modules: []
+        dependencies:
+            - sese-website
+            - bytestring
+            - cassava
+            - monad-logger
+            - persistent-postgresql
+            - text
+            - vector
