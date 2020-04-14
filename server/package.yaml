@@ -229,6 +229,20 @@ executables:
             - sese-website
             - bytestring
             - cassava
+            - esqueleto
+            - monad-logger
+            - persistent-postgresql
+            - text
+            - vector
+
+    import-product-keywords:
+        main: ImportProductKeywords.hs
+        <<: *script-defaults
+        other-modules: []
+        dependencies:
+            - sese-website
+            - bytestring
+            - cassava
             - monad-logger
             - persistent-postgresql
             - text
