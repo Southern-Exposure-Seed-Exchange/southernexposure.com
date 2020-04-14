@@ -12,8 +12,7 @@ module Routes.Admin.ShippingMethods
     , RateType(..)
     ) where
 
-import Control.Concurrent.STM.TVar (readTVarIO)
-import Control.Monad.Reader (asks, liftIO, forM_)
+import Control.Monad.Reader (forM_)
 import Data.Aeson (ToJSON(..), FromJSON(..), (.=), (.:), object, withObject, withText)
 import Data.Maybe (mapMaybe, isJust)
 import Database.Persist ((/<-.), Entity(..), SelectOpt(Asc), selectList, deleteWhere, insertMany_, replace)
@@ -21,11 +20,9 @@ import Numeric.Natural (Natural)
 import Servant ((:<|>)(..), (:>), AuthProtect, ReqBody, Get, Post, JSON)
 
 import Auth (WrappedAuthToken, Cookied, withAdminCookie, validateAdminAndParameters)
-import Cache
-import Config
 import Models
 import Models.Fields (Cents(..), Country(..), PriorityShippingFee(..), ShippingRate(..))
-import Routes.CommonData (AdminCategorySelect(..), makeAdminCategorySelect, validateCategorySelect)
+import Routes.CommonData (AdminCategorySelect, makeAdminCategorySelects, validateCategorySelect)
 import Server
 import Validation (Validation(..))
 
@@ -159,10 +156,8 @@ shippingDataRoute :: WrappedAuthToken -> App (Cookied ShippingData)
 shippingDataRoute = flip withAdminCookie $ \_ -> do
     (methods, categories) <- runDB $
         (,) <$> selectList [] [Asc ShippingMethodPriority]
-            <*> selectList [] []
-    categoryCache <- asks getCaches >>= fmap getCategoryPredecessorCache . liftIO . readTVarIO
-    let categorySelects = L.sortOn acsName $ map (makeAdminCategorySelect categoryCache) categories
-    return $ ShippingData (map makeMethodData methods) categorySelects
+            <*> makeAdminCategorySelects
+    return $ ShippingData (map makeMethodData methods) categories
   where
     makeMethodData :: Entity ShippingMethod -> MethodData
     makeMethodData (Entity sId ShippingMethod {..}) =

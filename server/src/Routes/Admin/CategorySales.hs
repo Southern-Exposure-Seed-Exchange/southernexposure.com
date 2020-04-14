@@ -12,12 +12,9 @@ import Database.Persist (Entity(..), SelectOpt(Desc), selectList)
 import Servant ((:>), AuthProtect, Get, JSON)
 
 import Auth (Cookied, WrappedAuthToken, withAdminCookie)
-import Cache (Caches(getCategoryPredecessorCache))
 import Models
-import Routes.CommonData (AdminCategorySelect(acsName), makeAdminCategorySelect)
-import Server (App, runDB, readCache)
+import Routes.CommonData (AdminCategorySelect, makeAdminCategorySelects)
 
-import qualified Data.List as L
 
 type CategrySalesAPI =
          "list" :> CategorySalesListRoute
@@ -69,11 +66,10 @@ instance ToJSON CategorySalesData where
 
 categorySalesListRoute :: WrappedAuthToken -> App (Cookied CategorySalesListData)
 categorySalesListRoute = flip withAdminCookie $ \_ -> do
-    categoryCache <- readCache getCategoryPredecessorCache
     (categories, sales) <- runDB $
-        (,) <$> selectList [] []
+        (,) <$> makeAdminCategorySelects
             <*> selectList [] [Desc CategorySaleEndDate]
     return CategorySalesListData
-        { csldCategories = L.sortOn acsName $ map (makeAdminCategorySelect categoryCache) categories
+        { csldCategories = categories
         , csldSales = map CategorySalesData sales
         }

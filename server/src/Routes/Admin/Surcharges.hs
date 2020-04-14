@@ -7,19 +7,15 @@ module Routes.Admin.Surcharges
     , surchargesRoutes
     ) where
 
-import Control.Concurrent.STM.TVar (readTVarIO)
-import Control.Monad.Reader (asks, liftIO)
 import Data.Aeson (ToJSON(..), FromJSON(..), (.=), (.:), withObject, object)
 import Data.Maybe (isNothing, mapMaybe)
 import Database.Persist ((/<-.), Entity(..), replace, selectList, deleteWhere, insertMany_)
 import Servant ((:<|>)(..), (:>), AuthProtect, ReqBody, Get, Post, JSON)
 
 import Auth (WrappedAuthToken, Cookied, withAdminCookie, validateAdminAndParameters)
-import Cache
-import Config
 import Models
 import Models.Fields (Cents)
-import Routes.CommonData (AdminCategorySelect(..), makeAdminCategorySelect, validateCategorySelect)
+import Routes.CommonData (AdminCategorySelect, makeAdminCategorySelects, validateCategorySelect)
 import Server
 import Validation (Validation(..))
 
@@ -95,12 +91,10 @@ instance FromJSON SurchargeData where
 surchargesDataRoute :: WrappedAuthToken -> App (Cookied SurchargesData)
 surchargesDataRoute t = withAdminCookie t $ \_ -> do
     (categories, surcharges) <- runDB $
-        (,) <$> selectList [] [] <*> selectList [] []
-    categoryCache <- asks getCaches >>= fmap getCategoryPredecessorCache . liftIO . readTVarIO
-    let categorySelects = L.sortOn acsName $ map (makeAdminCategorySelect categoryCache) categories
+        (,) <$> makeAdminCategorySelects <*> selectList [] []
     return SurchargesData
         { sdSurcharges = map makeSurchargeData surcharges
-        , sdAllCategories = categorySelects
+        , sdAllCategories = categories
         }
   where
     makeSurchargeData :: Entity Surcharge -> SurchargeData

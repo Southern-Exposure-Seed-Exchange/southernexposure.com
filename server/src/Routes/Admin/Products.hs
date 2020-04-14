@@ -9,9 +9,8 @@ module Routes.Admin.Products
     , productRoutes
     ) where
 
-import Control.Concurrent.STM (readTVarIO)
 import Control.Monad (forM_, unless)
-import Control.Monad.Reader (asks, liftIO, lift)
+import Control.Monad.Reader (liftIO, lift)
 import Data.Aeson ((.=), (.:), (.:?), ToJSON(..), FromJSON(..), Value(Object), object, withObject)
 import Data.Maybe (mapMaybe, listToMaybe, fromMaybe)
 import Data.Monoid ((<>))
@@ -24,8 +23,6 @@ import Database.Persist
 import Servant ((:<|>)(..), (:>), AuthProtect, ReqBody, Capture, Get, Post, JSON, err404)
 
 import Auth (WrappedAuthToken, Cookied, withAdminCookie, validateAdminAndParameters)
-import Config (Config(getCaches))
-import Cache (Caches(getCategoryPredecessorCache))
 import Models
     ( EntityField(..), Product(..), ProductId, ProductVariant(..), ProductVariantId
     , SeedAttribute(..), Category(..), CategoryId, Unique(..), slugify
@@ -33,7 +30,7 @@ import Models
     )
 import Models.Fields (LotSize, Cents)
 import Routes.CommonData
-    ( AdminCategorySelect(acsName), makeAdminCategorySelect, validateCategorySelect
+    ( AdminCategorySelect, makeAdminCategorySelects, validateCategorySelect
     , getAdditionalCategories
     )
 import Routes.Utils (activeVariantExists, makeImageFromBase64, sanitize)
@@ -149,11 +146,8 @@ instance ToJSON SharedProductData where
         object [ "categories" .= spdCategories ]
 
 sharedProductDataRoute :: WrappedAuthToken -> App (Cookied SharedProductData)
-sharedProductDataRoute t = withAdminCookie t $ \_ -> do
-    categories <- runDB $ selectList [] []
-    categoryCache <- asks getCaches >>= fmap getCategoryPredecessorCache . liftIO . readTVarIO
-    return . SharedProductData . L.sortOn acsName
-        $ map (makeAdminCategorySelect categoryCache) categories
+sharedProductDataRoute t = withAdminCookie t $ \_ ->
+    SharedProductData <$> runDB makeAdminCategorySelects
 
 
 data ProductParameters =

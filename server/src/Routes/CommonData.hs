@@ -21,6 +21,7 @@ module Routes.CommonData
     , makeCategoryData
     , AdminCategorySelect(..)
     , makeAdminCategorySelect
+    , makeAdminCategorySelects
     , validateCategorySelect
     , AuthorizationData
     , toAuthorizationData
@@ -69,7 +70,7 @@ import Numeric.Natural (Natural)
 import Servant (errBody, err500)
 
 import Avalara (CreateTransactionRequest(..), AddressInfo(..))
-import Cache (CategoryPredecessorCache, queryCategoryPredecessorCache)
+import Cache (CategoryPredecessorCache, getCategoryPredecessorCache, queryCategoryPredecessorCache)
 import Config
 import Images
 import Models
@@ -363,6 +364,13 @@ makeAdminCategorySelect cache (Entity cId cat) =
                     $ map (categoryName . entityVal)
                     $ reverse predecessors
         in acs { acsName = newName}
+
+-- | Build a list of AdminCategorySelects from every Category, using the
+-- CategoryCache to prepend the Category names with their ancestors'.
+makeAdminCategorySelects :: AppSQL [AdminCategorySelect]
+makeAdminCategorySelects = do
+    categoryCache <- lift $ readCache getCategoryPredecessorCache
+    L.sortOn acsName . map (makeAdminCategorySelect categoryCache) <$> selectList [] []
 
 -- | Validate a mutli-category select field by ensuring at least one
 -- category is selected & all the Categories exist in the database.
