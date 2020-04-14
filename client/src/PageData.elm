@@ -16,6 +16,7 @@ module PageData exposing
     , AdminListPage
     , AdminListProduct
     , AdminNewCategoryData
+    , AdminNewCategorySaleData
     , AdminOrderDetails
     , AdminPageListData
     , AdminProductListData
@@ -56,6 +57,7 @@ module PageData exposing
     , adminEditProductSaleDataDecoder
     , adminListPageDecoder
     , adminNewCategoryDataDecoder
+    , adminNewCategorySaleDataDecoder
     , adminNewProductDataDecoder
     , adminOrderDetailsDecoder
     , adminPageListDataDecoder
@@ -81,6 +83,7 @@ module PageData exposing
     , ordersConfig
     , productDataDecoder
     , productDetailsDecoder
+    , saleTypeEncoder
     , searchConfig
     , statusText
     )
@@ -138,6 +141,7 @@ type alias PageData =
     , adminProductSaleNew : WebData AdminProductSaleNewData
     , adminEditProductSale : WebData AdminEditProductSaleData
     , adminCategorySaleList : WebData AdminCategorySaleListData
+    , adminNewCategorySale : WebData AdminNewCategorySaleData
     }
 
 
@@ -194,6 +198,7 @@ initial =
     , adminProductSaleNew = RemoteData.NotAsked
     , adminEditProductSale = RemoteData.NotAsked
     , adminCategorySaleList = RemoteData.NotAsked
+    , adminNewCategorySale = RemoteData.NotAsked
     }
 
 
@@ -1291,6 +1296,34 @@ saleTypeDecoder =
                     _ ->
                         Decode.fail <| "Unexpected SaleType: " ++ type_
             )
+
+
+saleTypeEncoder : SaleType -> Value
+saleTypeEncoder t =
+    let
+        ( type_, amount ) =
+            case t of
+                FlatSale cents ->
+                    ( "flat", centsEncoder cents )
+
+                PercentSale percent ->
+                    ( "percent", Encode.int percent )
+    in
+    Encode.object
+        [ ( "type", Encode.string type_ )
+        , ( "amount", amount )
+        ]
+
+
+type alias AdminNewCategorySaleData =
+    { categories : List AdminCategorySelect
+    }
+
+
+adminNewCategorySaleDataDecoder : Decoder AdminNewCategorySaleData
+adminNewCategorySaleDataDecoder =
+    Decode.map AdminNewCategorySaleData
+        (Decode.field "categories" <| Decode.list adminCategorySelectDecoder)
 
 
 

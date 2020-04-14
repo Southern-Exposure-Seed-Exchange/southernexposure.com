@@ -25,6 +25,7 @@ import Search
 import SiteUI exposing (NavigationData)
 import Time
 import User exposing (AuthStatus)
+import Views.CategorySalesAdmin as CategorySalesAdmin
 import Views.CouponAdmin as CouponAdmin
 import Views.CustomerAdmin as CustomerAdmin
 import Views.OrderAdmin as OrderAdmin
@@ -69,6 +70,7 @@ type alias Model =
     , shippingMethodForm : ShippingAdmin.Form
     , newProductSaleForm : ProductSalesAdmin.NewForm
     , editProductSaleForm : ProductSalesAdmin.EditForm
+    , newCategorySaleForm : CategorySalesAdmin.NewForm
     , settingsForm : SettingsAdmin.Form
     , cartItemCount : Int
     , maybeSessionToken : Maybe String
@@ -121,6 +123,7 @@ initial key route =
     , shippingMethodForm = ShippingAdmin.initialForm
     , newProductSaleForm = ProductSalesAdmin.initialNewForm
     , editProductSaleForm = ProductSalesAdmin.initialEditForm
+    , newCategorySaleForm = CategorySalesAdmin.initialNewForm
     , settingsForm = SettingsAdmin.initialForm
     , cartItemCount = 0
     , maybeSessionToken = Nothing

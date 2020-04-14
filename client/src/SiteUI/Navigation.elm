@@ -325,6 +325,12 @@ adminView route =
                         ( CategorySaleList, _ ) ->
                             False
 
+                        ( CategorySaleNew, CategorySaleList ) ->
+                            True
+
+                        ( CategorySaleNew, _ ) ->
+                            False
+
                 _ ->
                     False
     in

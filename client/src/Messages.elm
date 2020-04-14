@@ -26,6 +26,7 @@ import SiteUI.Search as SiteSearch
 import StaticPage exposing (StaticPage)
 import Time
 import User
+import Views.CategorySalesAdmin as CategorySalesAdmin
 import Views.CouponAdmin as CouponAdmin
 import Views.CustomerAdmin as CustomerAdmin
 import Views.OrderAdmin as OrderAdmin
@@ -88,6 +89,7 @@ type Msg
     | SettingsMsg SettingsAdmin.Msg
     | NewProductSaleMsg ProductSalesAdmin.NewMsg
     | EditProductSaleMsg ProductSalesAdmin.EditMsg
+    | NewCategorySaleMsg CategorySalesAdmin.NewMsg
       -- API Requests
     | ReAuthorize (WebData User.AuthStatus)
     | LogOutResponse (WebData ())
@@ -122,3 +124,4 @@ type Msg
     | GetAdminProductSaleNew (WebData PageData.AdminProductSaleNewData)
     | GetAdminEditProductSaleData (WebData PageData.AdminEditProductSaleData)
     | GetAdminCategorySaleList (WebData PageData.AdminCategorySaleListData)
+    | GetAdminNewCattegorySaleData (WebData PageData.AdminNewCategorySaleData)
