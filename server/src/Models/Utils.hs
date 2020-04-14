@@ -147,7 +147,7 @@ truncateHtml targetWordCount =
 
 -- | Return the ID's of a Category's Child Categories, including the passed
 -- CategoryId.
-getChildCategoryIds  :: Key Category -> AppSQL [Key Category]
+getChildCategoryIds :: MonadIO m => Key Category -> SqlPersistT m [Key Category]
 getChildCategoryIds categoryId = do
     childrenKeys <- selectKeysList [CategoryParentId ==. Just categoryId] []
     subKeys <- concat <$> mapM getChildCategoryIds childrenKeys
