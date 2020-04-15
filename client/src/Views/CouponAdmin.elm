@@ -298,100 +298,66 @@ new model =
 
 couponTypeRow : Api.FormErrors -> DiscountType -> String -> (DiscountType -> msg) -> (String -> msg) -> Html msg
 couponTypeRow errors selectedType enteredAmount selectMsg inputMsg =
-    let
-        inputId =
-            "DiscountAmount"
+    Admin.selectInputRow
+        { label = "Discount Type"
+        , isRequired = True
+        , selectMsg = selectMsg
+        , inputMsg = inputMsg
+        , selectedValue = selectedType
+        , selectId = "DiscountType"
+        , selectOptions = [ Shipping, Percentage, Flat ]
+        , selectToValue =
+            \t ->
+                case t of
+                    Shipping ->
+                        "shipping"
 
-        selectId =
-            "DiscountType"
+                    Percentage ->
+                        "percentage"
 
-        inputAttrs =
-            case selectedType of
-                Shipping ->
-                    [ type_ "hidden" ]
+                    Flat ->
+                        "flat"
+        , selectToString =
+            \t ->
+                case t of
+                    Shipping ->
+                        "Free Shipping"
 
-                Percentage ->
-                    [ type_ "number", A.min "1", A.max "100", A.step "1" ]
+                    Percentage ->
+                        "Percent Discount"
 
-                Flat ->
-                    [ type_ "number", A.min "0.01", A.step "0.01" ]
+                    Flat ->
+                        "Flat Amount"
+        , selectValueParser =
+            \t ->
+                case t of
+                    "shipping" ->
+                        Ok Shipping
 
-        typeParser str =
-            case str of
-                "shipping" ->
-                    Ok Shipping
+                    "percentage" ->
+                        Ok Percentage
 
-                "percentage" ->
-                    Ok Percentage
+                    "flat" ->
+                        Ok Flat
 
-                "flat" ->
-                    Ok Flat
+                    _ ->
+                        Err <| "Unrecognized discount type: " ++ t
+        , inputValue = enteredAmount
+        , inputId = "DiscountAmount"
+        , inputAttributes =
+            \t ->
+                case t of
+                    Shipping ->
+                        [ type_ "hidden" ]
 
-                _ ->
-                    Err <| "Unrecognized discount type: " ++ str
+                    Percentage ->
+                        [ type_ "number", A.min "1", A.max "100", A.step "1" ]
 
-        typeToValue type_ =
-            case type_ of
-                Shipping ->
-                    "shipping"
-
-                Percentage ->
-                    "percentage"
-
-                Flat ->
-                    "flat"
-
-        typeToString type_ =
-            case type_ of
-                Shipping ->
-                    "Free Shipping"
-
-                Percentage ->
-                    "Percent Discount"
-
-                Flat ->
-                    "Flat Amount"
-
-        options =
-            [ Shipping, Percentage, Flat ]
-                |> List.map
-                    (\t ->
-                        option
-                            [ value <| typeToValue t
-                            , selected <| t == selectedType
-                            ]
-                            [ text <| typeToString t ]
-                    )
-
-        fieldErrors =
-            Dict.get "discount" errors |> Maybe.withDefault []
-
-        errorHtml =
-            if List.isEmpty fieldErrors then
-                text ""
-
-            else
-                fieldErrors
-                    |> List.map text
-                    |> List.intersperse (br [] [])
-                    |> div [ class "invalid-feedback" ]
-    in
-    Form.withLabel "Discount Type"
-        True
-        [ Form.selectElement selectId "w-25 d-inline-block" typeParser selectMsg options
-        , input
-            ([ id <| "input" ++ inputId
-             , name inputId
-             , required True
-             , value enteredAmount
-             , onInput inputMsg
-             , class "form-control w-50 d-inline-block ml-4"
-             ]
-                ++ inputAttrs
-            )
-            []
-        , errorHtml
-        ]
+                    Flat ->
+                        [ type_ "number", A.min "0.01", A.step "0.01" ]
+        , errors = errors
+        , errorField = "discount"
+        }
 
 
 dateRow : FormErrors -> String -> (String -> msg) -> Html msg

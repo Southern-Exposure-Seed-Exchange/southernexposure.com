@@ -301,55 +301,27 @@ new model { categories } =
 
 saleTypeRow : Api.FormErrors -> SaleTypeTag -> String -> (SaleTypeTag -> msg) -> (String -> msg) -> Html msg
 saleTypeRow errors selectedType enteredAmount selectMsg inputMsg =
-    let
-        inputId =
-            "SaleAmount"
+    Admin.selectInputRow
+        { label = "Sale Type"
+        , isRequired = True
+        , selectMsg = selectMsg
+        , inputMsg = inputMsg
+        , selectedValue = selectedType
+        , selectId = "SaleType"
+        , selectOptions = [ Flat, Percent ]
+        , selectToValue = tagToValue
+        , selectToString = tagToString
+        , selectValueParser = tagParser
+        , inputValue = enteredAmount
+        , inputId = "SaleAmount"
+        , inputAttributes =
+            \t ->
+                case t of
+                    Flat ->
+                        [ type_ "number", A.min "0.01", A.step "0.01" ]
 
-        selectId =
-            "SaleType"
-
-        inputAttrs =
-            case selectedType of
-                Flat ->
-                    [ type_ "number", A.min "0.01", A.step "0.01" ]
-
-                Percent ->
-                    [ type_ "number", A.min "1", A.max "100", A.step "1" ]
-
-        options =
-            [ Flat, Percent ]
-                |> List.map
-                    (\t ->
-                        option [ value <| tagToValue t, selected <| t == selectedType ]
-                            [ text <| tagToString t ]
-                    )
-
-        fieldErrors =
-            Dict.get "type" errors |> Maybe.withDefault []
-
-        errorHtml =
-            if List.isEmpty fieldErrors then
-                text ""
-
-            else
-                fieldErrors
-                    |> List.map text
-                    |> List.intersperse (br [] [])
-                    |> div [ class "invalid-feedback" ]
-    in
-    Form.withLabel "Sale Type"
-        True
-        [ Form.selectElement selectId "w-25 d-inline-block" tagParser selectMsg options
-        , input
-            ([ id <| "input" ++ inputId
-             , name inputId
-             , required True
-             , value enteredAmount
-             , onInput inputMsg
-             , class "form-control w-50 d-inline-block ml-4"
-             ]
-                ++ inputAttrs
-            )
-            []
-        , errorHtml
-        ]
+                    Percent ->
+                        [ type_ "number", A.min "1", A.max "100", A.step "1" ]
+        , errors = errors
+        , errorField = "type"
+        }

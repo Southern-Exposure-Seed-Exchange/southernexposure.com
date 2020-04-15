@@ -2,6 +2,7 @@ module Views.Admin exposing
     ( MultiSelectConfig
     , MultiSelectItem
     , SearchableTableConfig
+    , SelectInputRowConfig
     , activeIcon
     , base64ImagePreview
     , categorySelects
@@ -12,6 +13,7 @@ module Views.Admin exposing
     , multiSelect
     , searchInput
     , searchableTable
+    , selectInputRow
     , slugFrom
     , submitOrSavingButton
     , updateEditField
@@ -24,9 +26,10 @@ import Api
 import Array exposing (Array)
 import Base64
 import Category exposing (CategoryId(..))
+import Dict
 import File exposing (File)
-import Html exposing (Html, button, div, form, img, input, option, select, span, table, tbody, text)
-import Html.Attributes exposing (class, disabled, name, selected, src, type_, value)
+import Html exposing (Attribute, Html, br, button, div, form, img, input, option, select, span, table, tbody, text)
+import Html.Attributes exposing (class, disabled, id, name, required, selected, src, type_, value)
 import Html.Events exposing (on, onClick, onInput, onSubmit, targetValue)
 import Json.Decode as Decode
 import Models.Utils exposing (slugify)
@@ -295,6 +298,72 @@ categorySelects isRequired selectMsg addMsg removeMsg model categories =
         , label = "Categories"
         , addLabel = "Category"
         }
+
+
+{-| Configuration parameters for the `selectInputRow` rendering functin.
+-}
+type alias SelectInputRowConfig a msg =
+    { label : String
+    , isRequired : Bool
+    , selectMsg : a -> msg
+    , inputMsg : String -> msg
+    , selectedValue : a
+    , selectId : String
+    , selectOptions : List a
+    , selectToValue : a -> String
+    , selectToString : a -> String
+    , selectValueParser : String -> Result String a
+    , inputValue : String
+    , inputId : String
+    , inputAttributes : a -> List (Attribute msg)
+    , errors : Api.FormErrors
+    , errorField : String
+    }
+
+
+{-| A re-useable view for Admin form that requiring rendering a `select` and
+`input` element on the same row.
+-}
+selectInputRow : SelectInputRowConfig a msg -> Html msg
+selectInputRow cfg =
+    let
+        options =
+            cfg.selectOptions
+                |> List.map
+                    (\opt ->
+                        option [ value <| cfg.selectToValue opt, selected <| opt == cfg.selectedValue ]
+                            [ text <| cfg.selectToString opt ]
+                    )
+
+        fieldErrors =
+            Dict.get cfg.errorField cfg.errors |> Maybe.withDefault []
+
+        errorHtml =
+            if List.isEmpty fieldErrors then
+                text ""
+
+            else
+                fieldErrors
+                    |> List.map text
+                    |> List.intersperse (br [] [])
+                    |> div [ class "invalid-feedback" ]
+    in
+    Form.withLabel cfg.label
+        cfg.isRequired
+        [ Form.selectElement cfg.selectId "w-25 d-inline-block" cfg.selectValueParser cfg.selectMsg options
+        , input
+            ([ id <| "input" ++ cfg.inputId
+             , name cfg.inputId
+             , required cfg.isRequired
+             , value cfg.inputValue
+             , onInput cfg.inputMsg
+             , class "form-control w-50 d-inline-block ml-4"
+             ]
+                ++ cfg.inputAttributes cfg.selectedValue
+            )
+            []
+        , errorHtml
+        ]
 
 
 {-| Check to see if the new value for an Edit Form's field is equal to the
