@@ -16,7 +16,6 @@ module Routes.Customers
 import Control.Exception.Safe (throwM, Exception, try, handle)
 import Control.Monad ((>=>), (<=<), when, void)
 import Control.Monad.IO.Class (liftIO)
-import Control.Monad.Reader (ask)
 import Data.Aeson (ToJSON(..), FromJSON(..), (.=), (.:), (.:?), withObject, object)
 import Data.Int (Int64)
 import Data.List (partition)
@@ -334,12 +333,10 @@ resetRequestRoute = validate >=> \parameters -> do
                         , passwordResetExpirationTime = expirationTime
                         , passwordResetCode = resetCode
                         }
-            resetId <- runDB $ do
+            runDB $ do
                 deleteWhere [PasswordResetCustomerId ==. customerId]
-                insert passwordReset
-            cfg <- ask
-            runDB (Emails.getEmailData (Emails.PasswordReset customerId resetId))
-                >>= either (const $ return ()) (void . liftIO . Emails.sendWithRetries cfg)
+                resetId <- insert passwordReset
+                enqueueTask Nothing $ SendEmail $ Emails.PasswordReset customerId resetId
 
 
 data ResetPasswordParameters =
