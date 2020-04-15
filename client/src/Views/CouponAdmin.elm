@@ -14,9 +14,9 @@ module Views.CouponAdmin exposing
 
 import Api
 import Dict
-import Html exposing (Html, a, br, div, form, input, option, table, tbody, td, text, th, thead, tr)
-import Html.Attributes as A exposing (class, id, name, required, selected, type_, value)
-import Html.Events exposing (onInput, onSubmit)
+import Html exposing (Html, a, div, form, table, tbody, td, text, th, thead, tr)
+import Html.Attributes as A exposing (class, type_)
+import Html.Events exposing (onSubmit)
 import Iso8601
 import Json.Decode as Decode
 import Json.Encode as Encode exposing (Value)
