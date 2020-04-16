@@ -5,6 +5,7 @@ CHANGELOG
 v1.03.14
 =========
 
+* Add hourly job to remove sold-out Product Variants from Carts.
 * Add Admin pages for listing, creating, & editing Category Sales.
 * Make the Order Confirmation & Password Reset emails send asynchronously again
   now that the bug with dropped Job-queue tasks has been fixed.

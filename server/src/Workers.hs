@@ -36,9 +36,9 @@ import Data.Monoid ((<>))
 import Data.Scientific (Scientific)
 import Data.Time (UTCTime, getCurrentTime, addUTCTime)
 import Database.Persist.Sql
-    ( (=.), (==.), (<=.), (<.), Entity(..), SelectOpt(..), ToBackendKey, SqlBackend
-    , SqlPersistT, runSqlPool, selectFirst, delete, insert_, fromSqlKey
-    , deleteWhere, deleteCascadeWhere, update
+    ( (=.), (==.), (<=.), (<.), (<-.), Entity(..), SelectOpt(..), ToBackendKey
+    , SqlBackend, SqlPersistT, runSqlPool, selectList, selectFirst, delete
+    , insert_, fromSqlKey, deleteWhere, deleteCascadeWhere, update
     )
 import GHC.Generics (Generic)
 import Numeric.Natural (Natural)
@@ -319,6 +319,7 @@ cleanDatabase = do
     deleteWhere [PasswordResetExpirationTime <. currentTime]
     deleteCascadeWhere [CartExpirationTime <. Just currentTime]
     deactivateCoupons currentTime
+    removeSoldOutVariants
     enqueueTask (Just $ addUTCTime 3600 currentTime) CleanDatabase
   where
     -- De-activate coupons whose expiration date has passed and coupons
@@ -333,3 +334,7 @@ cleanDatabase = do
             E.where_ $
                 (orderCount E.>=. c E.^. CouponTotalUses E.&&. c E.^. CouponTotalUses E.!=. E.val 0)
                 E.||.  E.val currentTime E.>. c E.^. CouponExpirationDate
+    removeSoldOutVariants :: SqlPersistT IO ()
+    removeSoldOutVariants = do
+        soldOut <- selectList [ProductVariantQuantity <=. 0] []
+        deleteWhere [CartItemProductVariantId <-. map entityKey soldOut]
