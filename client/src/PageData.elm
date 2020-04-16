@@ -7,6 +7,7 @@ module PageData exposing
     , AdminComment
     , AdminCouponListData
     , AdminEditCategoryData
+    , AdminEditCategorySaleData
     , AdminEditCouponData
     , AdminEditCustomerData
     , AdminEditPageData
@@ -51,6 +52,7 @@ module PageData exposing
     , adminCategorySelectDecoder
     , adminCouponListDataDecoder
     , adminEditCategoryDataDecoder
+    , adminEditCategorySaleDataDecoder
     , adminEditCouponDataDecoder
     , adminEditCustomerDataDecoder
     , adminEditPageDataDecoder
@@ -142,6 +144,7 @@ type alias PageData =
     , adminEditProductSale : WebData AdminEditProductSaleData
     , adminCategorySaleList : WebData AdminCategorySaleListData
     , adminNewCategorySale : WebData AdminNewCategorySaleData
+    , adminEditCategorySale : WebData AdminEditCategorySaleData
     }
 
 
@@ -199,6 +202,7 @@ initial =
     , adminEditProductSale = RemoteData.NotAsked
     , adminCategorySaleList = RemoteData.NotAsked
     , adminNewCategorySale = RemoteData.NotAsked
+    , adminEditCategorySale = RemoteData.NotAsked
     }
 
 
@@ -1324,6 +1328,19 @@ adminNewCategorySaleDataDecoder : Decoder AdminNewCategorySaleData
 adminNewCategorySaleDataDecoder =
     Decode.map AdminNewCategorySaleData
         (Decode.field "categories" <| Decode.list adminCategorySelectDecoder)
+
+
+type alias AdminEditCategorySaleData =
+    { categories : List AdminCategorySelect
+    , sale : AdminCategorySale
+    }
+
+
+adminEditCategorySaleDataDecoder : Decoder AdminEditCategorySaleData
+adminEditCategorySaleDataDecoder =
+    Decode.map2 AdminEditCategorySaleData
+        (Decode.field "categories" <| Decode.list adminCategorySelectDecoder)
+        (Decode.field "sale" adminCategorySaleDecoder)
 
 
 

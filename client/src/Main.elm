@@ -416,6 +416,11 @@ fetchDataForRoute ({ route, pageData, key } as model) =
                     , getAdminNewCategorySale
                     )
 
+                Admin (CategorySaleEdit saleId) ->
+                    ( { pageData | adminEditCategorySale = RemoteData.Loading }
+                    , getAdminEditCategorySaleData saleId
+                    )
+
                 Redirect path ->
                     ( pageData
                     , Browser.Navigation.load path
@@ -762,7 +767,14 @@ getAdminNewCategorySale : Cmd Msg
 getAdminNewCategorySale =
     Api.get Api.AdminNewCategorySale
         |> Api.withJsonResponse PageData.adminNewCategorySaleDataDecoder
-        |> Api.sendRequest GetAdminNewCattegorySaleData
+        |> Api.sendRequest GetAdminNewCategorySaleData
+
+
+getAdminEditCategorySaleData : Int -> Cmd Msg
+getAdminEditCategorySaleData saleId =
+    Api.get (Api.AdminEditCategorySaleData saleId)
+        |> Api.withJsonResponse PageData.adminEditCategorySaleDataDecoder
+        |> Api.sendRequest GetAdminEditCategorySaleData
 
 
 
@@ -1196,9 +1208,14 @@ update msg ({ pageData, key } as model) =
                 |> Tuple.mapSecond (Cmd.map EditProductSaleMsg)
 
         NewCategorySaleMsg subMsg ->
-            CategorySalesAdmin.updateNewForm subMsg model.newCategorySaleForm
+            CategorySalesAdmin.updateNewForm key subMsg model.newCategorySaleForm
                 |> Tuple.mapFirst (\form -> { model | newCategorySaleForm = form })
                 |> Tuple.mapSecond (Cmd.map NewCategorySaleMsg)
+
+        EditCategorySaleMsg subMsg ->
+            CategorySalesAdmin.updateEditForm key pageData.adminEditCategorySale subMsg model.editCategorySaleForm
+                |> Tuple.mapFirst (\form -> { model | editCategorySaleForm = form })
+                |> Tuple.mapSecond (Cmd.map EditCategorySaleMsg)
 
         ReAuthorize response ->
             case response of
@@ -1554,10 +1571,17 @@ update msg ({ pageData, key } as model) =
             in
             ( { model | pageData = updatedPageData }, Cmd.none )
 
-        GetAdminNewCattegorySaleData response ->
+        GetAdminNewCategorySaleData response ->
             let
                 updatedPageData =
                     { pageData | adminNewCategorySale = response }
+            in
+            ( { model | pageData = updatedPageData }, Cmd.none )
+
+        GetAdminEditCategorySaleData response ->
+            let
+                updatedPageData =
+                    { pageData | adminEditCategorySale = response }
             in
             ( { model | pageData = updatedPageData }, Cmd.none )
 
@@ -1823,6 +1847,9 @@ runOnCurrentWebData runner { pageData, route } =
         Admin CategorySaleNew ->
             justRunner pageData.adminNewCategorySale
 
+        Admin (CategorySaleEdit _) ->
+            justRunner pageData.adminEditCategorySale
+
 
 {-| Update the current page number using the Paginated data.
 
@@ -1964,6 +1991,9 @@ resetForm oldRoute model =
 
                 CategorySaleNew ->
                     { model | newCategorySaleForm = CategorySalesAdmin.initialNewForm }
+
+                CategorySaleEdit _ ->
+                    { model | editCategorySaleForm = CategorySalesAdmin.initialEditForm }
     in
     case oldRoute of
         ProductDetails _ ->

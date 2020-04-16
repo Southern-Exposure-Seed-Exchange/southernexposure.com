@@ -90,6 +90,7 @@ type Msg
     | NewProductSaleMsg ProductSalesAdmin.NewMsg
     | EditProductSaleMsg ProductSalesAdmin.EditMsg
     | NewCategorySaleMsg CategorySalesAdmin.NewMsg
+    | EditCategorySaleMsg CategorySalesAdmin.EditMsg
       -- API Requests
     | ReAuthorize (WebData User.AuthStatus)
     | LogOutResponse (WebData ())
@@ -124,4 +125,5 @@ type Msg
     | GetAdminProductSaleNew (WebData PageData.AdminProductSaleNewData)
     | GetAdminEditProductSaleData (WebData PageData.AdminEditProductSaleData)
     | GetAdminCategorySaleList (WebData PageData.AdminCategorySaleListData)
-    | GetAdminNewCattegorySaleData (WebData PageData.AdminNewCategorySaleData)
+    | GetAdminNewCategorySaleData (WebData PageData.AdminNewCategorySaleData)
+    | GetAdminEditCategorySaleData (WebData PageData.AdminEditCategorySaleData)

@@ -1,4 +1,5 @@
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TypeOperators #-}
@@ -7,37 +8,55 @@ module Routes.Admin.CategorySales
     , categorySalesRoutes
     ) where
 
+import Control.Monad (unless)
 import Control.Monad.IO.Class (liftIO)
+import Control.Monad.Trans (lift)
 import Data.Aeson ((.=), (.:), ToJSON(..), FromJSON(..), object, withObject)
-import Data.Time (LocalTime, getCurrentTimeZone, localTimeToUTC)
-import Database.Persist (Entity(..), SelectOpt(Desc), selectList, insert)
-import Servant ((:<|>)(..), (:>), AuthProtect, ReqBody, Get, Post, JSON)
+import Data.Maybe (catMaybes)
+import Data.Time (LocalTime, TimeZone, getCurrentTimeZone, localTimeToUTC)
+import Database.Persist
+    ( Entity(..), SelectOpt(Desc), Update, selectList, insert, get, update
+    )
+import Servant
+    ( (:<|>)(..), (:>), AuthProtect, Capture, ReqBody, Get, Post, Patch, JSON
+    , err404
+    )
 
 import Auth (Cookied, WrappedAuthToken, withAdminCookie, validateAdminAndParameters)
 import Models
 import Models.Fields (SaleType)
-import Routes.CommonData (AdminCategorySelect, makeAdminCategorySelects, validateCategorySelect)
-import Routes.Utils (parseLocalTime)
-import Server (App, runDB)
+import Routes.CommonData
+    ( AdminCategorySelect, makeAdminCategorySelects, validateCategorySelect
+    )
+import Routes.Utils (parseLocalTime, parseMaybeLocalTime, mapUpdate)
+import Server (App, runDB, serverError)
 import Validation (Validation(..))
 
 import qualified Data.Text as T
+import qualified Validation as V
+
 
 type CategrySalesAPI =
          "list" :> CategorySalesListRoute
     :<|> "new" :> CategorySalesNewDataRoute
     :<|> "new" :> CategorySalesNewRoute
+    :<|> "edit" :> CategorySalesEditDataRoute
+    :<|> "edit" :> CategorySalesEditRoute
 
 type CategorySalesRoutes =
          (WrappedAuthToken -> App (Cookied CategorySalesListData))
     :<|> (WrappedAuthToken -> App (Cookied CategorySalesNewData))
     :<|> (WrappedAuthToken -> CategorySalesNewParameters -> App (Cookied CategorySaleId))
+    :<|> (WrappedAuthToken -> CategorySaleId -> App (Cookied CategorySalesEditData))
+    :<|> (WrappedAuthToken -> CategorySalesEditParameters -> App (Cookied ()))
 
 categorySalesRoutes :: CategorySalesRoutes
 categorySalesRoutes =
          categorySalesListRoute
     :<|> categorySalesNewDataRoute
     :<|> categorySalesNewRoute
+    :<|> categorySalesEditDataRoute
+    :<|> categorySaleEditRoute
 
 
 -- LIST
@@ -145,3 +164,86 @@ categorySalesNewRoute = validateAdminAndParameters $ \_ CategorySalesNewParamete
         , categorySaleEndDate = localTimeToUTC timeZone csnpEnd
         , categorySaleCategoryIds = csnpCategories
         }
+
+
+-- EDIT
+
+type CategorySalesEditDataRoute =
+       AuthProtect "cookie-auth"
+    :> Capture "id" CategorySaleId
+    :> Get '[JSON] (Cookied CategorySalesEditData)
+
+data CategorySalesEditData =
+    CategorySalesEditData
+        { csedSale :: CategorySalesData
+        , csedCategories :: [AdminCategorySelect]
+        } deriving (Show)
+
+instance ToJSON CategorySalesEditData where
+    toJSON CategorySalesEditData {..} =
+        object
+            [ "sale" .= csedSale
+            , "categories" .= csedCategories
+            ]
+
+categorySalesEditDataRoute :: WrappedAuthToken -> CategorySaleId -> App (Cookied CategorySalesEditData)
+categorySalesEditDataRoute t saleId = withAdminCookie t $ \_ -> runDB $
+    get saleId >>= \case
+        Nothing ->
+            lift $ serverError err404
+        Just sale ->
+            CategorySalesEditData (CategorySalesData $ Entity saleId sale)
+                <$> makeAdminCategorySelects
+
+
+type CategorySalesEditRoute =
+       AuthProtect "cookie-auth"
+    :> ReqBody '[JSON] CategorySalesEditParameters
+    :> Patch '[JSON] (Cookied ())
+
+data CategorySalesEditParameters =
+    CategorySalesEditParameters
+        { csepId :: CategorySaleId
+        , csepName :: Maybe T.Text
+        , csepType :: Maybe SaleType
+        , csepStart :: Maybe LocalTime
+        , csepEnd :: Maybe LocalTime
+        , csepCategories :: Maybe [CategoryId]
+        }
+
+instance FromJSON CategorySalesEditParameters where
+    parseJSON = withObject "CategorySalesEditParameters" $ \v -> do
+        csepId <- v .: "id"
+        csepName <- v .: "name"
+        csepType <- v .: "type"
+        csepStart <- v .: "start" >>= parseMaybeLocalTime
+        csepEnd <- v .: "end" >>= parseMaybeLocalTime
+        csepCategories <- v .: "categories"
+        return CategorySalesEditParameters {..}
+
+instance Validation CategorySalesEditParameters where
+    validators CategorySalesEditParameters {..} = do
+        categories <- maybe (return []) (validateCategorySelect True) csepCategories
+        saleExists <- V.exists csepId
+        return $
+            ( "", [("Could not find the Sale in the database.", saleExists)] )
+            : categories
+
+categorySaleEditRoute :: WrappedAuthToken -> CategorySalesEditParameters -> App (Cookied ())
+categorySaleEditRoute = validateAdminAndParameters $ \_ parameters -> do
+    timezone <- liftIO getCurrentTimeZone
+    let updates = makeUpdates timezone parameters
+    unless (null updates) $
+        runDB $ update (csepId parameters) updates
+  where
+    makeUpdates :: TimeZone -> CategorySalesEditParameters -> [Update CategorySale]
+    makeUpdates zone CategorySalesEditParameters {..} =
+        let mapUpdateUTC f v = mapUpdate f $ localTimeToUTC zone <$> v
+        in
+        catMaybes
+            [ mapUpdate CategorySaleName csepName
+            , mapUpdate CategorySaleType csepType
+            , mapUpdateUTC CategorySaleStartDate csepStart
+            , mapUpdateUTC CategorySaleEndDate csepEnd
+            , mapUpdate CategorySaleCategoryIds csepCategories
+            ]

@@ -71,6 +71,7 @@ type alias Model =
     , newProductSaleForm : ProductSalesAdmin.NewForm
     , editProductSaleForm : ProductSalesAdmin.EditForm
     , newCategorySaleForm : CategorySalesAdmin.NewForm
+    , editCategorySaleForm : CategorySalesAdmin.EditForm
     , settingsForm : SettingsAdmin.Form
     , cartItemCount : Int
     , maybeSessionToken : Maybe String
@@ -124,6 +125,7 @@ initial key route =
     , newProductSaleForm = ProductSalesAdmin.initialNewForm
     , editProductSaleForm = ProductSalesAdmin.initialEditForm
     , newCategorySaleForm = CategorySalesAdmin.initialNewForm
+    , editCategorySaleForm = CategorySalesAdmin.initialEditForm
     , settingsForm = SettingsAdmin.initialForm
     , cartItemCount = 0
     , maybeSessionToken = Nothing

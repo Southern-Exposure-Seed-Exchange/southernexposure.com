@@ -5,6 +5,7 @@ CHANGELOG
 v1.03.14
 =========
 
+* Add Admin pages for listing, creating, & editing Category Sales.
 * Make the Order Confirmation & Password Reset emails send asynchronously again
   now that the bug with dropped Job-queue tasks has been fixed.
 * Fix a bug causing Category Sales to only apply if they match a Product's

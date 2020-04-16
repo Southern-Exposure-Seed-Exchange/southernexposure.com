@@ -218,6 +218,11 @@ view route pageData =
                     , activeItem "New Sale"
                     ]
 
+                Admin (CategorySaleEdit _) ->
+                    [ inactiveItem "Category Sales" <| Admin CategorySaleList
+                    , activeItem "Edit Sale"
+                    ]
+
                 Redirect _ ->
                     singleItem "Redirecting..."
 
