@@ -540,6 +540,17 @@ div.admin#navigation
   // Condense the Navbar
   .nav-link
     padding: 0.25rem 0.5rem
+  .dropdown-item
+    // Condense the Dropdowns
+    padding: 0.25rem 0.5rem
+    // Highlight an active item
+    &.active
+      color: black
+      background-color: $pale-tan-accent
+    // Highlight a hovered or clicked item
+    &:hover, &:active
+      color: white
+      background-color: $navbar-light-hover-bg
 .admin
   // Limit height of image previews
   .image-preview > img

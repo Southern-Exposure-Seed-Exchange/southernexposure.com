@@ -5,6 +5,7 @@ CHANGELOG
 v1.03.14
 =========
 
+* Add dropdowns to the Admin's navigation bar in order to reduce it's width.
 * Add hourly job to remove sold-out Product Variants from Carts.
 * Add Admin pages for listing, creating, & editing Category Sales.
 * Make the Order Confirmation & Password Reset emails send asynchronously again

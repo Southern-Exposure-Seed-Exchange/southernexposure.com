@@ -198,13 +198,57 @@ adminView route =
                     [ text title ]
                 ]
 
+        activeRoute : AdminRoute -> Bool
+        activeRoute targetRoute =
+            Admin targetRoute == route || isChildRoute targetRoute
+
         activeClass : AdminRoute -> String
         activeClass targetRoute =
-            if Admin targetRoute == route || isChildRoute targetRoute then
+            if activeRoute targetRoute then
                 " active "
 
             else
                 ""
+
+        dropdown : String -> List ( String, AdminRoute ) -> Html Msg
+        dropdown menuName menuItems =
+            let
+                isActive =
+                    List.any activeRoute <| List.map Tuple.second menuItems
+
+                menuActiveClass =
+                    if isActive then
+                        " active"
+
+                    else
+                        ""
+
+                menuId =
+                    "admin-nav-" ++ String.toLower menuName
+            in
+            li [ class <| "nav-item dropdown" ++ menuActiveClass ]
+                [ a
+                    [ class "nav-link dropdown-toggle"
+                    , href <| reverse route
+                    , target "_self"
+                    , attribute "data-toggle" "dropdown"
+                    , Aria.haspopup True
+                    , Aria.expanded False
+                    , Aria.role "button"
+                    , id menuId
+                    ]
+                    [ text menuName ]
+                , div [ class "dropdown-menu mt-0", Aria.labelledby menuId ] <|
+                    List.map dropdownItem menuItems
+                ]
+
+        dropdownItem : ( String, AdminRoute ) -> Html Msg
+        dropdownItem ( itemName, itemRoute ) =
+            a
+                (class ("dropdown-item" ++ activeClass itemRoute)
+                    :: routeLinkAttributes (Admin itemRoute)
+                )
+                [ text itemName ]
 
         isChildRoute : AdminRoute -> Bool
         isChildRoute parentRoute =
@@ -355,17 +399,23 @@ adminView route =
                 [ span [ class "navbar-toggler-icon" ] [] ]
             , div [ id "admin-navbar", class "collapse navbar-collapse" ]
                 [ ul [ class "navbar-nav" ]
-                    [ navItem "Categories" CategoryList
-                    , navItem "Products" ProductList
-                    , navItem "Pages" PageList
-                    , navItem "Orders" <| OrderList { page = 1, perPage = 50, query = "" }
+                    [ dropdown "Catalog"
+                        [ ( "Products", ProductList )
+                        , ( "Categories", CategoryList )
+                        , ( "Pages", PageList )
+                        ]
                     , navItem "Customers" <| CustomerList { page = 1, perPage = 50, query = "" }
-                    , navItem "Coupons" CouponList
-                    , navItem "Surcharges" Surcharges
-                    , navItem "Shipping" ShippingMethods
+                    , navItem "Orders" <| OrderList { page = 1, perPage = 50, query = "" }
+                    , dropdown "Checkout"
+                        [ ( "Surcharges", Surcharges )
+                        , ( "Shipping", ShippingMethods )
+                        ]
+                    , dropdown "Discounts"
+                        [ ( "Coupons", CouponList )
+                        , ( "Product Sales", ProductSaleList )
+                        , ( "Category Sales", CategorySaleList )
+                        ]
                     , navItem "Settings" Settings
-                    , navItem "Product Sales" ProductSaleList
-                    , navItem "Category Sales" CategorySaleList
                     ]
                 ]
             ]
