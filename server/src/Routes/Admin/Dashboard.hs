@@ -8,9 +8,16 @@ module Routes.Admin.Dashboard
     ) where
 
 import Control.Monad (forM)
+import Control.Monad.IO.Class (MonadIO, liftIO)
 import Data.Aeson ((.=), ToJSON(..), object)
-import Data.Time (UTCTime)
-import Database.Persist ((==.), Entity(..), SelectOpt(..), selectList)
+import Data.Time
+    ( UTCTime, LocalTime(..), Day, TimeZone, getCurrentTimeZone, midnight
+    , getCurrentTime, addDays, utcToLocalTime, localTimeToUTC
+    )
+import Database.Persist
+    ( (==.), (>=.), (<.), (<-.), Entity(..), SelectOpt(..), selectList
+    )
+import Database.Persist.Sql (SqlPersistT)
 import Servant ((:>), AuthProtect, Get, JSON)
 
 import Auth (Cookied, WrappedAuthToken, withAdminCookie)
@@ -43,6 +50,7 @@ data DashboardReportsData =
     DashboardReportsData
         { drdOrders :: [DashboardOrder]
         , drdCustomers :: [DashboardCustomer]
+        , drdDailySales :: [DailySalesData]
         } deriving (Show)
 
 instance ToJSON DashboardReportsData where
@@ -50,6 +58,7 @@ instance ToJSON DashboardReportsData where
         object
             [ "orders" .= drdOrders
             , "customers" .= drdCustomers
+            , "dailySales" .= drdDailySales
             ]
 
 data DashboardOrder =
@@ -84,6 +93,20 @@ instance ToJSON DashboardCustomer where
             , "email" .= dcEmail
             ]
 
+data DailySalesData =
+    DailySalesData
+        { dsdDay :: UTCTime
+        , dsdTotal :: Cents
+        } deriving (Show)
+
+instance ToJSON DailySalesData where
+    toJSON DailySalesData {..} =
+        object
+            [ "day" .= dsdDay
+            , "total" .= dsdTotal
+            ]
+
+
 dashboardReportsRoute :: WrappedAuthToken -> App (Cookied DashboardReportsData)
 dashboardReportsRoute = flip withAdminCookie $ \_ -> runDB $ do
     rawOrders <- E.select $ E.from $ \(o `E.InnerJoin` sa) -> do
@@ -105,7 +128,7 @@ dashboardReportsRoute = flip withAdminCookie $ \_ -> runDB $ do
             , doTotal = total
             }
     customers <- map makeCustomer <$> selectList [] [LimitTo 10, Desc CustomerId]
-    return $ DashboardReportsData orders customers
+    DashboardReportsData orders customers <$> getDailySalesReport
   where
     makeCustomer :: Entity Customer -> DashboardCustomer
     makeCustomer (Entity cId c) =
@@ -113,3 +136,23 @@ dashboardReportsRoute = flip withAdminCookie $ \_ -> runDB $ do
             { dcId = cId
             , dcEmail = customerEmail c
             }
+
+getDailySalesReport :: MonadIO m => SqlPersistT m [DailySalesData]
+getDailySalesReport = do
+    daysToQuery <- getDays
+    forM daysToQuery $ \(startTime, endTime) -> do
+        orders <- selectList [OrderCreatedAt >=. startTime, OrderCreatedAt <. endTime] []
+        products <- selectList [OrderProductOrderId <-. map entityKey orders] []
+        items <- selectList [OrderLineItemOrderId <-. map entityKey orders] []
+        let total = getOrderTotal (map entityVal items) (map entityVal products)
+        return $ DailySalesData startTime total
+  where
+    getDays :: MonadIO m => m [(UTCTime, UTCTime)]
+    getDays = do
+        zone <- liftIO getCurrentTimeZone
+        today <- localDay . utcToLocalTime zone <$> liftIO getCurrentTime
+        let days =  [addDays (-31) today .. today]
+        return $ map (\d -> (toTime zone d, toTime zone $ addDays 1 d)) days
+    toTime :: TimeZone -> Day -> UTCTime
+    toTime zone day =
+        localTimeToUTC zone $ LocalTime day midnight

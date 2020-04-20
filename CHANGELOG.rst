@@ -5,7 +5,8 @@ CHANGELOG
 v1.03.14
 =========
 
-* Add Recent Orders & Newest Customers tables to the Admin Homepage/Dashboard.
+* Add Recent Orders & Newest Customers tables and a Daily Sales graph to the
+  Admin Homepage/Dashboard.
 * Add dropdowns to the Admin's navigation bar in order to reduce it's width.
 * Add hourly job to remove sold-out Product Variants from Carts.
 * Add Admin pages for listing, creating, & editing Category Sales.

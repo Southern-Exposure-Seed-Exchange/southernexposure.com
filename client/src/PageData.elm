@@ -34,6 +34,7 @@ module PageData exposing
     , CouponType(..)
     , CustomerData
     , DashboardCustomer
+    , DashboardGraphData
     , DashboardOrder
     , LineItemType(..)
     , MyAccount
@@ -1356,14 +1357,16 @@ adminEditCategorySaleDataDecoder =
 type alias AdminDashboardData =
     { customers : List DashboardCustomer
     , orders : List DashboardOrder
+    , dailySales : List DashboardGraphData
     }
 
 
 adminDashboardDataDecoder : Decoder AdminDashboardData
 adminDashboardDataDecoder =
-    Decode.map2 AdminDashboardData
+    Decode.map3 AdminDashboardData
         (Decode.field "customers" <| Decode.list dashboardCustomerDecoder)
         (Decode.field "orders" <| Decode.list dashboardOrderDecoder)
+        (Decode.field "dailySales" <| Decode.list dashboardGraphDataDecoder)
 
 
 type alias DashboardCustomer =
@@ -1395,6 +1398,19 @@ dashboardOrderDecoder =
         (Decode.field "date" Iso8601.decoder)
         (Decode.field "customer" Decode.string)
         (Decode.field "state" regionDecoder)
+        (Decode.field "total" centsDecoder)
+
+
+type alias DashboardGraphData =
+    { date : Posix
+    , amount : Cents
+    }
+
+
+dashboardGraphDataDecoder : Decoder DashboardGraphData
+dashboardGraphDataDecoder =
+    Decode.map2 DashboardGraphData
+        (Decode.field "day" Iso8601.decoder)
         (Decode.field "total" centsDecoder)
 
 

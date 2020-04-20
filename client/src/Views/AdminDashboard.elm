@@ -1,9 +1,24 @@
 module Views.AdminDashboard exposing (view)
 
-import Html exposing (Html, a, div, h5, li, p, table, tbody, td, text, th, thead, tr, ul)
+import Decimal
+import Html exposing (Html, a, div, h5, li, p, table, tbody, td, text, tr, ul)
 import Html.Attributes exposing (class)
+import LineChart
+import LineChart.Area as Area
+import LineChart.Axis as Axis
+import LineChart.Axis.Intersection as Intersection
+import LineChart.Colors as Colors
+import LineChart.Container as Container
+import LineChart.Dots as Dots
+import LineChart.Events as Events
+import LineChart.Grid as Grid
+import LineChart.Interpolation as Interpolation
+import LineChart.Junk as Junk
+import LineChart.Legends as Legends
+import LineChart.Line as Line
 import Locations exposing (AddressLocations)
-import PageData exposing (AdminDashboardData, DashboardCustomer, DashboardOrder)
+import Models.Fields exposing (Cents(..))
+import PageData exposing (AdminDashboardData, DashboardCustomer, DashboardGraphData, DashboardOrder)
 import RemoteData exposing (WebData)
 import Routing exposing (AdminRoute(..), Route(..))
 import Time exposing (Zone)
@@ -15,12 +30,12 @@ view : Zone -> WebData AdminDashboardData -> AddressLocations -> List (Html msg)
 view zone dashboardData locations =
     [ text "This page will eventually contain sections like:"
     , ul []
-        [ li [] [ text "Monthly Order Count & Totals" ]
-        , li [] [ text "Graph of Monthly Order Totals" ]
+        [ li [] [ text "Monthly Order Totals" ]
         ]
-    , div [ class "row mb-4" ]
+    , div [ class "row mb-4 justify-content-center" ]
         [ section "Recent Orders" "col-md-8" (.orders >> orderTable zone locations) dashboardData
         , section "Newest Customers" "col-md-4" (.customers >> customerTable) dashboardData
+        , section "Daily Sales" "col-12 col-xl-10" (.dailySales >> dailySalesGraph zone) dashboardData
         ]
     ]
 
@@ -92,3 +107,41 @@ customerTable customers =
     table [ class "table table-sm table-striped mb-0" ]
         [ tbody [] <| List.map renderCustomer customers
         ]
+
+
+dailySalesGraph : Zone -> List DashboardGraphData -> Html msg
+dailySalesGraph zone dataPoints =
+    let
+        centsToFloat (Cents c) =
+            Decimal.fromInt c
+                |> Decimal.mul (Decimal.fromIntWithExponent 1 -2)
+                |> Decimal.toFloat
+
+        chartConfig : LineChart.Config DashboardGraphData msg
+        chartConfig =
+            { x = Axis.time zone 1500 "" (.date >> Time.posixToMillis >> toFloat)
+            , y = Axis.default 600 "" (.amount >> centsToFloat)
+            , container = containerConfig
+            , intersection = Intersection.default
+            , interpolation = Interpolation.monotone
+            , legends = Legends.none
+            , events = Events.default
+            , area = Area.normal 0.5
+            , grid = Grid.default
+            , line = Line.default
+            , dots = Dots.default
+            , junk = Junk.default
+            }
+
+        containerConfig : Container.Config msg
+        containerConfig =
+            Container.custom
+                { attributesHtml = []
+                , attributesSvg = []
+                , size = Container.relative
+                , margin = Container.Margin 10 0 30 70
+                , id = "daily-sales-graph"
+                }
+    in
+    LineChart.viewCustom chartConfig
+        [ LineChart.line Colors.green Dots.circle "" dataPoints ]
