@@ -1,6 +1,6 @@
 module Views.AdminDashboard exposing (view)
 
-import Html exposing (Html, a, div, h5, li, table, tbody, td, text, th, thead, tr, ul)
+import Html exposing (Html, a, div, h5, li, p, table, tbody, td, text, th, thead, tr, ul)
 import Html.Attributes exposing (class)
 import Locations exposing (AddressLocations)
 import PageData exposing (AdminDashboardData, DashboardCustomer, DashboardOrder)
@@ -8,7 +8,7 @@ import RemoteData exposing (WebData)
 import Routing exposing (AdminRoute(..), Route(..))
 import Time exposing (Zone)
 import Views.Format as Format
-import Views.Utils exposing (routeLinkAttributes)
+import Views.Utils exposing (icon, routeLinkAttributes)
 
 
 view : Zone -> WebData AdminDashboardData -> AddressLocations -> List (Html msg)
@@ -33,8 +33,19 @@ section name classes renderer webData =
                 RemoteData.Success resp ->
                     renderer resp
 
-                _ ->
-                    text "TODO: Loading spinner or error text"
+                RemoteData.Loading ->
+                    div [ class "m-4 p-4 text-center" ]
+                        [ div [] [ icon "spinner fa-spin fa-5x" ]
+                        , div [ class "mt-4 font-weight-bold" ] [ text "Loading..." ]
+                        ]
+
+                RemoteData.Failure _ ->
+                    div [ class "m-4 p-4 text-center" ]
+                        [ div [] [ text "An error occured while loading the report data." ]
+                        ]
+
+                RemoteData.NotAsked ->
+                    p [] [ text "Programming Error: Dashboard reports not requested from server." ]
     in
     div [ class <| classes ++ " mb-3" ]
         [ div [ class "card" ]
