@@ -11,6 +11,7 @@ import Routes.Admin.Categories
 import Routes.Admin.CategorySales
 import Routes.Admin.Coupons
 import Routes.Admin.Customers
+import Routes.Admin.Dashboard
 import Routes.Admin.Orders
 import Routes.Admin.Products
 import Routes.Admin.ProductSales
@@ -32,6 +33,7 @@ type AdminAPI =
     :<|> "settings" :> SettingsAPI
     :<|> "product-sales" :> ProductSalesAPI
     :<|> "category-sales" :> CategrySalesAPI
+    :<|> "dashboard" :> DashboardAPI
 
 
 adminRoutes :: ServerT AdminAPI App
@@ -47,3 +49,4 @@ adminRoutes =
     :<|> settingsRoutes
     :<|> productSalesRoutes
     :<|> categorySalesRoutes
+    :<|> dashboardRoutes

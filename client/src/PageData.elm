@@ -6,6 +6,7 @@ module PageData exposing
     , AdminCategorySelect
     , AdminComment
     , AdminCouponListData
+    , AdminDashboardData
     , AdminEditCategoryData
     , AdminEditCategorySaleData
     , AdminEditCouponData
@@ -32,6 +33,8 @@ module PageData exposing
     , CheckoutDetails
     , CouponType(..)
     , CustomerData
+    , DashboardCustomer
+    , DashboardOrder
     , LineItemType(..)
     , MyAccount
     , OrderData
@@ -51,6 +54,7 @@ module PageData exposing
     , adminCategorySaleListDataDecoder
     , adminCategorySelectDecoder
     , adminCouponListDataDecoder
+    , adminDashboardDataDecoder
     , adminEditCategoryDataDecoder
     , adminEditCategorySaleDataDecoder
     , adminEditCouponDataDecoder
@@ -97,7 +101,7 @@ import Dict exposing (Dict)
 import Iso8601
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode exposing (Value)
-import Locations exposing (AddressLocations)
+import Locations exposing (AddressLocations, Region, regionDecoder)
 import Models.Fields exposing (Cents(..), ImageData, LotSize, centsDecoder, centsEncoder, centsMap, centsMap2, imageDecoder, lotSizeDecoder)
 import Paginate exposing (Paginated)
 import Product exposing (Product, ProductId, ProductVariant, ProductVariantId(..), variantPrice)
@@ -145,6 +149,7 @@ type alias PageData =
     , adminCategorySaleList : WebData AdminCategorySaleListData
     , adminNewCategorySale : WebData AdminNewCategorySaleData
     , adminEditCategorySale : WebData AdminEditCategorySaleData
+    , adminDashboard : WebData AdminDashboardData
     }
 
 
@@ -203,6 +208,7 @@ initial =
     , adminCategorySaleList = RemoteData.NotAsked
     , adminNewCategorySale = RemoteData.NotAsked
     , adminEditCategorySale = RemoteData.NotAsked
+    , adminDashboard = RemoteData.NotAsked
     }
 
 
@@ -841,7 +847,7 @@ type alias OrderData =
     , name : String
     , email : String
     , street : String
-    , state : Locations.Region
+    , state : Region
     , status : OrderStatus
     , total : Cents
     }
@@ -855,7 +861,7 @@ orderDataDecoder =
         (Decode.field "customerName" Decode.string)
         (Decode.field "customerEmail" Decode.string)
         (Decode.field "shippingStreet" Decode.string)
-        (Decode.field "shippingRegion" Locations.regionDecoder)
+        (Decode.field "shippingRegion" regionDecoder)
         (Decode.field "orderStatus" orderStatusDecoder)
         (Decode.field "orderTotal" centsDecoder)
 
@@ -1341,6 +1347,55 @@ adminEditCategorySaleDataDecoder =
     Decode.map2 AdminEditCategorySaleData
         (Decode.field "categories" <| Decode.list adminCategorySelectDecoder)
         (Decode.field "sale" adminCategorySaleDecoder)
+
+
+
+-- Dashboard Admin
+
+
+type alias AdminDashboardData =
+    { customers : List DashboardCustomer
+    , orders : List DashboardOrder
+    }
+
+
+adminDashboardDataDecoder : Decoder AdminDashboardData
+adminDashboardDataDecoder =
+    Decode.map2 AdminDashboardData
+        (Decode.field "customers" <| Decode.list dashboardCustomerDecoder)
+        (Decode.field "orders" <| Decode.list dashboardOrderDecoder)
+
+
+type alias DashboardCustomer =
+    { id : Int
+    , email : String
+    }
+
+
+dashboardCustomerDecoder : Decoder DashboardCustomer
+dashboardCustomerDecoder =
+    Decode.map2 DashboardCustomer
+        (Decode.field "id" Decode.int)
+        (Decode.field "email" Decode.string)
+
+
+type alias DashboardOrder =
+    { id : Int
+    , date : Posix
+    , customer : String
+    , state : Region
+    , total : Cents
+    }
+
+
+dashboardOrderDecoder : Decoder DashboardOrder
+dashboardOrderDecoder =
+    Decode.map5 DashboardOrder
+        (Decode.field "id" Decode.int)
+        (Decode.field "date" Iso8601.decoder)
+        (Decode.field "customer" Decode.string)
+        (Decode.field "state" regionDecoder)
+        (Decode.field "total" centsDecoder)
 
 
 

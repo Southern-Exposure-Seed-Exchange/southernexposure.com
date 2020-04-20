@@ -285,7 +285,9 @@ fetchDataForRoute ({ route, pageData, key } as model) =
                             ( pageData, redirectIfAuthRequired key model.route )
 
                 Admin Dashboard ->
-                    doNothing
+                    { pageData | adminDashboard = RemoteData.Loading }
+                        |> fetchLocationsOnce
+                        |> batchCommand getAdminDashboardData
 
                 Admin CategoryList ->
                     ( { pageData | adminCategoryList = RemoteData.Loading }
@@ -775,6 +777,13 @@ getAdminEditCategorySaleData saleId =
     Api.get (Api.AdminEditCategorySaleData saleId)
         |> Api.withJsonResponse PageData.adminEditCategorySaleDataDecoder
         |> Api.sendRequest GetAdminEditCategorySaleData
+
+
+getAdminDashboardData : Cmd Msg
+getAdminDashboardData =
+    Api.get Api.AdminDashboardReports
+        |> Api.withJsonResponse PageData.adminDashboardDataDecoder
+        |> Api.sendRequest GetAdminDashboardData
 
 
 
@@ -1582,6 +1591,13 @@ update msg ({ pageData, key } as model) =
             let
                 updatedPageData =
                     { pageData | adminEditCategorySale = response }
+            in
+            ( { model | pageData = updatedPageData }, Cmd.none )
+
+        GetAdminDashboardData response ->
+            let
+                updatedPageData =
+                    { pageData | adminDashboard = response }
             in
             ( { model | pageData = updatedPageData }, Cmd.none )
 
