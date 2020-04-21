@@ -12,7 +12,8 @@ import Control.Monad.IO.Class (MonadIO, liftIO)
 import Data.Aeson ((.=), ToJSON(..), object)
 import Data.Time
     ( UTCTime, LocalTime(..), Day, TimeZone, getCurrentTimeZone, midnight
-    , getCurrentTime, addDays, utcToLocalTime, localTimeToUTC
+    , getCurrentTime, addDays, utcToLocalTime, localTimeToUTC, toGregorian
+    , fromGregorian, addGregorianMonthsClip
     )
 import Database.Persist
     ( (==.), (>=.), (<.), (<-.), Entity(..), SelectOpt(..), selectList
@@ -50,7 +51,8 @@ data DashboardReportsData =
     DashboardReportsData
         { drdOrders :: [DashboardOrder]
         , drdCustomers :: [DashboardCustomer]
-        , drdDailySales :: [DailySalesData]
+        , drdDailySales :: [SalesData]
+        , drdMonthlySales :: [SalesData]
         } deriving (Show)
 
 instance ToJSON DashboardReportsData where
@@ -59,6 +61,7 @@ instance ToJSON DashboardReportsData where
             [ "orders" .= drdOrders
             , "customers" .= drdCustomers
             , "dailySales" .= drdDailySales
+            , "monthlySales" .= drdMonthlySales
             ]
 
 data DashboardOrder =
@@ -93,17 +96,17 @@ instance ToJSON DashboardCustomer where
             , "email" .= dcEmail
             ]
 
-data DailySalesData =
-    DailySalesData
-        { dsdDay :: UTCTime
-        , dsdTotal :: Cents
+data SalesData =
+    SalesData
+        { sdDay :: UTCTime
+        , sdTotal :: Cents
         } deriving (Show)
 
-instance ToJSON DailySalesData where
-    toJSON DailySalesData {..} =
+instance ToJSON SalesData where
+    toJSON SalesData {..} =
         object
-            [ "day" .= dsdDay
-            , "total" .= dsdTotal
+            [ "day" .= sdDay
+            , "total" .= sdTotal
             ]
 
 
@@ -128,7 +131,7 @@ dashboardReportsRoute = flip withAdminCookie $ \_ -> runDB $ do
             , doTotal = total
             }
     customers <- map makeCustomer <$> selectList [] [LimitTo 10, Desc CustomerId]
-    DashboardReportsData orders customers <$> getDailySalesReport
+    DashboardReportsData orders customers <$> getDailySalesReport <*> getMonthlySalesReport
   where
     makeCustomer :: Entity Customer -> DashboardCustomer
     makeCustomer (Entity cId c) =
@@ -137,15 +140,9 @@ dashboardReportsRoute = flip withAdminCookie $ \_ -> runDB $ do
             , dcEmail = customerEmail c
             }
 
-getDailySalesReport :: MonadIO m => SqlPersistT m [DailySalesData]
-getDailySalesReport = do
-    daysToQuery <- getDays
-    forM daysToQuery $ \(startTime, endTime) -> do
-        orders <- selectList [OrderCreatedAt >=. startTime, OrderCreatedAt <. endTime] []
-        products <- selectList [OrderProductOrderId <-. map entityKey orders] []
-        items <- selectList [OrderLineItemOrderId <-. map entityKey orders] []
-        let total = getOrderTotal (map entityVal items) (map entityVal products)
-        return $ DailySalesData startTime total
+getDailySalesReport :: MonadIO m => SqlPersistT m [SalesData]
+getDailySalesReport =
+    getDays >>= mapM (uncurry getTotalForTimePeriod)
   where
     getDays :: MonadIO m => m [(UTCTime, UTCTime)]
     getDays = do
@@ -153,6 +150,32 @@ getDailySalesReport = do
         today <- localDay . utcToLocalTime zone <$> liftIO getCurrentTime
         let days =  [addDays (-31) today .. today]
         return $ map (\d -> (toTime zone d, toTime zone $ addDays 1 d)) days
-    toTime :: TimeZone -> Day -> UTCTime
-    toTime zone day =
-        localTimeToUTC zone $ LocalTime day midnight
+
+getMonthlySalesReport :: MonadIO m => SqlPersistT m [SalesData]
+getMonthlySalesReport =
+    getMonths >>= mapM (uncurry getTotalForTimePeriod)
+  where
+    getMonths :: MonadIO m => m [(UTCTime, UTCTime)]
+    getMonths = do
+        zone <- liftIO getCurrentTimeZone
+        today <- localDay . utcToLocalTime zone <$> liftIO getCurrentTime
+        let startOfMonth = (\(y, m, _) -> fromGregorian y m 1) $ toGregorian today
+            months = map (`addGregorianMonthsClip` startOfMonth) [-11 .. 0]
+        return $ map
+            (\d ->
+                ( toTime zone d
+                , toTime zone $ addGregorianMonthsClip 1 d
+                )
+            ) months
+
+toTime :: TimeZone -> Day -> UTCTime
+toTime zone day =
+    localTimeToUTC zone $ LocalTime day midnight
+
+getTotalForTimePeriod :: MonadIO m => UTCTime -> UTCTime -> SqlPersistT m SalesData
+getTotalForTimePeriod startTime endTime = do
+    orders <- selectList [OrderCreatedAt >=. startTime, OrderCreatedAt <. endTime] []
+    products <- selectList [OrderProductOrderId <-. map entityKey orders] []
+    items <- selectList [OrderLineItemOrderId <-. map entityKey orders] []
+    let total = getOrderTotal (map entityVal items) (map entityVal products)
+    return $ SalesData startTime total

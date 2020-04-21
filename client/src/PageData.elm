@@ -1358,15 +1358,17 @@ type alias AdminDashboardData =
     { customers : List DashboardCustomer
     , orders : List DashboardOrder
     , dailySales : List DashboardGraphData
+    , monthlySales : List DashboardGraphData
     }
 
 
 adminDashboardDataDecoder : Decoder AdminDashboardData
 adminDashboardDataDecoder =
-    Decode.map3 AdminDashboardData
+    Decode.map4 AdminDashboardData
         (Decode.field "customers" <| Decode.list dashboardCustomerDecoder)
         (Decode.field "orders" <| Decode.list dashboardOrderDecoder)
         (Decode.field "dailySales" <| Decode.list dashboardGraphDataDecoder)
+        (Decode.field "monthlySales" <| Decode.list dashboardGraphDataDecoder)
 
 
 type alias DashboardCustomer =

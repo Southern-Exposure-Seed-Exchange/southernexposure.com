@@ -1,7 +1,7 @@
 module Views.AdminDashboard exposing (view)
 
 import Decimal
-import Html exposing (Html, a, div, h5, li, p, table, tbody, td, text, tr, ul)
+import Html exposing (Html, a, div, h5, p, table, tbody, td, text, tr)
 import Html.Attributes exposing (class)
 import LineChart
 import LineChart.Area as Area
@@ -28,14 +28,17 @@ import Views.Utils exposing (icon, routeLinkAttributes)
 
 view : Zone -> WebData AdminDashboardData -> AddressLocations -> List (Html msg)
 view zone dashboardData locations =
-    [ text "This page will eventually contain sections like:"
-    , ul []
-        [ li [] [ text "Monthly Order Totals" ]
-        ]
-    , div [ class "row mb-4 justify-content-center" ]
+    [ div [ class "row mb-4 justify-content-center" ]
         [ section "Recent Orders" "col-md-8" (.orders >> orderTable zone locations) dashboardData
         , section "Newest Customers" "col-md-4" (.customers >> customerTable) dashboardData
-        , section "Daily Sales" "col-12 col-xl-10" (.dailySales >> dailySalesGraph zone) dashboardData
+        , section "Daily Sales"
+            "col-12 col-lg-10"
+            (.dailySales >> salesGraph "daily-sales-graph" zone)
+            dashboardData
+        , section "Monthly Sales"
+            "col-12 col-lg-10"
+            (.monthlySales >> salesGraph "monthly-sales-graph" zone)
+            dashboardData
         ]
     ]
 
@@ -56,7 +59,7 @@ section name classes renderer webData =
 
                 RemoteData.Failure _ ->
                     div [ class "m-4 p-4 text-center" ]
-                        [ div [] [ text "An error occured while loading the report data." ]
+                        [ div [] [ text "An error occurred while loading the report data." ]
                         ]
 
                 RemoteData.NotAsked ->
@@ -109,8 +112,8 @@ customerTable customers =
         ]
 
 
-dailySalesGraph : Zone -> List DashboardGraphData -> Html msg
-dailySalesGraph zone dataPoints =
+salesGraph : String -> Zone -> List DashboardGraphData -> Html msg
+salesGraph graphId zone dataPoints =
     let
         centsToFloat (Cents c) =
             Decimal.fromInt c
@@ -139,8 +142,8 @@ dailySalesGraph zone dataPoints =
                 { attributesHtml = []
                 , attributesSvg = []
                 , size = Container.relative
-                , margin = Container.Margin 10 0 30 70
-                , id = "daily-sales-graph"
+                , margin = Container.Margin 5 0 35 80
+                , id = graphId
                 }
     in
     LineChart.viewCustom chartConfig
