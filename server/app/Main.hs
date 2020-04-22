@@ -5,7 +5,7 @@ module Main where
 
 import Control.Concurrent (newEmptyMVar, takeMVar, putMVar, threadDelay)
 import Control.Concurrent.Async (async, cancel, race_)
-import Control.Concurrent.STM.TVar (newTVarIO)
+import Control.Concurrent.STM (newTVarIO, writeTVar, atomically)
 import Control.Exception (Exception(..), SomeException)
 import Control.Immortal.Queue (processImmortalQueue, closeImmortalQueue)
 import Control.Monad (when, forever, void)
@@ -31,7 +31,7 @@ import Web.Stripe.Client (StripeConfig(..), StripeKey(..))
 
 import Api
 import Auth (sessionEntropy, mkPersistentServerKey)
-import Cache (initializeCaches)
+import Cache (initializeCaches, emptyCache)
 import Config
 import Models
 import Paths_sese_website (version)
@@ -75,8 +75,10 @@ main = do
     avalaraSourceLocation <- T.pack . fromMaybe "DEFAULT" <$> lookupEnv "AVATAX_LOCATION_CODE"
     dbPool <- makePool env
     log "Initialized database pool."
-    cache <- runSqlPool initializeCaches dbPool >>= newTVarIO
-    log "Initialized database cache."
+    cache <- newTVarIO emptyCache
+    void . async
+        $ runSqlPool initializeCaches dbPool >>= atomically . writeTVar cache
+    log "Started initialization of database cache."
     let cfg = defaultConfig
             { getPool = dbPool
             , getEnv = env
