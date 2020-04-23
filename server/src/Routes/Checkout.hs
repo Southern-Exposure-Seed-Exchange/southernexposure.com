@@ -52,7 +52,7 @@ import Routes.CommonData
 import Routes.AvalaraUtils (createAvalaraTransaction, createAvalaraCustomer)
 import Routes.Utils (hashPassword, generateUniqueToken, getDisabledCheckoutDetails)
 import Validation (Validation(..))
-import Workers (Task(Avalara, SendEmail), AvalaraTask(..), enqueueTask)
+import Workers (Task(..), AvalaraTask(..), enqueueTask)
 
 import qualified Avalara
 import qualified Data.Text as T
@@ -562,7 +562,9 @@ customerPlaceOrderRoute = validateCookieAndParameters $ \ce@(Entity customerId c
         deleteCart cartId
         reduceQuantities orderId
         return orderId
-    runDB $ enqueueTask Nothing $ SendEmail $ Emails.OrderPlaced orderId
+    runDB $ do
+        enqueueTask Nothing $ SendEmail $ Emails.OrderPlaced orderId
+        enqueueTask Nothing $ UpdateSalesCache orderId
     (orderLines, products) <- runDB $ (,)
         <$> selectList [OrderLineItemOrderId ==. orderId] []
         <*> getCheckoutProducts orderId
@@ -779,7 +781,9 @@ anonymousPlaceOrderRoute = validate >=> \parameters -> do
                 , apodAuthorizationData = toAuthorizationData $ Entity customerId customer
                 }
             )
-    runDB $ enqueueTask Nothing $ SendEmail $ Emails.OrderPlaced orderId
+    runDB $ do
+        enqueueTask Nothing $ SendEmail $ Emails.OrderPlaced orderId
+        enqueueTask Nothing $ UpdateSalesCache orderId
     addSessionCookie temporarySession (AuthToken authToken) orderData
 
 

@@ -1,3 +1,5 @@
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards #-}
 {-| This module is responsible for designating the various caches we use to
 improve server performance, as well as functions for initializing
 & querying them.
@@ -9,15 +11,24 @@ module Cache
     , CategoryPredecessorCache
     , syncCategoryPredecessorCache
     , queryCategoryPredecessorCache
+    , SalesReports(..)
+    , SalesData(..)
     )
     where
 
-import Control.Monad.IO.Class (MonadIO)
+import Control.Monad.IO.Class (MonadIO, liftIO)
+import Data.Aeson ((.=), ToJSON(..), object)
 import Data.Maybe (fromMaybe, maybeToList)
-import Database.Persist (Entity(..), selectList)
+import Data.Time
+    ( UTCTime, LocalTime(..), Day, TimeZone, getCurrentTimeZone, midnight
+    , getCurrentTime, addDays, utcToLocalTime, localTimeToUTC, toGregorian
+    , fromGregorian, addGregorianMonthsClip
+    )
+import Database.Persist ((>=.), (<.), (<-.), Entity(..), selectList)
 import Database.Persist.Sql (SqlPersistT)
 
-import Models.DB (Category(..), CategoryId, Settings, defaultSettings, getSettings)
+import Models.DB
+import Models.Fields (Cents(..), creditLineItemTypes)
 
 import qualified Data.Map.Strict as M
 
@@ -26,17 +37,21 @@ data Caches
     = Caches
         { getCategoryPredecessorCache :: CategoryPredecessorCache
         , getSettingsCache :: Settings
+        , getSalesReportCache :: SalesReports
         }
 
 -- | An empty set of caches.
 emptyCache :: Caches
 emptyCache =
-    Caches (CategoryPredecessorCache M.empty) defaultSettings
+    Caches (CategoryPredecessorCache M.empty) defaultSettings emptyReports
 
 -- | Build all the caches.
 initializeCaches :: MonadIO m => SqlPersistT m Caches
 initializeCaches =
-    Caches <$> syncCategoryPredecessorCache <*> (entityVal <$> getSettings)
+    Caches
+        <$> syncCategoryPredecessorCache
+        <*> (entityVal <$> getSettings)
+        <*> generateSalesReports
 
 
 
@@ -83,3 +98,92 @@ syncCategoryPredecessorCache = do
 queryCategoryPredecessorCache :: CategoryId -> CategoryPredecessorCache -> [Entity Category]
 queryCategoryPredecessorCache categoryId (CategoryPredecessorCache cache) =
     fromMaybe [] $ M.lookup categoryId cache
+
+
+
+data SalesReports =
+    SalesReports
+        { srDailySales :: [SalesData]
+        , srMonthlySales :: [SalesData]
+        } deriving (Show)
+
+
+data SalesData =
+    SalesData
+        { sdDay :: UTCTime
+        , sdTotal :: Cents
+        } deriving (Show)
+
+instance ToJSON SalesData where
+    toJSON SalesData {..} =
+        object
+            [ "day" .= sdDay
+            , "total" .= sdTotal
+            ]
+
+emptyReports :: SalesReports
+emptyReports =
+    SalesReports [] []
+
+generateSalesReports :: MonadIO m => SqlPersistT m SalesReports
+generateSalesReports = do
+    srDailySales <- getDailySalesReport
+    srMonthlySales <- getMonthlySalesReport
+    return SalesReports {..}
+
+getDailySalesReport :: MonadIO m => SqlPersistT m [SalesData]
+getDailySalesReport =
+    getDays >>= mapM (uncurry getTotalForTimePeriod)
+  where
+    getDays :: MonadIO m => m [(UTCTime, UTCTime)]
+    getDays = do
+        zone <- liftIO getCurrentTimeZone
+        today <- localDay . utcToLocalTime zone <$> liftIO getCurrentTime
+        let days =  [addDays (-31) today .. today]
+        return $ map (\d -> (toTime zone d, toTime zone $ addDays 1 d)) days
+
+getMonthlySalesReport :: MonadIO m => SqlPersistT m [SalesData]
+getMonthlySalesReport =
+    getMonths >>= mapM (uncurry getTotalForTimePeriod)
+  where
+    getMonths :: MonadIO m => m [(UTCTime, UTCTime)]
+    getMonths = do
+        zone <- liftIO getCurrentTimeZone
+        today <- localDay . utcToLocalTime zone <$> liftIO getCurrentTime
+        let startOfMonth = (\(y, m, _) -> fromGregorian y m 1) $ toGregorian today
+            months = map (`addGregorianMonthsClip` startOfMonth) [-11 .. 0]
+        return $ map
+            (\d ->
+                ( toTime zone d
+                , toTime zone $ addGregorianMonthsClip 1 d
+                )
+            ) months
+
+toTime :: TimeZone -> Day -> UTCTime
+toTime zone day =
+    localTimeToUTC zone $ LocalTime day midnight
+
+getTotalForTimePeriod :: MonadIO m => UTCTime -> UTCTime -> SqlPersistT m SalesData
+getTotalForTimePeriod startTime endTime = do
+    orders <- selectList [OrderCreatedAt >=. startTime, OrderCreatedAt <. endTime] []
+    products <- selectList [OrderProductOrderId <-. map entityKey orders] []
+    items <- selectList [OrderLineItemOrderId <-. map entityKey orders] []
+    let total = getOrderTotal items products
+    return $ SalesData startTime total
+  where
+    getOrderTotal items products = Cents . fromIntegral $
+        integerCents (sum $ map productTotal products) + sum (map lineTotal items)
+    productTotal :: Entity OrderProduct -> Cents
+    productTotal (Entity _ p) =
+        Cents (orderProductQuantity p) * orderProductPrice p
+    lineTotal :: Entity OrderLineItem -> Integer
+    lineTotal (Entity _ l) =
+        let amount = integerCents $ orderLineItemAmount l
+        in
+        if orderLineItemType l `elem` creditLineItemTypes then
+            (-1) * amount
+        else
+            amount
+    integerCents :: Cents -> Integer
+    integerCents (Cents c) =
+        fromIntegral c

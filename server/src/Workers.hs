@@ -23,6 +23,7 @@ module Workers
 
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.Async (wait)
+import Control.Concurrent.STM (TVar, atomically, readTVar, writeTVar)
 import Control.Exception.Safe (Exception(..), throwM)
 import Control.Immortal.Queue (ImmortalQueue(..))
 import Control.Monad (when)
@@ -34,11 +35,15 @@ import Data.Foldable (asum)
 import Data.Maybe (listToMaybe)
 import Data.Monoid ((<>))
 import Data.Scientific (Scientific)
-import Data.Time (UTCTime, getCurrentTime, addUTCTime)
+import Data.Time
+    ( UTCTime, TimeZone, Day, LocalTime(..), getCurrentTime, getCurrentTimeZone
+    , addUTCTime, utcToLocalTime, localTimeToUTC, fromGregorian, toGregorian
+    , midnight, addDays
+    )
 import Database.Persist.Sql
     ( (=.), (==.), (<=.), (<.), (<-.), Entity(..), SelectOpt(..), ToBackendKey
     , SqlBackend, SqlPersistT, runSqlPool, selectList, selectFirst, delete
-    , insert_, fromSqlKey, deleteWhere, deleteCascadeWhere, update
+    , insert_, fromSqlKey, deleteWhere, deleteCascadeWhere, update, get
     )
 import GHC.Generics (Generic)
 import Numeric.Natural (Natural)
@@ -47,12 +52,13 @@ import Avalara
     ( RefundTransactionRequest(..), VoidTransactionRequest(..), VoidReason(..)
     , CommitTransactionRequest(..)
     )
+import Cache (Caches(..), SalesReports(..), SalesData(..))
 import Config (Config(..), AvalaraStatus(AvalaraTesting), timedLogStr)
 import Emails (EmailType, getEmailData)
 import Images (makeImageConfig, scaleExistingImage, optimizeImage)
 import Models
 import Models.PersistJSON (JSONValue(..))
-import Models.Fields (AvalaraTransactionCode(..))
+import Models.Fields (AvalaraTransactionCode(..), Cents(..))
 import Routes.AvalaraUtils (createAvalaraTransaction)
 import Server (avalaraRequest)
 
@@ -72,6 +78,10 @@ data Task
     | SendEmail EmailType
     | CleanDatabase
     | Avalara AvalaraTask
+    | UpdateSalesCache OrderId
+    -- ^ Record a new Order in the SalesReports Cache
+    | AddSalesReportDay
+    -- ^ Add today to the SalesReports Cache if it does not exist
     deriving (Show, Generic)
 
 instance FromJSON Task
@@ -120,7 +130,7 @@ enqueueTask runAt task = do
 -- | Process a queue of Jobs by querying the database and sending any due
 -- jobs to worker threads.
 taskQueueConfig :: Natural -> Config -> ImmortalQueue (Entity Job)
-taskQueueConfig threadCount cfg@Config { getPool, getServerLogger } =
+taskQueueConfig threadCount cfg@Config { getPool, getServerLogger, getCaches } =
     ImmortalQueue
         { qThreadCount = threadCount
         , qPollWorkerTime = 1000
@@ -209,6 +219,10 @@ taskQueueConfig threadCount cfg@Config { getPool, getServerLogger } =
             "Commit Avalara Transaction " <> T.pack (show $ Avalara.tCode trans)
         Avalara (VoidTransaction trans) ->
             "Void Avalara Transaction " <> T.pack (show $ Avalara.tCode trans)
+        UpdateSalesCache orderId ->
+            "Update Sales Reports Cache with Order #" <> showSqlKey orderId
+        AddSalesReportDay ->
+            "Add Sales Report Day"
 
     showSqlKey :: (ToBackendKey SqlBackend a) => Key a -> T.Text
     showSqlKey =
@@ -235,6 +249,10 @@ taskQueueConfig threadCount cfg@Config { getPool, getServerLogger } =
                 runSql cleanDatabase
             Success (Avalara task) ->
                 performAvalaraTask task
+            Success (UpdateSalesCache orderId) ->
+                runSql $ updateSalesCache getCaches orderId
+            Success AddSalesReportDay ->
+                runSql $ addNewReportDate getCaches
 
     -- Perform an Avalara-specific action.
     performAvalaraTask :: AvalaraTask -> IO ()
@@ -338,3 +356,120 @@ cleanDatabase = do
     removeSoldOutVariants = do
         soldOut <- selectList [ProductVariantQuantity <=. 0] []
         deleteWhere [CartItemProductVariantId <-. map entityKey soldOut]
+
+
+-- | Add the given Order's total to the Daily & Monthly sales caches.
+--
+-- Adds a new SalesData if there is no SalesData for the Order's time
+-- period.
+updateSalesCache :: TVar Caches -> OrderId -> SqlPersistT IO ()
+updateSalesCache cacheTVar orderId = do
+    mOrderDate <- fmap orderCreatedAt <$> get orderId
+    orderTotal <- getOrderTotal
+        <$> (map entityVal <$> selectList [OrderLineItemOrderId ==. orderId] [])
+        <*> (map entityVal <$> selectList [OrderProductOrderId ==. orderId] [])
+    zone <- liftIO getCurrentTimeZone
+    case mOrderDate of
+        Nothing ->
+            error "Could not fetch Order & date."
+        Just orderDate ->
+            lift . atomically $ do
+                cache <- readTVar cacheTVar
+                writeTVar cacheTVar $ cache
+                    { getSalesReportCache =
+                        updateSalesReports (getSalesReportCache cache) zone orderDate
+                            (updateReport orderTotal orderDate)
+                    }
+  where
+    updateReport :: Cents -> UTCTime -> [SalesData] -> SalesData -> [SalesData]
+    updateReport total date sales newReport =
+        case sales of
+            [] ->
+                [ newReport { sdTotal = total } ]
+            [sale] ->
+                if sdDay newReport == sdDay sale then
+                    [ sale { sdTotal = total + sdTotal sale } ]
+                else
+                    [ sale, newReport { sdTotal = total + sdTotal sale } ]
+            sale : nextSale : rest ->
+                if date >= sdDay sale && date < sdDay nextSale then
+                    sale { sdTotal = total + sdTotal sale } : rest
+                else
+                    sale : updateReport total date (nextSale : rest) newReport
+
+-- | Add a new SalesData entry for today to the SalesReports cache.
+--
+-- Does nothing if the entries already exist.
+addNewReportDate :: TVar Caches -> SqlPersistT IO ()
+addNewReportDate cacheTVar = do
+    today <- liftIO getCurrentTime
+    zone <- liftIO getCurrentTimeZone
+    lift . atomically $ do
+        cache <- readTVar cacheTVar
+        writeTVar cacheTVar $ cache
+            { getSalesReportCache =
+                updateSalesReports (getSalesReportCache cache) zone today updateReport
+            }
+    enqueueTask (Just $ tomorrow zone today) AddSalesReportDay
+  where
+    tomorrow :: TimeZone -> UTCTime -> UTCTime
+    tomorrow zone today =
+        let day = localDay $ utcToLocalTime zone today
+        in
+        toTime zone $ addDays 1 day
+    updateReport :: [SalesData] -> SalesData -> [SalesData]
+    updateReport sales newReport =
+        if sdDay newReport `notElem` map sdDay sales then
+            drop 1 sales ++ [newReport]
+        else
+            sales
+
+-- | Update the Monthly & Daily sales reports using a generic updater
+-- function. The function is passed the reports and a Zero-total SalesData
+-- corresponding to the passed UTCTime.
+--
+-- The length of the daily report will be limited to 31 items and the
+-- monthly limited to 12 items.
+updateSalesReports
+    :: SalesReports -> TimeZone -> UTCTime -> ([SalesData] -> SalesData -> [SalesData]) -> SalesReports
+updateSalesReports reports zone reportDate reportUpdater =
+    reports
+        { srDailySales =
+            limitLength 31 $ reportUpdater (srDailySales reports) dailyReport
+        , srMonthlySales =
+            limitLength 12 $ reportUpdater (srMonthlySales reports) monthlyReport
+        }
+  where
+    limitLength :: Int -> [a] -> [a]
+    limitLength maxLength items =
+        if length items > maxLength then
+            drop (length items - maxLength) items
+        else
+            items
+    -- Build a Daily SalesData item for the given date, starting at
+    -- midnight of the day, local time.
+    dailyReport :: SalesData
+    dailyReport =
+        let day = localDay $ utcToLocalTime zone reportDate
+        in
+        SalesData
+            { sdDay = toTime zone day
+            , sdTotal = 0
+            }
+    -- Build a Monthly SalesData item for the given date, starting at the
+    -- first of the month, local time.
+    monthlyReport :: SalesData
+    monthlyReport =
+        let day = localDay $ utcToLocalTime zone reportDate
+            startOfMonth =
+                (\(y, m, _) -> fromGregorian y m 1) $ toGregorian day
+        in
+        SalesData
+            { sdDay = toTime zone startOfMonth
+            , sdTotal = 0
+            }
+
+-- Convert a Day to a UTCTime representing midnight in the local timezone.
+toTime :: TimeZone -> Day -> UTCTime
+toTime zone day =
+    localTimeToUTC zone $ LocalTime day midnight
