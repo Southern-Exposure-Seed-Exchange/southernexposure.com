@@ -248,3 +248,16 @@ executables:
             - persistent-postgresql
             - text
             - vector
+
+    import-product-suggestions:
+        main: ImportProductSuggestions.hs
+        <<: *script-defaults
+        other-modules: []
+        dependencies:
+            - sese-website
+            - bytestring
+            - cassava
+            - monad-logger
+            - persistent-postgresql
+            - text
+            - vector
