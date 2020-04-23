@@ -5,6 +5,7 @@ CHANGELOG
 v1.03.14
 =========
 
+* Ensure the recurring asynchronous tasks are in the job queue.
 * Add Recent Orders & Newest Customers tables and Daily & Monthly Sales graph
   to the Admin Homepage/Dashboard.
 * Add dropdowns to the Admin's navigation bar in order to reduce it's width.

@@ -46,7 +46,7 @@ data EmailType
     | PasswordReset CustomerId DB.PasswordResetId
     | PasswordResetSuccess CustomerId
     | OrderPlaced OrderId
-    deriving (Show, Generic)
+    deriving (Show, Generic, Eq)
 
 instance FromJSON EmailType
 instance ToJSON EmailType

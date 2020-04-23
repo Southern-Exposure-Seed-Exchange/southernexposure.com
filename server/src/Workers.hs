@@ -82,7 +82,7 @@ data Task
     -- ^ Record a new Order in the SalesReports Cache
     | AddSalesReportDay
     -- ^ Add today to the SalesReports Cache if it does not exist
-    deriving (Show, Generic)
+    deriving (Show, Generic, Eq)
 
 instance FromJSON Task
 instance ToJSON Task
@@ -99,7 +99,7 @@ data AvalaraTask
     | VoidTransaction Avalara.Transaction
     -- ^ Void/delete a Transaction that was made but whose payment
     -- processing failed.
-    deriving (Show, Generic)
+    deriving (Show, Generic, Eq)
 
 instance FromJSON AvalaraTask
 instance ToJSON AvalaraTask

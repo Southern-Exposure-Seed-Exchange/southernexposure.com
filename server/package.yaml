@@ -106,6 +106,7 @@ library:
         - Images
         - Models
         - Models.Fields
+        - Models.PersistJSON
         - Routes.Admin.ShippingMethods
         - Routes.CommonData
         - Routes.StoneEdge

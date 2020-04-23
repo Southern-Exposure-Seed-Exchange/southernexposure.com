@@ -8,11 +8,12 @@ import Control.Concurrent.Async (async, cancel, race_)
 import Control.Concurrent.STM (newTVarIO, writeTVar, atomically)
 import Control.Exception (Exception(..), SomeException)
 import Control.Immortal.Queue (processImmortalQueue, closeImmortalQueue)
-import Control.Monad (when, forever, void)
+import Control.Monad (when, forever, void, forM_)
 import Control.Monad.IO.Class (MonadIO)
 import Control.Monad.Trans.Control (MonadBaseControl)
 import Control.Monad.Logger (MonadLogger, runNoLoggingT, runStderrLoggingT)
-import Data.Maybe (fromMaybe)
+import Data.Aeson (Result(..), fromJSON)
+import Data.Maybe (fromMaybe, mapMaybe)
 import Data.Monoid ((<>))
 import Data.Pool (destroyAllResources)
 import Data.Text.Encoding (decodeUtf8)
@@ -34,9 +35,10 @@ import Auth (sessionEntropy, mkPersistentServerKey)
 import Cache (initializeCaches, emptyCache)
 import Config
 import Models
+import Models.PersistJSON (JSONValue(..))
 import Paths_sese_website (version)
 import StoneEdge (StoneEdgeCredentials(..))
-import Workers (taskQueueConfig)
+import Workers (Task(CleanDatabase, AddSalesReportDay), taskQueueConfig, enqueueTask)
 
 import qualified Avalara
 import qualified Data.ByteString.Char8 as C
@@ -74,6 +76,7 @@ main = do
     avalaraCompanyCode <- Avalara.CompanyCode . T.pack <$> requireSetting "AVATAX_COMPANY_CODE"
     avalaraSourceLocation <- T.pack . fromMaybe "DEFAULT" <$> lookupEnv "AVATAX_LOCATION_CODE"
     dbPool <- makePool env
+    initializeJobs dbPool
     log "Initialized database pool."
     cache <- newTVarIO emptyCache
     void . async
@@ -224,3 +227,18 @@ main = do
                     >>= maybe ((++ defaultPath) <$> getCurrentDirectory) return
                 createDirectoryIfMissing True dir
                 return dir
+          initializeJobs :: ConnectionPool -> IO ()
+          initializeJobs = runSqlPool $ do
+                jobs <- selectList [] []
+                let decodedJobs = mapMaybe (decodeJobType . entityVal) jobs
+                    recurringTasks = [CleanDatabase, AddSalesReportDay]
+                forM_ recurringTasks $ \task ->
+                    when (task `notElem` decodedJobs) $
+                        enqueueTask Nothing task
+          decodeJobType :: Job -> Maybe Task
+          decodeJobType job =
+                case fromJSON (fromJSONValue $ jobAction job) of
+                    Success j ->
+                        Just j
+                    Error _ ->
+                        Nothing
