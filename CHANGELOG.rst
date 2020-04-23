@@ -6,7 +6,7 @@ v1.03.14
 =========
 
 * Mark products as Out of Stock in the Google Merchant feed if the Checkout
-  functinality is diabled.
+  functionality is diabled.
 * Ensure the recurring asynchronous tasks are in the job queue.
 * Add Recent Orders & Newest Customers tables and Daily & Monthly Sales graph
   to the Admin Homepage/Dashboard.
