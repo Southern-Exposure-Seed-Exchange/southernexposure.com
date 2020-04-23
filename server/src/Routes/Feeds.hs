@@ -27,7 +27,7 @@ import Config (Config(getCaches))
 import Models
 import Models.Fields (Milligrams(..), LotSize(..), renderLotSize, toDollars)
 import Routes.Utils (XML, activeVariantExists)
-import Server (App, AppSQL, runDB)
+import Server (App, AppSQL, runDB, readCache)
 
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.Map.Strict as M
@@ -155,6 +155,7 @@ type MerchantFeedRoute =
 merchantFeedRoute :: App LBS.ByteString
 merchantFeedRoute = do
     currentTime <- liftIO getCurrentTime
+    isCheckoutDisabled <- readCache $ settingsDisableCheckout . getSettingsCache
     (variantSales, categorySales, products, categories) <- runDB $ do
         vs <- map entityVal <$> selectList
             [ ProductSaleStartDate <=. currentTime
@@ -177,17 +178,18 @@ merchantFeedRoute = do
         return (vs, catSale, psVsCs, cs)
     let categoryMap = foldr (\(Entity cId c) m -> M.insert cId c m) M.empty categories
     categoryCache <- asks getCaches >>= fmap getCategoryPredecessorCache . liftIO . readTVarIO
-    let convert = convertProduct categoryCache categoryMap variantSales categorySales
+    let convert = convertProduct isCheckoutDisabled categoryCache categoryMap variantSales categorySales
     return $ GMerch.renderFeed $ map convert products
 
 convertProduct
-    :: CategoryPredecessorCache
+    :: Bool
+    -> CategoryPredecessorCache
     -> M.Map CategoryId Category
     -> [ProductSale]
     -> [CategorySale]
     -> (Entity Product, Entity ProductVariant, [Entity ProductToCategory])
     -> GMerch.Product
-convertProduct predCache categoryMap prodSales catSales (Entity _ prod, Entity variantId variant, categories) =
+convertProduct checkoutDisabled predCache categoryMap prodSales catSales (Entity _ prod, Entity variantId variant, categories) =
     let
         fullSku =
             productBaseSku prod <> productVariantSkuSuffix variant
@@ -225,7 +227,7 @@ convertProduct predCache categoryMap prodSales catSales (Entity _ prod, Entity v
         , pPriceData =
             GMerch.PriceData
                 { pdAvailability =
-                    if productVariantQuantity variant > 0 then
+                    if productVariantQuantity variant > 0 && not checkoutDisabled then
                         GMerch.InStock
                     else
                         GMerch.OutOfStock
