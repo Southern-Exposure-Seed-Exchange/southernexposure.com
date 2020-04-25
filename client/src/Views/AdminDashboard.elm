@@ -135,7 +135,7 @@ orderTable zone locations orders =
         renderOrder : DashboardOrder -> Html msg
         renderOrder order =
             tr [ class "text-center" ]
-                [ td [] [ text <| Format.date zone order.date ]
+                [ td [] [ text <| Format.dateTime zone order.date ]
                 , td [] [ text order.customer ]
                 , td [] [ text <| Maybe.withDefault "" <| Locations.regionName locations order.state ]
                 , td [ class "text-right" ] [ text <| Format.cents order.total ]
@@ -155,7 +155,7 @@ customerTable customers =
     let
         renderCustomer { id, email } =
             tr []
-                [ td [] [ text email ]
+                [ td [ class "pl-3" ] [ text email ]
                 , td []
                     [ a (routeLinkAttributes (Admin <| CustomerEdit id))
                         [ text "View" ]

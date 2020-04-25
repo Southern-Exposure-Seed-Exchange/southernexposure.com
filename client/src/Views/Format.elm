@@ -2,6 +2,7 @@ module Views.Format exposing
     ( cents
     , centsNumber
     , date
+    , dateTime
     )
 
 import DateFormat
@@ -20,6 +21,23 @@ date =
         , DateFormat.dayOfMonthFixed
         , DateFormat.text "/"
         , DateFormat.yearNumberLastTwo
+        ]
+
+
+dateTime : Zone -> Posix -> String
+dateTime =
+    DateFormat.format
+        [ DateFormat.monthNumber
+        , DateFormat.text "/"
+        , DateFormat.dayOfMonthFixed
+        , DateFormat.text "/"
+        , DateFormat.yearNumberLastTwo
+        , DateFormat.text " "
+        , DateFormat.hourNumber
+        , DateFormat.text ":"
+        , DateFormat.minuteNumber
+        , DateFormat.text " "
+        , DateFormat.amPmUppercase
         ]
 
 
