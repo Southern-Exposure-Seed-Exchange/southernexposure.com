@@ -1,5 +1,6 @@
-module Views.AdminDashboard exposing (view)
+module Views.AdminDashboard exposing (Model, Msg, initialModel, update, view)
 
+import DateFormat
 import Decimal
 import Html exposing (Html, a, div, h5, p, table, tbody, td, text, tr)
 import Html.Attributes exposing (class)
@@ -26,18 +27,72 @@ import Views.Format as Format
 import Views.Utils exposing (icon, routeLinkAttributes)
 
 
-view : Zone -> WebData AdminDashboardData -> AddressLocations -> List (Html msg)
-view zone dashboardData locations =
+type alias Model =
+    { dailyGraphHover : Maybe DashboardGraphData
+    , monthlyGraphHover : Maybe DashboardGraphData
+    }
+
+
+initialModel : Model
+initialModel =
+    { dailyGraphHover = Nothing
+    , monthlyGraphHover = Nothing
+    }
+
+
+type Msg
+    = DailyGraphHover (Maybe DashboardGraphData)
+    | MonthlyGraphHover (Maybe DashboardGraphData)
+
+
+update : Msg -> Model -> Model
+update msg model =
+    case msg of
+        DailyGraphHover v ->
+            { model | dailyGraphHover = v }
+
+        MonthlyGraphHover v ->
+            { model | monthlyGraphHover = v }
+
+
+view : Model -> Zone -> WebData AdminDashboardData -> AddressLocations -> List (Html Msg)
+view model zone dashboardData locations =
     [ div [ class "row mb-4 justify-content-center" ]
         [ section "Recent Orders" "col-md-8" (.orders >> orderTable zone locations) dashboardData
         , section "Newest Customers" "col-md-4" (.customers >> customerTable) dashboardData
         , section "Daily Sales"
             "col-12 col-lg-10"
-            (.dailySales >> salesGraph "daily-sales-graph" zone)
+            (.dailySales
+                >> salesGraph
+                    { id = "daily-sales-graph"
+                    , zone = zone
+                    , hoveredItem = model.dailyGraphHover
+                    , onHover = DailyGraphHover
+                    , dateFormat =
+                        [ DateFormat.monthNameAbbreviated
+                        , DateFormat.text " "
+                        , DateFormat.dayOfMonthSuffix
+                        , DateFormat.text ", "
+                        , DateFormat.yearNumber
+                        ]
+                    }
+            )
             dashboardData
         , section "Monthly Sales"
             "col-12 col-lg-10"
-            (.monthlySales >> salesGraph "monthly-sales-graph" zone)
+            (.monthlySales
+                >> salesGraph
+                    { id = "monthly-sales-graph"
+                    , zone = zone
+                    , hoveredItem = model.monthlyGraphHover
+                    , onHover = MonthlyGraphHover
+                    , dateFormat =
+                        [ DateFormat.monthNameFull
+                        , DateFormat.text " "
+                        , DateFormat.yearNumber
+                        ]
+                    }
+            )
             dashboardData
         ]
     ]
@@ -112,28 +167,49 @@ customerTable customers =
         ]
 
 
-salesGraph : String -> Zone -> List DashboardGraphData -> Html msg
-salesGraph graphId zone dataPoints =
+type alias SalesGraphConfig msg =
+    { id : String
+    , zone : Zone
+    , hoveredItem : Maybe DashboardGraphData
+    , onHover : Maybe DashboardGraphData -> msg
+    , dateFormat : List DateFormat.Token
+    }
+
+
+salesGraph : SalesGraphConfig msg -> List DashboardGraphData -> Html msg
+salesGraph cfg dataPoints =
     let
         centsToFloat (Cents c) =
             Decimal.fromInt c
                 |> Decimal.mul (Decimal.fromIntWithExponent 1 -2)
                 |> Decimal.toFloat
 
+        hoverEvent =
+            Events.custom
+                [ Events.onMouseMove cfg.onHover (Events.map List.head Events.getNearestX)
+                , Events.onMouseLeave (cfg.onHover Nothing)
+                ]
+
+        hoverView =
+            Junk.hoverMany
+                (Maybe.map List.singleton cfg.hoveredItem |> Maybe.withDefault [])
+                (.date >> DateFormat.format cfg.dateFormat cfg.zone)
+                (.amount >> Format.cents)
+
         chartConfig : LineChart.Config DashboardGraphData msg
         chartConfig =
-            { x = Axis.time zone 1500 "" (.date >> Time.posixToMillis >> toFloat)
+            { x = Axis.time cfg.zone 1500 "" (.date >> Time.posixToMillis >> toFloat)
             , y = Axis.default 600 "" (.amount >> centsToFloat)
             , container = containerConfig
             , intersection = Intersection.default
             , interpolation = Interpolation.monotone
             , legends = Legends.none
-            , events = Events.default
+            , events = hoverEvent
             , area = Area.normal 0.5
             , grid = Grid.default
             , line = Line.default
             , dots = Dots.default
-            , junk = Junk.default
+            , junk = hoverView
             }
 
         containerConfig : Container.Config msg
@@ -143,8 +219,8 @@ salesGraph graphId zone dataPoints =
                 , attributesSvg = []
                 , size = Container.relative
                 , margin = Container.Margin 5 0 35 80
-                , id = graphId
+                , id = cfg.id
                 }
     in
     LineChart.viewCustom chartConfig
-        [ LineChart.line Colors.green Dots.circle "" dataPoints ]
+        [ LineChart.line Colors.green Dots.circle "Sales" dataPoints ]

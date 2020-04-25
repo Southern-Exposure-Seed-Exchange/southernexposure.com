@@ -177,8 +177,9 @@ view ({ route, pageData, navigationData, zone } as model) =
                         |> withIntermediateText (apply <| Checkout.successView zone LogOut orderId newAccount)
 
                 Admin Dashboard ->
-                    withIntermediateText (AdminDashboard.view zone pageData.adminDashboard)
+                    withIntermediateText (AdminDashboard.view model.adminDashboard zone pageData.adminDashboard)
                         pageData.locations
+                        |> List.map (Html.map DashboardMsg)
 
                 Admin CategoryList ->
                     withIntermediateText CategoryAdminViews.list pageData.adminCategoryList

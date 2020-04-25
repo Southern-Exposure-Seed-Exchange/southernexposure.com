@@ -44,6 +44,7 @@ import Update.Utils exposing (batchCommand, discardCommand, extraCommand, noComm
 import Url exposing (Url)
 import User exposing (AuthStatus)
 import View exposing (view)
+import Views.AdminDashboard as AdminDashboard
 import Views.CategorySalesAdmin as CategorySalesAdmin
 import Views.CouponAdmin as CouponAdmin
 import Views.CustomerAdmin as CustomerAdmin
@@ -1225,6 +1226,11 @@ update msg ({ pageData, key } as model) =
             CategorySalesAdmin.updateEditForm key pageData.adminEditCategorySale subMsg model.editCategorySaleForm
                 |> Tuple.mapFirst (\form -> { model | editCategorySaleForm = form })
                 |> Tuple.mapSecond (Cmd.map EditCategorySaleMsg)
+
+        DashboardMsg subMsg ->
+            AdminDashboard.update subMsg model.adminDashboard
+                |> (\m -> { model | adminDashboard = m })
+                |> noCommand
 
         ReAuthorize response ->
             case response of

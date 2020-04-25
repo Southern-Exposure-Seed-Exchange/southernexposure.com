@@ -5,6 +5,8 @@ CHANGELOG
 v1.03.15
 =========
 
+* Add a hover popup to the Admin Dashboard graphs showing the Date & Sales
+  for the closest point.
 * Allow disabling priority shipping for from the Shipping Methods admin page.
 
 
