@@ -176,6 +176,7 @@ priorityFeeTests :: TestTree
 priorityFeeTests = testGroup "Priority S&H Calculations"
     [ testCase "No Shipping Methods" noMethods
     , testProperty "Priority S&H Not Available" noPriorityAvailable
+    , testProperty "Priority S&H Disabled" priorityDisabled
     , testProperty "Fee Correctly Calculated" calculatedCorrectly
     , testCase "Only Flat Rate Calculation" onlyFlat
     , testCase "Only Percentage Rate Calculation" onlyPercent
@@ -188,14 +189,20 @@ priorityFeeTests = testGroup "Priority S&H Calculations"
     noPriorityAvailable = property $ do
         method <- forAll genCartCharge
         (Cents subTotal) <- forAll genCents
-        calculatePriorityFee [ShippingCharge method Nothing] subTotal === Nothing
+        calculatePriorityFee [ShippingCharge method Nothing True] subTotal === Nothing
+    priorityDisabled :: Property
+    priorityDisabled = property $ do
+        (method, pr, Cents subTotal) <- forAll $
+            (,,) <$> genCartCharge <*> genPriorityFee <*> genCents
+        calculatePriorityFee [ShippingCharge method (Just pr) False] subTotal
+            === Nothing
     calculatedCorrectly :: Property
     calculatedCorrectly = property $ do
         method <- forAll genCartCharge
         pr@(PriorityShippingFee (Cents flat) percent) <- forAll genPriorityFee
         (Cents subTotal) <- forAll genCents
         let percentAmount = toRational subTotal * (fromIntegral percent % 100)
-        calculatePriorityFee [ShippingCharge method $ Just pr] subTotal
+        calculatePriorityFee [ShippingCharge method (Just pr) True] subTotal
             === Just (Cents $ round $ percentAmount + toRational flat)
     onlyFlat :: Assertion
     onlyFlat =
@@ -206,7 +213,7 @@ priorityFeeTests = testGroup "Priority S&H Calculations"
         calculatePriorityFee [makeShippingCharge (PriorityShippingFee 0 10)] 1000
             @?= Just 100
     makeShippingCharge :: PriorityShippingFee -> ShippingCharge
-    makeShippingCharge fee = ShippingCharge (CartCharge "" 900) (Just fee)
+    makeShippingCharge fee = ShippingCharge (CartCharge "" 900) (Just fee) True
 
 
 -- SALES
@@ -746,6 +753,7 @@ routesAdminShipping = testGroup "Routes.Admin.ShippingMethods Module"
             <*> Gen.list (Range.linear 1 10) genRateData
             <*> genCents
             <*> Gen.integral (Range.linear 0 100)
+            <*> Gen.bool
             <*> Gen.list (Range.linear 1 10) genEntityKey
             <*> Gen.list (Range.linear 1 10) genEntityKey
             <*> Gen.integral (Range.linear 1 1000)

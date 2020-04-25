@@ -2,6 +2,12 @@
 CHANGELOG
 =========
 
+v1.03.15
+=========
+
+* Allow disabling priority shipping for from the Shipping Methods admin page.
+
+
 v1.03.14
 =========
 

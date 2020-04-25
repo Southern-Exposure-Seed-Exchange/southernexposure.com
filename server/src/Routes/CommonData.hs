@@ -576,12 +576,14 @@ data ShippingCharge =
     ShippingCharge
         { scCharge :: CartCharge
         , scPriorityFee :: Maybe PriorityShippingFee
+        , scPriorityEnabled :: Bool
         } deriving (Show)
 
 instance ToJSON ShippingCharge where
     toJSON charge =
         object [ "charge" .= scCharge charge
                , "priorityFee" .= scPriorityFee charge
+               , "priorityEnabled" .= scPriorityEnabled charge
                ]
 
 
@@ -827,7 +829,7 @@ calculateCouponDiscount coupon shipMethods subTotal =
 calculatePriorityFee :: [ShippingCharge] -> Natural -> Maybe Cents
 calculatePriorityFee shipMethods subTotal =
     case shipMethods of
-        ShippingCharge _ (Just fee):_ ->
+        ShippingCharge _ (Just fee) True:_ ->
             let (PriorityShippingFee (Cents flatRate) percentRate) = fee
                 percentAmount :: Rational
                 percentAmount =
@@ -901,12 +903,15 @@ getShippingMethods maybeCountry items subTotal =
                             amount
                         Percentage _ percentage ->
                             Cents . round $ (toRational percentage / 100) * toRational subTotal
+                priorityEnabled =
+                    shippingMethodIsPriorityEnabled method
                 addPriorityFee charge =
-                    if priorityExcluded then
-                        ShippingCharge charge Nothing
+                    if priorityExcluded || not priorityEnabled then
+                        ShippingCharge charge Nothing priorityEnabled
                     else
                         ShippingCharge charge
-                            $ Just $ shippingMethodPriorityRate method
+                            (Just $ shippingMethodPriorityRate method)
+                            priorityEnabled
                 priorityExcluded =
                     any productExcludesPriority (map cidProduct items)
                 productExcludesPriority prod =

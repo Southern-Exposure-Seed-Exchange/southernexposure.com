@@ -69,6 +69,7 @@ type alias MethodForm =
     , rates : Array ShippingRate
     , priorityFee : String
     , priorityRate : String
+    , priorityEnabled : Bool
     , categories : Array CategoryId
     , priorityExcludedCategories : Array CategoryId
     , priority : String
@@ -84,6 +85,7 @@ initialMethodForm =
     , rates = Array.fromList [ initialShippingRate ]
     , priorityFee = ""
     , priorityRate = ""
+    , priorityEnabled = True
     , categories = Array.empty
     , priorityExcludedCategories = Array.empty
     , priority = "1"
@@ -100,11 +102,12 @@ methodDecoder =
         (Decode.field "rates" <| Decode.array rateDecoder)
         (Decode.field "priorityFee" <| Decode.map centsToString centsDecoder)
         (Decode.field "priorityRate" <| Decode.map String.fromInt Decode.int)
+        (Decode.field "isPriorityEnabled" Decode.bool)
         (Decode.field "categories" <| Decode.array Category.idDecoder)
-        (Decode.field "priorityCategories" <| Decode.array Category.idDecoder)
         |> Decode.andThen
             (\f ->
-                Decode.map2 f
+                Decode.map3 f
+                    (Decode.field "priorityCategories" <| Decode.array Category.idDecoder)
                     (Decode.field "priority" <| Decode.map String.fromInt Decode.int)
                     (Decode.field "isActive" Decode.bool)
             )
@@ -117,6 +120,7 @@ type alias ValidMethod =
     , rates : Array ValidShippingRate
     , priorityFee : Cents
     , priorityRate : Int
+    , priorityEnabled : Bool
     , categories : Array CategoryId
     , priorityExcludedCategories : Array CategoryId
     , priority : Int
@@ -134,6 +138,7 @@ validateMethod f =
             , rates = rates
             , priorityFee = pFee
             , priorityRate = pRate
+            , priorityEnabled = f.priorityEnabled
             , categories = f.categories
             , priorityExcludedCategories = f.priorityExcludedCategories
             , priority = priority
@@ -155,6 +160,7 @@ validMethodEncoder m =
         , ( "rates", Encode.array validRateEncoder m.rates )
         , ( "priorityFee", centsEncoder m.priorityFee )
         , ( "priorityRate", Encode.int m.priorityRate )
+        , ( "isPriorityEnabled", Encode.bool m.priorityEnabled )
         , ( "categories", Encode.array Category.idEncoder m.categories )
         , ( "priorityCategories", Encode.array Category.idEncoder m.priorityExcludedCategories )
         , ( "priority", Encode.int m.priority )
@@ -325,6 +331,7 @@ type MethodMsg
     | InputPriorityFee String
     | InputPriorityRate String
     | InputPriority String
+    | InputPriorityEnabled Bool
     | InputIsActive Bool
       -- Country Select
     | AddCountry
@@ -358,6 +365,9 @@ updateMethod msg model =
 
         InputPriority v ->
             { model | priority = v }
+
+        InputPriorityEnabled v ->
+            { model | priorityEnabled = v }
 
         InputIsActive v ->
             { model | isActive = v }
@@ -491,6 +501,7 @@ renderMethodForm categories countries errors_ index model =
     , rateForms
     , Form.inputRow errors model.priorityFee InputPriorityFee True "Priority Fee ($)" "priority-fee" "text" "off"
     , Form.inputRow errors model.priorityRate InputPriorityRate True "Priority Rate (%)" "priority-rate" "text" "off"
+    , Form.checkboxRow model.priorityEnabled InputPriorityEnabled "Is Priority Enabled" ("priority-enabled-1" ++ String.fromInt index)
     , categorySelects False
         SelectCategory
         AddCategory
@@ -499,7 +510,7 @@ renderMethodForm categories countries errors_ index model =
         categories
     , prioritySelects categories model errors
     , Form.inputRow errors model.priority InputPriority True "Priority" "priority" "text" "off"
-    , Form.checkboxRow model.isActive InputIsActive "Is Active" "is-active"
+    , Form.checkboxRow model.isActive InputIsActive "Is Active" ("is-active-" ++ String.fromInt index)
     ]
         |> List.map (Html.map (UpdateMethod index))
         |> (\html -> html ++ [ removeButton ])

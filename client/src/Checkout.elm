@@ -1231,6 +1231,11 @@ view model authStatus locations checkoutDetails =
             checkoutDetails.charges.shippingMethod
                 |> Maybe.andThen .priorityFee
 
+        priorityShipingEnabled =
+            checkoutDetails.charges.shippingMethod
+                |> Maybe.map .priorityEnabled
+                |> Maybe.withDefault False
+
         mobileCouponCodeForm =
             div [ class "col-12 d-sm-none" ]
                 [ h5 [] [ text "Coupon Code" ]
@@ -1315,8 +1320,7 @@ view model authStatus locations checkoutDetails =
                 ]
             , div [ class "row mb-3" ]
                 [ storeCreditForm
-
-                -- , priorityShippingForm
+                , viewIf priorityShipingEnabled priorityShippingForm
                 , mobileCouponCodeForm
                 ]
             , div [ class "mb-3" ]

@@ -1543,14 +1543,16 @@ cartChargesDecoder =
 type alias ShippingCharge =
     { charge : CartCharge
     , priorityFee : Maybe PriorityFee
+    , priorityEnabled : Bool
     }
 
 
 shippingChargeDecoder : Decoder ShippingCharge
 shippingChargeDecoder =
-    Decode.map2 ShippingCharge
+    Decode.map3 ShippingCharge
         (Decode.field "charge" cartChargeDecoder)
         (Decode.field "priorityFee" <| Decode.nullable priorityFeeDecoder)
+        (Decode.field "priorityEnabled" Decode.bool)
 
 
 type alias PriorityFee =

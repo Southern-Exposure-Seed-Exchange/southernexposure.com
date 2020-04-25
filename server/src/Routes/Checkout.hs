@@ -364,7 +364,7 @@ checkPriorityShippingAvailable :: MonadThrow m => Bool -> CartCharges -> m ()
 checkPriorityShippingAvailable hasPriority charges =
     when hasPriority $
         case ccShippingMethods charges of
-            ShippingCharge _ Nothing:_ ->
+            ShippingCharge _ Nothing _:_ ->
                 throwM PriorityShippingNotAvailable
             _ ->
                 return ()

@@ -55,6 +55,7 @@ data MethodData =
         , mdRates :: [RateData]
         , mdPriorityFee :: Cents
         , mdPriorityRate :: Natural
+        , mdPriorityEnabled :: Bool
         , mdCategories :: [CategoryId]
         , mdPriorityCategories :: [CategoryId]
         , mdPriority :: Natural
@@ -70,6 +71,7 @@ instance ToJSON MethodData where
             , "rates" .= mdRates
             , "priorityFee" .= mdPriorityFee
             , "priorityRate" .= mdPriorityRate
+            , "isPriorityEnabled" .= mdPriorityEnabled
             , "categories" .= mdCategories
             , "priorityCategories" .= mdPriorityCategories
             , "priority" .= mdPriority
@@ -84,6 +86,7 @@ instance FromJSON MethodData where
         mdRates <- v .: "rates"
         mdPriorityFee <- v .: "priorityFee"
         mdPriorityRate <- v .: "priorityRate"
+        mdPriorityEnabled <- v .: "isPriorityEnabled"
         mdCategories <- v .: "categories"
         mdPriorityCategories <- v .: "priorityCategories"
         mdPriority <- v .: "priority"
@@ -171,6 +174,7 @@ shippingDataRoute = flip withAdminCookie $ \_ -> do
             , mdRates = map makeRateData shippingMethodRates
             , mdPriorityFee = priorityFee
             , mdPriorityRate = priorityRate
+            , mdPriorityEnabled = shippingMethodIsPriorityEnabled
             , mdCategories = shippingMethodCategoryIds
             , mdPriorityCategories = shippingMethodExcludedPriorityCategoryIds
             , mdPriority = shippingMethodPriority
@@ -243,6 +247,7 @@ shippingUpdateRoute = validateAdminAndParameters $ \_ ShippingUpdateParameters {
             , shippingMethodCountries = mdCountries
             , shippingMethodRates = map makeRate mdRates
             , shippingMethodPriorityRate = PriorityShippingFee mdPriorityFee mdPriorityRate
+            , shippingMethodIsPriorityEnabled = mdPriorityEnabled
             , shippingMethodCategoryIds = mdCategories
             , shippingMethodExcludedPriorityCategoryIds = mdPriorityCategories
             , shippingMethodPriority = mdPriority

@@ -144,6 +144,7 @@ ShippingMethod
     excludedPriorityCategoryIds [CategoryId]
     isActive Bool
     priority Natural
+    isPriorityEnabled Bool default=True
 
 
 Coupon
