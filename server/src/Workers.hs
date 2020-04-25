@@ -82,6 +82,9 @@ data Task
     -- ^ Record a new Order in the SalesReports Cache
     | AddSalesReportDay
     -- ^ Add today to the SalesReports Cache if it does not exist
+    | RemoveSoldOutProducts OrderId
+    -- ^ Remove any products in the Order from Carts if they are now sold
+    -- out.
     deriving (Show, Generic, Eq)
 
 instance FromJSON Task
@@ -223,6 +226,8 @@ taskQueueConfig threadCount cfg@Config { getPool, getServerLogger, getCaches } =
             "Update Sales Reports Cache with Order #" <> showSqlKey orderId
         AddSalesReportDay ->
             "Add Sales Report Day"
+        RemoveSoldOutProducts orderId ->
+            "Remove Sold Out Products in Order #" <> showSqlKey orderId <> " From Carts"
 
     showSqlKey :: (ToBackendKey SqlBackend a) => Key a -> T.Text
     showSqlKey =
@@ -253,6 +258,8 @@ taskQueueConfig threadCount cfg@Config { getPool, getServerLogger, getCaches } =
                 runSql $ updateSalesCache getCaches orderId
             Success AddSalesReportDay ->
                 runSql $ addNewReportDate getCaches
+            Success (RemoveSoldOutProducts orderId) ->
+                runSql $ removeSoldOutVariants orderId
 
     -- Perform an Avalara-specific action.
     performAvalaraTask :: AvalaraTask -> IO ()
@@ -337,7 +344,6 @@ cleanDatabase = do
     deleteWhere [PasswordResetExpirationTime <. currentTime]
     deleteCascadeWhere [CartExpirationTime <. Just currentTime]
     deactivateCoupons currentTime
-    removeSoldOutVariants
     enqueueTask (Just $ addUTCTime 3600 currentTime) CleanDatabase
   where
     -- De-activate coupons whose expiration date has passed and coupons
@@ -352,11 +358,16 @@ cleanDatabase = do
             E.where_ $
                 (orderCount E.>=. c E.^. CouponTotalUses E.&&. c E.^. CouponTotalUses E.!=. E.val 0)
                 E.||.  E.val currentTime E.>. c E.^. CouponExpirationDate
-    removeSoldOutVariants :: SqlPersistT IO ()
-    removeSoldOutVariants = do
-        soldOut <- selectList [ProductVariantQuantity <=. 0] []
-        deleteWhere [CartItemProductVariantId <-. map entityKey soldOut]
 
+-- | Remove Cart Items for sold-out variants from the order.
+removeSoldOutVariants :: OrderId -> SqlPersistT IO ()
+removeSoldOutVariants orderId = do
+    soldOut <- E.select $ E.from $ \(op `E.InnerJoin` pv) -> do
+        E.on $ pv E.^. ProductVariantId E.==. op E.^. OrderProductProductVariantId
+        E.where_ $ pv E.^. ProductVariantQuantity E.<=. E.val 0
+            E.&&. op E.^. OrderProductOrderId E.==. E.val orderId
+        return pv
+    deleteWhere [CartItemProductVariantId <-. map entityKey soldOut]
 
 -- | Add the given Order's total to the Daily & Monthly sales caches.
 --

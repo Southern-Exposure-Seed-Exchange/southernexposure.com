@@ -562,9 +562,7 @@ customerPlaceOrderRoute = validateCookieAndParameters $ \ce@(Entity customerId c
         deleteCart cartId
         reduceQuantities orderId
         return orderId
-    runDB $ do
-        enqueueTask Nothing $ SendEmail $ Emails.OrderPlaced orderId
-        enqueueTask Nothing $ UpdateSalesCache orderId
+    runDB $ enqueuePostOrderTasks orderId
     (orderLines, products) <- runDB $ (,)
         <$> selectList [OrderLineItemOrderId ==. orderId] []
         <*> getCheckoutProducts orderId
@@ -781,9 +779,7 @@ anonymousPlaceOrderRoute = validate >=> \parameters -> do
                 , apodAuthorizationData = toAuthorizationData $ Entity customerId customer
                 }
             )
-    runDB $ do
-        enqueueTask Nothing $ SendEmail $ Emails.OrderPlaced orderId
-        enqueueTask Nothing $ UpdateSalesCache orderId
+    runDB $ enqueuePostOrderTasks orderId
     addSessionCookie temporarySession (AuthToken authToken) orderData
 
 
@@ -1189,6 +1185,16 @@ reduceQuantities orderId =
         update (orderProductProductVariantId p)
             [ProductVariantQuantity -=. fromIntegral (orderProductQuantity p)]
     )
+
+
+-- | Enqueue the asynchronous tasks to perform after a new Order is placed.
+enqueuePostOrderTasks :: OrderId -> AppSQL ()
+enqueuePostOrderTasks orderId =
+    mapM_ (enqueueTask Nothing)
+        [ SendEmail $ Emails.OrderPlaced orderId
+        , UpdateSalesCache orderId
+        , RemoveSoldOutProducts orderId
+        ]
 
 
 -- LOGIN
