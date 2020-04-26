@@ -487,7 +487,7 @@ update msg model authStatus maybeSessionToken checkoutDetails =
             { model | isProcessing = False } |> nothingAndNoCommand
 
         RefreshDetails (RemoteData.Success (Ok details)) ->
-            ( model
+            ( { model | errors = Api.initialErrors }
             , Just (DetailsRefreshed details)
             , Cmd.none
             )

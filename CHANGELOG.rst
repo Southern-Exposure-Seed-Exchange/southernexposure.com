@@ -5,6 +5,8 @@ CHANGELOG
 v1.03.15
 =========
 
+* Fix a bug preventing addressed errors from disappearing from the Checkout
+  page.
 * Show the Order time in the Recent Orders table of the Admin Dashboard.
 * Remove newly sold-out Products from Carts when each Order is placed instead
   of on an hourly basis.
