@@ -5,6 +5,10 @@ CHANGELOG
 v1.03.15
 =========
 
+* Add a new "Cannot Ship To" field to the Add/Edit Product pages. This is an
+  optional list of US States/Territories that allows admins to prevent
+  Customers from ordering the Product if their shipping address lies in one of
+  the given states.
 * Fix a bug preventing addressed errors from disappearing from the Checkout
   page.
 * Show the Order time in the Recent Orders table of the Admin Dashboard.

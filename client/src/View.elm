@@ -236,11 +236,13 @@ view ({ route, pageData, navigationData, zone } as model) =
                         |> List.map (Html.map ProductListMsg)
 
                 Admin ProductNew ->
-                    withIntermediateText (ProductAdmin.new model.newProductForm) pageData.adminSharedProduct
+                    RemoteData.map2 Tuple.pair pageData.adminSharedProduct pageData.locations
+                        |> withIntermediateText (apply <| ProductAdmin.new model.newProductForm)
                         |> List.map (Html.map NewProductMsg)
 
                 Admin (ProductEdit _) ->
-                    withIntermediateText (ProductAdmin.editForm model.editProductForm) pageData.adminSharedProduct
+                    RemoteData.map2 Tuple.pair pageData.adminSharedProduct pageData.locations
+                        |> withIntermediateText (apply <| ProductAdmin.editForm model.editProductForm)
                         |> List.map (Html.map EditProductMsg)
 
                 Admin CouponList ->

@@ -354,17 +354,15 @@ fetchDataForRoute ({ route, pageData, key } as model) =
                     )
 
                 Admin ProductNew ->
-                    ( { pageData | adminSharedProduct = RemoteData.Loading }
-                    , getAdminSharedProductData
-                    )
+                    { pageData | adminSharedProduct = RemoteData.Loading }
+                        |> fetchLocationsOnce
+                        |> batchCommand getAdminSharedProductData
 
                 Admin (ProductEdit productId) ->
-                    ( { pageData | adminSharedProduct = RemoteData.Loading }
-                    , Cmd.batch
-                        [ getAdminSharedProductData
-                        , getAdminEditProductData productId
-                        ]
-                    )
+                    { pageData | adminSharedProduct = RemoteData.Loading }
+                        |> fetchLocationsOnce
+                        |> batchCommand getAdminSharedProductData
+                        |> batchCommand (getAdminEditProductData productId)
 
                 Admin CouponList ->
                     ( { pageData | adminCouponList = RemoteData.Loading }

@@ -44,6 +44,7 @@ Product
     createdAt UTCTime
     updatedAt UTCTime
     keywords T.Text default=''
+    shippingRestrictions [Region] default='[]'
     UniqueProductSlug slug
     UniqueBaseSku baseSku
     deriving Show

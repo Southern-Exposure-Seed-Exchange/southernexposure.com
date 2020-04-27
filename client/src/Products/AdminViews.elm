@@ -29,6 +29,7 @@ import Html.Events exposing (on, onCheck, onClick, onInput, onSubmit, targetValu
 import Json.Decode as Decode exposing (Decoder)
 import Json.Decode.Pipeline as Decode
 import Json.Encode as Encode exposing (Value)
+import Locations exposing (AddressLocations, Region(..), regionDecoder, regionEncoder)
 import Models.Fields exposing (Cents(..), LotSize(..), centsDecoder, centsEncoder, centsToString, lotSizeDecoder, lotSizeEncoder, milligramsToGrams, milligramsToString)
 import Models.Utils exposing (slugify)
 import PageData
@@ -202,9 +203,9 @@ updateNewForm key msg model =
                     noCommand { model | isSaving = False }
 
 
-new : NewForm -> PageData.AdminSharedProductData -> List (Html NewMsg)
-new model data =
-    [ formView "Add Product" NewSubmit NewFormMsg model data
+new : NewForm -> PageData.AdminSharedProductData -> AddressLocations -> List (Html NewMsg)
+new model data locations =
+    [ formView "Add Product" NewSubmit NewFormMsg model data locations
     ]
 
 
@@ -302,11 +303,11 @@ updateEditForm key msg model =
             noCommand model
 
 
-editForm : EditForm -> PageData.AdminSharedProductData -> List (Html EditMsg)
-editForm model productData =
+editForm : EditForm -> PageData.AdminSharedProductData -> AddressLocations -> List (Html EditMsg)
+editForm model productData locations =
     case model.productData of
         RemoteData.Success productForm ->
-            [ formView "Update Product" EditSubmit EditFormMsg productForm productData
+            [ formView "Update Product" EditSubmit EditFormMsg productForm productData locations
             ]
 
         RemoteData.Failure error ->
@@ -339,6 +340,7 @@ type alias Form =
     , isSmallGrower : Bool
     , isRegional : Bool
     , keywords : String
+    , shippingRestrictions : Array Region
     , errors : Api.FormErrors
     , isSaving : Bool
 
@@ -362,6 +364,7 @@ initialForm =
     , isSmallGrower = False
     , isRegional = False
     , keywords = ""
+    , shippingRestrictions = Array.empty
     , errors = Api.initialErrors
     , isSaving = False
     , imageUrl = ""
@@ -395,6 +398,7 @@ encodeForm model validVariants maybeProductId =
         , ( "imageName", Encode.string model.imageName )
         , ( "imageData", Encode.string model.imageData )
         , ( "keywords", Encode.string model.keywords )
+        , ( "shippingRestrictions", Encode.array regionEncoder model.shippingRestrictions )
         , ( "seedAttributes", encodedSeedAttribues )
         , ( "variants", Encode.list variantEncoder validVariants )
         , ( "id", Maybe.withDefault Encode.null <| Maybe.map Product.idEncoder maybeProductId )
@@ -424,6 +428,7 @@ formDecoder =
         |> fromAttribute "smallGrower"
         |> fromAttribute "regional"
         |> Decode.required "keywords" Decode.string
+        |> Decode.required "shippingRestrictions" (Decode.array regionDecoder)
         |> Decode.hardcoded Api.initialErrors
         |> Decode.hardcoded False
         |> Decode.required "imageUrl" Decode.string
@@ -527,9 +532,15 @@ type FormMsg
     | ToggleSmallGrower Bool
     | ToggleRegional Bool
     | InputKeywords String
+      -- Shipping Restrictions
+    | AddState
+    | SelectState Int Region
+    | RemoveState Int
+      -- Images
     | SelectImage
     | ImageUploaded File
     | ImageEncoded String
+      -- Variant Forms
     | UpdateVariant Int VariantMsg
     | AddVariant
     | RemoveVariant Int
@@ -585,6 +596,21 @@ updateForm msg model =
 
         InputKeywords val ->
             noCommand { model | keywords = val }
+
+        AddState ->
+            { model | shippingRestrictions = Array.push (USState "AL") model.shippingRestrictions }
+                |> noCommand
+
+        SelectState index val ->
+            { model
+                | shippingRestrictions =
+                    updateArray index (always val) model.shippingRestrictions
+            }
+                |> noCommand
+
+        RemoveState index ->
+            { model | shippingRestrictions = removeIndex index model.shippingRestrictions }
+                |> noCommand
 
         SelectImage ->
             ( model, selectImageFile ImageUploaded )
@@ -732,8 +758,8 @@ validateVariant ({ lotSizeAmount } as variant) =
 
 {-| Render the form for updating/creating Products.
 -}
-formView : String -> msg -> (FormMsg -> msg) -> Form -> PageData.AdminSharedProductData -> Html msg
-formView buttonText submitMsg msgWrapper model { categories } =
+formView : String -> msg -> (FormMsg -> msg) -> Form -> PageData.AdminSharedProductData -> AddressLocations -> Html msg
+formView buttonText submitMsg msgWrapper model { categories } locations =
     let
         inputRow s =
             Form.inputRow model.errors (s model)
@@ -764,6 +790,7 @@ formView buttonText submitMsg msgWrapper model { categories } =
             , inputRow .baseSku InputBaseSku True "Base SKU" "baseSku" "text" "off"
             , Form.textareaRow model.errors model.description InputDescription False "Description" "description" 10
             , inputRow .keywords InputKeywords False "Search Keywords" "keywords" "text" "off"
+            , shippingRestrictedSelects model.errors locations model.shippingRestrictions
             , Form.checkboxRow model.isOrganic ToggleOrganic "Is Organic" "isOrganic"
             , Form.checkboxRow model.isHeirloom ToggleHeirloom "Is Heirloom" "isHeirloom"
             , Form.checkboxRow model.isSmallGrower ToggleSmallGrower "Is Small Grower" "isSmallGrower"
@@ -785,6 +812,58 @@ formView buttonText submitMsg msgWrapper model { categories } =
                     [ text "Add Variant" ]
                 ]
             ]
+
+
+shippingRestrictedSelects : Api.FormErrors -> AddressLocations -> Array Region -> Html FormMsg
+shippingRestrictedSelects errors locations selectedRegions =
+    let
+        toValue r =
+            case r of
+                USState c ->
+                    "u:" ++ c
+
+                ArmedForces c ->
+                    "a:" ++ c
+
+                CAProvince c ->
+                    "c:" ++ c
+
+                Custom str ->
+                    str
+
+        fromValue str =
+            case String.split ":" str of
+                [ "u", c ] ->
+                    Ok <| USState c
+
+                [ "a", c ] ->
+                    Ok <| ArmedForces c
+
+                _ ->
+                    Err <| "Expected a USState or ArmedForces: " ++ str
+
+        items =
+            List.map (toItem USState) locations.states
+                ++ List.map (toItem ArmedForces) locations.armedForces
+
+        toItem region { code, name } =
+            { name = name, value = region code }
+    in
+    { isRequired = False
+    , selectMsg = SelectState
+    , addMsg = AddState
+    , removeMsg = RemoveState
+    , errors = errors
+    , selected = selectedRegions
+    , items = items
+    , toValue = toValue
+    , fromValue = fromValue
+    , blankOption = Admin.MultiSelectItem "Select a State" (USState "")
+    , prefix = "shipping-restrictions"
+    , label = "Cannot Ship To"
+    , addLabel = "State"
+    }
+        |> Admin.multiSelect
 
 
 {-| Render the sub-form for ProductVariants.

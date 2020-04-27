@@ -12,13 +12,13 @@ module Routes.Checkout
 import Control.Applicative ((<|>))
 import Control.Arrow (first)
 import Control.Exception.Safe (MonadThrow, MonadCatch, Exception, throwM, try, handle)
-import Control.Monad ((>=>), when, unless, void)
+import Control.Monad ((>=>), when, unless, void, forM_)
 import Control.Monad.Reader (asks, lift, liftIO)
 import Data.Aeson ((.:), (.:?), (.=), FromJSON(..), ToJSON(..), Value(Object), withObject, object)
 import Data.Foldable (asum)
 import Data.Int (Int64)
 import Data.List (partition, find)
-import Data.Maybe (listToMaybe, isJust, isNothing, fromMaybe)
+import Data.Maybe (listToMaybe, isJust, isNothing, fromMaybe, mapMaybe)
 import Data.Monoid ((<>))
 import Data.Time.Clock (getCurrentTime, UTCTime)
 import Data.Typeable (Typeable)
@@ -47,7 +47,7 @@ import Routes.CommonData
     , fromAddressData, ShippingCharge(..), VariantData(..), getVariantPrice
     , OrderDetails(..), toCheckoutOrder, getCheckoutProducts, CheckoutProduct
     , LoginParameters(..), validatePassword, handlePasswordValidationError
-    , PasswordValidationError(..)
+    , PasswordValidationError(..), BaseProductData(..)
     )
 import Routes.AvalaraUtils (createAvalaraTransaction, createAvalaraCustomer)
 import Routes.Utils (hashPassword, generateUniqueToken, getDisabledCheckoutDetails)
@@ -119,7 +119,7 @@ handleCouponErrors = V.singleFieldError "coupon" . \case
             <> " is required to use this coupon."
 
 -- PRIORITY SHIPPING/HANDLING ERRORS
---
+
 data PrioritySHError
     = PriorityShippingNotAvailable
     deriving (Show, Typeable)
@@ -132,6 +132,25 @@ handlePriorityShippingErrors = V.singleFieldError "priority-shipping" . \case
         "Sorry, priority shipping & handling is not available with the items "
             <> "currently in your cart."
 
+-- SHIPPING RESTRICTION ERROR
+
+data ShippingRestrictionError
+    = CannotShipTo Region [BaseProductData]
+    deriving (Show, Typeable)
+
+instance Exception ShippingRestrictionError
+
+handleShippingRestrictionError :: ShippingRestrictionError -> App a
+handleShippingRestrictionError = V.singleError . \case
+    CannotShipTo region products ->
+        let names = T.intercalate ", " $ map bpdName products
+        in
+            "Sorry we can not ship the following products to "
+            <> regionName region
+            <> ": "
+            <> names
+            <> "."
+
 
 -- CART/ADDRESS DETAILS
 
@@ -139,6 +158,7 @@ handlePriorityShippingErrors = V.singleFieldError "priority-shipping" . \case
 data CheckoutDetailsError
     = DetailsPriorityError PrioritySHError
     | DetailsCouponError CouponError
+    | DetailsCannotShip ShippingRestrictionError
     deriving (Show, Typeable)
 
 instance Exception CheckoutDetailsError
@@ -150,6 +170,8 @@ withCheckoutDetailsErrors =
             handlePriorityShippingErrors priorityError
         DetailsCouponError couponError ->
             handleCouponErrors couponError
+        DetailsCannotShip shipError ->
+            handleShippingRestrictionError shipError
 
 
 
@@ -337,12 +359,29 @@ getCoupon currentTime maybeCustomerId couponCode = do
 -- & priority shipping availability. Throws 'CheckoutDetailsError'.
 detailsCharges :: Maybe AddressData -> [CartItemData] -> Maybe (Entity Coupon) -> Bool -> AppSQL CartCharges
 detailsCharges maybeShipping items maybeCoupon priorityShipping = do
+    mapException DetailsCannotShip
+        $ checkProductRestrictions maybeShipping items
     charges <- getCharges maybeShipping items maybeCoupon priorityShipping True
     mapException DetailsCouponError
         $ checkCouponMeetsMinimum maybeCoupon charges
     mapException DetailsPriorityError
         $ checkPriorityShippingAvailable priorityShipping charges
     return charges
+
+-- | Ensure that all of the Products are allowed to be shipped to the state.
+--
+-- Throws a ShippingRestrictionError when some products are not allowed to
+-- be shipped to the given shipping address.
+checkProductRestrictions :: MonadThrow m => Maybe AddressData -> [CartItemData] -> m ()
+checkProductRestrictions maybeShipping items =
+    forM_ maybeShipping $ \shipping -> do
+        let restrictedProducts = flip mapMaybe items $ \CartItemData { cidProduct } ->
+                if adState shipping `elem` bpdShippingRestrictions cidProduct then
+                    Just cidProduct
+                else
+                    Nothing
+        unless (null restrictedProducts) $
+            throwM $ CannotShipTo (adState shipping) restrictedProducts
 
 -- | Ensure the product total equals or exceeds the Coupon
 -- minimum by seeing if it was removed from the CartCharges. If
@@ -384,6 +423,7 @@ data PlaceOrderError
     | CardChargeError
     | PlaceOrderCouponError CouponError
     | AvalaraNoTransactionCode
+    | PlaceOrderCannotShip ShippingRestrictionError
     deriving (Show, Typeable)
 
 instance Exception PlaceOrderError
@@ -431,6 +471,8 @@ withPlaceOrderErrors shippingAddress =
             V.singleError
                 $ "An error occured while calculating the sales tax due. Please try again or "
                 <> "contact us for help. (Error ANTC: No Transction Code Returned)"
+        PlaceOrderCannotShip shippingError ->
+            handleShippingRestrictionError shippingError
 
 
 
@@ -1115,10 +1157,12 @@ createLineItems
     -- ^ Coupon Code
     -> AppSQL (Integer, Maybe CouponId)
 createLineItems currentTime customerId shippingAddress items orderId priorityShipping maybeCouponCode = do
+    let shippingData = Just $ toAddressData shippingAddress
+    mapException PlaceOrderCannotShip
+        $ checkProductRestrictions shippingData items
     maybeCoupon <- mapException PlaceOrderCouponError $ sequence
         $ getCoupon currentTime (Just customerId) <$> maybeCouponCode
-    charges <- getCharges (Just $ toAddressData shippingAddress) items
-        maybeCoupon priorityShipping False
+    charges <- getCharges shippingData items maybeCoupon priorityShipping False
     mapException PlaceOrderCouponError $ checkCouponMeetsMinimum maybeCoupon charges
     shippingCharge <-
         case ccShippingMethods charges of

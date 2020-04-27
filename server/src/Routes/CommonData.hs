@@ -7,7 +7,7 @@
 module Routes.CommonData
     ( ProductData
     , getProductData
-    , BaseProductData
+    , BaseProductData(bpdName, bpdShippingRestrictions)
     , makeBaseProductData
     , VariantData(vdId, vdProductId)
     , makeVariantData
@@ -116,6 +116,7 @@ data BaseProductData =
         , bpdLongDescription :: T.Text
         , bpdImage :: ImageSourceSet
         , bpdCategories :: [CategoryId]
+        , bpdShippingRestrictions :: [Region]
         } deriving (Show)
 
 instance ToJSON BaseProductData where
@@ -127,6 +128,7 @@ instance ToJSON BaseProductData where
             , "baseSku" .= bpdBaseSku
             , "longDescription" .= bpdLongDescription
             , "image" .= bpdImage
+            , "shippingRestrictions" .= bpdShippingRestrictions
             ]
 
 makeBaseProductData :: (MonadReader Config m, MonadIO m) => Entity Product -> [Entity ProductToCategory] -> m BaseProductData
@@ -142,6 +144,7 @@ makeBaseProductData (Entity pId Product {..}) categories = do
         , bpdCategories =
             productMainCategory
                 : map (productToCategoryCategoryId . entityVal) categories
+        , bpdShippingRestrictions = productShippingRestrictions
         }
 
 

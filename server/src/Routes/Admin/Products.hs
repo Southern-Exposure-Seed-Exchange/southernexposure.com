@@ -28,7 +28,7 @@ import Models
     , SeedAttribute(..), Category(..), CategoryId, Unique(..), slugify
     , ProductToCategory(..)
     )
-import Models.Fields (LotSize, Cents)
+import Models.Fields (LotSize, Cents, Region)
 import Routes.CommonData
     ( AdminCategorySelect, makeAdminCategorySelects, validateCategorySelect
     , getAdditionalCategories
@@ -161,6 +161,7 @@ data ProductParameters =
         -- ^ Base64 Encoded
         , ppImageName :: T.Text
         , ppKeywords :: T.Text
+        , ppShippingRestrictions :: [Region]
         , ppVariantData :: [VariantData]
         , ppSeedAttribute :: Maybe SeedData
         } deriving (Show)
@@ -177,6 +178,7 @@ instance FromJSON ProductParameters where
         ppKeywords <- fromMaybe "" <$> (v .:? "keywords")
         ppVariantData <- v .: "variants"
         ppSeedAttribute <- v .: "seedAttributes"
+        ppShippingRestrictions <- v .: "shippingRestrictions"
         return ProductParameters {..}
 
 instance Validation ProductParameters where
@@ -300,6 +302,7 @@ newProductRoute = validateAdminAndParameters $ \_ p@ProductParameters {..} -> do
                     , productLongDescription = sanitize ppLongDescription
                     , productImageUrl = imageUrl
                     , productKeywords = ppKeywords
+                    , productShippingRestrictions = L.nub ppShippingRestrictions
                     , productCreatedAt = time
                     , productUpdatedAt = time
                     }
@@ -327,6 +330,7 @@ data EditProductData =
         , epdLongDescription :: T.Text
         , epdImageUrl :: T.Text
         , epdKeywords :: T.Text
+        , epdShippingRestrictions :: [Region]
         , epdVariantData :: [VariantData]
         , epdSeedAttribute :: Maybe SeedData
         } deriving (Show)
@@ -342,6 +346,7 @@ instance ToJSON EditProductData where
             , "longDescription" .= epdLongDescription
             , "imageUrl" .= epdImageUrl
             , "keywords" .= epdKeywords
+            , "shippingRestrictions" .= epdShippingRestrictions
             , "variants" .= epdVariantData
             , "seedAttributes" .= epdSeedAttribute
             ]
@@ -368,6 +373,7 @@ editProductDataRoute t productId = withAdminCookie t $ \_ ->
                 , epdLongDescription = productLongDescription
                 , epdImageUrl = productImageUrl
                 , epdKeywords = productKeywords
+                , epdShippingRestrictions = productShippingRestrictions
                 , epdVariantData = variants
                 , epdSeedAttribute = seedAttr
                 }
@@ -454,6 +460,7 @@ editProductRoute = validateAdminAndParameters $ \_ EditProductParameters {..} ->
             , ProductBaseSku =. ppBaseSku
             , ProductLongDescription =. sanitize ppLongDescription
             , ProductKeywords =. ppKeywords
+            , ProductShippingRestrictions =. L.nub ppShippingRestrictions
             , ProductUpdatedAt =. time
             ] ++ imageUpdate
         deleteWhere [ProductToCategoryProductId ==. eppId]
