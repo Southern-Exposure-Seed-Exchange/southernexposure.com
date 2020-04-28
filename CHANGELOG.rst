@@ -2,6 +2,13 @@
 CHANGELOG
 =========
 
+v1.04.01
+=========
+
+* Fix a bug causing incorrect rendering of the Order time on the Admin
+  Dashboard.
+
+
 v1.04.00
 =========
 
