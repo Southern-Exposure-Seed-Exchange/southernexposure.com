@@ -14,9 +14,10 @@ module Views.CustomerAdmin exposing
 import Address
 import Api
 import Dict
-import Html exposing (Html, a, div, form, h2, hr, table, tbody, td, text, th, thead, tr)
-import Html.Attributes exposing (class, href, target)
-import Html.Events exposing (onSubmit)
+import Html exposing (Html, a, button, div, form, h2, hr, table, tbody, td, text, th, thead, tr)
+import Html.Attributes exposing (class, href, target, type_)
+import Html.Events exposing (onClick, onSubmit)
+import Html.Extra exposing (viewIf)
 import Json.Decode as Decode
 import Json.Encode as Encode
 import Locations exposing (AddressLocations)
@@ -125,6 +126,7 @@ type alias EditForm =
     , password : String
     , passwordConfirm : String
     , isSaving : Bool
+    , showDeleteConfirm : Bool
     , errors : Api.FormErrors
     }
 
@@ -137,6 +139,7 @@ initialEditForm =
     , password = ""
     , passwordConfirm = ""
     , isSaving = False
+    , showDeleteConfirm = False
     , errors = Api.initialErrors
     }
 
@@ -149,6 +152,9 @@ type EditMsg
     | InputPasswordConfirm String
     | Submit
     | SubmitResponse (WebData (Result Api.FormErrors Int))
+    | Delete
+    | DeleteConfirmed
+    | DeleteResponse (WebData ())
 
 
 updateEditForm : Routing.Key -> WebData PageData.AdminEditCustomerData -> EditMsg -> EditForm -> ( EditForm, Cmd EditMsg )
@@ -258,6 +264,36 @@ updateEditForm key original msg model =
                 _ ->
                     noCommand model
 
+        Delete ->
+            noCommand { model | showDeleteConfirm = True }
+
+        DeleteConfirmed ->
+            case RemoteData.toMaybe original |> Maybe.map .id of
+                Just customerId ->
+                    ( { model | isSaving = True }
+                    , Api.delete (Api.AdminDeleteCustomer customerId)
+                        |> Api.withJsonResponse (Decode.succeed ())
+                        |> Api.sendRequest DeleteResponse
+                    )
+
+                Nothing ->
+                    noCommand model
+
+        DeleteResponse response ->
+            case response of
+                RemoteData.Success () ->
+                    ( initialEditForm
+                    , Routing.newUrl key <| Admin <| CustomerList { page = 1, perPage = 50, query = "" }
+                    )
+
+                RemoteData.Failure error ->
+                    ( { model | errors = Api.apiFailureToError error, isSaving = False }
+                    , Cmd.none
+                    )
+
+                _ ->
+                    noCommand { model | isSaving = False }
+
 
 edit : Zone -> EditForm -> AddressLocations -> PageData.AdminEditCustomerData -> List (Html EditMsg)
 edit zone model locations original =
@@ -277,6 +313,31 @@ edit zone model locations original =
                 , td [] [ text <| Format.cents order.total ]
                 , td [] [ a (routeLinkAttributes <| Admin <| AdminOrderDetails order.id) [ text "View Order" ] ]
                 ]
+
+        deleteEvent =
+            if model.showDeleteConfirm then
+                DeleteConfirmed
+
+            else
+                Delete
+
+        deleteButton =
+            viewIf (original.email /= "gardens+deleted@southernexposure.com") <|
+                button [ type_ "button", onClick deleteEvent, class "btn btn-danger" ]
+                    [ text <|
+                        if model.showDeleteConfirm then
+                            "Yes, Delete the Customer"
+
+                        else
+                            "Delete Customer"
+                    ]
+
+        deleteWarningText =
+            viewIf model.showDeleteConfirm <|
+                div [ class "text-danger text-right" ]
+                    [ text "Are you sure? This will completely move all the Customer's orders to the "
+                    , text "\"gardens+deleted@southernexposure.com\" account and then erase the Customer!"
+                    ]
     in
     [ div [ class "text-right mb-4" ]
         [ htmlOrBlank
@@ -318,8 +379,11 @@ edit zone model locations original =
             InputIsAdmin
             "Is Administrator"
             "IsAdmin"
-        , div [ class "form-group" ]
-            [ Admin.submitOrSavingButton model "Update Customer" ]
+        , deleteWarningText
+        , div [ class "form-group d-flex justify-content-between" ]
+            [ Admin.submitOrSavingButton model "Update Customer"
+            , deleteButton
+            ]
         ]
     , hr [] []
     , h2 [] [ text "Order History" ]

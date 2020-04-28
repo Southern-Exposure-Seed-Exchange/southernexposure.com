@@ -8,24 +8,26 @@ module Routes.Admin.Customers
     , customerRoutes
     ) where
 
-import Control.Monad (unless, forM)
+import Control.Monad (unless, forM, forM_)
+import Control.Monad.IO.Class (MonadIO, liftIO)
 import Data.Aeson ((.=), (.:), ToJSON(..), FromJSON(..), object, withObject)
 import Data.Maybe (fromMaybe, catMaybes)
 import Data.Monoid ((<>))
 import Database.Persist
     ( (=.), (==.), Entity(..), Filter, Update, count, selectFirst, get, update
-    , selectList
+    , selectList, getBy, insert, updateWhere, deleteCascade
     )
 import Data.Time (UTCTime)
+import Data.Text.Encoding (encodeUtf8, decodeUtf8)
 import Servant
     ( (:<|>)(..), (:>), AuthProtect, QueryParam, Capture, ReqBody, Get, Patch
-    , JSON, err404
+    , Delete, JSON, err404
     )
 
 import Auth (Cookied, WrappedAuthToken, withAdminCookie, validateAdminAndParameters)
 import Models
     ( CustomerId, Customer(..), Address(..), EntityField(..), Unique(..)
-    , Order(..), OrderId, getOrderTotal
+    , Order(..), OrderId, getOrderTotal, AddressId
     )
 import Models.Fields (Cents, StripeCustomerId, OrderStatus, AvalaraCustomerCode)
 import Routes.CommonData (AddressData, toAddressData)
@@ -33,7 +35,10 @@ import Routes.Utils (extractRowCount, buildWhereQuery, hashPassword, generateUni
 import Server (App, AppSQL, runDB, serverError)
 import Validation (Validation(..))
 
+import qualified Crypto.BCrypt as BCrypt
 import qualified Data.Text as T
+import qualified Data.UUID as UUID
+import qualified Data.UUID.V4 as UUID4
 import qualified Database.Esqueleto as E
 import qualified Validation as V
 
@@ -42,17 +47,20 @@ type CustomerAPI =
          "list" :> CustomerListRoute
     :<|> "edit" :> CustomerEditDataRoute
     :<|> "edit" :> CustomerEditRoute
+    :<|> "delete" :> CustomerDeleteRoute
 
 type CustomerRoutes =
          (WrappedAuthToken -> Maybe Int -> Maybe Int -> Maybe T.Text -> App (Cookied CustomerListData))
     :<|> (WrappedAuthToken -> CustomerId -> App (Cookied CustomerEditData))
     :<|> (WrappedAuthToken -> CustomerEditParameters -> App (Cookied CustomerId))
+    :<|> (WrappedAuthToken -> CustomerId -> App (Cookied ()))
 
 customerRoutes :: CustomerRoutes
 customerRoutes =
          customerListRoute
     :<|> customerEditDataRoute
     :<|> customerEditRoute
+    :<|> customerDeleteRoute
 
 
 -- LIST
@@ -346,4 +354,65 @@ customerEditRoute = validateAdminAndParameters $ \_ parameters -> do
             [ mapUpdate CustomerEmail cepEmail
             , mapUpdate CustomerStoreCredit cepStoreCredit
             , mapUpdate CustomerIsAdmin cepIsAdmin
+            ]
+
+
+-- DELETE
+
+
+type CustomerDeleteRoute =
+       AuthProtect "cookie-auth"
+    :> Capture "customer" CustomerId
+    :> Delete '[JSON] (Cookied ())
+
+-- | Delete a customer by moving their Orders & related
+-- anonymized-addresses to the `southernexposure+deleted@gmail.com`
+-- account, then delete the customer's account & all remaining related
+-- models.
+customerDeleteRoute :: WrappedAuthToken -> CustomerId -> App (Cookied ())
+customerDeleteRoute t customerId = withAdminCookie t $ \_ -> runDB $ do
+    newCustomerId <- getBy (UniqueEmail "southernexposure+deleted@gmail.com") >>= \case
+        Nothing -> do
+            hashedPassword <- generateRandomPassword
+            token <- generateUniqueToken UniqueToken
+            insert Customer
+                { customerEmail = "gardens+deleted@southernexposure.com"
+                , customerStoreCredit = 0
+                , customerMemberNumber = ""
+                , customerEncryptedPassword = hashedPassword
+                , customerAuthToken = token
+                , customerStripeId = Nothing
+                , customerAvalaraCode = Nothing
+                , customerIsAdmin = False
+                }
+        Just (Entity cId _) ->
+            return cId
+    unless (newCustomerId == customerId) $ do
+        orders <- selectList [OrderCustomerId ==. customerId] []
+        forM_ orders $ \(Entity oId order) -> do
+            update oId [OrderCustomerId =. newCustomerId]
+            moveAddress newCustomerId (orderShippingAddressId order)
+            mapM_ (moveAddress newCustomerId) $ orderBillingAddressId order
+        updateWhere [ReviewCustomerId ==. customerId] [ReviewCustomerId =. newCustomerId]
+        deleteCascade customerId
+  where
+    generateRandomPassword :: MonadIO m => m T.Text
+    generateRandomPassword = liftIO $ do
+        password <- UUID.toText <$> UUID4.nextRandom
+        mHashed <- BCrypt.hashPasswordUsingPolicy BCrypt.slowerBcryptHashingPolicy
+            $ encodeUtf8 password
+        case mHashed of
+            Just hashed ->
+                return $ decodeUtf8 hashed
+            Nothing ->
+                return password
+    moveAddress :: CustomerId -> AddressId -> AppSQL ()
+    moveAddress newCustomerId addressId =
+        update addressId
+            [ AddressFirstName =. "DELETED"
+            , AddressLastName =. "DELETED"
+            , AddressAddressOne =. "DELETED"
+            , AddressAddressTwo =. "DELETED"
+            , AddressCustomerId =. newCustomerId
+            , AddressIsDefault =. False
             ]
