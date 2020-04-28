@@ -448,10 +448,11 @@ shippingRestrictionsBlock { shippingRestrictions } locations =
             String.join ", " <|
                 List.filterMap (regionName locations) shippingRestrictions
     in
-    div [ class "small text-danger" ]
-        [ text "Cannot ship to: "
-        , text regionText
-        ]
+    viewIf (not <| List.isEmpty shippingRestrictions) <|
+        div [ class "small text-danger" ]
+            [ text "Cannot ship to: "
+            , text regionText
+            ]
 
 
 

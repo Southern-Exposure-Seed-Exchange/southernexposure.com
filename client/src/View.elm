@@ -98,9 +98,8 @@ view ({ route, pageData, navigationData, zone } as model) =
         pageContent =
             case route of
                 ProductDetails _ ->
-                    withIntermediateText
-                        (ProductViews.details model.addToCartForms)
-                        pageData.productDetails
+                    RemoteData.map2 Tuple.pair pageData.productDetails pageData.locations
+                        |> withIntermediateText (apply <| ProductViews.details model.addToCartForms)
 
                 CategoryDetails _ pagination ->
                     if Paginate.getResponseData pageData.categoryDetails == Nothing then

@@ -169,9 +169,9 @@ fetchDataForRoute ({ route, pageData, key } as model) =
         ( data, cmd ) =
             case route of
                 ProductDetails slug ->
-                    ( { pageData | productDetails = RemoteData.Loading }
-                    , getProductDetailsData slug
-                    )
+                    { pageData | productDetails = RemoteData.Loading }
+                        |> fetchLocationsOnce
+                        |> batchCommand (getProductDetailsData slug)
 
                 CategoryDetails slug pagination ->
                     updateCategoryDetails slug pagination pageData.categoryDetails

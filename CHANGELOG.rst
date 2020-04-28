@@ -5,7 +5,7 @@ CHANGELOG
 v1.03.15
 =========
 
-* Show Product shipping restrictions on the Cart page.
+* Show Product shipping restrictions on the Cart & Product Details pages.
 * Fix spacing around general error messages on the Checkout page.
 * Add a new "Cannot Ship To" field to the Add/Edit Product pages. This is an
   optional list of US States/Territories that allows admins to prevent
