@@ -2,7 +2,7 @@
 CHANGELOG
 =========
 
-v1.03.15
+v1.04.00
 =========
 
 * Add the ability to delete a Customer from the Edit Customer admin page. This
