@@ -176,9 +176,9 @@ instance FromJSON ProductParameters where
         ppImageData <- encodeUtf8 <$> v .: "imageData"
         ppImageName <- v .: "imageName"
         ppKeywords <- fromMaybe "" <$> (v .:? "keywords")
+        ppShippingRestrictions <- v .: "shippingRestrictions"
         ppVariantData <- v .: "variants"
         ppSeedAttribute <- v .: "seedAttributes"
-        ppShippingRestrictions <- v .: "shippingRestrictions"
         return ProductParameters {..}
 
 instance Validation ProductParameters where

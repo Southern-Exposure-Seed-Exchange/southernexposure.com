@@ -450,12 +450,13 @@ type alias CheckoutDetails =
     , storeCredit : Cents
     , isDisabled : Bool
     , disabledMessage : String
+    , restrictionsError : Maybe String
     }
 
 
 checkoutDetailsDecoder : Decoder CheckoutDetails
 checkoutDetailsDecoder =
-    Decode.map7 CheckoutDetails
+    Decode.map8 CheckoutDetails
         (Decode.field "shippingAddresses" <| Decode.list Address.decoder)
         (Decode.field "billingAddresses" <| Decode.list Address.decoder)
         (Decode.field "items" <| Decode.list cartItemDecoder)
@@ -463,6 +464,7 @@ checkoutDetailsDecoder =
         (Decode.field "storeCredit" centsDecoder)
         (Decode.field "disabled" Decode.bool)
         (Decode.field "disabledMessage" Decode.string)
+        (Decode.field "restrictionsError" <| Decode.nullable Decode.string)
 
 
 isFreeCheckout : WebData CheckoutDetails -> Bool

@@ -140,8 +140,8 @@ data ShippingRestrictionError
 
 instance Exception ShippingRestrictionError
 
-handleShippingRestrictionError :: ShippingRestrictionError -> App a
-handleShippingRestrictionError = V.singleError . \case
+renderShippingRestrictionError :: ShippingRestrictionError -> T.Text
+renderShippingRestrictionError = \case
     CannotShipTo region products ->
         let names = T.intercalate ", " $ map bpdName products
         in
@@ -151,6 +151,9 @@ handleShippingRestrictionError = V.singleError . \case
             <> names
             <> "."
 
+handleShippingRestrictionError :: ShippingRestrictionError -> App a
+handleShippingRestrictionError = V.singleError . renderShippingRestrictionError
+
 
 -- CART/ADDRESS DETAILS
 
@@ -158,7 +161,6 @@ handleShippingRestrictionError = V.singleError . \case
 data CheckoutDetailsError
     = DetailsPriorityError PrioritySHError
     | DetailsCouponError CouponError
-    | DetailsCannotShip ShippingRestrictionError
     deriving (Show, Typeable)
 
 instance Exception CheckoutDetailsError
@@ -170,8 +172,6 @@ withCheckoutDetailsErrors =
             handlePriorityShippingErrors priorityError
         DetailsCouponError couponError ->
             handleCouponErrors couponError
-        DetailsCannotShip shipError ->
-            handleShippingRestrictionError shipError
 
 
 
@@ -200,6 +200,7 @@ data CheckoutDetailsData =
         , cddStoreCredit :: Cents
         , cddIsDisabled :: Bool
         , cddDisabledMessage :: T.Text
+        , cddRestrictionsError :: Maybe T.Text
         }
 
 instance ToJSON CheckoutDetailsData where
@@ -212,6 +213,7 @@ instance ToJSON CheckoutDetailsData where
             , "storeCredit" .= cddStoreCredit details
             , "disabled" .= cddIsDisabled details
             , "disabledMessage" .= cddDisabledMessage details
+            , "restrictionsError" .= cddRestrictionsError details
             ]
 
 type CustomerDetailsRoute =
@@ -239,7 +241,7 @@ getCustomerDetails (Entity customerId customer) parameters = do
         $ getCoupon currentTime (Just customerId) <$> cdpCouponCode parameters
     items <- getCartItems $ \c ->
         c E.^. CartCustomerId E.==. E.just (E.val customerId)
-    charges <- detailsCharges maybeShipping items maybeCoupon priorityShipping
+    (restrictions, charges) <- detailsCharges maybeShipping items maybeCoupon priorityShipping
     return CheckoutDetailsData
         { cddShippingAddresses = map toAddressData shippingAddresses
         , cddBillingAddresses = map toAddressData billingAddresses
@@ -248,6 +250,7 @@ getCustomerDetails (Entity customerId customer) parameters = do
         , cddStoreCredit = customerStoreCredit customer
         , cddIsDisabled = isDisabled
         , cddDisabledMessage = disabledMsg
+        , cddRestrictionsError = restrictions
         }
     where
         getShippingAddress :: CustomerDetailsParameters -> [Entity Address] -> AppSQL (Maybe AddressData)
@@ -309,7 +312,7 @@ anonymousDetailsRoute parameters =
                 $ getCoupon currentTime Nothing <$> adpCouponCode parameters
             items <- getCartItems $ \c ->
                 c E.^. CartSessionToken E.==. E.just (E.val $ adpCartToken parameters)
-            charges <- detailsCharges maybeAddress items maybeCoupon priorityShipping
+            (restrictions, charges) <- detailsCharges maybeAddress items maybeCoupon priorityShipping
             return CheckoutDetailsData
                 { cddShippingAddresses = []
                 , cddBillingAddresses = []
@@ -318,6 +321,7 @@ anonymousDetailsRoute parameters =
                 , cddStoreCredit = 0
                 , cddIsDisabled = isDisabled
                 , cddDisabledMessage = disabledMsg
+                , cddRestrictionsError = restrictions
                 }
 
 
@@ -355,18 +359,23 @@ getCoupon currentTime maybeCustomerId couponCode = do
                         $ throwM CouponCustomerMaxUses
                 Nothing -> return ()
 
--- | Get the CartCharges for the details routes & check the coupon minimum
--- & priority shipping availability. Throws 'CheckoutDetailsError'.
-detailsCharges :: Maybe AddressData -> [CartItemData] -> Maybe (Entity Coupon) -> Bool -> AppSQL CartCharges
+-- | Get the CartCharges & a potential ShippingRestrictionErrorfor the
+-- details routes & check the coupon minimum & priority shipping
+-- availability.
+--
+-- Throws 'CheckoutDetailsError'.
+detailsCharges :: Maybe AddressData -> [CartItemData] -> Maybe (Entity Coupon) -> Bool
+    -> AppSQL (Maybe T.Text, CartCharges)
 detailsCharges maybeShipping items maybeCoupon priorityShipping = do
-    mapException DetailsCannotShip
-        $ checkProductRestrictions maybeShipping items
+    restrictions <- try $ checkProductRestrictions maybeShipping items
     charges <- getCharges maybeShipping items maybeCoupon priorityShipping True
     mapException DetailsCouponError
         $ checkCouponMeetsMinimum maybeCoupon charges
     mapException DetailsPriorityError
         $ checkPriorityShippingAvailable priorityShipping charges
-    return charges
+    return
+        ( either (Just . renderShippingRestrictionError) (const Nothing) restrictions
+        , charges)
 
 -- | Ensure that all of the Products are allowed to be shipped to the state.
 --

@@ -1405,6 +1405,7 @@ update msg ({ pageData, key } as model) =
                                     Checkout.initialWithDefaults
                                         details.shippingAddresses
                                         details.billingAddresses
+                                        details.restrictionsError
                             }
 
                         _ ->

@@ -88,8 +88,8 @@ initial =
     }
 
 
-initialWithDefaults : List Address.Model -> List Address.Model -> Form
-initialWithDefaults shippingAddresses billingAddresses =
+initialWithDefaults : List Address.Model -> List Address.Model -> Maybe String -> Form
+initialWithDefaults shippingAddresses billingAddresses restrictionsError =
     let
         withDefault addrs =
             findBy .isDefault addrs
@@ -109,6 +109,11 @@ initialWithDefaults shippingAddresses billingAddresses =
 
                 ExistingAddress _ ->
                     False
+
+        errors =
+            restrictionsError
+                |> Maybe.map (\e -> Api.addError "" e Api.initialErrors)
+                |> Maybe.withDefault Api.initialErrors
     in
     { email = ""
     , password = ""
@@ -124,7 +129,7 @@ initialWithDefaults shippingAddresses billingAddresses =
     , priorityShipping = False
     , couponCode = ""
     , comment = ""
-    , errors = Api.initialErrors
+    , errors = errors
     , isProcessing = False
     }
 
@@ -319,15 +324,29 @@ update msg model authStatus maybeSessionToken checkoutDetails =
                             else
                                 Cmd.none
                     in
-                    ( { model
-                        | isProcessing = isProcessing
-                        , email = ""
-                        , password = ""
-                        , passwordConfirm = ""
-                      }
-                    , Just <| LoggedIn resp.authStatus resp.details
-                    , cmd
-                    )
+                    case resp.details.restrictionsError of
+                        Nothing ->
+                            ( { model
+                                | isProcessing = isProcessing
+                                , email = ""
+                                , password = ""
+                                , passwordConfirm = ""
+                              }
+                            , Just <| LoggedIn resp.authStatus resp.details
+                            , cmd
+                            )
+
+                        Just err ->
+                            ( { model
+                                | isProcessing = False
+                                , email = ""
+                                , password = ""
+                                , passwordConfirm = ""
+                                , errors = Api.addError "" err Api.initialErrors
+                              }
+                            , Just <| LoggedIn resp.authStatus resp.details
+                            , Ports.scrollToTop
+                            )
 
                 RemoteData.Success (Err errors) ->
                     ( { model | isProcessing = False, errors = errors }
@@ -487,9 +506,22 @@ update msg model authStatus maybeSessionToken checkoutDetails =
             { model | isProcessing = False } |> nothingAndNoCommand
 
         RefreshDetails (RemoteData.Success (Ok details)) ->
-            ( { model | errors = Api.initialErrors }
+            let
+                errors =
+                    details.restrictionsError
+                        |> Maybe.map (\e -> Api.addError "" e Api.initialErrors)
+                        |> Maybe.withDefault Api.initialErrors
+
+                cmd =
+                    if Dict.isEmpty errors then
+                        Cmd.none
+
+                    else
+                        Ports.scrollToErrorMessage
+            in
+            ( { model | errors = errors }
             , Just (DetailsRefreshed details)
-            , Cmd.none
+            , cmd
             )
 
         RefreshDetails (RemoteData.Success (Err formErrors)) ->
