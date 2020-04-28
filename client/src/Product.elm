@@ -19,6 +19,7 @@ import Html exposing (Html, span)
 import Html.Attributes exposing (class)
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode exposing (Value)
+import Locations exposing (Region, regionDecoder)
 import Markdown exposing (defaultOptions)
 import Models.Fields exposing (Cents(..), ImageData, LotSize, imageDecoder, lotSizeDecoder, lotSizeToString)
 import Views.Microdata as Microdata
@@ -45,6 +46,7 @@ type alias Product =
     , baseSKU : String
     , longDescription : String
     , image : ImageData
+    , shippingRestrictions : List Region
     }
 
 
@@ -82,13 +84,14 @@ singleVariantName product variants =
 
 decoder : Decoder Product
 decoder =
-    Decode.map6 Product
+    Decode.map7 Product
         (Decode.field "id" idDecoder)
         (Decode.field "name" Decode.string)
         (Decode.field "slug" Decode.string)
         (Decode.field "baseSku" Decode.string)
         (Decode.field "longDescription" Decode.string)
         (Decode.field "image" imageDecoder)
+        (Decode.field "shippingRestrictions" <| Decode.list regionDecoder)
 
 
 type ProductVariantId

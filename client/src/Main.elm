@@ -468,14 +468,14 @@ fetchCartDetails : AuthStatus -> Maybe String -> PageData -> ( PageData, Cmd Msg
 fetchCartDetails authStatus maybeSessionToken pageData =
     case authStatus of
         User.Anonymous ->
-            ( { pageData | cartDetails = RemoteData.Loading }
-            , getAnonymousCartDetails maybeSessionToken
-            )
+            { pageData | cartDetails = RemoteData.Loading }
+                |> fetchLocationsOnce
+                |> batchCommand (getAnonymousCartDetails maybeSessionToken)
 
         User.Authorized _ ->
-            ( { pageData | cartDetails = RemoteData.Loading }
-            , getCartDetails
-            )
+            { pageData | cartDetails = RemoteData.Loading }
+                |> fetchLocationsOnce
+                |> batchCommand getCartDetails
 
 
 getProductDetailsData : String -> Cmd Msg

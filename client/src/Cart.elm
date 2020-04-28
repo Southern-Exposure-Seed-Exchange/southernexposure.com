@@ -15,9 +15,10 @@ import Html.Events exposing (onClick, onSubmit)
 import Html.Extra exposing (viewIf)
 import Html.Keyed as Keyed
 import Json.Encode as Encode
+import Locations exposing (AddressLocations, regionName)
 import Models.Fields exposing (Cents(..), centsMap, imageToSrcSet, imgSrcFallback, lotSizeToString)
 import PageData exposing (CartDetails, CartItemId(..))
-import Product exposing (variantPrice)
+import Product exposing (Product, variantPrice)
 import RemoteData
 import Routing exposing (Route(..))
 import User exposing (AuthStatus)
@@ -158,8 +159,8 @@ customerUpdateRequest body =
 -- VIEW
 
 
-view : Form -> CartDetails -> List (Html Msg)
-view ({ quantities } as form_) ({ items, charges } as cartDetails) =
+view : Form -> CartDetails -> AddressLocations -> List (Html Msg)
+view ({ quantities } as form_) ({ items, charges } as cartDetails) locations =
     let
         itemCount =
             List.foldl (.quantity >> (+)) 0 items
@@ -241,6 +242,7 @@ view ({ quantities } as form_) ({ items, charges } as cartDetails) =
                     , small
                         [ class "text-muted" ]
                         [ text <| "Item #" ++ product.baseSKU ++ variant.skuSuffix ]
+                    , shippingRestrictionsBlock product locations
                     ]
                 , td [ class "text-right align-middle" ]
                     [ text <| Format.cents <| variantPrice variant ]
@@ -307,7 +309,7 @@ view ({ quantities } as form_) ({ items, charges } as cartDetails) =
             ]
         , form [ class "mb-4", onSubmit Submit ]
             [ cartTable
-            , mobileCartTable form_ cartDetails totals
+            , mobileCartTable form_ cartDetails locations totals
             , buttons
             ]
         ]
@@ -319,8 +321,8 @@ view ({ quantities } as form_) ({ items, charges } as cartDetails) =
         ]
 
 
-mobileCartTable : Form -> CartDetails -> { subTotal : Cents, total : Cents } -> Html Msg
-mobileCartTable { quantities } { items, charges } totals =
+mobileCartTable : Form -> CartDetails -> AddressLocations -> { subTotal : Cents, total : Cents } -> Html Msg
+mobileCartTable { quantities } { items, charges } locations totals =
     let
         cartRow { id, product, variant } =
             div [ class "cart-mobile-product row py-4" ]
@@ -349,6 +351,7 @@ mobileCartTable { quantities } { items, charges } totals =
                                         |> Maybe.withDefault ""
                                    )
                         ]
+                    , shippingRestrictionsBlock product locations
                     , div [ class "text-danger" ]
                         [ text <| Format.cents <| variantPrice variant ]
                     , productInputs "d-none d-sm-flex d-md-none mt-2" id
@@ -436,6 +439,19 @@ productImageSizes =
             , "(max-width: 767px) 165px"
             , "100px"
             ]
+
+
+shippingRestrictionsBlock : Product -> AddressLocations -> Html msg
+shippingRestrictionsBlock { shippingRestrictions } locations =
+    let
+        regionText =
+            String.join ", " <|
+                List.filterMap (regionName locations) shippingRestrictions
+    in
+    div [ class "small text-danger" ]
+        [ text "Cannot ship to: "
+        , text regionText
+        ]
 
 
 

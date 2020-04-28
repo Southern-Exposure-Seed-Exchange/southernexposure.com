@@ -160,7 +160,8 @@ view ({ route, pageData, navigationData, zone } as model) =
                         |> withIntermediateText (apply <| OrderDetails.view zone orderId)
 
                 Cart ->
-                    withIntermediateText (Cart.view model.editCartForm) pageData.cartDetails
+                    RemoteData.map2 Tuple.pair pageData.cartDetails pageData.locations
+                        |> withIntermediateText (apply <| Cart.view model.editCartForm)
                         |> List.map (Html.map EditCartMsg)
 
                 QuickOrder ->
