@@ -6,7 +6,7 @@ v1.03.15
 =========
 
 * Add the ability to delete a Customer from the Edit Customer admin page. This
-  will anonymous & move their order & related addresses to the
+  will anonymize & move their order & related addresses to the
   ``gardens+deleted@southernexposure.com`` account and then delete all other
   data for the Customer.
 * Show Product shipping restrictions on the Cart & Product Details pages.
