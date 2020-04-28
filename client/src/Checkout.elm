@@ -1325,7 +1325,7 @@ view model authStatus locations checkoutDetails =
         form [ onSubmit Submit ]
             [ processingOverlay
             , genericErrorText hasErrors
-            , generalErrors
+            , div [ class "mb-3" ] [ generalErrors ]
             , registrationCard
             , div [ class "row mb-3" ]
                 [ addressForm

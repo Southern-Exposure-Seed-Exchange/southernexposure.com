@@ -5,6 +5,7 @@ CHANGELOG
 v1.03.15
 =========
 
+* Fix spacing around general error messages on the Checkout page.
 * Add a new "Cannot Ship To" field to the Add/Edit Product pages. This is an
   optional list of US States/Territories that allows admins to prevent
   Customers from ordering the Product if their shipping address lies in one of
