@@ -3,7 +3,7 @@
 name:
     sese-website
 version:
-    1.4.1.0
+    1.4.2.0
 synopsis:
     The API Server for Southern Exposure's Retail Website
 category:
@@ -17,7 +17,7 @@ author:
 maintainer:
     "pavan.rikhi@gmail.com"
 copyright:
-    2017-2019 Pavan Rikhi
+    2017-2020 Pavan Rikhi
 bug-reports:
     http://bugs.sleepanarchy.com/projects/sese-website/issues/new
 
