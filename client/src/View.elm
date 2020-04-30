@@ -98,8 +98,8 @@ view ({ route, pageData, navigationData, zone } as model) =
         pageContent =
             case route of
                 ProductDetails _ ->
-                    RemoteData.map2 Tuple.pair pageData.productDetails pageData.locations
-                        |> withIntermediateText (apply <| ProductViews.details model.addToCartForms)
+                    withIntermediateText (ProductViews.details model.addToCartForms)
+                        pageData.productDetails
 
                 CategoryDetails _ pagination ->
                     if Paginate.getResponseData pageData.categoryDetails == Nothing then
@@ -159,8 +159,7 @@ view ({ route, pageData, navigationData, zone } as model) =
                         |> withIntermediateText (apply <| OrderDetails.view zone orderId)
 
                 Cart ->
-                    RemoteData.map2 Tuple.pair pageData.cartDetails pageData.locations
-                        |> withIntermediateText (apply <| Cart.view model.editCartForm)
+                    withIntermediateText (Cart.view model.editCartForm) pageData.cartDetails
                         |> List.map (Html.map EditCartMsg)
 
                 QuickOrder ->

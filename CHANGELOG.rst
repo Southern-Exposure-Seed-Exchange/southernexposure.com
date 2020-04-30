@@ -2,6 +2,15 @@
 CHANGELOG
 =========
 
+v1.04.02
+=========
+
+* Remove the Shipping Restrictions text from the Product Details & Cart pages.
+  We will add this text to the Product descriptions manually, since the list of
+  restrictions is very long for Products that we only ship to the continental
+  U.S.
+
+
 v1.04.01
 =========
 

@@ -5,10 +5,9 @@ import Dict exposing (Dict)
 import Html exposing (..)
 import Html.Attributes as A exposing (alt, attribute, class, for, href, id, selected, src, title, type_, value)
 import Html.Events exposing (on, onSubmit, targetValue)
-import Html.Extra exposing (viewIf, viewIfLazy)
+import Html.Extra exposing (viewIfLazy)
 import Html.Keyed as Keyed
 import Json.Decode as Decode
-import Locations exposing (AddressLocations, regionName)
 import Messages exposing (Msg(..))
 import Model exposing (CartForms)
 import Models.Fields exposing (Cents(..), centsToString, imageToSrcSet, imgSrcFallback, lotSizeToString)
@@ -27,8 +26,8 @@ import Views.Pager as Pager
 import Views.Utils exposing (htmlOrBlank, icon, numericInput, onIntInput, rawHtml, routeLinkAttributes)
 
 
-details : CartForms -> PageData.ProductDetails -> AddressLocations -> List (Html Msg)
-details addToCartForms { product, variants, maybeSeedAttribute, categories } locations =
+details : CartForms -> PageData.ProductDetails -> List (Html Msg)
+details addToCartForms { product, variants, maybeSeedAttribute, categories } =
     let
         categoryBlocks =
             List.filter (not << String.isEmpty << .description) categories
@@ -91,17 +90,7 @@ details addToCartForms { product, variants, maybeSeedAttribute, categories } loc
                     , Microdata.urlMeta <|
                         Routing.reverse <|
                             ProductDetails product.slug
-                    , div [ Microdata.description ]
-                        [ rawHtml product.longDescription
-                        , viewIf (not <| List.isEmpty product.shippingRestrictions) <|
-                            p [ class "text-danger" ]
-                                [ text "We cannot ship to: "
-                                , product.shippingRestrictions
-                                    |> List.filterMap (regionName locations)
-                                    |> String.join ", "
-                                    |> text
-                                ]
-                        ]
+                    , div [ Microdata.description ] [ rawHtml product.longDescription ]
                     , div [] categoryBlocks
                     ]
                 ]

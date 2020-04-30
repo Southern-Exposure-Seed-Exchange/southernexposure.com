@@ -169,9 +169,9 @@ fetchDataForRoute ({ route, pageData, key } as model) =
         ( data, cmd ) =
             case route of
                 ProductDetails slug ->
-                    { pageData | productDetails = RemoteData.Loading }
-                        |> fetchLocationsOnce
-                        |> batchCommand (getProductDetailsData slug)
+                    ( { pageData | productDetails = RemoteData.Loading }
+                    , getProductDetailsData slug
+                    )
 
                 CategoryDetails slug pagination ->
                     updateCategoryDetails slug pagination pageData.categoryDetails
@@ -468,14 +468,14 @@ fetchCartDetails : AuthStatus -> Maybe String -> PageData -> ( PageData, Cmd Msg
 fetchCartDetails authStatus maybeSessionToken pageData =
     case authStatus of
         User.Anonymous ->
-            { pageData | cartDetails = RemoteData.Loading }
-                |> fetchLocationsOnce
-                |> batchCommand (getAnonymousCartDetails maybeSessionToken)
+            ( { pageData | cartDetails = RemoteData.Loading }
+            , getAnonymousCartDetails maybeSessionToken
+            )
 
         User.Authorized _ ->
-            { pageData | cartDetails = RemoteData.Loading }
-                |> fetchLocationsOnce
-                |> batchCommand getCartDetails
+            ( { pageData | cartDetails = RemoteData.Loading }
+            , getCartDetails
+            )
 
 
 getProductDetailsData : String -> Cmd Msg
