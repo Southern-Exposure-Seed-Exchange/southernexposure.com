@@ -220,7 +220,7 @@ convertProduct checkoutDisabled predCache categoryMap prodSales catSales (Entity
         { pId = fullSku
         , pTitle = productName prod <> lotSize
         , pDescription = productLongDescription prod
-        , pLink = productUrl <> productSlug prod <> "/"
+        , pLink = productUrl <> productSlug prod <> "/" <> "?variant=" <> T.pack (show $ E.fromSqlKey variantId)
         , pImageLink = imageUrl <> productImageUrl prod
         , pProductType = categoryHierarchy
         , pGoogleProductType = Just googleCategory

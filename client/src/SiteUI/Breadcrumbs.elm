@@ -53,7 +53,7 @@ view route pageData =
                     Paginate.getResponseData pageData.categoryDetails
                         |> maybeToList categoryDetailsToBreadcrumbs
 
-                ProductDetails _ ->
+                ProductDetails _ _ ->
                     pageData.productDetails
                         |> RemoteData.toMaybe
                         |> maybeToList productDetailsToBreadcrumbs

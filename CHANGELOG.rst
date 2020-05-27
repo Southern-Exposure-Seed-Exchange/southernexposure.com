@@ -2,6 +2,15 @@
 CHANGELOG
 =========
 
+v1.04.03
+=========
+
+* Add a ``variant`` query parameter to the Product Details URL, allowing for
+  pre-selecting a different ProductVariant when loading the page. Modify the
+  Google Merchant feed to use this parameter, fixing an issue where Google
+  Merchant was parsing the first variant's price for every variant.
+
+
 v1.04.02
 =========
 

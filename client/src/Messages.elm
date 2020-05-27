@@ -96,7 +96,7 @@ type Msg
       -- API Requests
     | ReAuthorize (WebData User.AuthStatus)
     | LogOutResponse (WebData ())
-    | GetProductDetailsData (WebData PageData.ProductDetails)
+    | GetProductDetailsData (Maybe ProductVariantId) (WebData PageData.ProductDetails)
     | GetNavigationData (WebData NavigationData)
     | GetAdvancedSearchData (WebData PageData.AdvancedSearch)
     | GetPageDetailsData (WebData StaticPage)

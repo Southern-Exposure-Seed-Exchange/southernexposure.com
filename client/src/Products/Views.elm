@@ -89,7 +89,7 @@ details addToCartForms { product, variants, maybeSeedAttribute, categories } =
                     , Microdata.brandMeta "Southern Exposure Seed Exchange"
                     , Microdata.urlMeta <|
                         Routing.reverse <|
-                            ProductDetails product.slug
+                            ProductDetails product.slug Nothing
                     , div [ Microdata.description ] [ rawHtml product.longDescription ]
                     , div [] categoryBlocks
                     ]
@@ -181,7 +181,7 @@ list routeConstructor pagination addToCartForms products =
                 [ td [ class "row-product-image text-center align-middle" ]
                     [ Keyed.node "a"
                         (Aria.label ("View Details for " ++ product.name)
-                            :: routeLinkAttributes (ProductDetails product.slug)
+                            :: routeLinkAttributes (ProductDetails product.slug Nothing)
                         )
                         [ ( "product-img-" ++ (String.fromInt <| (\(ProductId i) -> i) product.id)
                           , img
@@ -197,7 +197,7 @@ list routeConstructor pagination addToCartForms products =
                     ]
                 , td [ class "row-product-description" ]
                     [ h3 [ class "mb-0 d-flex justify-content-between" ]
-                        [ a (Microdata.url :: routeLinkAttributes (ProductDetails product.slug))
+                        [ a (Microdata.url :: routeLinkAttributes (ProductDetails product.slug Nothing))
                             [ Product.singleVariantName product variants ]
                         , htmlOrBlank SeedAttribute.icons maybeSeedAttribute
                         ]
@@ -275,7 +275,7 @@ renderMobileProductBlock { maybeSelectedVariantId, maybeSelectedVariant, variant
         [ div [ class "col-12 col-sm-4 pr-sm-0 mb-sm-2" ]
             [ Keyed.node "a"
                 (Aria.label ("View Details for " ++ product.name)
-                    :: routeLinkAttributes (ProductDetails product.slug)
+                    :: routeLinkAttributes (ProductDetails product.slug Nothing)
                 )
                 [ ( "product-img-" ++ (String.fromInt <| (\(ProductId i) -> i) product.id)
                   , img
@@ -291,7 +291,7 @@ renderMobileProductBlock { maybeSelectedVariantId, maybeSelectedVariant, variant
             ]
         , div [ class "col" ]
             [ h5 [ class "text-center text-sm-left" ]
-                [ a (routeLinkAttributes <| ProductDetails product.slug)
+                [ a (routeLinkAttributes <| ProductDetails product.slug Nothing)
                     [ Product.singleVariantName product variants ]
                 ]
             , div [ class "price-and-attributes clearfix" ]
@@ -561,7 +561,7 @@ cartFormData addToCartForms ( product, variants ) =
                         Maybe.map lotSizeToString variant.lotSize
                 , Microdata.urlMeta <|
                     Routing.reverse <|
-                        ProductDetails product.slug
+                        ProductDetails product.slug Nothing
                 ]
 
         requestFeedback =

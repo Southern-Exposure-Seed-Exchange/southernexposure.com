@@ -12,7 +12,7 @@ module Routing exposing
 
 import Browser.Navigation
 import Category exposing (CategoryId(..))
-import Product exposing (ProductId(..))
+import Product exposing (ProductId(..), ProductVariantId(..))
 import Products.Pagination as Pagination
 import Routing.Utils exposing (fromStringParam, joinPath, optionalIntParam, parseFlag, queryFlag, queryParameter, withQueryStrings)
 import Search exposing (UniqueSearch(..))
@@ -24,7 +24,7 @@ import Url.Parser.Query as Query
 
 
 type Route
-    = ProductDetails String
+    = ProductDetails String (Maybe ProductVariantId)
     | CategoryDetails String Pagination.Data
     | AdvancedSearch
     | SearchResults Search.Data Pagination.Data
@@ -188,7 +188,7 @@ parseRoute =
             Url.oneOf
                 [ Url.map (PageDetails "home" Nothing) Url.top
                 , Url.map (PageDetails "home" Nothing) (Url.s "index.html")
-                , Url.map ProductDetails (Url.s "products" </> Url.string)
+                , Url.map ProductDetails (Url.s "products" </> Url.string <?> Query.map (Maybe.map ProductVariantId) (Query.int "variant"))
                 , Url.map CategoryDetails (Url.s "categories" </> Url.string)
                     |> Pagination.fromQueryString
                 , Url.map AdvancedSearch (Url.s "search" </> Url.s "advanced")
@@ -241,8 +241,19 @@ parseRestHelper depth =
 reverse : Route -> String
 reverse route =
     case route of
-        ProductDetails slug ->
+        ProductDetails slug id ->
             joinPath [ "products", slug ]
+                ++ withQueryStrings
+                    (Maybe.map
+                        ((\(ProductVariantId i) -> i)
+                            >> String.fromInt
+                            >> Tuple.pair "variant"
+                            >> queryParameter
+                            >> List.singleton
+                        )
+                        id
+                        |> Maybe.withDefault []
+                    )
 
         CategoryDetails slug pagination ->
             joinPath [ "categories", slug ]
@@ -537,7 +548,7 @@ reverseAdmin route =
 authRequired : Route -> Bool
 authRequired route =
     case route of
-        ProductDetails _ ->
+        ProductDetails _ _ ->
             False
 
         CategoryDetails _ _ ->

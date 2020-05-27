@@ -221,7 +221,7 @@ view ({ quantities } as form_) ({ items, charges } as cartDetails) =
                 , td [ class "align-middle" ]
                     [ a
                         (Aria.label ("View Product Details for " ++ product.name)
-                            :: routeLinkAttributes (ProductDetails product.slug)
+                            :: routeLinkAttributes (ProductDetails product.slug <| Just variant.id)
                         )
                         [ img
                             [ src <| imgSrcFallback product.image
@@ -235,7 +235,7 @@ view ({ quantities } as form_) ({ items, charges } as cartDetails) =
                     ]
                 , td [ class "align-middle" ]
                     [ div [ class "font-weight-bold" ]
-                        [ a (routeLinkAttributes <| ProductDetails product.slug)
+                        [ a (routeLinkAttributes <| ProductDetails product.slug <| Just variant.id)
                             [ Product.nameWithLotSize product variant ]
                         ]
                     , small
@@ -325,7 +325,7 @@ mobileCartTable { quantities } { items, charges } totals =
         cartRow { id, product, variant } =
             div [ class "cart-mobile-product row py-4" ]
                 [ div [ class "col-4 mb-3" ]
-                    [ a (routeLinkAttributes <| ProductDetails product.slug)
+                    [ a (routeLinkAttributes <| ProductDetails product.slug <| Just variant.id)
                         [ img
                             [ class "img-fluid"
                             , src <| imgSrcFallback product.image
@@ -336,7 +336,7 @@ mobileCartTable { quantities } { items, charges } totals =
                         ]
                     ]
                 , div [ class "col-8 pl-0 mb-2" ]
-                    [ a (routeLinkAttributes <| ProductDetails product.slug)
+                    [ a (routeLinkAttributes <| ProductDetails product.slug <| Just variant.id)
                         [ h5 [ class "text-body mb-0 product-name-lotsize" ]
                             [ rawHtml product.name ]
                         ]

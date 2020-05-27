@@ -97,7 +97,7 @@ view ({ route, pageData, navigationData, zone } as model) =
 
         pageContent =
             case route of
-                ProductDetails _ ->
+                ProductDetails _ _ ->
                     withIntermediateText (ProductViews.details model.addToCartForms)
                         pageData.productDetails
 
@@ -306,7 +306,7 @@ view ({ route, pageData, navigationData, zone } as model) =
                             )
                         |> Maybe.withDefault []
 
-                ProductDetails _ ->
+                ProductDetails _ _ ->
                     RemoteData.toMaybe pageData.productDetails
                         |> Maybe.map (.predecessors >> List.map .id)
                         |> Maybe.withDefault []
@@ -356,7 +356,7 @@ pageTitle ({ route, pageData } as model) =
                 |> Maybe.withDefault ""
     in
     case route of
-        ProductDetails _ ->
+        ProductDetails _ _ ->
             getFromPageData .productDetails (.product >> .name)
 
         CategoryDetails _ _ ->
@@ -547,7 +547,7 @@ adminTitle ({ pageData } as model) adminRoute =
 pageImage : Model -> Maybe String
 pageImage { route, pageData } =
     case route of
-        ProductDetails _ ->
+        ProductDetails _ _ ->
             RemoteData.toMaybe pageData.productDetails
                 |> Maybe.map (.product >> .image >> .original)
 
@@ -564,7 +564,7 @@ pageImage { route, pageData } =
 pageDescription : Model -> String
 pageDescription { route, pageData } =
     case route of
-        ProductDetails _ ->
+        ProductDetails _ _ ->
             RemoteData.toMaybe pageData.productDetails
                 |> Maybe.map (.product >> .longDescription)
                 |> Maybe.withDefault ""

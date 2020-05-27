@@ -168,9 +168,9 @@ fetchDataForRoute ({ route, pageData, key } as model) =
 
         ( data, cmd ) =
             case route of
-                ProductDetails slug ->
+                ProductDetails slug vId ->
                     ( { pageData | productDetails = RemoteData.Loading }
-                    , getProductDetailsData slug
+                    , getProductDetailsData slug vId
                     )
 
                 CategoryDetails slug pagination ->
@@ -478,11 +478,11 @@ fetchCartDetails authStatus maybeSessionToken pageData =
             )
 
 
-getProductDetailsData : String -> Cmd Msg
-getProductDetailsData slug =
+getProductDetailsData : String -> Maybe ProductVariantId -> Cmd Msg
+getProductDetailsData slug vId =
     Api.get (Api.ProductDetails slug)
         |> Api.withJsonResponse PageData.productDetailsDecoder
-        |> Api.sendRequest GetProductDetailsData
+        |> Api.sendRequest (GetProductDetailsData vId)
 
 
 getNavigationData : Cmd Msg
@@ -1292,14 +1292,40 @@ update msg ({ pageData, key } as model) =
                     -- TODO: Couldn't log user out - show error toast/message
                     ( model, Cmd.none )
 
-        GetProductDetailsData response ->
+        GetProductDetailsData selectedSku response ->
             let
                 updatedPageData =
                     { pageData | productDetails = response }
+
+                updatedCartForms =
+                    case ( selectedSku, response ) of
+                        ( Just variantId, RemoteData.Success resp ) ->
+                            let
+                                productId =
+                                    resp.product.id |> (\(ProductId i) -> i)
+                            in
+                            Dict.update productId
+                                (\f ->
+                                    case f of
+                                        Just cartForm ->
+                                            Just { cartForm | variant = Just variantId }
+
+                                        Nothing ->
+                                            Just
+                                                { variant = Just variantId
+                                                , requestStatus = RemoteData.NotAsked
+                                                , quantity = 1
+                                                }
+                                )
+                                model.addToCartForms
+
+                        _ ->
+                            model.addToCartForms
             in
             ( { model
                 | pageData = updatedPageData
                 , productDetailsLightbox = Gallery.initial
+                , addToCartForms = updatedCartForms
               }
             , Cmd.none
             )
@@ -1729,7 +1755,7 @@ runOnCurrentWebData runner { pageData, route } =
             runner Nothing
     in
     case route of
-        ProductDetails _ ->
+        ProductDetails _ _ ->
             justRunner pageData.productDetails
 
         CategoryDetails _ _ ->
@@ -2017,7 +2043,7 @@ resetForm oldRoute model =
                     { model | editCategorySaleForm = CategorySalesAdmin.initialEditForm }
     in
     case oldRoute of
-        ProductDetails _ ->
+        ProductDetails _ _ ->
             model
 
         CategoryDetails _ _ ->
