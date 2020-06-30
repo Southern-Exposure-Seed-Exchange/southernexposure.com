@@ -73,7 +73,7 @@ stripeRequest req = do
 -- | Perform a request to Avalara's AvaTax API.
 --
 -- TODO: Add a setting allowing us to skip Avalara calls, since
--- eventaully our Sandbox account will expire.
+-- eventually our Sandbox account will expire.
 --
 -- TODO: Log the request data as well! Maybe refactor to:
 --       @(a -> ReaderT .... b) -> a -> App b@
