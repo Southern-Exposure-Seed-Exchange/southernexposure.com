@@ -261,3 +261,17 @@ executables:
             - persistent-postgresql
             - text
             - vector
+
+    export-products-racks:
+        main: ExportProductsRacks.hs
+        <<: *script-defaults
+        other-modules: []
+        dependencies:
+            - sese-website
+            - bytestring
+            - cassava
+            - esqueleto
+            - monad-logger
+            - persistent-postgresql
+            - text
+            - time
