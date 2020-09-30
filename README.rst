@@ -18,7 +18,7 @@ Frontend.
 Quickstart
 ==========
 
-You will need to have `Stack <https://haskellstack.org>`_ & either `NVM
+You will need to have ` a Stack <https://haskellstack.org>`_ or either `NVM
 <https://github.com/creationix/nvm>`_ or ``node``/``npm`` installed.
 
 You can start the Client & Server in watch mode by running ``./manage.hs`` or
