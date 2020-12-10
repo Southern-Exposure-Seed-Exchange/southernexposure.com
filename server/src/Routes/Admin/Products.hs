@@ -18,7 +18,7 @@ import Data.Text.Encoding (encodeUtf8)
 import Data.Time (UTCTime, getCurrentTime)
 import Database.Persist
     ( (==.), (=.), Entity(..), SelectOpt(Asc), selectList, selectFirst
-    , insert, insertMany_, insert_, update, get, getBy, deleteWhere
+    , insert, insertMany_, insert_, update, get, getBy, deleteWhere, delete
     )
 import Servant ((:<|>)(..), (:>), AuthProtect, ReqBody, Capture, Get, Post, JSON, err404)
 
