@@ -2,6 +2,13 @@
 CHANGELOG
 =========
 
+v1.04.04
+=========
+
+* Fix a bug preventing admins from disabling all Organic, Heirloom, Regional, &
+  Small Grower statuses if they were previously set.
+
+
 v1.04.03
 =========
 

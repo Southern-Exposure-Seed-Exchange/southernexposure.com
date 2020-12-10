@@ -476,6 +476,8 @@ editProductRoute = validateAdminAndParameters $ \_ EditProductParameters {..} ->
                     , SeedAttributeIsRegional =. sdRegional
                     , SeedAttributeIsSmallGrower =. sdSmallGrower
                     ]
+            (Nothing, Just (Entity attrId _)) ->
+                delete attrId
             _ ->
                 return ()
         forM_ ppVariantData $ \variant@VariantData {..} ->
