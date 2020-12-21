@@ -176,7 +176,8 @@ taskQueueConfig threadCount cfg@Config { getPool, getServerLogger, getCaches } =
             logMsg $
                 "Cannot Decode Worker Job: " <> T.pack err
         Success action -> do
-            requeueJob job 150
+            when (jobRetries job <= 5) $
+                requeueJob job 150
             logMsg $
                 "Worker Job Failed: " <> describeTask action
                     <> " - " <> T.pack (displayException e)
