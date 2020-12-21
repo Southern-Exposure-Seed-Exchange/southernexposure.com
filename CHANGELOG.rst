@@ -2,7 +2,7 @@
 CHANGELOG
 =========
 
-v1.04.05
+v1.04.06
 =========
 
 * Discard failed jobs after 5 retries.
