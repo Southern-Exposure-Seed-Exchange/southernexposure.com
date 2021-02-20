@@ -10,7 +10,7 @@ import Api
 import Browser.Navigation
 import Dict
 import Html exposing (..)
-import Html.Attributes exposing (autofocus, checked, class, for, href, id, required, type_, value)
+import Html.Attributes exposing (autofocus, checked, class, for, href, id, required, target, type_, value)
 import Html.Events exposing (onCheck, onInput, onSubmit)
 import Json.Encode as Encode exposing (Value)
 import Ports
@@ -247,11 +247,20 @@ view tagger model redirectTo =
                     ]
                     [ text "Create an Account" ]
                 ]
+
+        seedracksSection =
+            p []
+                [ text "Looking to resell our packets? Please login to our Seed Racks/Wholesale webstore at "
+                , a [ target "_blank", href "https://seedracks.southernexposure.com" ]
+                    [ text "seedracks.southernexposure.com" ]
+                , text "."
+                ]
     in
     [ h1 [] [ text "Please Sign In" ]
     , hr [] []
     , div [ class "row" ]
         [ div [ class "col-sm-6 mb-3" ] [ loginForm ]
         , div [ class "col-sm-6" ] [ createAccountSection ]
+        , div [ class "col-12" ] [ seedracksSection ]
         ]
     ]
