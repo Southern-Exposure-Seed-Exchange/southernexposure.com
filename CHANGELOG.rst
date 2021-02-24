@@ -2,6 +2,12 @@
 CHANGELOG
 =========
 
+develop
+========
+
+* Add link to seedracks website on the Login page.
+
+
 v1.04.06
 =========
 
