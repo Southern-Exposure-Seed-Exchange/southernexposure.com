@@ -36,6 +36,7 @@ import Web.Stripe.Customer (Email(..), createCustomer, updateCustomer)
 import Auth
 import Avalara
     ( CommitTransactionRequest(..), VoidTransactionRequest(..), VoidReason(..)
+    , CustomerCode
     )
 import Config
 import Models
@@ -241,7 +242,9 @@ getCustomerDetails (Entity customerId customer) parameters = do
         $ getCoupon currentTime (Just customerId) <$> cdpCouponCode parameters
     items <- getCartItems $ \c ->
         c E.^. CartCustomerId E.==. E.just (E.val customerId)
-    (restrictions, charges) <- detailsCharges maybeShipping items maybeCoupon priorityShipping
+    let avalaraCode = fromAvalaraCustomerCode <$> customerAvalaraCode customer
+    (restrictions, charges) <- detailsCharges maybeShipping avalaraCode
+        items maybeCoupon priorityShipping
     return CheckoutDetailsData
         { cddShippingAddresses = map toAddressData shippingAddresses
         , cddBillingAddresses = map toAddressData billingAddresses
@@ -312,7 +315,7 @@ anonymousDetailsRoute parameters =
                 $ getCoupon currentTime Nothing <$> adpCouponCode parameters
             items <- getCartItems $ \c ->
                 c E.^. CartSessionToken E.==. E.just (E.val $ adpCartToken parameters)
-            (restrictions, charges) <- detailsCharges maybeAddress items maybeCoupon priorityShipping
+            (restrictions, charges) <- detailsCharges maybeAddress Nothing items maybeCoupon priorityShipping
             return CheckoutDetailsData
                 { cddShippingAddresses = []
                 , cddBillingAddresses = []
@@ -364,11 +367,11 @@ getCoupon currentTime maybeCustomerId couponCode = do
 -- availability.
 --
 -- Throws 'CheckoutDetailsError'.
-detailsCharges :: Maybe AddressData -> [CartItemData] -> Maybe (Entity Coupon) -> Bool
+detailsCharges :: Maybe AddressData -> Maybe CustomerCode -> [CartItemData] -> Maybe (Entity Coupon) -> Bool
     -> AppSQL (Maybe T.Text, CartCharges)
-detailsCharges maybeShipping items maybeCoupon priorityShipping = do
+detailsCharges maybeShipping avalaraCode items maybeCoupon priorityShipping = do
     restrictions <- try $ checkProductRestrictions maybeShipping items
-    charges <- getCharges maybeShipping items maybeCoupon priorityShipping True
+    charges <- getCharges maybeShipping avalaraCode items maybeCoupon priorityShipping True
     mapException DetailsCouponError
         $ checkCouponMeetsMinimum maybeCoupon charges
     mapException DetailsPriorityError
@@ -1090,7 +1093,7 @@ createOrder
     -> UTCTime
     -- ^ Current Time
     -> AppSQL (Entity Order, Cents, Cents)
-createOrder (Entity customerId customer) cartId shippingEntity billingId maybeStoreCredit priorityShipping maybeCouponCode comment currentTime = do
+createOrder ce@(Entity customerId customer) cartId shippingEntity billingId maybeStoreCredit priorityShipping maybeCouponCode comment currentTime = do
     items <- getCartItems $ \c -> c E.^. CartId E.==. E.val cartId
     let order = Order
             { orderCustomerId = customerId
@@ -1107,7 +1110,7 @@ createOrder (Entity customerId customer) cartId shippingEntity billingId maybeSt
             , orderCreatedAt = currentTime
             }
     orderId <- insert order
-    (lineTotal, maybeCouponId) <- createLineItems currentTime customerId
+    (lineTotal, maybeCouponId) <- createLineItems currentTime ce
         shippingEntity items orderId priorityShipping maybeCouponCode
     when (isJust maybeCouponId) $
         update orderId [OrderCouponId =. maybeCouponId]
@@ -1152,8 +1155,8 @@ deleteCart cartId =
 createLineItems
     :: UTCTime
     -- ^ Current Time
-    -> CustomerId
-    -- ^ Customer Id
+    -> Entity Customer
+    -- ^ Customer placing the Order
     -> Entity Address
     -- ^ Shipping Address
     -> [CartItemData]
@@ -1165,13 +1168,14 @@ createLineItems
     -> Maybe T.Text
     -- ^ Coupon Code
     -> AppSQL (Integer, Maybe CouponId)
-createLineItems currentTime customerId shippingAddress items orderId priorityShipping maybeCouponCode = do
+createLineItems currentTime (Entity customerId customer) shippingAddress items orderId priorityShipping maybeCouponCode = do
     let shippingData = Just $ toAddressData shippingAddress
     mapException PlaceOrderCannotShip
         $ checkProductRestrictions shippingData items
     maybeCoupon <- mapException PlaceOrderCouponError $ sequence
         $ getCoupon currentTime (Just customerId) <$> maybeCouponCode
-    charges <- getCharges shippingData items maybeCoupon priorityShipping False
+    let avalaraCode = fromAvalaraCustomerCode <$> customerAvalaraCode customer
+    charges <- getCharges shippingData avalaraCode items maybeCoupon priorityShipping False
     mapException PlaceOrderCouponError $ checkCouponMeetsMinimum maybeCoupon charges
     shippingCharge <-
         case ccShippingMethods charges of

@@ -652,12 +652,13 @@ to properly return an error for the user.
 -}
 getCharges
     :: Maybe AddressData        -- ^ Used to calculate the Shipping & Tax charge.
+    -> Maybe Avalara.CustomerCode   -- ^ Optional customer code for tax exemption.
     -> [CartItemData]           -- ^ The cart items (see `getCartItems`)
     -> Maybe (Entity Coupon)    -- ^ A Coupon to apply.
     -> Bool                     -- ^ Include Priority S&H
     -> Bool                     -- ^ Include Avalara Tax Quote
     -> AppSQL CartCharges
-getCharges maybeShipping items maybeCoupon priorityShipping includeAvalara =
+getCharges maybeShipping maybeAvalaraCustomer items maybeCoupon priorityShipping includeAvalara =
     let
         maybeCountry =
             adCountry <$> maybeShipping
@@ -761,7 +762,7 @@ getCharges maybeShipping items maybeCoupon priorityShipping includeAvalara =
                     , ctrType = Just Avalara.SalesOrder
                     , ctrCompanyCode = Nothing
                     , ctrDate = date
-                    , ctrCustomerCode = Avalara.CustomerCode "SALES_ORDER"
+                    , ctrCustomerCode = fromMaybe (Avalara.CustomerCode "SALES_ORDER") maybeAvalaraCustomer
                     , ctrDiscount =
                         if discount /= 0 then
                             Just discount

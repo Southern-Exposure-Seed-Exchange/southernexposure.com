@@ -5,6 +5,7 @@ CHANGELOG
 develop
 ========
 
+* Send the customer code to Avalara when getting sales tax quotes.
 * Add link to seedracks website on the Login page.
 
 

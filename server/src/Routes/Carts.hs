@@ -26,7 +26,7 @@ import Servant ((:>), (:<|>)(..), AuthProtect, ReqBody, JSON, PlainText, Get, Po
 
 import Auth
 import Models
-import Models.Fields (AddressType(..))
+import Models.Fields (AddressType(..), AvalaraCustomerCode(..))
 import Routes.CommonData (CartItemData(..), CartCharges(..), getCartItems, getCharges, toAddressData)
 import Routes.Utils (generateUniqueToken, getDisabledCheckoutDetails)
 import Server
@@ -251,13 +251,14 @@ customerDetailsRoute :: WrappedAuthToken -> App (Cookied CartDetailsData)
 customerDetailsRoute token = withValidatedCookie token getCustomerCartDetails
 
 getCustomerCartDetails :: Entity Customer -> App CartDetailsData
-getCustomerCartDetails (Entity customerId _) =
+getCustomerCartDetails (Entity customerId customer) =
     runDB $ do
         (checkoutDisabled, disabledMsg) <- lift getDisabledCheckoutDetails
         shippingAddress <- getShipping
         items <- getCartItems $ \c ->
             c E.^. CartCustomerId E.==. E.just (E.val customerId)
-        charges <- getCharges shippingAddress items Nothing False False
+        let avalaraCode = fromAvalaraCustomerCode <$> customerAvalaraCode customer
+        charges <- getCharges shippingAddress avalaraCode items Nothing False False
         return $ CartDetailsData items charges checkoutDisabled disabledMsg
     where getShipping =
             fmap toAddressData . listToMaybe
@@ -290,7 +291,7 @@ anonymousDetailsRoute parameters =
         (checkoutDisabled, disabledMsg) <- lift getDisabledCheckoutDetails
         items <- getCartItems $ \c ->
             c E.^. CartSessionToken E.==. E.just (E.val $ adpCartToken parameters)
-        charges <- getCharges Nothing items Nothing False False
+        charges <- getCharges Nothing Nothing items Nothing False False
         return $ CartDetailsData items charges checkoutDisabled disabledMsg
 
 
