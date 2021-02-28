@@ -5,6 +5,10 @@ CHANGELOG
 develop
 ========
 
+
+v1.04.07
+========
+
 * Change email sending to work with Mailgun.
 * Send the customer code to Avalara when getting sales tax quotes.
 * Add link to seedracks website on the Login page.
