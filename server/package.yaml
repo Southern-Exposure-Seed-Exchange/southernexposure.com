@@ -56,8 +56,6 @@ dependencies:
     - esqueleto
     - fast-logger
     - filepath
-    - HaskellNet
-    - HaskellNet-SSL
     - hostname
     - http-api-data
     - http-client
@@ -80,6 +78,7 @@ dependencies:
     - servant-auth-cookie
     - servant-server
     - sitemap-gen
+    - smtp-mail
     - state-codes
     - stm
     - stripe-core

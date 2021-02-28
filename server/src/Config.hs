@@ -13,7 +13,7 @@ import Data.Monoid ((<>))
 import Data.Pool (Pool, createPool)
 import Data.Text (Text)
 import Database.Persist.Sql (ConnectionPool)
-import Network.HaskellNet.SMTP.SSL (SMTPConnection, connectSMTPSTARTTLS, closeSMTP)
+import Network.Mail.SMTP (SMTPConnection, connectSMTP', closeSMTP)
 import Servant.Server.Experimental.Auth.Cookie (PersistentServerKey, RandomSource)
 import System.Log.FastLogger (TimedFastLogger, LogStr, FormattedTime, ToLogStr(..))
 import Web.Stripe.Client (StripeConfig)
@@ -87,4 +87,4 @@ timedLogStr msg time = "[" <> toLogStr time <> "]: " <> toLogStr msg <> "\n"
 
 smtpPool :: String -> Int -> IO (Pool SMTPConnection)
 smtpPool serverName =
-    createPool (connectSMTPSTARTTLS serverName) closeSMTP 1 20
+    createPool (connectSMTP' serverName 2525) closeSMTP 1 20

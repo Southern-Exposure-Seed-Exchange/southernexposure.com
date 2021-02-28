@@ -24,7 +24,7 @@ import Data.Pool (withResource)
 import Database.Persist (get)
 import Database.Persist.Sql (SqlReadT)
 import GHC.Generics (Generic)
-import Network.HaskellNet.SMTP.SSL (authenticate, sendMimeMail2, AuthType(PLAIN))
+import Network.Mail.SMTP (login, renderAndSend)
 import Network.Mail.Mime (Address(..), Mail(..), plainPart, htmlPart)
 import Text.Blaze.Html.Renderer.Text (renderHtml)
 import Text.Markdown (markdown, def)
@@ -179,11 +179,11 @@ send cfg email =
     in
     withResource (getSmtpPool cfg) $ \conn -> do
         let user = getSmtpUser cfg
-        authSucceeded <- authenticate PLAIN user (getSmtpPass cfg) conn
-        if authSucceeded then
-            sendMimeMail2 mail conn
+        loginResponse <- login conn user (getSmtpPass cfg)
+        if fst loginResponse == 235 then
+            renderAndSend conn mail
         else
-            logger $ "SMTP Authentication Failed for User `" <> T.pack user <> "`"
+            logger $ "SMTP Authentication Failed for User `" <> T.pack user <> "`: " <> T.pack (show loginResponse)
 
 
 makeRecipient :: Environment -> EmailData -> Address
