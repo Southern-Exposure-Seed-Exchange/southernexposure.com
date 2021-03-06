@@ -366,12 +366,12 @@ type CustomerDeleteRoute =
     :> Delete '[JSON] (Cookied ())
 
 -- | Delete a customer by moving their Orders & related
--- anonymized-addresses to the `southernexposure+deleted@gmail.com`
+-- anonymized-addresses to the `gardens+deleted@southernexposure.com`
 -- account, then delete the customer's account & all remaining related
 -- models.
 customerDeleteRoute :: WrappedAuthToken -> CustomerId -> App (Cookied ())
 customerDeleteRoute t customerId = withAdminCookie t $ \_ -> runDB $ do
-    newCustomerId <- getBy (UniqueEmail "southernexposure+deleted@gmail.com") >>= \case
+    newCustomerId <- getBy (UniqueEmail "gardens+deleted@southernexposure.com") >>= \case
         Nothing -> do
             hashedPassword <- generateRandomPassword
             token <- generateUniqueToken UniqueToken

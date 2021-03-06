@@ -5,6 +5,9 @@ CHANGELOG
 develop
 ========
 
+* Fix an error on account deletion cause by a bug in account lookup when moving
+  deleted customer's orders to gardens account.
+
 
 v1.04.07
 ========
