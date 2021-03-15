@@ -14,7 +14,7 @@ module Routes.Customers
     ) where
 
 import Control.Exception.Safe (throwM, Exception, try, handle)
-import Control.Monad ((>=>), (<=<), when, void)
+import Control.Monad ((>=>), (<=<), when, void, forM_)
 import Control.Monad.IO.Class (liftIO)
 import Data.Aeson (ToJSON(..), FromJSON(..), (.=), (.:), (.:?), withObject, object)
 import Data.Int (Int64)
@@ -30,7 +30,7 @@ import Database.Persist
 import Database.Persist.Sql (toSqlKey)
 import Servant
     ( (:>), (:<|>)(..), AuthProtect, ReqBody, JSON, Get, Post, Put
-    , err403, err404, err500, QueryParam, Capture, Delete
+    , err403, err404, err500, QueryParam, QueryFlag, Capture, Delete
     )
 
 import Auth
@@ -75,7 +75,7 @@ type CustomerAPI =
 type CustomerRoutes =
          App LocationData
     :<|> (RegistrationParameters -> App (Cookied AuthorizationData))
-    :<|> (LoginParameters -> App (Cookied AuthorizationData))
+    :<|> (Bool -> LoginParameters -> App (Cookied AuthorizationData))
     :<|> App (Cookied ())
     :<|> (WrappedAuthToken -> AuthorizeParameters -> App (Cookied AuthorizationData))
     :<|> (ResetRequestParameters -> App ())
@@ -238,13 +238,18 @@ registrationRoute = validate >=> \parameters -> do
 
 
 type LoginRoute =
-       ReqBody '[JSON] LoginParameters
+       QueryFlag "clearCart"
+    :> ReqBody '[JSON] LoginParameters
     :> Post '[JSON] (Cookied AuthorizationData)
 
-loginRoute :: LoginParameters -> App (Cookied AuthorizationData)
-loginRoute LoginParameters { lpEmail, lpPassword, lpCartToken, lpRemember } = do
+loginRoute :: Bool -> LoginParameters -> App (Cookied AuthorizationData)
+loginRoute clearCart LoginParameters { lpEmail, lpPassword, lpCartToken, lpRemember } = do
     e@(Entity customerId customer) <- handle handlePasswordValidationError
         $ runDB $ validatePassword lpEmail lpPassword
+    when clearCart $ runDB $ do
+        mbCart <- getBy $ UniqueCustomerCart $ Just customerId
+        forM_ mbCart $ \(Entity cartId _) ->
+            deleteWhere [CartItemCartId ==. cartId] >> delete cartId
     runDB $ maybeMergeCarts customerId lpCartToken
     let sessionSettings = if lpRemember then permanentSession else temporarySession
     addSessionCookie sessionSettings (makeToken customer)

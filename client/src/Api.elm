@@ -35,7 +35,7 @@ import Json.Encode exposing (Value)
 import Product exposing (ProductId(..))
 import Products.Pagination as Pagination
 import RemoteData exposing (WebData)
-import Routing.Utils exposing (joinPath, queryParameter, withQueryStrings)
+import Routing.Utils exposing (joinPath, queryFlag, queryParameter, withQueryStrings)
 import StaticPage exposing (StaticPageId)
 
 
@@ -50,7 +50,7 @@ type Endpoint
     | ProductSearch Pagination.Data
     | PageDetails String
     | AdvancedSearchData
-    | CustomerLogin
+    | CustomerLogin Bool
     | CustomerRegister
     | CustomerAuthorize
     | CustomerLogout
@@ -144,8 +144,9 @@ toUrl endpoint =
                 AdvancedSearchData ->
                     joinPath [ "categories", "search" ]
 
-                CustomerLogin ->
+                CustomerLogin clearCart ->
                     joinPath [ "customers", "login" ]
+                        ++ withQueryStrings [ queryFlag "clearCart" clearCart ]
 
                 CustomerRegister ->
                     joinPath [ "customers", "register" ]

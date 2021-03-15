@@ -104,7 +104,7 @@ view route authStatus navigationData activeCategoryIds searchData =
 
         authLinks =
             if authStatus == Anonymous then
-                [ mobileLink (Login Nothing) "Log In"
+                [ mobileLink (Login Nothing False) "Log In"
                 , mobileLink CreateAccount "Register"
                 ]
 

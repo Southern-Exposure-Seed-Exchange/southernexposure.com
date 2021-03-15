@@ -31,7 +31,7 @@ type Route
     | PageDetails String (Maybe String)
     | CreateAccount
     | CreateAccountSuccess
-    | Login (Maybe String)
+    | Login (Maybe String) Bool
     | ResetPassword (Maybe String)
     | MyAccount
     | EditLogin
@@ -119,7 +119,7 @@ parseRoute =
 
         accountParser =
             Url.oneOf
-                [ Url.map Login (Url.s "login" <?> Query.string "redirect")
+                [ Url.map Login (Url.s "login" <?> Query.string "redirect" <?> parseFlag "clearCart")
                 , Url.map CreateAccount (Url.s "create")
                 , Url.map CreateAccountSuccess (Url.s "create" </> Url.s "success")
                 , Url.map ResetPassword (Url.s "reset-password" <?> Query.string "code")
@@ -128,6 +128,10 @@ parseRoute =
                 , Url.map EditAddress (Url.s "addresses")
                 , Url.map OrderDetails (Url.s "order" </> Url.int)
                 ]
+
+        clearCartQueryParser =
+            Query.string "clearCart"
+                |> Query.map (Maybe.map (always True) >> Maybe.withDefault False)
 
         adminParser =
             Url.oneOf
@@ -308,15 +312,18 @@ reverse route =
         CreateAccountSuccess ->
             joinPath [ "account", "create", "success" ]
 
-        Login redirectTo ->
+        Login redirectTo clearCart ->
             let
                 queryParams =
                     case redirectTo of
                         Nothing ->
-                            ""
+                            withQueryStrings [ queryFlag "clearCart" clearCart ]
 
                         Just url ->
-                            withQueryStrings [ queryParameter ( "redirect", url ) ]
+                            withQueryStrings
+                                [ queryParameter ( "redirect", url )
+                                , queryFlag "clearCart" clearCart
+                                ]
             in
             joinPath [ "account", "login" ] ++ queryParams
 
@@ -569,7 +576,7 @@ authRequired route =
         CreateAccountSuccess ->
             True
 
-        Login _ ->
+        Login _ _ ->
             False
 
         ResetPassword _ ->

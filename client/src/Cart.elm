@@ -19,8 +19,8 @@ import Models.Fields exposing (Cents(..), centsMap, imageToSrcSet, imgSrcFallbac
 import PageData exposing (CartDetails, CartItemId(..))
 import Product exposing (variantPrice)
 import RemoteData
-import Routing exposing (Route(..))
-import User exposing (AuthStatus)
+import Routing exposing (Route(..), reverse)
+import User exposing (AuthStatus, unauthorized)
 import Views.Aria as Aria
 import Views.Format as Format
 import Views.Utils exposing (htmlOrBlank, icon, numericInput, onIntInput, rawHtml, routeLinkAttributes)
@@ -158,8 +158,8 @@ customerUpdateRequest body =
 -- VIEW
 
 
-view : Form -> CartDetails -> List (Html Msg)
-view ({ quantities } as form_) ({ items, charges } as cartDetails) =
+view : AuthStatus -> Form -> CartDetails -> List (Html Msg)
+view authStatus ({ quantities } as form_) ({ items, charges } as cartDetails) =
     let
         itemCount =
             List.foldl (.quantity >> (+)) 0 items
@@ -187,9 +187,16 @@ view ({ quantities } as form_) ({ items, charges } as cartDetails) =
                     , disabled formIsUnchanged
                     ]
                     [ icon "refresh", text " Update" ]
-                , a (class "btn btn-primary ml-md-2" :: routeLinkAttributes Checkout)
+                , a (class "btn btn-primary ml-md-2" :: routeLinkAttributes checkoutRoute)
                     [ icon "shopping-cart", text " Checkout" ]
                 ]
+
+        checkoutRoute =
+            if authStatus == unauthorized then
+                Login (Just <| reverse <| Checkout) True
+
+            else
+                Checkout
 
         tableHeader =
             thead []

@@ -110,7 +110,7 @@ update key msg model authStatus =
                         ( initial
                         , Routing.reverse EditLogin
                             |> Just
-                            |> Login
+                            |> (\x -> Login x False)
                             |> Routing.newUrl key
                         )
 

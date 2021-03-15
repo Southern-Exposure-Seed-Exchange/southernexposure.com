@@ -203,7 +203,7 @@ fetchDataForRoute ({ route, pageData, key } as model) =
                 CreateAccountSuccess ->
                     doNothing
 
-                Login _ ->
+                Login _ _ ->
                     doNothing
 
                 ResetPassword _ ->
@@ -1245,15 +1245,15 @@ update msg ({ pageData, key } as model) =
                                 ( updatedModel, Cmd.none )
                     in
                     case model.route of
-                        Login (Just "") ->
+                        Login (Just "") _ ->
                             baseUpdate
                                 |> batchCommand (Routing.newUrl key Routing.homePage)
 
-                        Login (Just newUrl) ->
+                        Login (Just newUrl) _ ->
                             baseUpdate
                                 |> batchCommand (Browser.Navigation.pushUrl key newUrl)
 
-                        Login Nothing ->
+                        Login Nothing _ ->
                             baseUpdate
                                 |> batchCommand (Routing.newUrl key MyAccount)
 
@@ -1776,7 +1776,7 @@ runOnCurrentWebData runner { pageData, route } =
         CreateAccountSuccess ->
             nothingRunner
 
-        Login _ ->
+        Login _ _ ->
             nothingRunner
 
         ResetPassword _ ->
@@ -2064,7 +2064,7 @@ resetForm oldRoute model =
         CreateAccountSuccess ->
             model
 
-        Login _ ->
+        Login _ _ ->
             { model | loginForm = Login.initial }
 
         ResetPassword _ ->
@@ -2235,7 +2235,7 @@ updateSessionTokenAndCartItemCount model quantity sessionToken =
 redirectIfAuthRequired : Routing.Key -> Route -> Cmd msg
 redirectIfAuthRequired key route =
     if Routing.authRequired route then
-        Routing.newUrl key <| Login <| Just <| Routing.reverse route
+        Routing.newUrl key <| Login (Just <| Routing.reverse route) False
 
     else
         Cmd.none
@@ -2245,7 +2245,7 @@ redirect403IfAnonymous : Routing.Key -> RemoteData.WebData a -> { m | currentUse
 redirect403IfAnonymous key response { currentUser, route } =
     case ( response, currentUser ) of
         ( RemoteData.Failure (Http.BadStatus 403), User.Anonymous ) ->
-            Routing.newUrl key <| Login <| Just <| Routing.reverse route
+            Routing.newUrl key <| Login (Just <| Routing.reverse route) False
 
         _ ->
             Cmd.none

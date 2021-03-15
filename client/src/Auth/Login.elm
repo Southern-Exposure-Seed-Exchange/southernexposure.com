@@ -65,7 +65,7 @@ type Msg
     = Email String
     | Password String
     | Remember Bool
-    | SubmitForm (Maybe String)
+    | SubmitForm (Maybe String) Bool
     | SubmitResponse (WebData (Result Api.FormErrors AuthStatus))
 
 
@@ -84,10 +84,10 @@ update key msg model maybeSessionToken =
             { model | remember = remember }
                 |> nothingAndNoCommand
 
-        SubmitForm redirectTo ->
+        SubmitForm redirectTo clearCart ->
             ( { model | errors = Api.initialErrors, redirectTo = redirectTo }
             , Nothing
-            , login model maybeSessionToken
+            , login model maybeSessionToken clearCart
             )
 
         SubmitResponse response ->
@@ -136,9 +136,9 @@ rememberAuth remember authStatus =
         Cmd.none
 
 
-login : Form -> Maybe String -> Cmd Msg
-login form maybeSessionToken =
-    Api.post Api.CustomerLogin
+login : Form -> Maybe String -> Bool -> Cmd Msg
+login form maybeSessionToken clearCart =
+    Api.post (Api.CustomerLogin clearCart)
         |> Api.withJsonBody (encode form maybeSessionToken)
         |> Api.withErrorHandler User.decoder
         |> Api.sendRequest SubmitResponse
@@ -148,11 +148,11 @@ login form maybeSessionToken =
 -- VIEW
 
 
-view : (Msg -> msg) -> Form -> Maybe String -> List (Html msg)
-view tagger model redirectTo =
+view : (Msg -> msg) -> Form -> Maybe String -> Bool -> List (Html msg)
+view tagger model redirectTo clearCart =
     let
         loginForm =
-            form [ onSubmit <| tagger <| SubmitForm redirectTo ]
+            form [ onSubmit <| tagger <| SubmitForm redirectTo clearCart ]
                 [ fieldset []
                     [ legend [] [ text "Returning Customers" ]
                     , errorHtml

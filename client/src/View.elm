@@ -136,8 +136,8 @@ view ({ route, pageData, navigationData, zone } as model) =
                 CreateAccountSuccess ->
                     CreateAccount.successView
 
-                Login redirectTo ->
-                    Login.view LoginMsg model.loginForm redirectTo
+                Login redirectTo clearCart ->
+                    Login.view LoginMsg model.loginForm redirectTo clearCart
 
                 ResetPassword maybeCode ->
                     ResetPassword.view ResetPasswordMsg model.resetPasswordForm maybeCode
@@ -159,7 +159,7 @@ view ({ route, pageData, navigationData, zone } as model) =
                         |> withIntermediateText (apply <| OrderDetails.view zone orderId)
 
                 Cart ->
-                    withIntermediateText (Cart.view model.editCartForm) pageData.cartDetails
+                    withIntermediateText (Cart.view model.currentUser model.editCartForm) pageData.cartDetails
                         |> List.map (Html.map EditCartMsg)
 
                 QuickOrder ->
@@ -399,7 +399,7 @@ pageTitle ({ route, pageData } as model) =
         CreateAccountSuccess ->
             "Account Creation Successful"
 
-        Login _ ->
+        Login _ _ ->
             "Customer Login"
 
         ResetPassword Nothing ->
@@ -582,7 +582,7 @@ pageDescription { route, pageData } =
         NotFound ->
             "Sorry, this page no longer exists."
 
-        Login _ ->
+        Login _ _ ->
             "Log in to your Southern Exposure Seed Exchange account."
 
         CreateAccount ->
