@@ -5,6 +5,10 @@ CHANGELOG
 develop
 ========
 
+
+v1.04.08
+========
+
 * Change Checkout link to Login page with redirect & account cart clearing when
   visiting the Cart page while not logged in.
 * Fix an error on account deletion cause by a bug in account lookup when moving
