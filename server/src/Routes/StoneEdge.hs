@@ -14,6 +14,7 @@ module Routes.StoneEdge
     , stoneEdgeRoutes
     , StoneEdgeRequest(..)
     -- * Test Exports
+    , transformOrder
     , transformCoupon
     , transformStoreCredit
     , transformTax

@@ -274,3 +274,12 @@ executables:
             - persistent-postgresql
             - text
             - time
+
+    export-stoneedge-xml:
+        main: ExportStoneEdgeXML.hs
+        <<: *script-defaults
+        other-modules: []
+        dependencies:
+            - sese-website
+            - monad-logger
+            - persistent-postgresql
