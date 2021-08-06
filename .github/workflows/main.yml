@@ -1,0 +1,52 @@
+---
+# yamllint disable rule:line-length
+
+name: CI Build
+
+# yamllint disable-line rule:truthy
+on:
+  # Run Daily
+  schedule:
+    - cron: '0 0 * * *'
+  # Run on Push
+  push:
+  # Run on Tag Creation
+  create:
+  # Allow Running Manually
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Cache Stack Artifacts
+        uses: actions/cache@v2
+        with:
+          key: build-${{ github.ref }}-${{ github.sha }}
+          path: |
+            ~/.stack/
+            server/.stack-work/
+          restore-keys: |
+            build-${{ github.ref }}-
+            build-
+      - name: Setup Node
+        uses: actions/setup-node@v2
+        with:
+          node-version: 13.x
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+      - name: Setup Stack
+        uses: haskell/actions/setup@v1
+        with:
+          enable-stack: true
+          stack-no-global: true
+      - name: Install Client Dependencies
+        run: cd client && npm ci && cd ..
+      - name: Install Server Dependencies
+        run: cd server && stack install --only-dependencies && cd ..
+      - name: Build Project
+        run: ./manage.hs build
+      - name: Verify Client Formatting
+        run: cd client && npx elm-format --validate src
