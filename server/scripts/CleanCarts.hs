@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
-{- | Remove any inactive variants from Carts & remove Carts for customers
+{- Remove any inactive variants from Carts & remove Carts for customers
 that haven't logged in to the new site yet.
 -}
 import Control.Monad.Logger (runNoLoggingT)

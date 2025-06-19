@@ -2,7 +2,7 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeFamilies #-}
-{-| Update ProductVariant Prices by SKU from a CSV. -}
+{- Update ProductVariant Prices by SKU from a CSV. -}
 import Control.Monad.Logger (runNoLoggingT)
 import Data.Csv (FromNamedRecord, decodeByName)
 import Database.Persist

@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TupleSections #-}
-{-| Export the StoneEdge Import XML for an Order. -}
+{- Export the StoneEdge Import XML for an Order. -}
 
 import Control.Monad (forM)
 import Control.Monad.IO.Class (liftIO)

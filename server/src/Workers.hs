@@ -72,9 +72,9 @@ import qualified Emails
 data Task
     = OptimizeImage
         FilePath
-        -- ^ FilePath
+        -- FilePath
         FilePath
-        -- ^ Destination Directory
+        -- Destination Directory
     | SendEmail EmailType
     | CleanDatabase
     | Avalara AvalaraTask

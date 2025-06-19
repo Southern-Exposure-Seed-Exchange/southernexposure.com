@@ -13,7 +13,7 @@ module MerchantFeed
     , Condition(..)
     ) where
 
-{-| This module provides types & render functions for generating a Google
+{-  This module provides types & render functions for generating a Google
 Merchant Product Feed in RSS2.0 format:
 
 https://support.google.com/merchants/answer/7052112

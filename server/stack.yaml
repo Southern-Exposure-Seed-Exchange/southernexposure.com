@@ -13,7 +13,7 @@ extra-deps:
     - sitemap-gen-0.1.0.0@sha256:cc8ba0fb0a4387d1b0973cd95f1017b810c813913bc1d4066b92f1b1452d8574,1893
     # In LTS 16.0
     - immortal-queue-0.1.0.0@sha256:e71a055be75718de5675630706f36a5ec1af2f8c89d02128cba7a4126bbf83de,2490
-
+    - unix-compat-0.5.1
 flags: {}
 
 extra-package-dbs: []

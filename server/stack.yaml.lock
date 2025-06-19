@@ -32,6 +32,13 @@ packages:
       sha256: 023019a7645dd1b0c8de336bfa8972056142745f6db20b51abccd4ecde5d7434
   original:
     hackage: immortal-queue-0.1.0.0@sha256:e71a055be75718de5675630706f36a5ec1af2f8c89d02128cba7a4126bbf83de,2490
+- completed:
+    hackage: unix-compat-0.5.1@sha256:ecc47e6ebd49b06e90f3268f2ebc0b918b7ae76ecfa72bc99ca4b3afc8ca7879,2040
+    pantry-tree:
+      size: 1045
+      sha256: 751783ccc787a07f009cb3d88f5c2dc670fd36c2e689bfd981203516101894c0
+  original:
+    hackage: unix-compat-0.5.1
 snapshots:
 - completed:
     size: 569315

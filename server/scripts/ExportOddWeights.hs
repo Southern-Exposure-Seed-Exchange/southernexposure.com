@@ -1,7 +1,7 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeFamilies #-}
-{-| Export any Product Variants with Zero Mass Lot Sizes & Non-Standard
+{- Export any Product Variants with Zero Mass Lot Sizes & Non-Standard
 Masses Greater Than 42g.
 
 -}

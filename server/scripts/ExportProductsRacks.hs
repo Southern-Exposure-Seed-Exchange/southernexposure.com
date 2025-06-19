@@ -2,7 +2,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE RecordWildCards #-}
-{-| Export Product SKUs, Names, & Categories. -}
+{- Export Product SKUs, Names, & Categories. -}
 import Control.Monad.Logger (runNoLoggingT)
 import Data.Csv (ToNamedRecord, DefaultOrdered(..), encodeDefaultOrderedByName)
 import Data.List (sortOn)
