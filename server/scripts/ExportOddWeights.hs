@@ -9,11 +9,10 @@ import Control.Monad (forM)
 import Control.Monad.Logger (runNoLoggingT)
 import Data.List (intercalate)
 import Data.Maybe (catMaybes, mapMaybe)
-import Data.Monoid ((<>))
 import Data.Ratio ((%), Ratio, numerator, denominator)
 import Database.Persist
 import Database.Persist.Postgresql
-    ( ConnectionPool, SqlWriteT, createPostgresqlPool, runSqlPool )
+    ( ConnectionPool, SqlPersistT, createPostgresqlPool, runSqlPool )
 import Numeric.Natural (Natural)
 
 import Models
@@ -38,7 +37,7 @@ connectToPostgres =
     runNoLoggingT $ createPostgresqlPool "dbname=sese-website" 1
 
 -- | Get Active Products join with any Active Variants.
-getMassVariants :: SqlWriteT IO [ProductAndVariants]
+getMassVariants :: SqlPersistT IO [ProductAndVariants]
 getMassVariants = do
     products <- selectList [] [Asc ProductBaseSku]
     fmap catMaybes . forM products $ \e@(Entity pId _) -> do

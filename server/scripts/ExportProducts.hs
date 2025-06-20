@@ -5,7 +5,6 @@
 import Control.Monad.Logger (runNoLoggingT)
 import Data.Csv (ToNamedRecord, DefaultOrdered(..), encodeDefaultOrderedByName, header)
 import Data.List (sortOn)
-import Data.Monoid ((<>))
 import Database.Persist
 import Database.Persist.Postgresql
     ( ConnectionPool, SqlPersistT, createPostgresqlPool, runSqlPool

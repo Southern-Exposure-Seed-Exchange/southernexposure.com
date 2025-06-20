@@ -12,7 +12,6 @@ import Control.Monad (unless)
 import Control.Monad.Trans (lift, liftIO)
 import Data.Aeson ((.=), (.:), ToJSON(..), FromJSON(..), object, withObject)
 import Data.Maybe (catMaybes)
-import Data.Monoid ((<>))
 import Data.Time (LocalTime, TimeZone, getCurrentTimeZone, localTimeToUTC)
 import Database.Persist
     ( Entity(..), SelectOpt(Desc), Update, selectList, insert, get, update

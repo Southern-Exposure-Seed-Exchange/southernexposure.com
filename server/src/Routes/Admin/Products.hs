@@ -13,7 +13,6 @@ import Control.Monad (forM_, unless)
 import Control.Monad.Reader (liftIO, lift)
 import Data.Aeson ((.=), (.:), (.:?), ToJSON(..), FromJSON(..), Value(Object), object, withObject)
 import Data.Maybe (mapMaybe, listToMaybe, fromMaybe)
-import Data.Monoid ((<>))
 import Data.Text.Encoding (encodeUtf8)
 import Data.Time (UTCTime, getCurrentTime)
 import Database.Persist

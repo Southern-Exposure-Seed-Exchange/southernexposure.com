@@ -25,7 +25,6 @@ module Validation
 import Control.Arrow (second)
 import Data.Aeson (ToJSON(..), encode, object)
 import Data.Maybe (isJust, isNothing)
-import Data.Monoid ((<>))
 import Database.Persist
     ( PersistEntityBackend, PersistEntity, Filter, Unique, get, getBy
     , selectFirst

@@ -63,15 +63,14 @@ module Avalara
     , AuthenticationType(..)
     ) where
 
-import Control.Exception.Safe (MonadCatch, SomeException, try)
+import UnliftIO.Exception (SomeException, try)
+import UnliftIO (MonadUnliftIO)
 import Control.Monad.Reader (MonadIO, ReaderT, asks, ask, liftIO)
 import Data.Aeson
     ((.:), (.:?), (.=), FromJSON(..), ToJSON(..), Value(..), object, withObject
     , withText, withScientific, toJSONList
     )
-import Data.Default (def)
 import Data.Foldable (asum)
-import Data.Monoid ((<>))
 import Data.Scientific (Scientific)
 import Data.Text.Encoding (encodeUtf8)
 import Data.Time (UTCTime, Day, defaultTimeLocale, formatTime)
@@ -82,7 +81,7 @@ import Network.HTTP.Req
     ( (/:), Option, Scheme(Https), Url, runReq, req, header, https, GET(..)
     , POST(..), responseBody, jsonResponse, NoReqBody(..), ReqBodyJson(..)
     , HttpMethod, HttpBody, HttpBodyAllowed, AllowsBody, ProvidesBody
-    , HttpConfig(..)
+    , HttpConfig(..), defaultHttpConfig
     )
 import Network.HostName (getHostName)
 
@@ -179,7 +178,7 @@ generateClientHeader = do
 --
 -- API Docs:
 -- https://developer.avalara.com/api-reference/avatax/rest/v2/methods/Utilities/Ping/
-ping :: (MonadIO m, MonadCatch m) => ReaderT Config m (WithError PingResponse)
+ping :: MonadUnliftIO m => ReaderT Config m (WithError PingResponse)
 ping =
     makeGetRequest Ping
 
@@ -188,7 +187,7 @@ ping =
 --
 -- API Docs:
 -- https://developer.avalara.com/api-reference/avatax/rest/v2/methods/Transactions/CreateTransaction/
-createTransaction :: (MonadIO m, MonadCatch m) => CreateTransactionRequest -> ReaderT Config m (WithError Transaction)
+createTransaction :: MonadUnliftIO m => CreateTransactionRequest -> ReaderT Config m (WithError Transaction)
 createTransaction =
     makePostRequest CreateTransaction
 
@@ -197,7 +196,7 @@ createTransaction =
 --
 -- API Docs:
 -- https://developer.avalara.com/api-reference/avatax/rest/v2/methods/Transactions/CommitTransaction/
-commitTransaction :: (MonadIO m, MonadCatch m) => CompanyCode -> TransactionCode -> CommitTransactionRequest
+commitTransaction :: MonadUnliftIO m => CompanyCode -> TransactionCode -> CommitTransactionRequest
     -> ReaderT Config m (WithError Transaction)
 commitTransaction companyCode transactionCode =
     makePostRequest $ CommitTransaction companyCode transactionCode
@@ -208,7 +207,7 @@ commitTransaction companyCode transactionCode =
 --
 -- API Docs:
 -- https://developer.avalara.com/api-reference/avatax/rest/v2/methods/Transactions/RefundTransaction/
-refundTransaction :: (MonadIO m, MonadCatch m) => CompanyCode -> TransactionCode -> RefundTransactionRequest
+refundTransaction :: MonadUnliftIO m => CompanyCode -> TransactionCode -> RefundTransactionRequest
     -> ReaderT Config m (WithError Transaction)
 refundTransaction companyCode transactionCode =
     makePostRequest $ RefundTransaction companyCode transactionCode
@@ -219,7 +218,7 @@ refundTransaction companyCode transactionCode =
 -- API Docs:
 -- https://developer.avalara.com/api-reference/avatax/rest/v2/methods/Transactions/VoidTransaction/
 -- https://developer.avalara.com/avatax/voiding-documents/
-voidTransaction :: (MonadIO m, MonadCatch m) => CompanyCode -> TransactionCode -> VoidTransactionRequest
+voidTransaction :: MonadUnliftIO m => CompanyCode -> TransactionCode -> VoidTransactionRequest
     -> ReaderT Config m (WithError Transaction)
 voidTransaction companyCode transactionCode =
     makePostRequest $ VoidTransaction companyCode transactionCode
@@ -229,7 +228,7 @@ voidTransaction companyCode transactionCode =
 --
 -- API Docs:
 -- https://developer.avalara.com/api-reference/avatax/rest/v2/methods/Transactions/UnvoidTransaction/
-unvoidTransaction :: (MonadIO m, MonadCatch m) => CompanyCode -> TransactionCode -> ReaderT Config m (WithError Transaction)
+unvoidTransaction :: MonadUnliftIO m => CompanyCode -> TransactionCode -> ReaderT Config m (WithError Transaction)
 unvoidTransaction companyCode transactionCode =
     makeEmptyPostRequest $ UnvoidTransaction companyCode transactionCode
 
@@ -238,7 +237,7 @@ unvoidTransaction companyCode transactionCode =
 --
 -- API Docs:
 -- https://developer.avalara.com/api-reference/avatax/rest/v2/methods/Customers/CreateCustomers/
-createCustomers :: (MonadIO m, MonadCatch m) => CompanyId -> CreateCustomersRequest -> ReaderT Config m (WithError [Customer])
+createCustomers :: MonadUnliftIO m => CompanyId -> CreateCustomersRequest -> ReaderT Config m (WithError [Customer])
 createCustomers companyId =
     makePostRequest $ CreateCustomers companyId
 
@@ -994,25 +993,25 @@ formatAvalaraTime =
     T.pack . formatTime defaultTimeLocale "%FT%T+00:00"
 
 makeGetRequest
-    :: (FromJSON a, MonadIO m, MonadCatch m)
+    :: (FromJSON a, MonadUnliftIO m)
     => Endpoint -> ReaderT Config m (WithError a)
 makeGetRequest endpoint =
     makeRequest endpoint GET NoReqBody
 
 makePostRequest
-    :: (ToJSON a, FromJSON b, MonadIO m, MonadCatch m)
+    :: (ToJSON a, FromJSON b, MonadUnliftIO m)
     => Endpoint -> a -> ReaderT Config m (WithError b)
 makePostRequest endpoint body =
     makeRequest endpoint POST $ ReqBodyJson body
 
 makeEmptyPostRequest
-    :: (FromJSON b, MonadIO m, MonadCatch m)
+    :: (FromJSON b, MonadUnliftIO m)
     => Endpoint -> ReaderT Config m (WithError b)
 makeEmptyPostRequest endpoint =
     makeRequest endpoint POST NoReqBody
 
 makeRequest
-    :: ( FromJSON a, HttpMethod method, HttpBody body, MonadIO m, MonadCatch m
+    :: ( FromJSON a, HttpMethod method, HttpBody body, MonadUnliftIO m
        , HttpBodyAllowed (AllowsBody method) (ProvidesBody body)
        )
     => Endpoint -> method -> body
@@ -1023,7 +1022,7 @@ makeRequest endpoint method reqBody = do
     clientHeader <- generateClientHeader
     let headers = authHeader <> clientHeader
         httpConfig =
-            def
+            defaultHttpConfig
                 { httpConfigCheckResponse = \req_ resp body ->
                     let code =
                             statusCode $ responseStatus resp
@@ -1034,7 +1033,7 @@ makeRequest endpoint method reqBody = do
                     if validCode then
                         Nothing
                     else
-                        httpConfigCheckResponse def req_ resp body
+                        httpConfigCheckResponse defaultHttpConfig req_ resp body
                 }
     fmap (either HttpException id) . try $ runReq httpConfig $ responseBody
         <$> req method path reqBody jsonResponse headers

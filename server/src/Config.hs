@@ -9,7 +9,6 @@ module Config
     ) where
 
 import Control.Concurrent.STM (TVar)
-import Data.Monoid ((<>))
 import Data.Pool (Pool, createPool)
 import Data.Text (Text)
 import Database.Persist.Sql (ConnectionPool)

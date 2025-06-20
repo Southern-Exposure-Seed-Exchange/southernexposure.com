@@ -50,7 +50,6 @@ module Routes.CommonData
 
 import Prelude hiding (product)
 
-import Control.Exception.Safe (Exception, throw)
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Monad.Reader (MonadReader, lift, asks, void, when)
 import Data.Aeson ((.=), (.:), (.:?), ToJSON(..), FromJSON(..), object, withObject)
@@ -58,16 +57,17 @@ import Data.Digest.Pure.MD5 (md5)
 import Data.Int (Int64)
 import Data.List (intersect)
 import Data.Maybe (mapMaybe, listToMaybe, fromMaybe, maybeToList)
-import Data.Monoid ((<>))
 import Data.Ratio ((%))
 import Data.Text.Encoding (encodeUtf8, decodeUtf8)
 import Data.Time (UTCTime, getCurrentTime)
 import Database.Persist
     ( (=.), (==.), (>=.), (<=.), Entity(..), SelectOpt(Asc), selectList, getBy
-    , update
+    , update, OverflowNatural(..)
     )
 import Numeric.Natural (Natural)
 import Servant (errBody, err500)
+import Data.Coerce (coerce)
+import UnliftIO.Exception (throwIO, Exception)
 
 import Avalara (CreateTransactionRequest(..), AddressInfo(..))
 import Cache (CategoryPredecessorCache, getCategoryPredecessorCache, queryCategoryPredecessorCache)
@@ -463,12 +463,12 @@ validatePassword email password = do
             else
                 validateZencartPassword e
         Nothing ->
-            hashAnyways $ throw NoCustomer
+            hashAnyways $ throwIO NoCustomer
   where
     resetRequiredError =
-        void . hashAnyways $ throw PasswordResetRequired
+        void . hashAnyways $ throwIO PasswordResetRequired
     authorizationError =
-        throw AuthorizationError
+        throwIO AuthorizationError
     -- Hash the password without trying to validate it to prevent
     -- mining of valid logins.
     hashAnyways :: AppSQL a -> AppSQL a
@@ -504,7 +504,7 @@ validatePassword email password = do
             BCrypt.slowerBcryptHashingPolicy
             $ encodeUtf8 password
         newHash <- maybe
-            (throw MisconfiguredHashingPolicy)
+            (throwIO MisconfiguredHashingPolicy)
             (return . decodeUtf8) maybeNewHash
         update customerId [CustomerEncryptedPassword =. newHash]
 
@@ -633,7 +633,7 @@ getCartItems whereQuery = do
                     { cidItemId = E.unValue i
                     , cidProduct = productData
                     , cidVariant = variantData
-                    , cidQuantity = quantity
+                    , cidQuantity = coerce quantity
                     }
 
 
@@ -1152,6 +1152,6 @@ getCheckoutProducts orderId = do
                 { cpName = productName product
                 , cpSku = productBaseSku product <> productVariantSkuSuffix variant
                 , cpLotSize = productVariantLotSize variant
-                , cpQuantity = orderProductQuantity orderProd
+                , cpQuantity = coerce $ orderProductQuantity orderProd
                 , cpPrice = orderProductPrice orderProd
                 }

@@ -28,7 +28,7 @@ import Database.Persist ((>=.), (<.), (<-.), Entity(..), selectList)
 import Database.Persist.Sql (SqlPersistT)
 
 import Models.DB
-import Models.Fields (Cents(..), creditLineItemTypes)
+import Models.Fields (Cents(..), mkCents, creditLineItemTypes)
 
 import qualified Data.Map.Strict as M
 
@@ -175,7 +175,7 @@ getTotalForTimePeriod startTime endTime = do
         integerCents (sum $ map productTotal products) + sum (map lineTotal items)
     productTotal :: Entity OrderProduct -> Cents
     productTotal (Entity _ p) =
-        Cents (orderProductQuantity p) * orderProductPrice p
+        mkCents (orderProductQuantity p) * orderProductPrice p
     lineTotal :: Entity OrderLineItem -> Integer
     lineTotal (Entity _ l) =
         let amount = integerCents $ orderLineItemAmount l

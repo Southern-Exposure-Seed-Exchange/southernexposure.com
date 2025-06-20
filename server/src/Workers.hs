@@ -24,16 +24,14 @@ module Workers
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.Async (wait)
 import Control.Concurrent.STM (TVar, atomically, readTVar, writeTVar)
-import Control.Exception.Safe (Exception(..), throwM)
+import UnliftIO.Exception (Exception(..), throwIO)
 import Control.Immortal.Queue (ImmortalQueue(..))
 import Control.Monad (when)
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Monad.Reader (runReaderT, asks, lift)
-import Control.Monad.Trans.Control (MonadBaseControl)
 import Data.Aeson (ToJSON(toJSON), FromJSON, Result(..), fromJSON)
 import Data.Foldable (asum)
 import Data.Maybe (listToMaybe)
-import Data.Monoid ((<>))
 import Data.Scientific (Scientific)
 import Data.Time
     ( UTCTime, TimeZone, Day, LocalTime(..), getCurrentTime, getCurrentTimeZone
@@ -47,6 +45,7 @@ import Database.Persist.Sql
     )
 import GHC.Generics (Generic)
 import Numeric.Natural (Natural)
+import UnliftIO (MonadUnliftIO)
 
 import Avalara
     ( RefundTransactionRequest(..), VoidTransactionRequest(..), VoidReason(..)
@@ -143,7 +142,7 @@ taskQueueConfig threadCount cfg@Config { getPool, getServerLogger, getCaches } =
         , qFailure = handleError
         }
   where
-    runSql :: MonadBaseControl IO m => SqlPersistT m a -> m a
+    runSql :: MonadUnliftIO m => SqlPersistT m a -> m a
     runSql = flip runSqlPool getPool
 
     -- Grab the next item from Job table, preferring the jobs that have
@@ -281,7 +280,7 @@ taskQueueConfig threadCount cfg@Config { getPool, getServerLogger, getCaches } =
                 Avalara.SuccessfulResponse _ ->
                     return ()
                 e ->
-                    throwM $ RequestFailed e
+                    throwIO $ RequestFailed e
         CreateTransaction orderId -> flip runReaderT cfg $ do
             result <- fmap listToMaybe . runSql $ E.select $ E.from
                 $ \(o `E.InnerJoin` sa `E.LeftOuterJoin` ba `E.InnerJoin` c) -> do
@@ -292,11 +291,11 @@ taskQueueConfig threadCount cfg@Config { getPool, getServerLogger, getCaches } =
                     return (o, sa, ba, c)
             case result of
                 Nothing ->
-                    throwM OrderNotFound
+                    throwIO OrderNotFound
                 Just (o, sa, ba, c) -> runSql $
                     createAvalaraTransaction o sa ba c True >>= \case
                         Nothing ->
-                            throwM TransactionCreationFailed
+                            throwIO TransactionCreationFailed
                         Just transaction -> do
                             when (getAvalaraStatus cfg == AvalaraTesting) $
                                 enqueueTask Nothing . Avalara
@@ -311,7 +310,7 @@ taskQueueConfig threadCount cfg@Config { getPool, getServerLogger, getCaches } =
             let companyCode = getAvalaraCompanyCode cfg
             transactionCode <- case Avalara.tCode transaction of
                 Nothing ->
-                    throwM NoTransactionCode
+                    throwIO NoTransactionCode
                 Just tCode ->
                     return tCode
             let request = Avalara.commitTransaction companyCode transactionCode
@@ -320,12 +319,12 @@ taskQueueConfig threadCount cfg@Config { getPool, getServerLogger, getCaches } =
                 Avalara.SuccessfulResponse _ ->
                     return ()
                 e ->
-                    throwM $ RequestFailed e
+                    throwIO $ RequestFailed e
         VoidTransaction transaction -> do
             let companyCode = getAvalaraCompanyCode cfg
             transactionCode <- case Avalara.tCode transaction of
                 Nothing ->
-                    throwM NoTransactionCode
+                    throwIO NoTransactionCode
                 Just tCode ->
                     return tCode
             let request =
@@ -335,7 +334,7 @@ taskQueueConfig threadCount cfg@Config { getPool, getServerLogger, getCaches } =
                 Avalara.SuccessfulResponse _ ->
                     return ()
                 e ->
-                    throwM $ RequestFailed e
+                    throwIO $ RequestFailed e
 
 
 -- | Remove Expired Carts & PasswordResets, Deactivate Expired Coupons.
@@ -353,6 +352,10 @@ cleanDatabase = do
     deactivateCoupons currentTime =
         E.update $ \c -> do
             E.set c [ CouponIsActive E.=. E.val False ]
+            --  TODO sand-witch: sub_select is an unsafe function to use. If used with a SqlQuery that 
+            --  returns 0 results, then it may return NULL despite not mentioning Maybe 
+            --  in the return type. If it returns more than 1 result, then it will throw a 
+            --  SQL error.
             let orderCount = E.sub_select $ E.from $ \o -> do
                     E.where_ $ o E.^. OrderCouponId E.==. E.just (c E.^. CouponId)
                     return E.countRows

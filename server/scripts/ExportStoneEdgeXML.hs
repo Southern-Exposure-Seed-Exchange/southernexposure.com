@@ -6,7 +6,6 @@ import Control.Monad (forM)
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Logger (runNoLoggingT)
 import Data.Maybe (mapMaybe)
-import Data.Monoid ((<>))
 import Data.Time (utcToLocalTime, getTimeZone)
 import Database.Persist
 import Database.Persist.Postgresql

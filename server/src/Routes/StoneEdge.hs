@@ -25,11 +25,10 @@ module Routes.StoneEdge
 
 import Control.Monad ((<=<), when, forM)
 import Control.Monad.Reader (asks, liftIO)
-import Control.Exception.Safe (MonadCatch, Exception, Typeable, throwM, handle)
+import UnliftIO.Exception (Exception, throwIO, handle)
 import Data.Bifunctor (first)
 import Data.Char (isDigit)
 import Data.Maybe (fromMaybe, mapMaybe, listToMaybe, maybeToList)
-import Data.Monoid ((<>))
 import Data.Text (Text)
 import Data.Text.Encoding (decodeUtf8)
 import Data.Time
@@ -46,11 +45,14 @@ import Web.FormUrlEncoded (FromForm(..), Form, parseMaybe)
 import Config
 import Models
 import Models.Fields
-    ( Cents(..), Country(..), Region(..), OrderStatus(..), LineItemType(..)
+    ( Cents(..), mkCents, Country(..), Region(..), OrderStatus(..), LineItemType(..)
     , StripeChargeId(..), AdminOrderComment(..), renderLotSize
     )
 import Server
 import StoneEdge
+import Numeric.Natural (Natural)
+import Data.Coerce (coerce)
+import Database.Persist.Class.PersistField (OverflowNatural(..))
 
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.Text as T
@@ -72,7 +74,7 @@ integrationVersion = "1.000"
 data StoneEdgeIntegrationError
     = StoneEdgeAuthError
     -- ^ Request authentication does not match values from the 'Config'.
-    deriving (Show, Typeable)
+    deriving (Show)
 
 instance Exception StoneEdgeIntegrationError
 
@@ -91,11 +93,11 @@ stoneEdgeRoutes = \case
     InvalidRequest form ->
         return . ErrorResponse $ "Expecting a setifunction parameter, received: " <> T.pack (show form)
   where
-    xmlError :: MonadCatch m => TypeOfDownload -> StoneEdgeIntegrationError -> m StoneEdgeResponse
+    xmlError :: Monad m => TypeOfDownload -> StoneEdgeIntegrationError -> m StoneEdgeResponse
     xmlError type_ = \case
         StoneEdgeAuthError ->
             return $ XmlErrorResponse type_ "Invalid username, password, or store code."
-    simpleError :: MonadCatch m => StoneEdgeIntegrationError -> m StoneEdgeResponse
+    simpleError :: Monad m => StoneEdgeIntegrationError -> m StoneEdgeResponse
     simpleError = \case
         StoneEdgeAuthError ->
             return $ ErrorResponse "Invalid username, password, or store code."
@@ -287,7 +289,7 @@ transformOrder (order, createdAt, customer, shipping, maybeBilling, maybeCoupon,
         :: (Entity OrderProduct, Entity Product, Entity ProductVariant)
         -> StoneEdgeOrderProduct
     transformProduct (Entity lineId orderProd, Entity _ prod, Entity _ variant) =
-        let q = fromIntegral $ orderProductQuantity orderProd
+        let q = fromIntegral . coerce @_ @Natural $ orderProductQuantity orderProd
             p = orderProductPrice orderProd
             t = Cents $ fromIntegral q * fromCents p
         in StoneEdgeOrderProduct
@@ -331,7 +333,7 @@ transformOrder (order, createdAt, customer, shipping, maybeBilling, maybeCoupon,
     transformTotals =
         let productTotal =
                 sum $ map (\(Entity _ op, _, _) ->
-                        Cents $ fromIntegral (orderProductQuantity op) * fromCents (orderProductPrice op)
+                        mkCents (orderProductQuantity op) * orderProductPrice op
                     )
                     products
             (discounts, surcharges, maybeShipping, maybeCouponLine, maybeTaxLine) = foldl
@@ -491,4 +493,4 @@ checkAuth request = do
     let credentials = getStoneEdgeRequestCredentials request
     expectedCredentials <- asks getStoneEdgeAuth
     when (expectedCredentials /= credentials) $
-        throwM StoneEdgeAuthError
+        throwIO StoneEdgeAuthError

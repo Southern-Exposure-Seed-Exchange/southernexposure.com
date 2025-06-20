@@ -19,10 +19,9 @@ import Control.Exception (SomeException, try)
 import Control.Monad ((<=<), when)
 import Control.Monad.IO.Class (MonadIO)
 import Data.Aeson (ToJSON, FromJSON)
-import Data.Monoid ((<>))
 import Data.Pool (withResource)
 import Database.Persist (get)
-import Database.Persist.Sql (SqlReadT)
+import Database.Persist.Sql (SqlPersistT)
 import GHC.Generics (Generic)
 import Network.Mail.SMTP (login, renderAndSend)
 import Network.Mail.Mime (Address(..), Mail(..), plainPart, htmlPart)
@@ -57,7 +56,7 @@ data EmailData
     | PasswordResetSuccessData Customer
     | OrderPlacedData OrderPlaced.Parameters
 
-getEmailData :: MonadIO m => EmailType -> SqlReadT m (Either T.Text EmailData)
+getEmailData :: MonadIO m => EmailType -> SqlPersistT m (Either T.Text EmailData)
 getEmailData = \case
     AccountCreated cId ->
         tryGet AccountCreatedData "Could not find customer" cId

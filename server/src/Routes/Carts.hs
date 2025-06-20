@@ -18,7 +18,7 @@ import Data.Maybe (fromMaybe, listToMaybe)
 import Data.Time.Clock (getCurrentTime, addUTCTime)
 import Database.Persist
     ( (+=.), (=.), (==.), Entity(..), get, getBy, insert, insertEntity, update
-    , updateWhere, upsertBy, deleteWhere
+    , updateWhere, upsertBy, deleteWhere, OverflowNatural(..)
     )
 import Database.Persist.Sql (toSqlKey)
 import Numeric.Natural (Natural)
@@ -160,12 +160,12 @@ customerAddRoute = validateCookieAndParameters $ \(Entity customerId _) paramete
             CartItem
                 { cartItemCartId = cartId
                 , cartItemProductVariantId = productVariant
-                , cartItemQuantity = quantity
+                , cartItemQuantity = OverflowNatural quantity
                 }
     in do
         (Entity cartId _) <- getOrCreateCustomerCart customerId
         void . runDB $ upsertBy (UniqueCartItem cartId productVariant)
-            (item cartId) [CartItemQuantity +=. quantity]
+            (item cartId) [CartItemQuantity +=. OverflowNatural quantity]
 
 
 data AnonymousAddParameters =
@@ -209,12 +209,12 @@ anonymousAddRoute = validate >=> \parameters ->
             CartItem
                 { cartItemCartId = cartId
                 , cartItemProductVariantId = productVariant
-                , cartItemQuantity = quantity
+                , cartItemQuantity = OverflowNatural quantity
                 }
     in do
         (token, Entity cartId _) <- getOrCreateAnonymousCart maybeSessionToken
         void . runDB $ upsertBy (UniqueCartItem cartId productVariant)
-            (item cartId) [CartItemQuantity +=. quantity]
+            (item cartId) [CartItemQuantity +=. OverflowNatural quantity]
         return token
 
 
@@ -371,7 +371,7 @@ updateOrDeleteItems cartId =
             else
                 updateWhere
                     [ CartItemId ==. toSqlKey key, CartItemCartId ==. cartId ]
-                    [ CartItemQuantity =. val ]
+                    [ CartItemQuantity =. OverflowNatural val ]
         )
         (return ())
 

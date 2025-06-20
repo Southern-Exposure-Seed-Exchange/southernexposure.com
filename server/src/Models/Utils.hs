@@ -28,10 +28,9 @@ module Models.Utils
 import Control.Monad.IO.Class (MonadIO)
 import Data.Char (isAlphaNum)
 import Data.Maybe (listToMaybe)
-import Data.Monoid ((<>))
 import Data.Ratio ((%))
 import Database.Persist
-    ( (==.), (=.), (+=.), Entity(..), Key(..), getBy, update, upsert
+    ( (==.), (=.), (+=.), Entity(..), getBy, update, upsert
     , delete, deleteWhere, selectList, selectKeysList, insertEntity
     )
 import Database.Persist.Sql (SqlPersistT)
@@ -45,7 +44,9 @@ import Server
 import qualified Avalara
 import qualified Data.Text as T
 import qualified Database.Esqueleto as E
-
+-- TODO sand-witch: This module will switch over to the Experimental syntax in an upcoming major 
+-- version release. Please migrate to the Database.Esqueleto.Legacy module to continue using the 
+-- old syntax, or translate to the new and improved syntax in Database.Esqueleto.Experimental.
 
 -- | Turn a name into a URL-safe string.
 slugify :: T.Text -> T.Text
@@ -280,7 +281,7 @@ getOrderTax = sum . map orderLineItemAmount . filter ((==) TaxLine . orderLineIt
 getOrderSubtotal :: [OrderProduct] -> Cents
 getOrderSubtotal = sum . map
     (\prod ->
-        orderProductPrice prod * Cents (orderProductQuantity prod)
+        orderProductPrice prod * mkCents (orderProductQuantity prod)
     )
 
 -- | Calculate the sum of all OrderLineItem charge's for an Order.

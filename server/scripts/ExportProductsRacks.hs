@@ -6,7 +6,6 @@
 import Control.Monad.Logger (runNoLoggingT)
 import Data.Csv (ToNamedRecord, DefaultOrdered(..), encodeDefaultOrderedByName)
 import Data.List (sortOn)
-import Data.Monoid ((<>))
 import Data.Time (formatTime, defaultTimeLocale)
 import Database.Persist
 import Database.Persist.Postgresql

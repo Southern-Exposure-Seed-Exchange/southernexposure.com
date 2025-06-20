@@ -10,13 +10,11 @@ module Routes.AvalaraUtils
     , renderAvalaraError
     ) where
 
-import Control.Exception.Safe (MonadCatch)
 import Control.Monad.Reader (MonadReader, MonadIO, asks, liftIO, lift)
 import Data.Maybe (listToMaybe)
-import Data.Monoid ((<>))
 import Database.Persist
     ( (==.), (!=.), (=.), Entity(..), PersistEntityBackend, PersistEntity
-    , selectList, getBy, update
+    , selectList, getBy, update, OverflowNatural(..)
     )
 import Database.Persist.Sql (SqlBackend)
 
@@ -29,6 +27,7 @@ import Models.Fields
     )
 import Routes.CommonData (AddressData(..), addressToAvalara, toAddressData)
 import Server
+import UnliftIO (MonadUnliftIO)
 
 import qualified Avalara
 import qualified Data.List as L
@@ -56,7 +55,7 @@ renderAvalaraError errorInfo =
 --
 -- Throws a 'PlaceOrderError' on failure.
 getOrCreateAvalaraCustomer
-    :: (MonadReader Config m, MonadIO m, MonadCatch m)
+    :: (MonadReader Config m, MonadUnliftIO m)
     => Entity Customer -> Maybe (Entity Address) -> Entity Address
     -> E.SqlPersistT m (Maybe AvalaraCustomerCode)
 getOrCreateAvalaraCustomer (Entity customerId customer) maybeBilling shipping =
@@ -77,7 +76,7 @@ getOrCreateAvalaraCustomer (Entity customerId customer) maybeBilling shipping =
 --
 -- Returns 'Nothing' if the request returns an error or no Customers.
 createAvalaraCustomer
-    :: (MonadIO m, MonadReader Config m, MonadCatch m)
+    :: (MonadUnliftIO m, MonadReader Config m)
     => T.Text -> AddressData -> E.SqlPersistT m (Maybe AvalaraCustomerCode)
 createAvalaraCustomer email address = do
     companyId <- lift $ asks getAvalaraCompanyId
@@ -126,7 +125,7 @@ createAvalaraCustomer email address = do
 
 
 createAvalaraTransaction
-    :: (MonadReader Config m, MonadIO m, MonadCatch m)
+    :: (MonadReader Config m, MonadUnliftIO m)
     => Entity Order
     -- ^ The Order for the Transaction
     -> Entity Address
@@ -218,7 +217,7 @@ createAvalaraTransaction (Entity orderId order) shippingAddress billingAddress c
     makeProductLine :: (Entity OrderProduct, Entity Product, Entity ProductVariant) -> Avalara.LineItem
     makeProductLine (Entity _ orderProd, Entity _ prod, Entity _ variant) =
         let quantity =
-                fromIntegral $ orderProductQuantity orderProd
+                fromIntegral $ unOverflowNatural $ orderProductQuantity orderProd
             singlePrice =
                 toDollars $ orderProductPrice orderProd
             fullSku =

@@ -10,13 +10,12 @@ module Routes.Admin.Orders
     , orderRoutes
     ) where
 
-import Control.Exception.Safe (MonadThrow, Exception, try, throwM)
+import UnliftIO.Exception (Exception, try, throwIO)
 import Control.Monad ((>=>), forM, join, void)
 import Control.Monad.Trans (MonadIO, lift, liftIO)
 import Data.Aeson (ToJSON(..), FromJSON(..), (.=), (.:), object, withObject)
 import Data.List (sortOn)
 import Data.Maybe (fromMaybe)
-import Data.Monoid ((<>))
 import Data.Ratio ((%))
 import Data.Scientific (Scientific, fromRationalRepetend)
 import Data.Time
@@ -25,7 +24,7 @@ import Data.Time
     )
 import Database.Persist
     ( (==.), (=.), Entity(..), Filter, SelectOpt(..), count, get, selectList
-    , getEntity, getJustEntity, insert, update
+    , getEntity, getJustEntity, insert, update, OverflowNatural(..)
     )
 import Servant
     ( (:<|>)(..), (:>), AuthProtect, QueryParam, Capture, ReqBody, Get, Post
@@ -395,14 +394,14 @@ orderRefundRoute = validateAdminAndParameters $ \_ parameters -> do
             -&- Amount (fromIntegral $ fromCents refundAmount)
         case refundResult of
             Left stripeError ->
-                throwM $ StripeRefundError stripeError
+                throwIO $ StripeRefundError stripeError
             Right _ -> runDB $ do
                 addRefundLineItem orderId refundAmount
                 makeAvalaraRefund (Entity orderId order) refundAmount
                 return orderId
   where
-    maybeM :: (MonadThrow m, Exception e) => Maybe a -> e -> (a -> m b) -> m b
-    maybeM val exception justAction = maybe (throwM exception) justAction val
+    maybeM :: (MonadIO m, Exception e) => Maybe a -> e -> (a -> m b) -> m b
+    maybeM val exception justAction = maybe (throwIO exception) justAction val
     -- | Add the refund OrderLineItem & add an admin comment to the Order.
     addRefundLineItem :: OrderId -> Cents -> AppSQL ()
     addRefundLineItem orderId refundAmount = do
@@ -502,7 +501,7 @@ getOrderTotal orderId = do
     -- | Caclulate the total price + tax for a Product.
     finalProductPrice :: Entity OrderProduct -> Cents
     finalProductPrice (Entity _ p) =
-        fromIntegral (orderProductQuantity p) * orderProductPrice p
+        fromIntegral (unOverflowNatural $ orderProductQuantity p) * orderProductPrice p
     -- | Convert Cents to an Integer so it can handle negative numbers.
     centsInt :: Cents -> Integer
     centsInt (Cents c) =

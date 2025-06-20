@@ -13,14 +13,13 @@ module Routes.Customers
     , customerRoutes
     ) where
 
-import Control.Exception.Safe (throwM, Exception, try, handle)
+import UnliftIO.Exception (throwIO, Exception, try, handle)
 import Control.Monad ((>=>), (<=<), when, void, forM_)
 import Control.Monad.IO.Class (liftIO)
 import Data.Aeson (ToJSON(..), FromJSON(..), (.=), (.:), (.:?), withObject, object)
 import Data.Int (Int64)
 import Data.List (partition)
 import Data.Maybe (fromMaybe)
-import Data.Monoid ((<>))
 import Data.Time.Clock (UTCTime, getCurrentTime, addUTCTime)
 import Data.Typeable (Typeable)
 import Database.Persist
@@ -610,10 +609,10 @@ addressEditRoute token aId addressData = withValidatedCookie token $ \(Entity cu
         let addressId = toSqlKey aId
         getEntity addressId >>= \case
             Nothing ->
-                throwM AddressNotFound
+                throwIO AddressNotFound
             Just address
                 | addressCustomerId (entityVal address) /= customerId ->
-                    throwM AddressNotFound
+                    throwIO AddressNotFound
                 | toAddressData address == addressData ->
                     return ()
                 | otherwise -> do
@@ -641,9 +640,9 @@ addressDeleteRoute :: WrappedAuthToken -> Int64 -> App (Cookied ())
 addressDeleteRoute token aId = withValidatedCookie token $ \(Entity customerId _) -> do
     let addressId = toSqlKey aId :: AddressId
     either handleAddressError return <=< try . runDB $ do
-        address <- get addressId >>= maybe (throwM AddressNotFound) return
+        address <- get addressId >>= maybe (throwIO AddressNotFound) return
         if addressCustomerId address /= customerId then
-            throwM AddressNotFound
+            throwIO AddressNotFound
         else
             update addressId [AddressIsActive =. False, AddressIsDefault =. False]
 

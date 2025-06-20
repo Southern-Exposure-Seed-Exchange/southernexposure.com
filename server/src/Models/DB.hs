@@ -6,21 +6,24 @@
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE DataKinds #-}
 module Models.DB where
 
 import Control.Monad.IO.Class (MonadIO)
 import Data.Int (Int64)
 import Data.Time.Clock (UTCTime)
-import Database.Persist.Sql (SqlPersistT, Entity(..), selectList, insertEntity, delete, replace)
+import Database.Persist.Sql (SqlPersistT, Entity(..), OverflowNatural, selectList, insertEntity, delete, replace)
 import Database.Persist.TH
-import Numeric.Natural (Natural)
 
 import Models.Fields
 import Models.PersistJSON (JSONValue)
 
 import qualified Data.Text as T
 
-
+-- TODO sand-witch: mkDeleteCascade was deprecated
 share [mkPersist sqlSettings, mkDeleteCascade sqlSettings, mkMigrate "migrateAll"] [persistLowerCase|
 Category
     name T.Text
@@ -124,7 +127,7 @@ Cart
 CartItem
     cartId CartId
     productVariantId ProductVariantId
-    quantity Natural
+    quantity OverflowNatural
     UniqueCartItem cartId productVariantId
 
 
@@ -144,7 +147,7 @@ ShippingMethod
     categoryIds [CategoryId]
     excludedPriorityCategoryIds [CategoryId]
     isActive Bool
-    priority Natural
+    priority OverflowNatural
     isPriorityEnabled Bool default=True
 
 
@@ -156,8 +159,8 @@ Coupon
     discount CouponType
     minimumOrder Cents
     expirationDate UTCTime
-    totalUses Natural
-    usesPerCustomer Natural
+    totalUses OverflowNatural
+    usesPerCustomer OverflowNatural
     createdAt UTCTime
     UniqueCoupon code
     deriving Show
@@ -206,7 +209,7 @@ OrderLineItem json
 OrderProduct
     orderId OrderId
     productVariantId ProductVariantId
-    quantity Natural
+    quantity OverflowNatural
     price Cents
     UniqueOrderProduct orderId productVariantId
     deriving Show

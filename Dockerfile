@@ -1,8 +1,6 @@
 FROM docker.io/node:14 AS base
 RUN apt-get -y update && apt-get install -y libtinfo5 curl postgresql libpq-dev
-# Stack resolver is very old, so we have to use an older version of stack
-RUN curl -sSL https://github.com/commercialhaskell/stack/releases/download/v2.11.1/stack-2.11.1-linux-x86_64.tar.gz \
-  | tar -xz -C /usr/local/bin --strip-components=1
+RUN curl -sSL https://get.haskellstack.org/ | sh
 
 FROM base AS devcontainer
 RUN apt-get -y update && apt-get install -y sudo
@@ -26,4 +24,5 @@ WORKDIR /southernexposure/server
 RUN stack build --ghc-options="-Werror -O1" --only-dependencies sese-website
 # Actually build server
 COPY server .
-RUN stack build --ghc-options="-Werror -O1" --copy-bins
+# TODO sand-witch: remove -Wno-deprecations
+RUN stack build --ghc-options="-Werror -Wno-deprecations -O1" --copy-bins

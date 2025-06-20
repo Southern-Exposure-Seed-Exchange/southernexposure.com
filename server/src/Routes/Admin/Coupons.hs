@@ -18,6 +18,7 @@ import Data.Time
     )
 import Database.Persist
     ( Entity(..), SelectOpt(Desc), Update, selectList, insert, get, update
+    , OverflowNatural(..)
     )
 import Numeric.Natural (Natural)
 import Servant
@@ -31,6 +32,7 @@ import Models.Fields (Cents, CouponType(..))
 import Server (App, runDB, serverError)
 import Routes.Utils (mapUpdate, parseLocalTime, parseMaybeLocalTime)
 import Validation (Validation(..))
+import Data.Coerce(coerce)
 
 import qualified Data.Text as T
 import qualified Validation as V
@@ -169,8 +171,8 @@ newCouponRoute = validateAdminAndParameters $ \_ NewCouponParameters {..} -> do
         , couponDiscount = ncpDiscount
         , couponMinimumOrder = ncpMinimumOrder
         , couponExpirationDate = expiration
-        , couponTotalUses = ncpTotalUses
-        , couponUsesPerCustomer = ncpUsesPerCustomer
+        , couponTotalUses = OverflowNatural ncpTotalUses
+        , couponUsesPerCustomer = OverflowNatural ncpUsesPerCustomer
         , couponCreatedAt = currentTime
         }
 
@@ -228,8 +230,8 @@ editCouponDataRoute t couponId = withAdminCookie t $ \_ ->
                 , ecdDiscount = couponDiscount
                 , ecdMinimumOrder = couponMinimumOrder
                 , ecdExpirationDate = localDay localTime
-                , ecdTotalUses = couponTotalUses
-                , ecdUsesPerCustomer = couponUsesPerCustomer
+                , ecdTotalUses = unOverflowNatural couponTotalUses
+                , ecdUsesPerCustomer = unOverflowNatural couponUsesPerCustomer
                 }
 
 
@@ -309,6 +311,6 @@ editCouponRoute = validateAdminAndParameters $ \_ parameters -> do
             , mapUpdate CouponDiscount ecpDiscount
             , mapUpdate CouponMinimumOrder ecpMinimumOrder
             , mapUpdate CouponExpirationDate expires
-            , mapUpdate CouponTotalUses ecpTotalUses
-            , mapUpdate CouponUsesPerCustomer ecpUsesPerCustomer
+            , mapUpdate CouponTotalUses (coerce ecpTotalUses)
+            , mapUpdate CouponUsesPerCustomer (coerce ecpUsesPerCustomer)
             ]

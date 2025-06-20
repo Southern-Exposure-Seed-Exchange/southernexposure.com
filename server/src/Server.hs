@@ -1,7 +1,10 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE TypeApplications #-}
 module Server
     ( App
+    , runApp
     , AppSQL
     , runDB
     , stripeRequest
@@ -15,16 +18,19 @@ module Server
     ) where
 
 import Control.Concurrent.STM (atomically, readTVarIO, modifyTVar, readTVar, writeTVar)
-import Control.Exception.Safe (MonadCatch, displayException, tryAny, throwM)
 import Control.Monad (void)
 import Control.Monad.IO.Class (MonadIO, liftIO)
-import Control.Monad.Reader (MonadReader, ReaderT, asks, lift, runReaderT)
-import Control.Monad.Except (MonadError)
+import Control.Monad.Reader (MonadReader, ReaderT(..), asks, runReaderT)
+import Control.Monad.Except (MonadError(..), ExceptT(..))
 import Data.Aeson (FromJSON)
 import Data.Text (Text)
 import Database.Persist.Sql (SqlPersistT, runSqlPool)
-import Servant (Handler, throwError)
+import Servant (Handler(..))
 import Web.Stripe
+import UnliftIO (try, MonadUnliftIO, throwIO, catch, displayException, tryAny)
+import Servant.Server (ServerError)
+import Data.Coerce (coerce)
+import Control.Monad.Catch (MonadThrow)
 
 import Cache (Caches(..))
 import Config (Config(..), timedLogStr)
@@ -37,8 +43,17 @@ import qualified Data.Text as T
 -- | `App` is the monad stack used in the Servant Handlers. It wraps
 -- Servant's `Handler` monad in a `ReaderT` monad that holds the server's
 -- `Config` data.
-type App =
-    ReaderT Config Handler
+newtype App a = MkApp (ReaderT Config IO a)
+    deriving newtype (Functor, Applicative, Monad, MonadIO, MonadUnliftIO, MonadThrow, MonadReader Config)
+
+instance MonadError ServerError App where
+    throwError = throwIO
+    catchError = catch
+
+runApp :: App a -> Config -> Handler a
+runApp = coerce . try @_ @ServerError 
+
+
 
 type AppSQL =
     SqlPersistT App
@@ -78,7 +93,7 @@ stripeRequest req = do
 -- TODO: Log the request data as well! Maybe refactor to:
 --       @(a -> ReaderT .... b) -> a -> App b@
 avalaraRequest
-    :: (MonadReader Config m, MonadCatch m, MonadIO m)
+    :: (MonadReader Config m, MonadUnliftIO m)
     => ReaderT Avalara.Config IO (Avalara.WithError a)
     -> m (Avalara.WithError a)
 avalaraRequest req = do
@@ -88,7 +103,7 @@ avalaraRequest req = do
     case response of
         Left e -> do
             liftIO . logger . timedLogStr $ show e
-            throwM e
+            throwIO e
         Right r@(Avalara.SuccessfulResponse _) ->
             return r
         Right r@(Avalara.ErrorResponse err) -> do
@@ -100,9 +115,8 @@ avalaraRequest req = do
 
 
 -- | Throw an HTTP error.
-serverError :: MonadError e Handler => e -> App a
-serverError =
-    lift . throwError
+serverError :: ServerError -> App a
+serverError = throwError
 
 
 -- | Log a message to the server log.

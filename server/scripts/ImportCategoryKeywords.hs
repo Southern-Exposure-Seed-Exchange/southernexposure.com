@@ -4,7 +4,6 @@
 {-# LANGUAGE TypeFamilies #-}
 import Control.Monad.Logger (runNoLoggingT)
 import Data.Csv (FromRecord(..), HasHeader(NoHeader), decode)
-import Data.Monoid ((<>))
 import Database.Persist
 import Database.Persist.Postgresql
     ( ConnectionPool, SqlPersistT, createPostgresqlPool, runSqlPool

@@ -12,7 +12,6 @@ import Control.Monad (unless, forM, forM_)
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Data.Aeson ((.=), (.:), ToJSON(..), FromJSON(..), object, withObject)
 import Data.Maybe (fromMaybe, catMaybes)
-import Data.Monoid ((<>))
 import Database.Persist
     ( (=.), (==.), Entity(..), Filter, Update, count, selectFirst, get, update
     , selectList, getBy, insert, updateWhere, deleteCascade

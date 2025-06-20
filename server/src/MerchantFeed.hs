@@ -20,7 +20,6 @@ https://support.google.com/merchants/answer/7052112
 
 -}
 
-import Data.Monoid ((<>))
 import Data.Scientific (Scientific, FPFormat(..), formatScientific)
 import Data.Time (UTCTime, formatTime, defaultTimeLocale)
 import GHC.Generics (Generic)
