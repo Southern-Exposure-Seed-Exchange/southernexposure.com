@@ -1,0 +1,63 @@
+{
+  "name": "Dev Container",
+  "build": {
+    "dockerfile": "../Dockerfile",
+    "context": "..",
+    "target": "devcontainer",
+    "options": [
+      "--platform=linux/amd64"
+    ]
+  },
+
+  // Features to add to the dev container
+  "features": {},
+
+  // Configure tool-specific properties
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "terminal.integrated.shell.linux": "/bin/bash"
+      },
+      "extensions": [
+        "ms-vscode.vscode-json"
+      ]
+    }
+  },
+
+  // Use 'forwardPorts' to make a list of ports inside the container available locally
+  "forwardPorts": [],
+
+  // Use 'postCreateCommand' to run commands after the container is created
+  "postCreateCommand": "sudo chown -R node:node /home/node/.stack",
+
+  // Use 'postStartCommand' to run commands after the container starts
+  // "postStartCommand": "",
+
+  // Use 'postAttachCommand' to run commands when VS Code attaches to the container
+  // "postAttachCommand": "",
+
+  // Set 'remoteUser' to change the default user inside the container
+  "remoteUser": "node",
+
+  // Configure container environment variables
+  "containerEnv": {},
+
+  // Mount local folders or named volumes
+  "mounts": [
+    "source=sese-stack-root,target=/home/node/.stack,type=volume"
+    // Example: Mount local folder
+    // "source=${localWorkspaceFolder}/data,target=/workspace/data,type=bind,consistency=cached"
+  ],
+
+  // Configure container startup
+  "runArgs": [
+    // Example: Add extra capabilities
+    // "--cap-add=SYS_PTRACE"
+  ],
+
+  // Override the default command
+  // "overrideCommand": false,
+
+  // Whether to shutdown the container when VS Code is closed
+  "shutdownAction": "none"
+}

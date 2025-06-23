@@ -4,6 +4,10 @@ RUN apt-get -y update && apt-get install -y libtinfo5 curl postgresql libpq-dev
 RUN curl -sSL https://github.com/commercialhaskell/stack/releases/download/v2.11.1/stack-2.11.1-linux-x86_64.tar.gz \
   | tar -xz -C /usr/local/bin --strip-components=1
 
+FROM base AS devcontainer
+RUN apt-get -y update && apt-get install -y sudo
+RUN echo "node ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
+
 FROM base AS frontend-bulider
 WORKDIR /southernexposure
 COPY client/package.json ./client/package.json
@@ -22,4 +26,4 @@ WORKDIR /southernexposure/server
 RUN stack build --ghc-options="-Werror -O1" --only-dependencies sese-website
 # Actually build server
 COPY server .
-RUN stack build --ghc-options="-Werror -O1" --copy-bins 
+RUN stack build --ghc-options="-Werror -O1" --copy-bins
