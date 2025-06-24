@@ -48,10 +48,7 @@ instance PersistFieldSql JSONValue where
   sqlType = sqlTypeJsonB
 
 toPersistValueJsonB :: ToJSON a => a -> PersistValue
-toPersistValueJsonB = PersistDbSpecific . LBS.toStrict . encode
--- TODO sand-witch: Deprecated since 2.11 because of inconsistent escaping behavior across backends. 
--- The Postgres backend escapes these values, while the MySQL backend does not. If you are using this, 
--- please switch to 'PersistLiteral_' and provide a relevant 'LiteralType' for your conversion.
+toPersistValueJsonB = PersistLiteralEscaped . LBS.toStrict . encode
 
 fromPersistValueJsonB :: FromJSON a => PersistValue -> Either Text a
 fromPersistValueJsonB (PersistText t) =

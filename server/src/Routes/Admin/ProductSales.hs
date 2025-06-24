@@ -31,7 +31,7 @@ import Validation (Validation(..))
 
 import qualified Data.Text as T
 import qualified Data.Map.Strict as M
-import qualified Database.Esqueleto as E
+import qualified Database.Esqueleto.Experimental as E
 import qualified Validation as V
 
 
@@ -101,8 +101,9 @@ instance ToJSON SaleVariantData where
 
 getProductsAndVariants :: AppSQL [(Entity ProductVariant, Entity Product)]
 getProductsAndVariants =
-    E.select $ E.from $ \(v `E.InnerJoin` p) -> do
-        E.on $ v E.^. ProductVariantProductId E.==. p E.^. ProductId
+    E.select $ do 
+        (v E.:& p) <- E.from $ E.table `E.innerJoin` E.table 
+            `E.on` \(v E.:& p) -> v E.^. ProductVariantProductId E.==. p E.^. ProductId
         return (v, p)
 
 toVariantData :: Entity ProductVariant -> Entity Product -> SaleVariantData

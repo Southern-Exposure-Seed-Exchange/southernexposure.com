@@ -57,7 +57,7 @@ import Workers (Task(Avalara), AvalaraTask(RefundTransaction), enqueueTask)
 import qualified Avalara
 import qualified Data.List as L
 import qualified Data.Text as T
-import qualified Database.Esqueleto as E
+import qualified Database.Esqueleto.Experimental as E
 import qualified Validation as V
 
 
@@ -140,9 +140,14 @@ orderListRoute token maybePage maybePerPage maybeQuery = withAdminCookie token $
             if T.null query then
                 count ([] :: [Filter Order])
             else
-                extractRowCount . E.select $ E.from $ \(o `E.LeftOuterJoin` c `E.LeftOuterJoin` sa) -> do
-                    E.on $ E.just (o E.^. OrderShippingAddressId) E.==. sa E.?. AddressId
-                    E.on $ E.just (o E.^. OrderCustomerId) E.==. c E.?. CustomerId
+                extractRowCount . E.select $ do
+                    (o E.:& c E.:& sa) <- E.from $ E.table 
+                        `E.leftJoin` E.table
+                            `E.on` (\(o E.:& c) -> 
+                                E.just (o E.^. OrderCustomerId) E.==. c E.?. CustomerId)
+                        `E.leftJoin` E.table
+                            `E.on` (\(o E.:& _ E.:& sa) -> 
+                                E.just (o E.^. OrderShippingAddressId) E.==. sa E.?. AddressId)
                     E.where_ $ makeQuery o c sa query
                     return E.countRows
         orders <- do
@@ -155,9 +160,14 @@ orderListRoute token maybePage maybePerPage maybeQuery = withAdminCookie token $
                             , OffsetBy $ fromIntegral offset
                             ]
                 else
-                    E.select $ E.from $ \(o `E.LeftOuterJoin` c `E.LeftOuterJoin` sa) -> do
-                        E.on $ E.just (o E.^. OrderShippingAddressId) E.==. sa E.?. AddressId
-                        E.on $ E.just (o E.^. OrderCustomerId) E.==. c E.?. CustomerId
+                    E.select $ do
+                        (o E.:& c E.:& sa) <- E.from $ E.table
+                            `E.leftJoin` E.table 
+                                `E.on` (\(o E.:& c) -> 
+                                    E.just (o E.^. OrderCustomerId) E.==. c E.?. CustomerId)
+                            `E.leftJoin` E.table
+                                `E.on` (\(o E.:& _ E.:& sa) -> 
+                                    E.just (o E.^. OrderShippingAddressId) E.==. sa E.?. AddressId)
                         E.limit $ fromIntegral perPage
                         E.offset $ fromIntegral offset
                         E.orderBy [E.desc $ o E.^. OrderCreatedAt]

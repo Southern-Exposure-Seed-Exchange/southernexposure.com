@@ -43,10 +43,7 @@ import Server
 
 import qualified Avalara
 import qualified Data.Text as T
-import qualified Database.Esqueleto as E
--- TODO sand-witch: This module will switch over to the Experimental syntax in an upcoming major 
--- version release. Please migrate to the Database.Esqueleto.Legacy module to continue using the 
--- old syntax, or translate to the new and improved syntax in Database.Esqueleto.Experimental.
+import qualified Database.Esqueleto.Experimental as E
 
 -- | Turn a name into a URL-safe string.
 slugify :: T.Text -> T.Text
@@ -226,7 +223,8 @@ mergeCarts (Entity keepId _) (Entity mergeId _) = do
 -- | Get the first matching customer with the given email, searching by
 -- ignoring the casing.
 getCustomerByEmail :: T.Text -> AppSQL (Maybe (Entity Customer))
-getCustomerByEmail email = fmap listToMaybe . E.select $ E.from $ \c -> do
+getCustomerByEmail email = fmap listToMaybe . E.select $ do 
+    c <- E.from $ E.table
     E.where_ $ E.lower_ (c E.^. CustomerEmail) E.==. E.val (T.toLower email)
     return c
 

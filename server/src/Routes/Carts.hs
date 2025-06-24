@@ -35,7 +35,7 @@ import Validation (Validation(..))
 import qualified Data.Map.Strict as M
 import qualified Data.Text as T
 import qualified Database.Persist as P
-import qualified Database.Esqueleto as E
+import qualified Database.Esqueleto.Experimental as E
 import qualified Validation as V
 
 
@@ -401,7 +401,7 @@ customerCountRoute token = withValidatedCookie token $ \(Entity customerId _) ->
             Nothing ->
                 return [E.Value Nothing]
             Just (Entity cartId _) ->
-                E.select $ E.from $ \ci -> do
+                E.select $ E.from E.table >>= \ci -> do
                     E.where_ $ ci E.^. CartItemCartId E.==. E.val cartId
                     return . E.sum_ $ ci E.^. CartItemQuantity
 
@@ -511,8 +511,9 @@ upsertQuickOrderItem cartId item = do
 
 getVariantsByItem :: QuickOrderItem -> App [Entity ProductVariant]
 getVariantsByItem item =
-    runDB $ E.select $ E.from $ \(v `E.InnerJoin` p) -> do
-        E.on $ v E.^. ProductVariantProductId E.==. p E.^. ProductId
+    runDB $ E.select $ do 
+        (v E.:& p) <- E.from $ E.table `E.innerJoin` E.table 
+            `E.on` \(v E.:& p) -> v E.^. ProductVariantProductId E.==. p E.^. ProductId
         let fullSku = E.lower_ $ p E.^. ProductBaseSku E.++. v E.^. ProductVariantSkuSuffix
         E.where_ $
             fullSku E.==. E.val (T.toLower $ qoiSku item) E.&&.

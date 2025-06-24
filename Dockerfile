@@ -24,5 +24,4 @@ WORKDIR /southernexposure/server
 RUN stack build --ghc-options="-Werror -O1" --only-dependencies sese-website
 # Actually build server
 COPY server .
-# TODO sand-witch: remove -Wno-deprecations
-RUN stack build --ghc-options="-Werror -Wno-deprecations -O1" --copy-bins
+RUN stack build --ghc-options="-Werror -O1" --copy-bins

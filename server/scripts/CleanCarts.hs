@@ -7,7 +7,7 @@ import Database.Persist.Postgresql
 
 import Models
 
-import qualified Database.Esqueleto as E
+import qualified Database.Esqueleto.Experimental as E
 
 
 main :: IO ()
@@ -26,8 +26,10 @@ removeInactiveVariants = do
 
 removeOldCarts :: SqlPersistT IO ()
 removeOldCarts = do
-    oldCartIds <- fmap (map E.unValue) $ E.select $ E.from $ \(c `E.InnerJoin` cart) -> do
-        E.on $ cart E.^. CartCustomerId E.==. E.just (c E.^. CustomerId)
+    oldCartIds <- fmap (map E.unValue) $ E.select $ do 
+        (c E.:& cart) <- E.from $ E.table
+            `E.innerJoin` E.table 
+                `E.on` \(c E.:& cart) -> cart E.^. CartCustomerId E.==. E.just (c E.^. CustomerId)
         E.where_ $ c E.^. CustomerEncryptedPassword `E.ilike` E.concat_ [(E.%), E.val ":", (E.%)]
         return $ cart E.^. CartId
     deleteWhere [CartItemCartId <-. oldCartIds]

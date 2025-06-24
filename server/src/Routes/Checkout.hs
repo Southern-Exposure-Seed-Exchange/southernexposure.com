@@ -4,6 +4,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeOperators #-}
+{-# OPTIONS -Wno-deprecations #-}
 module Routes.Checkout
     ( CheckoutAPI
     , checkoutRoutes
@@ -57,7 +58,7 @@ import Workers (Task(..), AvalaraTask(..), enqueueTask)
 
 import qualified Avalara
 import qualified Data.Text as T
-import qualified Database.Esqueleto as E
+import qualified Database.Esqueleto.Experimental as E
 import qualified Emails
 import qualified Validation as V
 import qualified Web.Stripe as Stripe
@@ -1358,14 +1359,16 @@ instance Exception SuccessError
 
 getOrderAndAddress :: CustomerId -> OrderId -> AppSQL (Maybe (Entity Order, Entity Address, Maybe (Entity Address)))
 getOrderAndAddress customerId orderId =
-    fmap listToMaybe . E.select . E.from
-        $ \(o `E.InnerJoin` s `E.LeftOuterJoin` b) -> do
-            E.on $ o E.^. OrderBillingAddressId E.==. b E.?. AddressId
-            E.on $ o E.^. OrderShippingAddressId E.==. s E.^. AddressId
-            E.where_ $
-                o E.^. OrderId E.==. E.val orderId E.&&.
-                o E.^. OrderCustomerId E.==. E.val customerId
-            return (o, s, b)
+    fmap listToMaybe . E.select $ do  
+        (o E.:& s E.:& b) <- E.from $ E.table 
+            `E.innerJoin` E.table 
+                `E.on` (\(o E.:& s) -> o E.^. OrderShippingAddressId E.==. s E.^. AddressId)
+            `E.leftJoin` E.table 
+                `E.on` (\(o E.:& _ E.:& b) -> o E.^. OrderBillingAddressId E.==. b E.?. AddressId)
+        E.where_ $
+            o E.^. OrderId E.==. E.val orderId E.&&.
+            o E.^. OrderCustomerId E.==. E.val customerId
+        return (o, s, b)
 
 
 -- Utils

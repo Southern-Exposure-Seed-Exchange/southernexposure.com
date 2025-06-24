@@ -2,6 +2,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE FlexibleContexts #-}
 module Emails.OrderPlaced (Parameters(..), fetchData, get) where
 
@@ -17,7 +18,7 @@ import Models.Fields (mkCents, regionName, formatCents, LineItemType(..))
 
 import qualified Data.Text as T
 import qualified Data.Text.Lazy as L
-import qualified Database.Esqueleto as E
+import qualified Database.Esqueleto.Experimental as E
 import qualified Database.Persist as P
 import qualified Text.Blaze.Html as H
 import qualified Text.Blaze.Html5 as H
@@ -42,21 +43,30 @@ fetchData :: (Monad m, MonadIO m) => OrderId -> E.SqlPersistT m (Maybe Parameter
 fetchData orderId = do
     messageText <- maybe "" (settingsOrderPlacedEmailMessage . entityVal)
         <$> selectFirst [] []
-    maybeCustomerOrderAddresses <- fmap listToMaybe . E.select . E.from $
-        \(o `E.InnerJoin` c `E.InnerJoin` sa `E.LeftOuterJoin` ba) -> do
-            E.on $ ba E.?. AddressId E.==. o E.^. OrderBillingAddressId
-            E.on $ sa E.^. AddressId E.==. o E.^. OrderShippingAddressId
-            E.on $ c E.^. CustomerId E.==. o E.^. OrderCustomerId
-            E.where_ $ o E.^. OrderId E.==. E.val orderId
-            return (c, o, sa, ba)
+    maybeCustomerOrderAddresses <- fmap listToMaybe . E.select $ do 
+        (c E.:& o E.:& sa E.:& ba) <- E.from $ E.table @Customer
+            `E.innerJoin` E.table @Order
+                `E.on` (\(c E.:& o) -> c E.^. CustomerId E.==. o E.^. OrderCustomerId)
+            `E.innerJoin` E.table @Address
+                `E.on` (\(_ E.:& o E.:& sa) -> sa E.^. AddressId E.==. o E.^. OrderShippingAddressId)
+            `E.leftJoin` E.table @Address
+                `E.on` (\(_ E.:& o E.:& _ E.:& ba) -> ba E.?. AddressId E.==. o E.^. OrderBillingAddressId) 
+            
+        E.where_ $ o E.^. OrderId E.==. E.val orderId
+        return (c, o, sa, ba)
     lineItems <- map entityVal <$> P.selectList [OrderLineItemOrderId P.==. orderId] []
-    productData <- fmap productDataFromEntities . E.select . E.from $
-        \(op `E.InnerJoin` pv `E.InnerJoin` p `E.LeftOuterJoin` msa) -> do
-            E.on $ msa E.?. SeedAttributeProductId E.==. E.just (p E.^. ProductId)
-            E.on $ p E.^. ProductId E.==. pv E.^. ProductVariantProductId
-            E.on $ pv E.^. ProductVariantId E.==. op E.^. OrderProductProductVariantId
-            E.where_ $ op E.^. OrderProductOrderId E.==. E.val orderId
-            return (op, p, pv, msa)
+    productData <- fmap productDataFromEntities . E.select $ do 
+        (op E.:& pv E.:& p E.:& msa) <- E.from $ E.table 
+            `E.innerJoin` E.table 
+                `E.on` (\(op E.:& pv) -> pv E.^. ProductVariantId E.==. op E.^. OrderProductProductVariantId)
+            `E.innerJoin` E.table 
+                `E.on` (\(_ E.:& pv E.:& p) -> p E.^. ProductId E.==. pv E.^. ProductVariantProductId)
+            `E.leftJoin` E.table
+                `E.on` (\(_ E.:& p E.:& msa) -> 
+                    msa E.?. SeedAttributeProductId E.==. E.just (p E.^. ProductId))
+                
+        E.where_ $ op E.^. OrderProductOrderId E.==. E.val orderId
+        return (op, p, pv, msa)
     return $ case maybeCustomerOrderAddresses of
         Nothing ->
             Nothing

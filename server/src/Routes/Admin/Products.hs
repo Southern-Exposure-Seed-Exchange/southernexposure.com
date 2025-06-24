@@ -40,7 +40,7 @@ import qualified Data.ByteString as BS
 import qualified Data.Text as T
 import qualified Data.List as L
 import qualified Data.Map.Strict as M
-import qualified Database.Esqueleto as E
+import qualified Database.Esqueleto.Experimental as E
 import qualified Validation as V
 
 
@@ -114,7 +114,7 @@ productListRoute t = withAdminCookie t $ \_ -> runDB $ do
         foldr (\(Entity cId c) m -> M.insert cId (categoryName c) m) M.empty
     getProducts :: AppSQL [(Entity Product, E.Value Bool)]
     getProducts =
-        E.select $ E.from $ \p -> do
+        E.select $ E.from E.table >>= \p -> do
             E.orderBy [E.asc $ p E.^. ProductBaseSku]
             return (p, activeVariantExists p )
     makeProduct :: M.Map CategoryId T.Text -> (Entity Product, E.Value Bool) -> ListProduct

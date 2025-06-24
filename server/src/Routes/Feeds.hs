@@ -31,7 +31,7 @@ import Server (App, AppSQL, runDB, readCache)
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.Map.Strict as M
 import qualified Data.Text as T
-import qualified Database.Esqueleto as E
+import qualified Database.Esqueleto.Experimental as E
 import qualified MerchantFeed as GMerch
 
 
@@ -91,7 +91,7 @@ sitemapRoute = do
     return $ renderSitemap $ Sitemap urlsWithBase
   where
     getActiveProducts :: AppSQL [Entity Product]
-    getActiveProducts = E.select $ E.from $ \p -> do
+    getActiveProducts = E.select $ E.from E.table >>= \p -> do
         E.where_ $ activeVariantExists p
         return p
     makeCategoryUrl :: Entity Category -> SitemapUrl
@@ -166,8 +166,9 @@ merchantFeedRoute = do
             , CategorySaleEndDate >=. currentTime
             ]
             []
-        psVs <- E.select $ E.from $ \(p `E.InnerJoin` v) -> do
-            E.on $ v E.^. ProductVariantProductId E.==. p E.^. ProductId
+        psVs <- E.select $ do 
+            (p E.:& v) <- E.from $ E.table `E.innerJoin` E.table 
+                `E.on` \(p E.:& v) -> v E.^. ProductVariantProductId E.==. p E.^. ProductId
             E.where_ $ v E.^. ProductVariantIsActive
             return (p, v)
         psVsCs <- forM psVs $ \(p, v) -> do

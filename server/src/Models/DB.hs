@@ -10,6 +10,9 @@
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE DataKinds #-}
+
+{-# OPTIONS -Wno-deprecations #-}
+
 module Models.DB where
 
 import Control.Monad.IO.Class (MonadIO)

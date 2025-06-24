@@ -22,7 +22,7 @@ import Server
 
 import qualified Data.Map.Strict as Map
 import qualified Data.Text as T
-import qualified Database.Esqueleto as E
+import qualified Database.Esqueleto.Experimental as E
 
 
 type CategoryAPI =
@@ -163,7 +163,7 @@ type AdvancedSearchRoute =
 
 advancedSearchRoute :: App AdvancedSearchData
 advancedSearchRoute = do
-    cs <- runDB $ E.select $ E.from $ \c -> do
+    cs <- runDB $ E.select $ E.from E.table >>= \c -> do
         E.orderBy [E.asc $ c E.^. CategoryName]
         return (c E.^. CategoryId, c E.^. CategoryName)
     return . AdvancedSearchData

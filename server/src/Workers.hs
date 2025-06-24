@@ -5,6 +5,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+
+{-# OPTIONS -Wno-deprecations #-}
 {- | This module contains definitions for asynchronous actions that can be
 performed by worker threads outside the scope of the HTTP request/response
 cycle.
@@ -63,7 +65,7 @@ import Server (avalaraRequest)
 
 import qualified Avalara
 import qualified Data.Text as T
-import qualified Database.Esqueleto as E
+import qualified Database.Esqueleto.Experimental as E
 import qualified Emails
 
 
@@ -282,13 +284,16 @@ taskQueueConfig threadCount cfg@Config { getPool, getServerLogger, getCaches } =
                 e ->
                     throwIO $ RequestFailed e
         CreateTransaction orderId -> flip runReaderT cfg $ do
-            result <- fmap listToMaybe . runSql $ E.select $ E.from
-                $ \(o `E.InnerJoin` sa `E.LeftOuterJoin` ba `E.InnerJoin` c) -> do
-                    E.on $ c E.^. CustomerId E.==. o E.^. OrderCustomerId
-                    E.on $ o E.^. OrderBillingAddressId E.==. ba E.?. AddressId
-                    E.on $ o E.^. OrderShippingAddressId E.==. sa E.^. AddressId
-                    E.where_ $ o E.^. OrderId E.==. E.val orderId
-                    return (o, sa, ba, c)
+            result <- fmap listToMaybe . runSql $ E.select $ do 
+                (o E.:& sa E.:& ba E.:& c) <- E.from $ E.table 
+                    `E.innerJoin` E.table 
+                        `E.on` (\(o E.:& sa) -> o E.^. OrderShippingAddressId E.==. sa E.^. AddressId)
+                    `E.leftJoin` E.table 
+                        `E.on` (\(o E.:& _ E.:& ba) -> o E.^. OrderBillingAddressId E.==. ba E.?. AddressId)
+                    `E.innerJoin` E.table 
+                        `E.on` (\(o E.:& _ E.:& _ E.:& c) -> c E.^. CustomerId E.==. o E.^. OrderCustomerId)
+                E.where_ $ o E.^. OrderId E.==. E.val orderId
+                return (o, sa, ba, c)
             case result of
                 Nothing ->
                     throwIO OrderNotFound
@@ -342,6 +347,8 @@ cleanDatabase :: SqlPersistT IO ()
 cleanDatabase = do
     currentTime <- lift getCurrentTime
     deleteWhere [PasswordResetExpirationTime <. currentTime]
+    -- TODO sand-witch: "The DeleteCascade module is deprecated. 
+    -- You can now set cascade behavior directly on entities in the quasiquoter."
     deleteCascadeWhere [CartExpirationTime <. Just currentTime]
     deactivateCoupons currentTime
     enqueueTask (Just $ addUTCTime 3600 currentTime) CleanDatabase
@@ -352,13 +359,8 @@ cleanDatabase = do
     deactivateCoupons currentTime =
         E.update $ \c -> do
             E.set c [ CouponIsActive E.=. E.val False ]
-            --  TODO sand-witch: sub_select is an unsafe function to use. If used with a SqlQuery that 
-            --  returns 0 results, then it may return NULL despite not mentioning Maybe 
-            --  in the return type. If it returns more than 1 result, then it will throw a 
-            --  SQL error.
-            let orderCount = E.sub_select $ E.from $ \o -> do
+            let orderCount = E.subSelectCount $ E.from E.table >>= \o -> do
                     E.where_ $ o E.^. OrderCouponId E.==. E.just (c E.^. CouponId)
-                    return E.countRows
             E.where_ $
                 (orderCount E.>=. c E.^. CouponTotalUses E.&&. c E.^. CouponTotalUses E.!=. E.val 0)
                 E.||.  E.val currentTime E.>. c E.^. CouponExpirationDate
@@ -366,8 +368,9 @@ cleanDatabase = do
 -- | Remove Cart Items for sold-out variants from the order.
 removeSoldOutVariants :: OrderId -> SqlPersistT IO ()
 removeSoldOutVariants orderId = do
-    soldOut <- E.select $ E.from $ \(op `E.InnerJoin` pv) -> do
-        E.on $ pv E.^. ProductVariantId E.==. op E.^. OrderProductProductVariantId
+    soldOut <- E.select $ do 
+        (op E.:& pv) <- E.from $ E.table `E.innerJoin` E.table 
+            `E.on`  \(op E.:& pv) -> pv E.^. ProductVariantId E.==. op E.^. OrderProductProductVariantId
         E.where_ $ pv E.^. ProductVariantQuantity E.<=. E.val 0
             E.&&. op E.^. OrderProductOrderId E.==. E.val orderId
         return pv

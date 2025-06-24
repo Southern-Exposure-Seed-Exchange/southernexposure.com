@@ -3,6 +3,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TypeOperators #-}
+
+{-# OPTIONS -Wno-deprecations #-}
 module Routes.Admin.Customers
     ( CustomerAPI
     , customerRoutes
@@ -38,7 +40,7 @@ import qualified Crypto.BCrypt as BCrypt
 import qualified Data.Text as T
 import qualified Data.UUID as UUID
 import qualified Data.UUID.V4 as UUID4
-import qualified Database.Esqueleto as E
+import qualified Database.Esqueleto.Experimental as E
 import qualified Validation as V
 
 
@@ -111,21 +113,26 @@ customerListRoute t mPage mPerPage maybeQuery = withAdminCookie t $ \_ -> do
             if T.null query then
                 count ([] :: [Filter Customer])
             else
-                extractRowCount . E.select $ E.from $ \(c `E.LeftOuterJoin` a) -> do
-                    E.on $ E.just (c E.^. CustomerId) E.==. a E.?. AddressCustomerId
-                        E.&&. E.just (E.val True) E.==. a E.?. AddressIsActive
+                extractRowCount . E.select $ do 
+                    (c E.:& a) <- E.from $ E.table `E.leftJoin` E.table 
+                        `E.on` \(c E.:& a) -> 
+                                E.just (c E.^. CustomerId) E.==. a E.?. AddressCustomerId
+                                E.&&. E.just (E.val True) E.==. a E.?. AddressIsActive
                     E.where_ $ whereQuery c a query
                     return $ E.countDistinct $ c E.^. CustomerId
-        customerResult <- E.select $ E.from $ \(c `E.LeftOuterJoin` a) ->
+        customerResult <- E.select $ do 
+            (c E.:& a) <- E.from $ E.table `E.leftJoin` E.table `E.on` 
+                \(c E.:& a) ->
+                    let activeAddressFilter =
+                            if T.null query then
+                                E.just (E.val True) E.==. a E.?. AddressIsDefault
+                            else
+                                E.val True
+                    in E.just (c E.^. CustomerId) E.==. a E.?. AddressCustomerId
+                        E.&&. E.just (E.val True) E.==. a E.?. AddressIsActive
+                        E.&&. activeAddressFilter
             E.distinctOnOrderBy [E.asc $ c E.^. CustomerEmail] $ do
-                let activeAddressFilter =
-                        if T.null query then
-                            E.just (E.val True) E.==. a E.?. AddressIsDefault
-                        else
-                            E.val True
-                E.on $ E.just (c E.^. CustomerId) E.==. a E.?. AddressCustomerId
-                    E.&&. E.just (E.val True) E.==. a E.?. AddressIsActive
-                    E.&&. activeAddressFilter
+
                 E.limit $ fromIntegral perPage
                 E.offset $ fromIntegral offset
                 E.where_ $ whereQuery c a query
@@ -247,8 +254,9 @@ customerEditDataRoute t customerId = withAdminCookie t $ \_ ->
   where
     getOrders :: App [OrderData]
     getOrders = runDB $ do
-        os <- E.select $ E.from $ \(o `E.InnerJoin` sa) -> do
-            E.on $ sa E.^. AddressId E.==. o E.^. OrderShippingAddressId
+        os <- E.select $ do 
+            (o E.:& sa) <- E.from $ E.table `E.innerJoin` E.table 
+                `E.on` \(o E.:& sa) -> sa E.^. AddressId E.==. o E.^. OrderShippingAddressId
             E.where_ $ o E.^. OrderCustomerId E.==. E.val customerId
             E.orderBy [E.desc $ o E.^. OrderCreatedAt]
             return (o, sa)

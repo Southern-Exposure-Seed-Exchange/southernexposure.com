@@ -86,7 +86,7 @@ import qualified Data.StateCodes as StateCodes
 import qualified Data.List as L
 import qualified Data.Map.Strict as M
 import qualified Data.Text as T
-import qualified Database.Esqueleto as E
+import qualified Database.Esqueleto.Experimental as E
 import qualified Validation as V
 
 
@@ -610,14 +610,17 @@ getCartItems
     :: (E.SqlExpr (Entity Cart) -> E.SqlExpr (E.Value Bool))        -- ^ The `E.where_` query
     -> AppSQL [CartItemData]
 getCartItems whereQuery = do
-    items <- E.select $ E.from
-        $ \(ci `E.InnerJoin` c `E.InnerJoin` v `E.InnerJoin` p) -> do
-            E.on (p E.^. ProductId E.==. v E.^. ProductVariantProductId)
-            E.on (v E.^. ProductVariantId E.==. ci E.^. CartItemProductVariantId)
-            E.on (c E.^. CartId E.==. ci E.^. CartItemCartId)
-            E.where_ $ whereQuery c
-            E.orderBy [E.asc $ p E.^. ProductName]
-            return (ci E.^. CartItemId, p, v, ci E.^. CartItemQuantity)
+    items <- E.select $ do 
+        (ci E.:& c E.:& v E.:& p) <- E.from $ E.table
+            `E.innerJoin` E.table 
+                `E.on` (\(ci E.:& c) -> c E.^. CartId E.==. ci E.^. CartItemCartId)
+            `E.innerJoin` E.table 
+                `E.on` (\(ci E.:& _ E.:& v) -> v E.^. ProductVariantId E.==. ci E.^. CartItemProductVariantId)
+            `E.innerJoin` E.table 
+                `E.on` (\(_ E.:& v E.:& p) -> p E.^. ProductId E.==. v E.^. ProductVariantProductId)
+        E.where_ $ whereQuery c
+        E.orderBy [E.asc $ p E.^. ProductName]
+        return (ci E.^. CartItemId, p, v, ci E.^. CartItemQuantity)
     mapM toItemData items
     where toItemData (i, p, v, q) =
             let
@@ -1140,12 +1143,14 @@ instance ToJSON CheckoutProduct where
 
 getCheckoutProducts :: OrderId -> AppSQL [CheckoutProduct]
 getCheckoutProducts orderId = do
-    orderProducts <- E.select $ E.from $
-        \(op `E.InnerJoin` v `E.InnerJoin` p) -> do
-            E.on $ p E.^. ProductId E.==. v E.^. ProductVariantProductId
-            E.on $ v E.^. ProductVariantId E.==. op E.^. OrderProductProductVariantId
-            E.where_ $ op E.^. OrderProductOrderId E.==. E.val orderId
-            return (op, v , p)
+    orderProducts <- E.select $ do 
+        (op E.:& v E.:& p) <-  E.from $ E.table
+            `E.innerJoin` E.table 
+                `E.on` (\(op E.:& v) -> v E.^. ProductVariantId E.==. op E.^. OrderProductProductVariantId)
+            `E.innerJoin` E.table 
+                `E.on` (\(_ E.:& v E.:& p) -> p E.^. ProductId E.==. v E.^. ProductVariantProductId)
+        E.where_ $ op E.^. OrderProductOrderId E.==. E.val orderId
+        return (op, v , p)
     return $ map makeCheckoutProduct orderProducts
     where makeCheckoutProduct (Entity _ orderProd, Entity _ variant, Entity _ product) =
             CheckoutProduct

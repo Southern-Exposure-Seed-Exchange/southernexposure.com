@@ -17,7 +17,7 @@ import Models.Fields
 
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.Text as T
-import qualified Database.Esqueleto as E
+import qualified Database.Esqueleto.Experimental as E
 
 main :: IO ()
 main = do
@@ -31,10 +31,14 @@ connectToPostgres =
 getProductData :: SqlPersistT IO [(Entity Product, Entity ProductVariant, Maybe (Entity SeedAttribute), [Entity Category])]
 getProductData = do
     categoryCache <- syncCategoryPredecessorCache
-    products <- E.select $ E.from $ \(p `E.InnerJoin` v `E.InnerJoin` c `E.LeftOuterJoin` sa) -> do
-        E.on $ sa E.?. SeedAttributeProductId E.==. E.just (p E.^. ProductId)
-        E.on $ c E.^. CategoryId E.==. p E.^. ProductMainCategory
-        E.on $ v E.^. ProductVariantProductId E.==. p E.^. ProductId
+    products <- E.select $ do 
+        (p E.:& v E.:& c E.:& sa) <- E.from $ E.table 
+            `E.innerJoin` E.table 
+                `E.on` (\(p E.:& v) -> v E.^. ProductVariantProductId E.==. p E.^. ProductId)
+            `E.innerJoin` E.table 
+                `E.on` (\(p E.:& _ E.:& c) -> c E.^. CategoryId E.==. p E.^. ProductMainCategory)
+            `E.leftJoin` E.table 
+                `E.on` (\(p E.:& _ E.:& _ E.:& sa) -> sa E.?. SeedAttributeProductId E.==. E.just (p E.^. ProductId))
         E.where_ $ v E.^. ProductVariantIsActive
         return (p, v, sa, c)
     return $ map (addCategoryParents categoryCache) products

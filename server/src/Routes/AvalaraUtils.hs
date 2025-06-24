@@ -34,7 +34,7 @@ import qualified Data.List as L
 import qualified Data.Text as T
 import qualified Data.UUID as UUID
 import qualified Data.UUID.V4 as UUID4
-import qualified Database.Esqueleto as E
+import qualified Database.Esqueleto.Experimental as E
 
 
 -- | Render a prettified version of an 'Avalara.ErrorInfo'.
@@ -143,9 +143,12 @@ createAvalaraTransaction
     -> E.SqlPersistT m (Maybe Avalara.Transaction)
 createAvalaraTransaction (Entity orderId order) shippingAddress billingAddress customer alreadyCharged = do
     items <- selectList [OrderLineItemOrderId ==. orderId, OrderLineItemType !=. TaxLine] []
-    products <- E.select $ E.from $ \(op `E.InnerJoin` v `E.InnerJoin` p) -> do
-        E.on $ v E.^. ProductVariantProductId E.==. p E.^. ProductId
-        E.on $ op E.^. OrderProductProductVariantId E.==. v E.^. ProductVariantId
+    products <- E.select $ do 
+        (op E.:& v E.:& p) <- E.from $ E.table
+            `E.innerJoin` E.table 
+                `E.on` (\(op E.:& v) -> op E.^. OrderProductProductVariantId E.==. v E.^. ProductVariantId)
+            `E.innerJoin` E.table 
+                `E.on` (\(_ E.:& v E.:& p) -> v E.^. ProductVariantProductId E.==. p E.^. ProductId)
         E.where_ $ op E.^. OrderProductOrderId E.==. E.val orderId
         return (op, p, v)
     sourceAddress <- fmap Avalara.addressFromLocation . lift

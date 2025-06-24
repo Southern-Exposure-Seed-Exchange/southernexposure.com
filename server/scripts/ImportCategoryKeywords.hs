@@ -16,7 +16,7 @@ import qualified Data.ByteString.Lazy as LBS
 import qualified Data.List as L
 import qualified Data.Text as T
 import qualified Data.Vector as V
-import qualified Database.Esqueleto as E
+import qualified Database.Esqueleto.Experimental as E
 
 main :: IO ()
 main = do
@@ -52,8 +52,8 @@ updateCategoryKeywords =
                 error $ "Invalid slug: " <> T.unpack slug
             Just (Entity cId _) ->
                 getChildCategoryIds cId
-        products <- E.select $ E.from $ \p -> do
-            let alternateExists = E.exists $ E.from $ \ptc ->
+        products <- E.select $ E.from E.table >>= \p -> do
+            let alternateExists = E.exists $ E.from E.table >>= \ptc ->
                     E.where_ $ (ptc E.^. ProductToCategoryProductId E.==. p E.^. ProductId) E.&&.
                         (ptc E.^. ProductToCategoryCategoryId `E.in_` E.valList categoryTree)
             E.where_ $

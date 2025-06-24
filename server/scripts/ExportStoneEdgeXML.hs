@@ -21,7 +21,7 @@ import Routes.StoneEdge
 import StoneEdge
 
 import qualified Data.ByteString as BS
-import qualified Database.Esqueleto as E
+import qualified Database.Esqueleto.Experimental as E
 
 main :: IO ()
 main = do
@@ -49,11 +49,16 @@ connectToPostgres =
 -- | Ripped from Routes.StoneEdge.downloadOrdersRoute
 fetchOrder :: [OrderId] -> SqlPersistT IO [StoneEdgeOrder]
 fetchOrder orderIds = do
-    orders <- E.select $ E.from $ \(o `E.InnerJoin` c `E.InnerJoin` sa `E.LeftOuterJoin` ba `E.LeftOuterJoin` cp) -> do
-        E.on (o E.^. OrderCouponId E.==. cp E.?. CouponId)
-        E.on (o E.^. OrderBillingAddressId E.==. ba E.?. AddressId)
-        E.on (o E.^. OrderShippingAddressId E.==. sa E.^. AddressId)
-        E.on (o E.^. OrderCustomerId E.==. c E.^. CustomerId)
+    orders <- E.select $ do 
+        (o E.:& c E.:& sa E.:& ba E.:& cp) <- E.from $ E.table 
+            `E.innerJoin` E.table 
+                `E.on` (\(o E.:& c) -> o E.^. OrderCustomerId E.==. c E.^. CustomerId)
+            `E.innerJoin` E.table 
+                `E.on` (\(o E.:& _ E.:& sa) -> o E.^. OrderShippingAddressId E.==. sa E.^. AddressId)
+            `E.leftJoin` E.table 
+                `E.on` (\(o E.:& _ E.:& _ E.:& ba) -> o E.^. OrderBillingAddressId E.==. ba E.?. AddressId)
+            `E.leftJoin` E.table 
+                `E.on` (\(o E.:& _ E.:& _ E.:& _ E.:& cp) -> o E.^. OrderCouponId E.==. cp E.?. CouponId)
         E.where_ $ o E.^. OrderId `E.in_` E.valList orderIds
         E.orderBy [E.asc $ o E.^. OrderId]
         return (o, c, sa, ba, cp)
@@ -63,9 +68,12 @@ fetchOrder orderIds = do
             (adminCommentContent comment,)
                 <$> convertToLocalTime (adminCommentTime comment)
         lineItems <- selectList [OrderLineItemOrderId ==. entityKey o] []
-        products <- E.select $ E.from $ \(op `E.InnerJoin` v `E.InnerJoin` p) -> do
-            E.on (v E.^. ProductVariantProductId E.==. p E.^. ProductId)
-            E.on (op E.^. OrderProductProductVariantId E.==. v E.^. ProductVariantId)
+        products <- E.select $ do
+            (op E.:& v E.:& p) <- E.from $ E.table
+                `E.innerJoin` E.table 
+                    `E.on` (\(op E.:& v) -> op E.^. OrderProductProductVariantId E.==. v E.^. ProductVariantId)
+                `E.innerJoin` E.table 
+                    `E.on` (\(_ E.:& v E.:& p) -> v E.^. ProductVariantProductId E.==. p E.^. ProductId)
             E.where_ $ op E.^. OrderProductOrderId E.==. E.val (entityKey o)
             return (op, p, v)
         return (o, createdAt, c, sa, ba, cp, lineItems, products, adminComments)
