@@ -1,14 +1,14 @@
 {
   inputs = {
-    nixpkgs-old.url = "github:nixos/nixpkgs/cb4346597f033750a432f0161eb5d2c426776960";
     nixpkgs.url = "github:nixos/nixpkgs/nixos-23.05";
   };
 
-  outputs = { nixpkgs, nixpkgs-old, ...}:
+  outputs = { nixpkgs, ...}:
   let
     system = "x86_64-linux"; 
-    pkgs = import nixpkgs { inherit system; };
-    pkgs-old = import nixpkgs-old { inherit system; };
+    pkgs = import nixpkgs { 
+      inherit system; 
+    };
     ghc = "ghc8107";
     hp = pkgs.haskell.packages."${ghc}";
   in
@@ -25,11 +25,14 @@
         postgresql
         pkg-config
         # frontend dependencies
-        pkgs-old.nodejs
-        pkgs-old.python3
+        nodejs
+        python3
+        autoconf
+        automake
+        elmPackages.elm
+        elmPackages.elm-language-server
       ];
-
-      LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath [pkgs.zlib pkgs.openssl];
+      CXXFLAGS = "-std=c++17";
     };
   };
 }

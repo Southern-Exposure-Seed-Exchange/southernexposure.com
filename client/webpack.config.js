@@ -43,6 +43,7 @@ module.exports = {
   optimization: {
     runtimeChunk: 'single',
     minimizer: [new TerserJSPlugin({}), new OptimizeCSSAssetsPlugin({}),],
+    minimize: isProduction,
     splitChunks: {
       chunks: 'all',
       automaticNameDelimiter: '.',
@@ -87,8 +88,6 @@ module.exports = {
         use: [
           { loader: MiniCssExtractPlugin.loader,
             options: {
-              hmr: !isProduction,
-              reloadAll: true,
             },
           }, 'css-loader', 'postcss-loader', 'sass-loader'
         ],
@@ -157,12 +156,12 @@ module.exports = {
       hash: false,
       baseHref: '/',
     }),
-    new CopyWebpackPlugin([
+    new CopyWebpackPlugin({patterns: [
       { from: 'src/static',
         to: 'static',
-        ignore: ['PoorRichard.ttf'],
+        globOptions: {ignore: ['PoorRichard.ttf']},
       },
-    ]),
+    ],}),
     new webpack.ProvidePlugin({
       $: 'jquery',
       jQuery: 'jquery',
@@ -231,14 +230,9 @@ module.exports = {
   ],
 
   devServer: {
-    inline: true,
     host: '0.0.0.0',
-    disableHostCheck: true,
+    allowedHosts: 'all',
     historyApiFallback: true,
-    stats: {
-      colors: true,
-      chunks: false,
-    },
     proxy: {
       '/api/*': {
         target: 'http://localhost:3000',

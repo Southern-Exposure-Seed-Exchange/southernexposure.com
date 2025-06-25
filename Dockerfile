@@ -1,4 +1,4 @@
-FROM docker.io/node:14 AS base
+FROM docker.io/node:18 AS base
 RUN apt-get -y update && apt-get install -y libtinfo5 curl postgresql libpq-dev
 RUN curl -sSL https://get.haskellstack.org/ | sh
 
@@ -6,10 +6,11 @@ FROM base AS devcontainer
 RUN apt-get -y update && apt-get install -y sudo
 RUN echo "node ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
 
-FROM base AS frontend-bulider
+FROM base AS frontend-builder
 WORKDIR /southernexposure
 COPY client/package.json ./client/package.json
 COPY client/package-lock.json ./client/package-lock.json
+ENV CXXFLAGS=-std=c++17
 RUN npm --prefix client install
 # Actually build client
 COPY client ./client

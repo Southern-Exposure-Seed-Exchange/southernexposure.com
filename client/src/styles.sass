@@ -53,6 +53,11 @@ $breadcrumb-bg: $pale-tan-accent
 @import "~bootstrap/scss/variables"
 @import "~bootstrap/scss/bootstrap"
 
+@mixin hover-focus() 
+  &:hover,
+  &:focus 
+    @content;
+
 /** Fonts **/
 @font-face
   font-family: 'Poor Richard'
