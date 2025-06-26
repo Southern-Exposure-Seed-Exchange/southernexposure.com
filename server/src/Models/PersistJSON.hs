@@ -48,7 +48,7 @@ instance PersistFieldSql JSONValue where
   sqlType = sqlTypeJsonB
 
 toPersistValueJsonB :: ToJSON a => a -> PersistValue
-toPersistValueJsonB = PersistDbSpecific . LBS.toStrict . encode
+toPersistValueJsonB = PersistLiteralEscaped . LBS.toStrict . encode
 
 fromPersistValueJsonB :: FromJSON a => PersistValue -> Either Text a
 fromPersistValueJsonB (PersistText t) =

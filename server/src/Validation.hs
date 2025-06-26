@@ -2,6 +2,7 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE TypeApplications #-}
 module Validation
     ( Validators
     , Validation(..)
@@ -25,7 +26,6 @@ module Validation
 import Control.Arrow (second)
 import Data.Aeson (ToJSON(..), encode, object)
 import Data.Maybe (isJust, isNothing)
-import Data.Monoid ((<>))
 import Database.Persist
     ( PersistEntityBackend, PersistEntity, Filter, Unique, get, getBy
     , selectFirst
@@ -34,12 +34,12 @@ import Database.Persist.Sql (SqlBackend, Key)
 import Servant (err422, errBody)
 
 import Server
-import Models (EntityField(CustomerEmail))
+import Models (EntityField(CustomerEmail), Customer)
 
 import qualified Data.Text as T
 import qualified Data.HashMap.Strict as HM
 import qualified Data.Map.Strict as M
-import qualified Database.Esqueleto as E
+import qualified Database.Esqueleto.Experimental as E
 
 
 -- | Force the server to return a 422 HTTP Validation Error with a JSON body.
@@ -143,7 +143,8 @@ noMatches filters =
 -- | Ensure a a Customer with the given email doesn't exist.
 uniqueCustomer :: T.Text -> App Bool
 uniqueCustomer email =
-    fmap (not . null) . runDB $ E.select $ E.from $ \c -> do
+    fmap (not . null) . runDB $ E.select $ do 
+        c <- E.from $ E.table @Customer
         E.where_ $ E.lower_ (c E.^. CustomerEmail) E.==. E.val (T.toLower email)
         return c
 

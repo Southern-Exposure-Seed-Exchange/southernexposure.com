@@ -5,7 +5,6 @@
 import Data.Aeson (Result(Success), FromJSON, fromJSON, ToJSON(..), eitherDecode)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LBS
-import Data.Monoid ((<>))
 import Data.Ratio ((%))
 import Data.Text (Text)
 import Data.Text.Encoding (decodeUtf8)

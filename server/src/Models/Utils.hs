@@ -28,10 +28,9 @@ module Models.Utils
 import Control.Monad.IO.Class (MonadIO)
 import Data.Char (isAlphaNum)
 import Data.Maybe (listToMaybe)
-import Data.Monoid ((<>))
 import Data.Ratio ((%))
 import Database.Persist
-    ( (==.), (=.), (+=.), Entity(..), Key(..), getBy, update, upsert
+    ( (==.), (=.), (+=.), Entity(..), getBy, update, upsert
     , delete, deleteWhere, selectList, selectKeysList, insertEntity
     )
 import Database.Persist.Sql (SqlPersistT)
@@ -44,8 +43,7 @@ import Server
 
 import qualified Avalara
 import qualified Data.Text as T
-import qualified Database.Esqueleto as E
-
+import qualified Database.Esqueleto.Experimental as E
 
 -- | Turn a name into a URL-safe string.
 slugify :: T.Text -> T.Text
@@ -225,7 +223,8 @@ mergeCarts (Entity keepId _) (Entity mergeId _) = do
 -- | Get the first matching customer with the given email, searching by
 -- ignoring the casing.
 getCustomerByEmail :: T.Text -> AppSQL (Maybe (Entity Customer))
-getCustomerByEmail email = fmap listToMaybe . E.select $ E.from $ \c -> do
+getCustomerByEmail email = fmap listToMaybe . E.select $ do 
+    c <- E.from $ E.table
     E.where_ $ E.lower_ (c E.^. CustomerEmail) E.==. E.val (T.toLower email)
     return c
 
@@ -280,7 +279,7 @@ getOrderTax = sum . map orderLineItemAmount . filter ((==) TaxLine . orderLineIt
 getOrderSubtotal :: [OrderProduct] -> Cents
 getOrderSubtotal = sum . map
     (\prod ->
-        orderProductPrice prod * Cents (orderProductQuantity prod)
+        orderProductPrice prod * mkCents (orderProductQuantity prod)
     )
 
 -- | Calculate the sum of all OrderLineItem charge's for an Order.

@@ -25,11 +25,10 @@ module Routes.StoneEdge
 
 import Control.Monad ((<=<), when, forM)
 import Control.Monad.Reader (asks, liftIO)
-import Control.Exception.Safe (MonadCatch, Exception, Typeable, throwM, handle)
+import UnliftIO.Exception (Exception, throwIO, handle)
 import Data.Bifunctor (first)
 import Data.Char (isDigit)
 import Data.Maybe (fromMaybe, mapMaybe, listToMaybe, maybeToList)
-import Data.Monoid ((<>))
 import Data.Text (Text)
 import Data.Text.Encoding (decodeUtf8)
 import Data.Time
@@ -46,15 +45,18 @@ import Web.FormUrlEncoded (FromForm(..), Form, parseMaybe)
 import Config
 import Models
 import Models.Fields
-    ( Cents(..), Country(..), Region(..), OrderStatus(..), LineItemType(..)
+    ( Cents(..), mkCents, Country(..), Region(..), OrderStatus(..), LineItemType(..)
     , StripeChargeId(..), AdminOrderComment(..), renderLotSize
     )
 import Server
 import StoneEdge
+import Numeric.Natural (Natural)
+import Data.Coerce (coerce)
+import Database.Persist.Class.PersistField (OverflowNatural(..))
 
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.Text as T
-import qualified Database.Esqueleto as E
+import qualified Database.Esqueleto.Experimental as E
 import qualified Web.Stripe.Types as Stripe
 
 
@@ -72,7 +74,7 @@ integrationVersion = "1.000"
 data StoneEdgeIntegrationError
     = StoneEdgeAuthError
     -- ^ Request authentication does not match values from the 'Config'.
-    deriving (Show, Typeable)
+    deriving (Show)
 
 instance Exception StoneEdgeIntegrationError
 
@@ -91,11 +93,11 @@ stoneEdgeRoutes = \case
     InvalidRequest form ->
         return . ErrorResponse $ "Expecting a setifunction parameter, received: " <> T.pack (show form)
   where
-    xmlError :: MonadCatch m => TypeOfDownload -> StoneEdgeIntegrationError -> m StoneEdgeResponse
+    xmlError :: Monad m => TypeOfDownload -> StoneEdgeIntegrationError -> m StoneEdgeResponse
     xmlError type_ = \case
         StoneEdgeAuthError ->
             return $ XmlErrorResponse type_ "Invalid username, password, or store code."
-    simpleError :: MonadCatch m => StoneEdgeIntegrationError -> m StoneEdgeResponse
+    simpleError :: Monad m => StoneEdgeIntegrationError -> m StoneEdgeResponse
     simpleError = \case
         StoneEdgeAuthError ->
             return $ ErrorResponse "Invalid username, password, or store code."
@@ -188,11 +190,17 @@ downloadOrdersRoute DownloadOrdersRequest { dorLastOrder, dorStartNumber, dorBat
                 Nothing ->
                     return ()
     rawOrderData <- runDB $ do
-        orders <- E.select $ E.from $ \(o `E.InnerJoin` c `E.InnerJoin` sa `E.LeftOuterJoin` ba `E.LeftOuterJoin` cp) -> do
-            E.on (o E.^. OrderCouponId E.==. cp E.?. CouponId)
-            E.on (o E.^. OrderBillingAddressId E.==. ba E.?. AddressId)
-            E.on (o E.^. OrderShippingAddressId E.==. sa E.^. AddressId)
-            E.on (o E.^. OrderCustomerId E.==. c E.^. CustomerId)
+        orders <- E.select $ do
+            (o E.:& c E.:& sa E.:& ba E.:& cp) <- E.from $ E.table 
+                `E.innerJoin` E.table 
+                    `E.on` (\(o E.:& c) -> o E.^. OrderCustomerId E.==. c E.^. CustomerId)
+                `E.innerJoin` E.table
+                    `E.on` (\(o E.:& _ E.:& sa) -> o E.^. OrderShippingAddressId E.==. sa E.^. AddressId)
+                `E.leftJoin` E.table 
+                    `E.on` (\(o E.:& _ E.:& _ E.:& ba) -> o E.^. OrderBillingAddressId E.==. ba E.?. AddressId)
+                `E.leftJoin` E.table 
+                    `E.on` (\(o E.:& _ E.:& _ E.:& _ E.:& cp) -> o E.^. OrderCouponId E.==. cp E.?. CouponId)
+
             E.where_ $ orderIdFilter o
             E.orderBy [E.asc $ o E.^. OrderId]
             limitAndOffset
@@ -205,9 +213,12 @@ downloadOrdersRoute DownloadOrdersRequest { dorLastOrder, dorStartNumber, dorBat
                 (adminCommentContent comment,)
                     <$> convertToLocalTime (adminCommentTime comment)
             lineItems <- selectList [OrderLineItemOrderId ==. entityKey o] []
-            products <- E.select $ E.from $ \(op `E.InnerJoin` v `E.InnerJoin` p) -> do
-                E.on (v E.^. ProductVariantProductId E.==. p E.^. ProductId)
-                E.on (op E.^. OrderProductProductVariantId E.==. v E.^. ProductVariantId)
+            products <- E.select $ do 
+                (op E.:& v E.:& p) <- E.from $ E.table 
+                    `E.innerJoin` E.table 
+                        `E.on` (\(op E.:& v) -> op E.^. OrderProductProductVariantId E.==. v E.^. ProductVariantId)
+                    `E.innerJoin` E.table 
+                        `E.on` (\(_ E.:& v E.:& p) -> v E.^. ProductVariantProductId E.==. p E.^. ProductId)
                 E.where_ $ op E.^. OrderProductOrderId E.==. E.val (entityKey o)
                 return (op, p, v)
             return (o, createdAt, c, sa, ba, cp, lineItems, products, adminComments)
@@ -287,7 +298,7 @@ transformOrder (order, createdAt, customer, shipping, maybeBilling, maybeCoupon,
         :: (Entity OrderProduct, Entity Product, Entity ProductVariant)
         -> StoneEdgeOrderProduct
     transformProduct (Entity lineId orderProd, Entity _ prod, Entity _ variant) =
-        let q = fromIntegral $ orderProductQuantity orderProd
+        let q = fromIntegral . coerce @_ @Natural $ orderProductQuantity orderProd
             p = orderProductPrice orderProd
             t = Cents $ fromIntegral q * fromCents p
         in StoneEdgeOrderProduct
@@ -331,7 +342,7 @@ transformOrder (order, createdAt, customer, shipping, maybeBilling, maybeCoupon,
     transformTotals =
         let productTotal =
                 sum $ map (\(Entity _ op, _, _) ->
-                        Cents $ fromIntegral (orderProductQuantity op) * fromCents (orderProductPrice op)
+                        mkCents (orderProductQuantity op) * orderProductPrice op
                     )
                     products
             (discounts, surcharges, maybeShipping, maybeCouponLine, maybeTaxLine) = foldl
@@ -491,4 +502,4 @@ checkAuth request = do
     let credentials = getStoneEdgeRequestCredentials request
     expectedCredentials <- asks getStoneEdgeAuth
     when (expectedCredentials /= credentials) $
-        throwM StoneEdgeAuthError
+        throwIO StoneEdgeAuthError

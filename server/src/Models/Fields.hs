@@ -1,5 +1,7 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -7,20 +9,19 @@
 module Models.Fields where
 
 import Control.Applicative ((<|>))
-import Control.Monad (fail)
 import Data.Aeson (ToJSON(..), FromJSON(..), (.=), (.:), object, withObject, withText)
 import Data.ISO3166_CountryCodes (CountryCode)
-import Data.Monoid ((<>))
 import Data.Ratio ((%), numerator, denominator)
 import Data.Scientific (Scientific, scientific)
 import Data.StateCodes (StateCode)
 import Data.Time (UTCTime)
-import Database.Persist (PersistField(..))
+import Database.Persist (PersistField(..), OverflowNatural(..))
 import Database.Persist.Sql (PersistFieldSql(..), SqlType(SqlString))
 import Database.Persist.TH (derivePersistField)
 import GHC.Generics (Generic)
 import Numeric.Natural (Natural)
 import Text.Read (readMaybe, readPrec)
+import Data.Coerce (coerce)
 
 import qualified Avalara
 import qualified Data.CAProvinceCodes as CACodes
@@ -28,12 +29,15 @@ import qualified Data.StateCodes as StateCodes
 import qualified Data.Text as T
 import qualified Web.Stripe.Types as Stripe
 
-
 -- | Cents are used to do any currency-related arithmetic & are represented
 -- as arbitrary-percision numbers.
 newtype Cents =
     Cents { fromCents :: Natural }
-    deriving (Eq, Ord, Num, ToJSON, FromJSON, PersistField, PersistFieldSql)
+    deriving newtype (Eq, Ord, Num, ToJSON, FromJSON)
+    deriving (PersistField, PersistFieldSql) via OverflowNatural -- TODO sand-witch: improve this behavior
+
+mkCents :: OverflowNatural -> Cents
+mkCents = coerce
 
 -- | Fallback to the `Natural` instance.
 instance Show Cents where
@@ -83,7 +87,11 @@ fromDollars dollars =
 -- represented as arbitrary-percision numbers.
 newtype Milligrams =
     Milligrams { fromMilligrams :: Natural }
-    deriving (Eq, Ord, ToJSON, FromJSON, PersistField, PersistFieldSql)
+    deriving newtype (Eq, Ord, ToJSON, FromJSON)
+    deriving (PersistField, PersistFieldSql) via OverflowNatural -- TODO sand-witch: improve this behavior
+
+mkMilligrams :: OverflowNatural -> Milligrams
+mkMilligrams = coerce
 
 -- | Fallback to the 'Natural' instance.
 instance Show Milligrams where

@@ -1,7 +1,7 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeFamilies #-}
-{-| Export Product SKUs, Names, & Categories. -}
+{- Export Product SKUs, Names, & Categories. -}
 import Control.Monad.Logger (runNoLoggingT)
 import Data.Csv (FromNamedRecord, decodeByName)
 import Database.Persist

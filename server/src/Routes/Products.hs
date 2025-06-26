@@ -20,7 +20,7 @@ import Routes.CommonData
 import Routes.Utils (paginatedSelect)
 
 import qualified Data.Text as T
-import qualified Database.Esqueleto as E
+import qualified Database.Esqueleto.Experimental as E
 
 
 type ProductAPI =

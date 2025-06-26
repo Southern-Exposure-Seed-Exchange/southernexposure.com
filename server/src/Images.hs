@@ -26,7 +26,7 @@ module Images
     , ImageError(..)
     ) where
 
-import Control.Exception.Safe (Exception, MonadThrow, Typeable, throwM, tryIO)
+import UnliftIO.Exception (Exception, Typeable, throwIO, tryIO)
 import Control.Monad (forM_, when, unless)
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Monad.Reader (MonadReader, asks)
@@ -35,7 +35,6 @@ import Data.Char (toLower)
 import Data.Digest.Pure.MD5 (md5)
 import Data.Text (Text)
 import Data.Maybe (isJust)
-import Data.Monoid ((<>))
 import System.Directory (findExecutable, createDirectoryIfMissing, doesFileExist)
 import System.FilePath
     ( (</>), takeBaseName, takeExtension, splitFileName, splitPath, joinPath
@@ -200,13 +199,13 @@ instance Exception ImageError
 -- The filepath to the original image will be returned.
 --
 -- Throws 'ImageError'.
-scaleImage :: (MonadIO m, MonadThrow m) => ImageConfig -> Text -> FilePath -> BS.ByteString -> m FilePath
+scaleImage :: MonadIO m => ImageConfig -> Text -> FilePath -> BS.ByteString -> m FilePath
 scaleImage config filename destinationDirectory fileContents = do
     originalPath <- saveOriginalImage filename destinationDirectory fileContents
     scaleExistingImage config originalPath destinationDirectory
     return originalPath
 
-saveOriginalImage :: (MonadIO m, MonadThrow m) => Text -> FilePath -> BS.ByteString -> m FilePath
+saveOriginalImage :: MonadIO m => Text -> FilePath -> BS.ByteString -> m FilePath
 saveOriginalImage filename destinationDirectory fileContents = do
     let fileHash = md5 $ LBS.fromStrict fileContents
         baseName = takeBaseName $ T.unpack filename
@@ -221,7 +220,7 @@ saveOriginalImage filename destinationDirectory fileContents = do
     return originalPath
 
 -- | Throws 'ImageError'.
-scaleExistingImage :: (MonadIO m, MonadThrow m) => ImageConfig -> FilePath -> FilePath -> m ()
+scaleExistingImage :: MonadIO m => ImageConfig -> FilePath -> FilePath -> m ()
 scaleExistingImage config filePath destinationDirectory =
     let fileName = takeFileName filePath
     in
@@ -252,10 +251,10 @@ getFormat fileName =
             Nothing
 -- | Create a directory & it's parents, rethrowing any IOErrors as
 -- DirectoryCreationErrors.
-createDirectory :: (MonadThrow m, MonadIO m) => FilePath -> m ()
+createDirectory :: MonadIO m => FilePath -> m ()
 createDirectory path =
     liftIO (tryIO $ createDirectoryIfMissing True path) >>=
-        either (throwM . DirectoryCreationError path) return
+        either (throwIO . DirectoryCreationError path) return
 
 
 -- | Call GraphicsMagick's @mogrify@ command to resize a file to a new width,

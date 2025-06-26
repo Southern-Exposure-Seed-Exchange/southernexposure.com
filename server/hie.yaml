@@ -1,0 +1,43 @@
+cradle:
+  stack:
+    - path: "./src"
+      component: "sese-website:lib"
+
+    - path: "./scripts/CleanCarts.hs"
+      component: "sese-website:exe:clean-carts"
+
+    - path: "./scripts/ExportOddWeights.hs"
+      component: "sese-website:exe:export-odd-weights"
+
+    - path: "./scripts/ExportProducts.hs"
+      component: "sese-website:exe:export-products"
+
+    - path: "./scripts/ExportProductsRacks.hs"
+      component: "sese-website:exe:export-products-racks"
+
+    - path: "./scripts/ExportStoneEdgeXML.hs"
+      component: "sese-website:exe:export-stoneedge-xml"
+
+    - path: "./scripts/ImportCategoryKeywords.hs"
+      component: "sese-website:exe:import-category-keywords"
+
+    - path: "./scripts/ImportProductKeywords.hs"
+      component: "sese-website:exe:import-product-keywords"
+
+    - path: "./scripts/ImportProductSuggestions.hs"
+      component: "sese-website:exe:import-product-suggestions"
+
+    - path: "./app/Main.hs"
+      component: "sese-website:exe:sese-website-exe"
+
+    - path: "./app/Paths_sese_website.hs"
+      component: "sese-website:exe:sese-website-exe"
+
+    - path: "./scripts/UpdateProductDescriptions.hs"
+      component: "sese-website:exe:update-product-descriptions"
+
+    - path: "./scripts/UpdateProductPrices.hs"
+      component: "sese-website:exe:update-product-prices"
+
+    - path: "./test"
+      component: "sese-website:test:sese-website-test"

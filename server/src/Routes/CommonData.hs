@@ -50,7 +50,6 @@ module Routes.CommonData
 
 import Prelude hiding (product)
 
-import Control.Exception.Safe (Exception, throw)
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Monad.Reader (MonadReader, lift, asks, void, when)
 import Data.Aeson ((.=), (.:), (.:?), ToJSON(..), FromJSON(..), object, withObject)
@@ -58,16 +57,17 @@ import Data.Digest.Pure.MD5 (md5)
 import Data.Int (Int64)
 import Data.List (intersect)
 import Data.Maybe (mapMaybe, listToMaybe, fromMaybe, maybeToList)
-import Data.Monoid ((<>))
 import Data.Ratio ((%))
 import Data.Text.Encoding (encodeUtf8, decodeUtf8)
 import Data.Time (UTCTime, getCurrentTime)
 import Database.Persist
     ( (=.), (==.), (>=.), (<=.), Entity(..), SelectOpt(Asc), selectList, getBy
-    , update
+    , update, OverflowNatural(..)
     )
 import Numeric.Natural (Natural)
 import Servant (errBody, err500)
+import Data.Coerce (coerce)
+import UnliftIO.Exception (throwIO, Exception)
 
 import Avalara (CreateTransactionRequest(..), AddressInfo(..))
 import Cache (CategoryPredecessorCache, getCategoryPredecessorCache, queryCategoryPredecessorCache)
@@ -86,7 +86,7 @@ import qualified Data.StateCodes as StateCodes
 import qualified Data.List as L
 import qualified Data.Map.Strict as M
 import qualified Data.Text as T
-import qualified Database.Esqueleto as E
+import qualified Database.Esqueleto.Experimental as E
 import qualified Validation as V
 
 
@@ -463,12 +463,12 @@ validatePassword email password = do
             else
                 validateZencartPassword e
         Nothing ->
-            hashAnyways $ throw NoCustomer
+            hashAnyways $ throwIO NoCustomer
   where
     resetRequiredError =
-        void . hashAnyways $ throw PasswordResetRequired
+        void . hashAnyways $ throwIO PasswordResetRequired
     authorizationError =
-        throw AuthorizationError
+        throwIO AuthorizationError
     -- Hash the password without trying to validate it to prevent
     -- mining of valid logins.
     hashAnyways :: AppSQL a -> AppSQL a
@@ -504,7 +504,7 @@ validatePassword email password = do
             BCrypt.slowerBcryptHashingPolicy
             $ encodeUtf8 password
         newHash <- maybe
-            (throw MisconfiguredHashingPolicy)
+            (throwIO MisconfiguredHashingPolicy)
             (return . decodeUtf8) maybeNewHash
         update customerId [CustomerEncryptedPassword =. newHash]
 
@@ -610,14 +610,17 @@ getCartItems
     :: (E.SqlExpr (Entity Cart) -> E.SqlExpr (E.Value Bool))        -- ^ The `E.where_` query
     -> AppSQL [CartItemData]
 getCartItems whereQuery = do
-    items <- E.select $ E.from
-        $ \(ci `E.InnerJoin` c `E.InnerJoin` v `E.InnerJoin` p) -> do
-            E.on (p E.^. ProductId E.==. v E.^. ProductVariantProductId)
-            E.on (v E.^. ProductVariantId E.==. ci E.^. CartItemProductVariantId)
-            E.on (c E.^. CartId E.==. ci E.^. CartItemCartId)
-            E.where_ $ whereQuery c
-            E.orderBy [E.asc $ p E.^. ProductName]
-            return (ci E.^. CartItemId, p, v, ci E.^. CartItemQuantity)
+    items <- E.select $ do 
+        (ci E.:& c E.:& v E.:& p) <- E.from $ E.table
+            `E.innerJoin` E.table 
+                `E.on` (\(ci E.:& c) -> c E.^. CartId E.==. ci E.^. CartItemCartId)
+            `E.innerJoin` E.table 
+                `E.on` (\(ci E.:& _ E.:& v) -> v E.^. ProductVariantId E.==. ci E.^. CartItemProductVariantId)
+            `E.innerJoin` E.table 
+                `E.on` (\(_ E.:& v E.:& p) -> p E.^. ProductId E.==. v E.^. ProductVariantProductId)
+        E.where_ $ whereQuery c
+        E.orderBy [E.asc $ p E.^. ProductName]
+        return (ci E.^. CartItemId, p, v, ci E.^. CartItemQuantity)
     mapM toItemData items
     where toItemData (i, p, v, q) =
             let
@@ -633,7 +636,7 @@ getCartItems whereQuery = do
                     { cidItemId = E.unValue i
                     , cidProduct = productData
                     , cidVariant = variantData
-                    , cidQuantity = quantity
+                    , cidQuantity = coerce quantity
                     }
 
 
@@ -1140,18 +1143,20 @@ instance ToJSON CheckoutProduct where
 
 getCheckoutProducts :: OrderId -> AppSQL [CheckoutProduct]
 getCheckoutProducts orderId = do
-    orderProducts <- E.select $ E.from $
-        \(op `E.InnerJoin` v `E.InnerJoin` p) -> do
-            E.on $ p E.^. ProductId E.==. v E.^. ProductVariantProductId
-            E.on $ v E.^. ProductVariantId E.==. op E.^. OrderProductProductVariantId
-            E.where_ $ op E.^. OrderProductOrderId E.==. E.val orderId
-            return (op, v , p)
+    orderProducts <- E.select $ do 
+        (op E.:& v E.:& p) <-  E.from $ E.table
+            `E.innerJoin` E.table 
+                `E.on` (\(op E.:& v) -> v E.^. ProductVariantId E.==. op E.^. OrderProductProductVariantId)
+            `E.innerJoin` E.table 
+                `E.on` (\(_ E.:& v E.:& p) -> p E.^. ProductId E.==. v E.^. ProductVariantProductId)
+        E.where_ $ op E.^. OrderProductOrderId E.==. E.val orderId
+        return (op, v , p)
     return $ map makeCheckoutProduct orderProducts
     where makeCheckoutProduct (Entity _ orderProd, Entity _ variant, Entity _ product) =
             CheckoutProduct
                 { cpName = productName product
                 , cpSku = productBaseSku product <> productVariantSkuSuffix variant
                 , cpLotSize = productVariantLotSize variant
-                , cpQuantity = orderProductQuantity orderProd
+                , cpQuantity = coerce $ orderProductQuantity orderProd
                 , cpPrice = orderProductPrice orderProd
                 }

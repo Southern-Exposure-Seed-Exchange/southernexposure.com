@@ -4,6 +4,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeOperators #-}
+{-# OPTIONS -Wno-deprecations #-}
 module Routes.Checkout
     ( CheckoutAPI
     , checkoutRoutes
@@ -11,7 +12,8 @@ module Routes.Checkout
 
 import Control.Applicative ((<|>))
 import Control.Arrow (first)
-import Control.Exception.Safe (MonadThrow, MonadCatch, Exception, throwM, try, handle)
+import UnliftIO (MonadUnliftIO, MonadIO)
+import UnliftIO.Exception (Exception, throwIO, try, handle)
 import Control.Monad ((>=>), when, unless, void, forM_)
 import Control.Monad.Reader (asks, lift, liftIO)
 import Data.Aeson ((.:), (.:?), (.=), FromJSON(..), ToJSON(..), Value(Object), withObject, object)
@@ -19,13 +21,12 @@ import Data.Foldable (asum)
 import Data.Int (Int64)
 import Data.List (partition, find)
 import Data.Maybe (listToMaybe, isJust, isNothing, fromMaybe, mapMaybe)
-import Data.Monoid ((<>))
 import Data.Time.Clock (getCurrentTime, UTCTime)
 import Data.Typeable (Typeable)
 import Database.Persist
     ( (==.), (=.), (-=.), (+=.), Entity(..), insert, insert_, insertEntity, get
     , getBy, selectList, update, updateWhere, delete, deleteWhere, count
-    , getEntity, selectFirst
+    , getEntity, selectFirst, OverflowNatural(..)
     )
 import Servant ((:<|>)(..), (:>), AuthProtect, JSON, Post, ReqBody, err404)
 import Web.Stripe ((-&-))
@@ -57,7 +58,7 @@ import Workers (Task(..), AvalaraTask(..), enqueueTask)
 
 import qualified Avalara
 import qualified Data.Text as T
-import qualified Database.Esqueleto as E
+import qualified Database.Esqueleto.Experimental as E
 import qualified Emails
 import qualified Validation as V
 import qualified Web.Stripe as Stripe
@@ -336,16 +337,16 @@ getCoupon currentTime maybeCustomerId couponCode = do
     maybeCoupon <- getBy $ UniqueCoupon couponCode
     case maybeCoupon of
         Nothing ->
-            throwM CouponNotFound
+            throwIO CouponNotFound
         Just e@(Entity couponId coupon) -> do
             unless (couponIsActive coupon)
-                $ throwM CouponInactive
+                $ throwIO CouponInactive
             when (currentTime > couponExpirationDate coupon)
-                $ throwM CouponExpired
+                $ throwIO CouponExpired
             when (couponTotalUses coupon /= 0) $ do
                 totalUses <- count [OrderCouponId ==. Just couponId]
-                when (totalUses >= fromIntegral (couponTotalUses coupon))
-                    $ throwM CouponMaxUses
+                when (totalUses >= fromIntegral (unOverflowNatural $ couponTotalUses coupon))
+                    $ throwIO CouponMaxUses
             when (couponUsesPerCustomer coupon /= 0) $
                 checkCustomerUses e
             return e
@@ -358,8 +359,8 @@ getCoupon currentTime maybeCustomerId couponCode = do
                         [ OrderCouponId ==. Just couponId
                         , OrderCustomerId ==. customerId
                         ]
-                    when (customerUses >= fromIntegral (couponUsesPerCustomer coupon))
-                        $ throwM CouponCustomerMaxUses
+                    when (customerUses >= fromIntegral (unOverflowNatural $ couponUsesPerCustomer coupon))
+                        $ throwIO CouponCustomerMaxUses
                 Nothing -> return ()
 
 -- | Get the CartCharges & a potential ShippingRestrictionErrorfor the
@@ -384,7 +385,7 @@ detailsCharges maybeShipping avalaraCode items maybeCoupon priorityShipping = do
 --
 -- Throws a ShippingRestrictionError when some products are not allowed to
 -- be shipped to the given shipping address.
-checkProductRestrictions :: MonadThrow m => Maybe AddressData -> [CartItemData] -> m ()
+checkProductRestrictions :: MonadIO m => Maybe AddressData -> [CartItemData] -> m ()
 checkProductRestrictions maybeShipping items =
     forM_ maybeShipping $ \shipping -> do
         let restrictedProducts = flip mapMaybe items $ \CartItemData { cidProduct } ->
@@ -393,16 +394,16 @@ checkProductRestrictions maybeShipping items =
                 else
                     Nothing
         unless (null restrictedProducts) $
-            throwM $ CannotShipTo (adState shipping) restrictedProducts
+            throwIO $ CannotShipTo (adState shipping) restrictedProducts
 
 -- | Ensure the product total equals or exceeds the Coupon
 -- minimum by seeing if it was removed from the CartCharges. If
 -- it does not meet the minimum, throw a CouponError.
-checkCouponMeetsMinimum :: MonadThrow m => Maybe (Entity Coupon) -> CartCharges -> m ()
+checkCouponMeetsMinimum :: MonadIO m => Maybe (Entity Coupon) -> CartCharges -> m ()
 checkCouponMeetsMinimum maybeCoupon CartCharges { ccCouponDiscount } =
     case (maybeCoupon, ccCouponDiscount) of
         (Just (Entity _ coupon), Nothing) ->
-            throwM $ CouponBelowOrderMinimum $ couponMinimumOrder coupon
+            throwIO $ CouponBelowOrderMinimum $ couponMinimumOrder coupon
         _ ->
             return ()
 
@@ -411,12 +412,12 @@ checkCouponMeetsMinimum maybeCoupon CartCharges { ccCouponDiscount } =
 -- available.
 --
 -- Does nothing if no shipping methods are present.
-checkPriorityShippingAvailable :: MonadThrow m => Bool -> CartCharges -> m ()
+checkPriorityShippingAvailable :: MonadIO m => Bool -> CartCharges -> m ()
 checkPriorityShippingAvailable hasPriority charges =
     when hasPriority $
         case ccShippingMethods charges of
             ShippingCharge _ Nothing _:_ ->
-                throwM PriorityShippingNotAvailable
+                throwIO PriorityShippingNotAvailable
             _ ->
                 return ()
 
@@ -598,7 +599,7 @@ customerPlaceOrderRoute = validateCookieAndParameters $ \ce@(Entity customerId c
                 (cpopStoreCredit parameters) (cpopPriorityShipping parameters)
                 (cpopCouponCode parameters) (cpopComment parameters) currentTime
         when (appliedCredit > customerStoreCredit customer) $
-            throwM NotEnoughStoreCredit
+            throwIO NotEnoughStoreCredit
         when (appliedCredit > 0) $
             update customerId [CustomerStoreCredit -=. appliedCredit]
         let remainingCredit = maybe 0 (\c -> c - appliedCredit) $ cpopStoreCredit parameters
@@ -610,9 +611,9 @@ customerPlaceOrderRoute = validateCookieAndParameters $ \ce@(Entity customerId c
                         setCustomerCard customer stripeCustomerId billingAddress stripeToken
                         chargeCustomer stripeCustomerId orderId orderTotal
                     (Nothing, _) ->
-                        throwM BillingAddressRequired
+                        throwIO BillingAddressRequired
                     (_, Nothing) ->
-                        throwM StripeTokenRequired
+                        throwIO StripeTokenRequired
         deleteCart cartId
         reduceQuantities orderId
         return orderId
@@ -634,7 +635,7 @@ customerPlaceOrderRoute = validateCookieAndParameters $ \ce@(Entity customerId c
             shippingAddress <- getOrInsertAddress Shipping customerId shippingParam
             billingAddress <- sequence $ getOrInsertAddress Billing customerId <$> billingParam
             (Entity cartId _) <- getBy (UniqueCustomerCart $ Just customerId)
-                >>= maybe (throwM CartNotFound) return
+                >>= maybe (throwIO CartNotFound) return
             (order, orderTotal, appliedCredit) <- createOrder
                 customer cartId shippingAddress (entityKey <$> billingAddress)
                 maybeStoreCredit priorityShipping maybeCouponCode comment currentTime
@@ -642,7 +643,7 @@ customerPlaceOrderRoute = validateCookieAndParameters $ \ce@(Entity customerId c
           getOrInsertAddress :: AddressType -> CustomerId -> CustomerAddress -> AppSQL (Entity Address)
           getOrInsertAddress addrType customerId = \case
             ExistingAddress addrId makeDefault -> do
-                let noAddress = throwM $ AddressNotFound addrType
+                let noAddress = throwIO $ AddressNotFound addrType
                 address <- get addrId >>= maybe noAddress return
                 when (addressCustomerId address /= customerId) noAddress
                 when makeDefault $ do
@@ -792,7 +793,7 @@ anonymousPlaceOrderRoute = validate >=> \parameters -> do
                         return $ Entity customerId customer
                             { customerAvalaraCode = avalaraCustomerCode }
         (Entity cartId _) <- getBy (UniqueCustomerCart $ Just customerId)
-            >>= maybe (throwM CartNotFound) return
+            >>= maybe (throwIO CartNotFound) return
         let shippingAddress = fromAddressData Shipping customerId
                 shippingParam
             maybeBillingAddress = fromAddressData Billing customerId
@@ -817,9 +818,9 @@ anonymousPlaceOrderRoute = validate >=> \parameters -> do
                         setCustomerCard customer stripeCustomerId billingAddress stripeToken
                         chargeCustomer stripeCustomerId orderId orderTotal
                     (Nothing, _) ->
-                        throwM BillingAddressRequired
+                        throwIO BillingAddressRequired
                     (_, Nothing) ->
-                        throwM StripeTokenRequired
+                        throwIO StripeTokenRequired
         deleteCart cartId
         reduceQuantities orderId
         orderLines <- selectList [OrderLineItemOrderId ==. orderId] []
@@ -856,7 +857,7 @@ getOrCreateStripeCustomer (Entity customerId customer) stripeToken =
 createStripeCustomer :: T.Text -> T.Text -> AppSQL StripeCustomerId
 createStripeCustomer email stripeToken =
     lift (stripeRequest $ createCustomer -&- Email email -&- Stripe.TokenId stripeToken)
-        >>= either (throwM . StripeError)
+        >>= either (throwIO . StripeError)
             (return . StripeCustomerId . Stripe.customerId)
 
 -- | Set the Customer's default Stripe Card. Uses the first card if the
@@ -875,11 +876,11 @@ setCustomerCard customer stripeCustomerId billingAddress stripeToken = do
             requestResult <- lift . stripeRequest $
                 createCustomerCardByToken (fromStripeCustomerId stripeCustomerId)
                     (Stripe.TokenId stripeToken)
-            either (throwM . StripeError) (return . Stripe.cardId) requestResult
+            either (throwIO . StripeError) (return . Stripe.cardId) requestResult
     updateCardAddress stripeCustomerId stripeCardId billingAddress
     lift (stripeRequest (updateCustomer (fromStripeCustomerId stripeCustomerId)
         -&- Stripe.DefaultCard stripeCardId))
-        >>= either (throwM . StripeError) (void . return)
+        >>= either (throwIO . StripeError) (void . return)
 
 -- | Update the Name & Address of a Stripe Card.
 updateCardAddress :: StripeCustomerId -> Stripe.CardId -> Address -> AppSQL ()
@@ -902,7 +903,7 @@ commitAvalaraTransaction transaction = do
         Just tCode ->
             return tCode
         Nothing ->
-            throwM AvalaraNoTransactionCode
+            throwIO AvalaraNoTransactionCode
     let request =
             Avalara.commitTransaction companyCode transactionCode
                 $ CommitTransactionRequest { ctsrCommit = True }
@@ -922,7 +923,7 @@ voidAvalaraTransaction transction = do
         Just tCode ->
             return tCode
         Nothing ->
-            throwM AvalaraNoTransactionCode
+            throwIO AvalaraNoTransactionCode
     let request =
             Avalara.voidTransaction companyCode transactionCode
                 $ VoidTransactionRequest { vtrCode = DocDeleted }
@@ -965,7 +966,7 @@ withAvalaraTransaction order@(Entity orderId _) preTaxTotal storeCredit c@(Entit
                         Right () ->
                             enqueueTask Nothing . Avalara $ CreateTransaction orderId
                         Left (err :: PlaceOrderError) ->
-                            throwM err
+                            throwIO err
                 Just taxTransaction -> do
                     let taxTotal =
                             if status == AvalaraEnabled then
@@ -975,7 +976,7 @@ withAvalaraTransaction order@(Entity orderId _) preTaxTotal storeCredit c@(Entit
                         appliedCredit = min storeCredit taxTotal
                         orderTotal = taxTotal + preTaxTotal - appliedCredit
                     when (appliedCredit > customerStoreCredit customer) $
-                        throwM NotEnoughStoreCredit
+                        throwIO NotEnoughStoreCredit
                     when (appliedCredit > 0) $
                             update customerId [CustomerStoreCredit -=. appliedCredit]
                     try (innerAction orderTotal) >>= \case
@@ -1000,7 +1001,7 @@ withAvalaraTransaction order@(Entity orderId _) preTaxTotal storeCredit c@(Entit
                                 updateStoreCredit appliedCredit
                         Left (err :: PlaceOrderError) -> do
                             voidOrEnqueueTransaction taxTransaction
-                            throwM err
+                            throwIO err
   where
     -- Void a transaction, enqueueing a VoidTransaction task if the request
     -- fails.
@@ -1038,7 +1039,7 @@ chargeCustomer stripeCustomerId orderId orderTotal = do
     case chargeResult of
         Left err ->
             update orderId [OrderStatus =. PaymentFailed]
-                >> throwM (StripeError err)
+                >> throwIO (StripeError err)
         Right stripeCharge ->
             let
                 stripeChargeId =
@@ -1063,9 +1064,9 @@ getFirstStripeCard :: StripeCustomerId -> AppSQL Stripe.CardId
 getFirstStripeCard stripeCustomerId =
     lift (stripeRequest (getCustomerCards (fromStripeCustomerId stripeCustomerId)
             -&- Stripe.Limit 1))
-        >>= either (throwM . StripeError)
+        >>= either (throwIO . StripeError)
             (return . fmap Stripe.cardId . listToMaybe . Stripe.list)
-        >>= maybe (throwM CardChargeError) return
+        >>= maybe (throwIO CardChargeError) return
 
 
 -- | Create an Order and it's Line Items & Products, returning the ID, Total,
@@ -1180,7 +1181,7 @@ createLineItems currentTime (Entity customerId customer) shippingAddress items o
     shippingCharge <-
         case ccShippingMethods charges of
             [] ->
-                throwM NoShippingMethod
+                throwIO NoShippingMethod
             charge : _ ->
                 return charge
     shippingLine <- insertEntity . makeLine ShippingLine $ scCharge shippingCharge
@@ -1223,13 +1224,13 @@ createLineItems currentTime (Entity customerId customer) shippingAddress items o
 createProducts :: [CartItemData] -> OrderId -> AppSQL [Cents]
 createProducts items orderId =
     mapM (fmap calculateTotal <$> insertEntity . makeProduct) items
-    where calculateTotal (Entity _ prod) =
-            orderProductPrice prod * (Cents $ orderProductQuantity prod)
+    where calculateTotal (Entity _ prod) = -- TODO sand-witch: we should not convert quantity into cents
+            orderProductPrice prod * (mkCents $ orderProductQuantity prod)
           makeProduct CartItemData { cidVariant, cidQuantity } =
             OrderProduct
                 { orderProductOrderId = orderId
                 , orderProductProductVariantId = vdId cidVariant
-                , orderProductQuantity = cidQuantity
+                , orderProductQuantity = OverflowNatural cidQuantity
                 , orderProductPrice = getVariantPrice cidVariant
                 }
 
@@ -1240,7 +1241,7 @@ reduceQuantities orderId =
     selectList [OrderProductOrderId ==. orderId] [] >>=
     mapM_ (\(Entity _ p) ->
         update (orderProductProductVariantId p)
-            [ProductVariantQuantity -=. fromIntegral (orderProductQuantity p)]
+            [ProductVariantQuantity -=. fromIntegral (unOverflowNatural $ orderProductQuantity p)]
     )
 
 
@@ -1306,6 +1307,7 @@ loginRoute CheckoutLoginParameters { clpLogin, clpDetails } = do
 overwriteCustomerCart :: CustomerId -> Maybe T.Text -> AppSQL ()
 overwriteCustomerCart customerId cartToken = do
     getBy (UniqueCustomerCart $ Just customerId) >>= mapM_ (E.deleteCascade . entityKey)
+    -- TODO sand-witch: deleteCascade is deprecated
     mapM_ (`mergeAnonymousCart` customerId) cartToken
 
 
@@ -1333,7 +1335,7 @@ customerSuccessRoute token parameters = withValidatedCookie token $ \(Entity cus
     handle handleError . runDB $ do
         (e@(Entity orderId _), shipping, billing) <-
             getOrderAndAddress customerId (E.toSqlKey $ cspOrderId parameters)
-                >>= maybe (throwM OrderNotFound) return
+                >>= maybe (throwIO OrderNotFound) return
         lineItems <-
             selectList [OrderLineItemOrderId ==. orderId] []
         products <- getCheckoutProducts orderId
@@ -1357,14 +1359,16 @@ instance Exception SuccessError
 
 getOrderAndAddress :: CustomerId -> OrderId -> AppSQL (Maybe (Entity Order, Entity Address, Maybe (Entity Address)))
 getOrderAndAddress customerId orderId =
-    fmap listToMaybe . E.select . E.from
-        $ \(o `E.InnerJoin` s `E.LeftOuterJoin` b) -> do
-            E.on $ o E.^. OrderBillingAddressId E.==. b E.?. AddressId
-            E.on $ o E.^. OrderShippingAddressId E.==. s E.^. AddressId
-            E.where_ $
-                o E.^. OrderId E.==. E.val orderId E.&&.
-                o E.^. OrderCustomerId E.==. E.val customerId
-            return (o, s, b)
+    fmap listToMaybe . E.select $ do  
+        (o E.:& s E.:& b) <- E.from $ E.table 
+            `E.innerJoin` E.table 
+                `E.on` (\(o E.:& s) -> o E.^. OrderShippingAddressId E.==. s E.^. AddressId)
+            `E.leftJoin` E.table 
+                `E.on` (\(o E.:& _ E.:& b) -> o E.^. OrderBillingAddressId E.==. b E.?. AddressId)
+        E.where_ $
+            o E.^. OrderId E.==. E.val orderId E.&&.
+            o E.^. OrderCustomerId E.==. E.val customerId
+        return (o, s, b)
 
 
 -- Utils
@@ -1376,6 +1380,6 @@ eitherM handler =
 
 
 mapException
-    :: (Exception e1, Exception e2, MonadThrow m, MonadCatch m)
+    :: (Exception e1, Exception e2, MonadUnliftIO m)
     => (e1 -> e2) -> m a -> m a
-mapException transform = try >=> eitherM (throwM . transform)
+mapException transform = try >=> eitherM (throwIO . transform)

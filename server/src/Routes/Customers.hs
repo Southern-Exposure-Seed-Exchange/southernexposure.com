@@ -13,14 +13,13 @@ module Routes.Customers
     , customerRoutes
     ) where
 
-import Control.Exception.Safe (throwM, Exception, try, handle)
+import UnliftIO.Exception (throwIO, Exception, try, handle)
 import Control.Monad ((>=>), (<=<), when, void, forM_)
 import Control.Monad.IO.Class (liftIO)
 import Data.Aeson (ToJSON(..), FromJSON(..), (.=), (.:), (.:?), withObject, object)
 import Data.Int (Int64)
 import Data.List (partition)
 import Data.Maybe (fromMaybe)
-import Data.Monoid ((<>))
 import Data.Time.Clock (UTCTime, getCurrentTime, addUTCTime)
 import Data.Typeable (Typeable)
 import Database.Persist
@@ -52,7 +51,7 @@ import qualified Data.StateCodes as StateCodes
 import qualified Data.Text as T
 import qualified Data.UUID as UUID
 import qualified Data.UUID.V4 as UUID4
-import qualified Database.Esqueleto as E
+import qualified Database.Esqueleto.Experimental as E
 import qualified Emails
 import qualified Models.Fields as Fields
 import qualified Validation as V
@@ -454,29 +453,31 @@ myAccountRoute token maybeLimit = withValidatedCookie token $ \(Entity customerI
     return $ MyAccountDetails orderDetails (customerStoreCredit customer)
     where getOrderDetails customerId = runDB $ do
             let limit = fromMaybe 4 maybeLimit
-            orderData <- E.select $ E.from $
-                \(o `E.InnerJoin` op `E.InnerJoin` sa) -> do
-                    E.on $ sa E.^. AddressId E.==. o E.^. OrderShippingAddressId
-                    E.on $ op E.^. OrderProductOrderId E.==. o E.^. OrderId
-                    let lineTotal = E.sub_select $ E.from $ \ol_ -> do
-                            E.where_ $ ol_ E.^. OrderLineItemOrderId E.==. o E.^. OrderId
-                                E.&&. ol_ E.^. OrderLineItemType `E.notIn` E.valList creditLineItemTypes
-                            return $ sum0_ $ ol_ E.^. OrderLineItemAmount
-                        creditTotal = E.sub_select $ E.from $ \cl_ -> do
-                            E.where_ $ cl_ E.^. OrderLineItemOrderId E.==. o E.^. OrderId
-                                E.&&. cl_ E.^. OrderLineItemType `E.in_` E.valList creditLineItemTypes
-                            return $ sum0_ $ cl_ E.^. OrderLineItemAmount
-                    E.groupBy (o E.^. OrderId, sa E.^. AddressId)
-                    E.where_ $ o E.^. OrderCustomerId E.==. E.val customerId
-                    E.orderBy [E.desc $ o E.^. OrderCreatedAt]
-                    when (limit > 0) $ E.limit limit
-                    return
-                        ( o E.^. OrderId
-                        , sa
-                        , o E.^. OrderStatus
-                        , calculateTotal op lineTotal creditTotal
-                        , o E.^. OrderCreatedAt
-                        )
+            orderData <- E.select $ do 
+                (o E.:& op E.:& sa) <- E.from $ E.table 
+                    `E.innerJoin` E.table 
+                        `E.on` (\(o E.:& op) -> op E.^. OrderProductOrderId E.==. o E.^. OrderId)
+                    `E.innerJoin` E.table 
+                        `E.on` (\(o E.:& _ E.:& sa) -> sa E.^. AddressId E.==. o E.^. OrderShippingAddressId)
+                let lineTotal = E.subSelectUnsafe $ E.from E.table >>= \ol_ -> do
+                        E.where_ $ ol_ E.^. OrderLineItemOrderId E.==. o E.^. OrderId
+                            E.&&. ol_ E.^. OrderLineItemType `E.notIn` E.valList creditLineItemTypes
+                        return $ sum0_ $ ol_ E.^. OrderLineItemAmount
+                    creditTotal = E.subSelectUnsafe $ E.from E.table >>= \cl_ -> do
+                        E.where_ $ cl_ E.^. OrderLineItemOrderId E.==. o E.^. OrderId
+                            E.&&. cl_ E.^. OrderLineItemType `E.in_` E.valList creditLineItemTypes
+                        return $ sum0_ $ cl_ E.^. OrderLineItemAmount
+                E.groupBy (o E.^. OrderId, sa E.^. AddressId)
+                E.where_ $ o E.^. OrderCustomerId E.==. E.val customerId
+                E.orderBy [E.desc $ o E.^. OrderCreatedAt]
+                when (limit > 0) $ E.limit limit
+                return
+                    ( o E.^. OrderId
+                    , sa
+                    , o E.^. OrderStatus
+                    , calculateTotal op lineTotal creditTotal
+                    , o E.^. OrderCreatedAt
+                    )
             return $ map makeDetails orderData
           calculateTotal orderProduct lineTotal creditTotal =
             let
@@ -610,10 +611,10 @@ addressEditRoute token aId addressData = withValidatedCookie token $ \(Entity cu
         let addressId = toSqlKey aId
         getEntity addressId >>= \case
             Nothing ->
-                throwM AddressNotFound
+                throwIO AddressNotFound
             Just address
                 | addressCustomerId (entityVal address) /= customerId ->
-                    throwM AddressNotFound
+                    throwIO AddressNotFound
                 | toAddressData address == addressData ->
                     return ()
                 | otherwise -> do
@@ -641,9 +642,9 @@ addressDeleteRoute :: WrappedAuthToken -> Int64 -> App (Cookied ())
 addressDeleteRoute token aId = withValidatedCookie token $ \(Entity customerId _) -> do
     let addressId = toSqlKey aId :: AddressId
     either handleAddressError return <=< try . runDB $ do
-        address <- get addressId >>= maybe (throwM AddressNotFound) return
+        address <- get addressId >>= maybe (throwIO AddressNotFound) return
         if addressCustomerId address /= customerId then
-            throwM AddressNotFound
+            throwIO AddressNotFound
         else
             update addressId [AddressIsActive =. False, AddressIsDefault =. False]
 

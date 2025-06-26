@@ -10,13 +10,11 @@ module Routes.AvalaraUtils
     , renderAvalaraError
     ) where
 
-import Control.Exception.Safe (MonadCatch)
 import Control.Monad.Reader (MonadReader, MonadIO, asks, liftIO, lift)
 import Data.Maybe (listToMaybe)
-import Data.Monoid ((<>))
 import Database.Persist
     ( (==.), (!=.), (=.), Entity(..), PersistEntityBackend, PersistEntity
-    , selectList, getBy, update
+    , selectList, getBy, update, OverflowNatural(..)
     )
 import Database.Persist.Sql (SqlBackend)
 
@@ -29,13 +27,14 @@ import Models.Fields
     )
 import Routes.CommonData (AddressData(..), addressToAvalara, toAddressData)
 import Server
+import UnliftIO (MonadUnliftIO)
 
 import qualified Avalara
 import qualified Data.List as L
 import qualified Data.Text as T
 import qualified Data.UUID as UUID
 import qualified Data.UUID.V4 as UUID4
-import qualified Database.Esqueleto as E
+import qualified Database.Esqueleto.Experimental as E
 
 
 -- | Render a prettified version of an 'Avalara.ErrorInfo'.
@@ -56,7 +55,7 @@ renderAvalaraError errorInfo =
 --
 -- Throws a 'PlaceOrderError' on failure.
 getOrCreateAvalaraCustomer
-    :: (MonadReader Config m, MonadIO m, MonadCatch m)
+    :: (MonadReader Config m, MonadUnliftIO m)
     => Entity Customer -> Maybe (Entity Address) -> Entity Address
     -> E.SqlPersistT m (Maybe AvalaraCustomerCode)
 getOrCreateAvalaraCustomer (Entity customerId customer) maybeBilling shipping =
@@ -77,7 +76,7 @@ getOrCreateAvalaraCustomer (Entity customerId customer) maybeBilling shipping =
 --
 -- Returns 'Nothing' if the request returns an error or no Customers.
 createAvalaraCustomer
-    :: (MonadIO m, MonadReader Config m, MonadCatch m)
+    :: (MonadUnliftIO m, MonadReader Config m)
     => T.Text -> AddressData -> E.SqlPersistT m (Maybe AvalaraCustomerCode)
 createAvalaraCustomer email address = do
     companyId <- lift $ asks getAvalaraCompanyId
@@ -126,7 +125,7 @@ createAvalaraCustomer email address = do
 
 
 createAvalaraTransaction
-    :: (MonadReader Config m, MonadIO m, MonadCatch m)
+    :: (MonadReader Config m, MonadUnliftIO m)
     => Entity Order
     -- ^ The Order for the Transaction
     -> Entity Address
@@ -144,9 +143,12 @@ createAvalaraTransaction
     -> E.SqlPersistT m (Maybe Avalara.Transaction)
 createAvalaraTransaction (Entity orderId order) shippingAddress billingAddress customer alreadyCharged = do
     items <- selectList [OrderLineItemOrderId ==. orderId, OrderLineItemType !=. TaxLine] []
-    products <- E.select $ E.from $ \(op `E.InnerJoin` v `E.InnerJoin` p) -> do
-        E.on $ v E.^. ProductVariantProductId E.==. p E.^. ProductId
-        E.on $ op E.^. OrderProductProductVariantId E.==. v E.^. ProductVariantId
+    products <- E.select $ do 
+        (op E.:& v E.:& p) <- E.from $ E.table
+            `E.innerJoin` E.table 
+                `E.on` (\(op E.:& v) -> op E.^. OrderProductProductVariantId E.==. v E.^. ProductVariantId)
+            `E.innerJoin` E.table 
+                `E.on` (\(_ E.:& v E.:& p) -> v E.^. ProductVariantProductId E.==. p E.^. ProductId)
         E.where_ $ op E.^. OrderProductOrderId E.==. E.val orderId
         return (op, p, v)
     sourceAddress <- fmap Avalara.addressFromLocation . lift
@@ -218,7 +220,7 @@ createAvalaraTransaction (Entity orderId order) shippingAddress billingAddress c
     makeProductLine :: (Entity OrderProduct, Entity Product, Entity ProductVariant) -> Avalara.LineItem
     makeProductLine (Entity _ orderProd, Entity _ prod, Entity _ variant) =
         let quantity =
-                fromIntegral $ orderProductQuantity orderProd
+                fromIntegral $ unOverflowNatural $ orderProductQuantity orderProd
             singlePrice =
                 toDollars $ orderProductPrice orderProd
             fullSku =

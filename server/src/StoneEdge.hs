@@ -74,7 +74,6 @@ module StoneEdge
     , renderStoneEdgeOtherData
     ) where
 
-import Data.Monoid ((<>))
 import Data.Scientific (Scientific, FPFormat(Fixed), formatScientific, scientific)
 import Data.Text.Encoding (decodeUtf8, encodeUtf8)
 import Data.Time (LocalTime, Day, parseTimeM, defaultTimeLocale, formatTime)
@@ -633,10 +632,15 @@ instance FromForm LastDate where
         "all" ->
             return NoDate
         dateStr ->
-            fmap LastDate . parseTimeM True defaultTimeLocale "%e-%h-%Y"
+            fmap LastDate . runFormatError . parseTimeM True defaultTimeLocale "%e-%h-%Y"
                 $ T.unpack dateStr
 
 
+newtype FormatError a = MkFormatError { runFormatError :: Either T.Text a }
+    deriving newtype (Functor, Applicative, Monad)
+
+instance MonadFail FormatError where
+    fail = MkFormatError . Left . T.pack
 
 -- Utils
 

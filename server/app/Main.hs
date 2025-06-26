@@ -10,11 +10,9 @@ import Control.Exception (Exception(..), SomeException)
 import Control.Immortal.Queue (processImmortalQueue, closeImmortalQueue)
 import Control.Monad (when, forever, void, forM_)
 import Control.Monad.IO.Class (MonadIO)
-import Control.Monad.Trans.Control (MonadBaseControl)
-import Control.Monad.Logger (MonadLogger, runNoLoggingT, runStderrLoggingT)
+import Control.Monad.Logger (MonadLoggerIO, runNoLoggingT, runStderrLoggingT)
 import Data.Aeson (Result(..), fromJSON)
 import Data.Maybe (fromMaybe, mapMaybe)
-import Data.Monoid ((<>))
 import Data.Pool (destroyAllResources)
 import Data.Text.Encoding (decodeUtf8)
 import Data.Version (showVersion)
@@ -24,11 +22,12 @@ import Network.Wai.Middleware.RequestLogger (logStdoutDev, logStdout)
 import System.Directory (getCurrentDirectory, createDirectoryIfMissing)
 import System.Environment (lookupEnv)
 import System.Log.FastLogger
-     ( LogType(LogStdout, LogFile), FileLogSpec(..), TimedFastLogger
+     ( LogType'(LogStdout, LogFile), FileLogSpec(..), TimedFastLogger
      , newTimeCache, newTimedFastLogger, defaultBufSize
      )
 import System.Posix.Signals (installHandler, sigTERM, Handler(CatchOnce))
 import Web.Stripe.Client (StripeConfig(..), StripeKey(..))
+import UnliftIO (MonadUnliftIO)
 
 import Api
 import Auth (sessionEntropy, mkPersistentServerKey)
@@ -90,7 +89,7 @@ main = do
             , getSmtpPool = emailPool
             , getSmtpUser = smtpUser
             , getSmtpPass = smtpPass
-            , getStripeConfig = StripeConfig $ StripeKey $ C.pack stripeToken
+            , getStripeConfig = StripeConfig (StripeKey $ C.pack stripeToken) Nothing
             , getStoneEdgeAuth = stoneEdgeAuth
             , getCookieSecret = cookieSecret
             , getCookieEntropySource = entropySource
@@ -137,7 +136,7 @@ main = do
                     runNoLoggingT $ makeSqlPool env
                 Development ->
                     runStderrLoggingT $ makeSqlPool env
-          makeSqlPool :: (MonadIO m, MonadLogger m, MonadBaseControl IO m) => Environment -> m ConnectionPool
+          makeSqlPool :: (MonadIO m, MonadLoggerIO m, MonadUnliftIO m) => Environment -> m ConnectionPool
           makeSqlPool env = do
                 pool <- createPostgresqlPool "dbname=sese-website" $ poolSize env
                 runSqlPool (runMigration migrateAll) pool

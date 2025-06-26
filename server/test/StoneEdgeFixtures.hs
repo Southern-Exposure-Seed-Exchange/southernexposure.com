@@ -7,7 +7,6 @@ it's own module due to the extraneous vertical height of our XML generator
 module StoneEdgeFixtures where
 
 import qualified Data.ByteString as BS
-import Data.Monoid ((<>))
 import qualified Data.Text as T
 import Data.Text.Encoding (encodeUtf8, decodeUtf8)
 import Text.RawString.QQ (r)

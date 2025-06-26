@@ -15,7 +15,6 @@ module Routes.Redirects
     , redirectRoutes
     ) where
 
-import Data.Monoid ((<>))
 import Database.Persist.Sql (PersistEntity, PersistEntityBackend, SqlBackend, get)
 import GHC.TypeLits (Nat)
 import Servant

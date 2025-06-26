@@ -15,7 +15,9 @@ module Routes.Admin.ShippingMethods
 import Control.Monad.Reader (forM_)
 import Data.Aeson (ToJSON(..), FromJSON(..), (.=), (.:), object, withObject, withText)
 import Data.Maybe (mapMaybe, isJust)
-import Database.Persist ((/<-.), Entity(..), SelectOpt(Asc), selectList, deleteWhere, insertMany_, replace)
+import Database.Persist 
+    ( (/<-.), Entity(..), SelectOpt(Asc)
+    , selectList, deleteWhere, insertMany_, replace, OverflowNatural(..))
 import Numeric.Natural (Natural)
 import Servant ((:<|>)(..), (:>), AuthProtect, ReqBody, Get, Post, JSON)
 
@@ -177,7 +179,7 @@ shippingDataRoute = flip withAdminCookie $ \_ -> do
             , mdPriorityEnabled = shippingMethodIsPriorityEnabled
             , mdCategories = shippingMethodCategoryIds
             , mdPriorityCategories = shippingMethodExcludedPriorityCategoryIds
-            , mdPriority = shippingMethodPriority
+            , mdPriority = unOverflowNatural shippingMethodPriority
             , mdIsActive = shippingMethodIsActive
             }
     makeRateData :: ShippingRate -> RateData
@@ -250,7 +252,7 @@ shippingUpdateRoute = validateAdminAndParameters $ \_ ShippingUpdateParameters {
             , shippingMethodIsPriorityEnabled = mdPriorityEnabled
             , shippingMethodCategoryIds = mdCategories
             , shippingMethodExcludedPriorityCategoryIds = mdPriorityCategories
-            , shippingMethodPriority = mdPriority
+            , shippingMethodPriority = OverflowNatural mdPriority
             , shippingMethodIsActive = mdIsActive
             }
     makeRate :: RateData -> ShippingRate

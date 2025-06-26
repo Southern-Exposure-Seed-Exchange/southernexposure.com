@@ -1,7 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Emails.PasswordReset (get, getSuccess) where
 
-import Data.Monoid ((<>))
 
 import qualified Data.Text.Lazy as L
 

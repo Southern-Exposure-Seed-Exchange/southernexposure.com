@@ -1,7 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Emails.AccountCreated (get) where
 
-import Data.Monoid ((<>))
 
 import qualified Data.Text.Lazy as L
 

@@ -58,7 +58,7 @@ import qualified Data.ByteString.Lazy as LBS
 import qualified Data.Text as T
 import qualified Data.UUID as UUID
 import qualified Data.UUID.V4 as UUID4
-import qualified Database.Esqueleto as E
+import qualified Database.Esqueleto.Experimental as E
 import qualified Network.HTTP.Media as Media
 
 
@@ -94,9 +94,13 @@ paginatedSelect maybeSorting maybePage maybePerPage productFilters =
           offset =
             (page - 1) * perPage
           productsSelect ordering = do
-            products <- E.select $ E.from $ \(p `E.LeftOuterJoin` sa `E.LeftOuterJoin` pToC) -> do
-                E.on (E.just (p E.^. ProductId) E.==. pToC E.?. ProductToCategoryProductId)
-                E.on (E.just (p E.^. ProductId) E.==. sa E.?. SeedAttributeProductId)
+            products <- E.select $ do 
+                (p E.:& sa E.:& pToC) <- E.from $ E.table
+                    `E.leftJoin` E.table 
+                        `E.on` (\(p E.:& sa) -> E.just (p E.^. ProductId) E.==. sa E.?. SeedAttributeProductId)
+                    `E.leftJoin` E.table 
+                        `E.on` (\(p E.:& _ E.:& pToC) -> E.just (p E.^. ProductId) E.==. pToC E.?. ProductToCategoryProductId)
+                
                 E.where_ $ productFilters p sa pToC E.&&. activeVariantExists p
                 void $ ordering p
                 E.limit perPage
@@ -110,18 +114,25 @@ variantSorted :: (E.SqlExpr (E.Value (Maybe Cents)) -> [E.SqlExpr E.OrderBy])
               -> (E.SqlExpr (Entity Product) -> E.SqlExpr (Maybe (Entity SeedAttribute)) -> E.SqlExpr (Maybe (Entity ProductToCategory)) -> E.SqlExpr (E.Value Bool))
               -> AppSQL ([Entity Product], Int)
 variantSorted ordering offset perPage filters = do
-    productsAndPrice <- E.select $ E.from $ \(p `E.InnerJoin` v `E.LeftOuterJoin` sa `E.LeftOuterJoin` pToC) ->
-        let minPrice = E.min_ $ v E.^. ProductVariantPrice in
+    productsAndPrice <- E.select $ do
+        (p E.:& v E.:& sa E.:& pToC) <- E.from $ E.table
+            `E.innerJoin` E.table 
+                `E.on` (\(p E.:& v) -> p E.^. ProductId E.==. v E.^. ProductVariantProductId
+                                 E.&&. v E.^. ProductVariantIsActive E.==. E.val True)
+            `E.leftJoin` E.table 
+                `E.on` (\(p E.:& _ E.:& sa) -> 
+                        E.just (p E.^. ProductId) E.==. sa E.?. SeedAttributeProductId)
+            `E.leftJoin` E.table 
+                `E.on` (\(p E.:& _ E.:& _ E.:& pToC) -> 
+                        E.just (p E.^. ProductId) E.==. pToC E.?. ProductToCategoryProductId)
+        
+        let minPrice = E.min_ $ v E.^. ProductVariantPrice 
         E.distinctOnOrderBy (ordering minPrice ++ [E.asc $ p E.^. ProductName]) $ do
-        E.on (E.just (p E.^. ProductId) E.==. pToC E.?. ProductToCategoryProductId)
-        E.on (E.just (p E.^. ProductId) E.==. sa E.?. SeedAttributeProductId)
-        E.on (p E.^. ProductId E.==. v E.^. ProductVariantProductId
-                E.&&. v E.^. ProductVariantIsActive E.==. E.val True)
-        E.groupBy $ p E.^. ProductId
-        E.where_ $ filters p sa pToC
-        E.limit perPage
-        E.offset offset
-        return (p, minPrice)
+            E.groupBy $ p E.^. ProductId
+            E.where_ $ filters p sa pToC
+            E.limit perPage
+            E.offset offset
+            return (p, minPrice)
     pCount <- countProducts filters
     let (ps, _) = unzip productsAndPrice
     return (ps, pCount)
@@ -131,15 +142,18 @@ countProducts
     :: (E.SqlExpr (Entity Product) -> E.SqlExpr (Maybe (Entity SeedAttribute)) -> E.SqlExpr (Maybe (Entity ProductToCategory)) -> E.SqlExpr (E.Value Bool))
     -> AppSQL Int
 countProducts filters =
-    extractRowCount . E.select $ E.from $ \(p `E.LeftOuterJoin` sa `E.LeftOuterJoin` pToC) -> do
-        E.on (E.just (p E.^. ProductId) E.==. pToC E.?. ProductToCategoryProductId)
-        E.on (E.just (p E.^. ProductId) E.==. sa E.?. SeedAttributeProductId)
+    extractRowCount . E.select $ do 
+        (p E.:& sa E.:& pToC) <- E.from $ E.table
+            `E.leftJoin` E.table 
+                `E.on` (\(p E.:& sa) -> E.just (p E.^. ProductId) E.==. sa E.?. SeedAttributeProductId)
+            `E.leftJoin` E.table 
+                `E.on` (\(p E.:& _ E.:& pToC) -> E.just (p E.^. ProductId) E.==. pToC E.?. ProductToCategoryProductId)
         E.where_ $ filters p sa pToC E.&&. activeVariantExists p
         return (E.countRows :: E.SqlExpr (E.Value Int))
 
 -- | Determine if the Product has an active ProductVariant.
 activeVariantExists :: E.SqlExpr (Entity Product) -> E.SqlExpr (E.Value Bool)
-activeVariantExists p =  E.exists $ E.from $ \v -> E.where_ $
+activeVariantExists p =  E.exists $ E.from E.table >>= \v -> E.where_ $
     p E.^. ProductId E.==. v E.^. ProductVariantProductId E.&&.
     v E.^. ProductVariantIsActive E.==. E.val True
 

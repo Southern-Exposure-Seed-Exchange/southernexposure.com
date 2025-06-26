@@ -21,7 +21,7 @@ import Models.Fields (Region, Cents)
 import Server (App, runDB, readCache)
 
 import qualified Data.Text as T
-import qualified Database.Esqueleto as E
+import qualified Database.Esqueleto.Experimental as E
 
 
 type DashboardAPI =
@@ -92,8 +92,9 @@ instance ToJSON DashboardCustomer where
 
 dashboardReportsRoute :: WrappedAuthToken -> App (Cookied DashboardReportsData)
 dashboardReportsRoute = flip withAdminCookie $ \_ -> runDB $ do
-    rawOrders <- E.select $ E.from $ \(o `E.InnerJoin` sa) -> do
-        E.on $ sa E.^. AddressId E.==. o E.^. OrderShippingAddressId
+    rawOrders <- E.select $ do 
+        (o E.:& sa) <- E.from $ E.table `E.innerJoin` E.table
+            `E.on` \(o E.:& sa) -> sa E.^. AddressId E.==. o E.^. OrderShippingAddressId
         E.limit 10
         E.orderBy [E.desc $ o E.^. OrderId]
         let customerName =

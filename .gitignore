@@ -8,3 +8,6 @@ server/old_media
 server/dist
 server/sese-website.cabal
 env.sh
+
+.direnv/
+.envrc
