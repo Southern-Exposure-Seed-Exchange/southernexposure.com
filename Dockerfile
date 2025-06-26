@@ -4,7 +4,21 @@ RUN curl -sSL https://get.haskellstack.org/ | sh
 
 FROM base AS devcontainer
 RUN apt-get -y update && apt-get install -y sudo
+RUN curl -sSL https://github.com/elm/compiler/releases/download/0.19.1/binary-for-linux-64-bit.gz | gunzip -c > /usr/local/bin/elm
+RUN chmod +x /usr/local/bin/elm
 RUN echo "node ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
+USER node
+ENV BOOTSTRAP_HASKELL_GHC_VERSION=8.10.7
+ENV BOOTSTRAP_HASKELL_INSTALL_HLS=1
+# Stack is already installed in the base image, so we don't need to install it again via ghcup
+ENV BOOTSTRAP_HASKELL_INSTALL_NO_STACK=1
+# The last version of HLS that supports GHC 8.10.7
+ENV BOOTSTRAP_HASKELL_HLS_VERSION=2.2.0.0
+ENV BOOTSTRAP_HASKELL_ADJUST_BASHRC=1
+RUN curl --proto '=https' --tlsv1.2 -sSf https://get-ghcup.haskell.org | sh
+ENV PATH="/home/node/.ghcup/bin:/home/node/.cabal/bin:${PATH}"
+# To build the frontend
+ENV CXXFLAGS=-std=c++17
 
 FROM base AS frontend-builder
 WORKDIR /southernexposure

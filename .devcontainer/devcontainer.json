@@ -19,7 +19,9 @@
         "terminal.integrated.shell.linux": "/bin/bash"
       },
       "extensions": [
-        "ms-vscode.vscode-json"
+        "ms-vscode.vscode-json",
+        "elmtooling.elm-ls-vscode",
+        "haskell.haskell"
       ]
     }
   },
