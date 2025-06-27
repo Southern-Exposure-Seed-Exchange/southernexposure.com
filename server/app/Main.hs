@@ -1,6 +1,8 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+
 module Main where
 
 import Control.Concurrent (newEmptyMVar, takeMVar, putMVar, threadDelay)
@@ -60,11 +62,8 @@ main = do
     port <- lookupSetting "PORT" 3000
     mediaDir <- lookupDirectory "MEDIA" "/media/"
     log $ "Media directory initialized at " <> T.pack mediaDir <> "."
-    smtpServer <- fromMaybe "" <$> lookupEnv "SMTP_SERVER"
-    smtpUser <- fromMaybe "" <$> lookupEnv "SMTP_USER"
-    smtpPass <- fromMaybe "" <$> lookupEnv "SMTP_PASS"
-    emailPool <- smtpPool smtpServer (poolSize env)
-    log $ "Initialized SMTP Pool at " <> T.pack smtpServer <> "."
+    (smtpUser, smtpPass, emailPool) <- makeSMTPPool log env
+    devMail <- makeDevMail log env
     stripeToken <- fromMaybe "" <$> lookupEnv "STRIPE_TOKEN"
     cookieSecret <- mkPersistentServerKey . C.pack . fromMaybe ""
         <$> lookupEnv "COOKIE_SECRET"
@@ -102,6 +101,7 @@ main = do
             , getAvalaraLogger = avalaraLogger
             , getStripeLogger = stripeLogger
             , getServerLogger = serverLogger
+            , getDeveloperEmail = devMail
             }
     log "Starting 2 worker threads."
     workers <- processImmortalQueue $ taskQueueConfig 2 cfg
@@ -124,53 +124,83 @@ main = do
     log "PostgreSQL pool closed."
     log "Shutdown completed successfully."
     cleanupLoggers
-    where lookupSetting env def = lookupSettingWith env def read
-          lookupSettingWith :: String -> a -> (String -> a) -> IO a
-          lookupSettingWith env def builder = maybe def builder <$> lookupEnv env
-          requireSetting :: String -> IO String
-          requireSetting env =
+
+    where 
+        lookupSetting env def = lookupSettingWith env def read
+
+        lookupSettingWith :: String -> a -> (String -> a) -> IO a
+        lookupSettingWith env def builder = maybe def builder <$> lookupEnv env
+
+        requireSetting :: String -> IO String
+        requireSetting env =
             lookupEnv env
                 >>= maybe (error $ "Could not find required env variable: " ++ env) return
-          makePool :: Environment -> IO ConnectionPool
-          makePool env =
+
+        makeDevMail (log :: T.Text -> IO ()) env = do
+            mDev <- fmap T.pack <$> lookupEnv "DEV_MAIL"
+            case mDev of
+              Just {} | env == Production -> do
+                    log "DEV_MAIL variable ignored: server is in Production mode"
+                    pure Nothing
+              Nothing | env == Development -> 
+                    error "DEV_MAIL is required in the development setup"
+              _ -> pure mDev
+
+        makePool :: Environment -> IO ConnectionPool
+        makePool env =
             case env of
                 Production ->
                     runNoLoggingT $ makeSqlPool env
                 Development ->
                     runStderrLoggingT $ makeSqlPool env
-          makeSqlPool :: (MonadIO m, MonadLoggerIO m, MonadUnliftIO m) => Environment -> m ConnectionPool
-          makeSqlPool env = do
-                mbDbConnectionString <- liftIO $ lookupEnv "DB_CONNECTION_STRING"
-                connStr <- case mbDbConnectionString of
-                    Just connStr -> return $ pack connStr
-                    Nothing -> do
-                        dbHost <- liftIO $ lookupSettingWith "DB_HOST" "127.0.0.1" pack
-                        dbPort <- liftIO $ lookupSettingWith "DB_PORT" "5432" pack
-                        dbUser <- liftIO $ lookupSettingWith "DB_USER" "sese-website" pack
-                        mbDbPass <- liftIO $ lookupSettingWith "DB_PASS" Nothing (Just . pack)
-                        dbName <- liftIO $ lookupSettingWith "DB_NAME" "sese-website" pack
-                        let connStr = "host=" <> dbHost
-                                <> " port=" <> dbPort
-                                <> " user=" <> dbUser
-                                <> maybe "" (" password=" <>) mbDbPass
-                                <> " dbname=" <> dbName
-                        return connStr
 
-                pool <- createPostgresqlPool connStr $ poolSize env
-                runSqlPool (runMigration migrateAll) pool
-                return pool
-          poolSize env =
+        makeSMTPPool (log :: T.Text -> IO ()) env = do 
+            smtpServer <- fromMaybe "" <$> lookupEnv "SMTP_SERVER"
+            smtpUser <- fromMaybe "" <$> lookupEnv "SMTP_USER"
+            smtpPass <- fromMaybe "" <$> lookupEnv "SMTP_PASS"
+            smtpPort <- lookupSetting "SMTP_PORT" 2525
+            smtpEncrypted <- lookupSetting "SMTP_TLS" False
+            emailPool <- smtpPool smtpEncrypted smtpPort smtpServer (poolSize env)
+            log $ "Initialized SMTP Pool at " <> T.pack smtpServer <> "."
+            pure (smtpUser, smtpPass, emailPool)
+
+
+        makeSqlPool :: (MonadIO m, MonadLoggerIO m, MonadUnliftIO m) => Environment -> m ConnectionPool
+        makeSqlPool env = do
+            mbDbConnectionString <- liftIO $ lookupEnv "DB_CONNECTION_STRING"
+            connStr <- case mbDbConnectionString of
+                Just connStr -> return $ pack connStr
+                Nothing -> do
+                    dbHost <- liftIO $ lookupSettingWith "DB_HOST" "127.0.0.1" pack
+                    dbPort <- liftIO $ lookupSettingWith "DB_PORT" "5432" pack
+                    dbUser <- liftIO $ lookupSettingWith "DB_USER" "sese-website" pack
+                    mbDbPass <- liftIO $ lookupSettingWith "DB_PASS" Nothing (Just . pack)
+                    dbName <- liftIO $ lookupSettingWith "DB_NAME" "sese-website" pack
+                    let connStr = "host=" <> dbHost
+                            <> " port=" <> dbPort
+                            <> " user=" <> dbUser
+                            <> maybe "" (" password=" <>) mbDbPass
+                            <> " dbname=" <> dbName
+                    return connStr
+
+            pool <- createPostgresqlPool connStr $ poolSize env
+            runSqlPool (runMigration migrateAll) pool
+            return pool
+
+        poolSize env =
             case env of
                 Production ->
                     8
                 Development ->
                     2
-          warpSettings port serverLogger =
-              Warp.setServerName ""
-              $ Warp.setOnException (exceptionHandler serverLogger)
-              $ Warp.setPort port Warp.defaultSettings
-          exceptionHandler :: TimedFastLogger -> Maybe Request -> SomeException -> IO ()
-          exceptionHandler logger mReq e =
+
+        warpSettings port serverLogger =
+            Warp.setServerName ""
+                $ Warp.setOnException (exceptionHandler serverLogger)
+                $ Warp.setPort port Warp.defaultSettings
+
+        exceptionHandler :: TimedFastLogger -> Maybe Request -> SomeException -> IO ()
+        exceptionHandler logger mReq e =
             let reqString = flip (maybe "") mReq $ \req ->
                     decodeUtf8 $
                         "("
@@ -187,22 +217,26 @@ main = do
                     , ": "
                     , T.pack $ displayException e
                     ]
-          logMsg :: TimedFastLogger -> T.Text -> IO ()
-          logMsg logger =
+
+        logMsg :: TimedFastLogger -> T.Text -> IO ()
+        logMsg logger =
             logger . timedLogStr
-          httpLogger env =
-              case env of
-                Production ->
-                    logStdout
-                Development ->
-                    logStdoutDev
-          makeStoneEdgeAuth = do
+
+        httpLogger env =
+            case env of
+            Production ->
+                logStdout
+            Development ->
+                logStdoutDev
+
+        makeStoneEdgeAuth = do
             secUsername <- T.pack . fromMaybe "" <$> lookupEnv "STONE_EDGE_USER"
             secPassword <- T.pack . fromMaybe "" <$> lookupEnv "STONE_EDGE_PASS"
             secStoreCode <- T.pack . fromMaybe "" <$> lookupEnv "STONE_EDGE_CODE"
             return StoneEdgeCredentials {..}
-          makeAvalaraConfig :: IO Avalara.Config
-          makeAvalaraConfig = do
+
+        makeAvalaraConfig :: IO Avalara.Config
+        makeAvalaraConfig = do
             let cAppName = "SESE Retail Website"
                 cAppVersion = T.pack $ showVersion version
             cAccountId <- Avalara.AccountId . T.pack
@@ -219,8 +253,9 @@ main = do
                     error $ "Invalid AVATAX_ENVIRONMENT: " ++ T.unpack rawEnvironment
                         ++ "\n\n\tValid value are `Production` or `Sandbox`"
             return Avalara.Config {..}
-          makeLoggers :: Environment -> IO (TimedFastLogger, TimedFastLogger, TimedFastLogger, IO ())
-          makeLoggers env = do
+
+        makeLoggers :: Environment -> IO (TimedFastLogger, TimedFastLogger, TimedFastLogger, IO ())
+        makeLoggers env = do
             timeCache <- newTimeCache "%Y-%m-%dT%T"
             case env of
                 Development -> do
@@ -238,24 +273,27 @@ main = do
                     (stripe, stripeClean) <- makeLogger $ logDir ++ "/stripe.log"
                     (server, servClean) <- makeLogger $ logDir ++ "/server.log"
                     return (avalara, stripe, server, aClean >> stripeClean >> servClean)
-          lookupDirectory :: String -> FilePath -> IO FilePath
-          lookupDirectory envName defaultPath = do
-                dir <- lookupEnv envName
-                    >>= maybe ((++ defaultPath) <$> getCurrentDirectory) return
-                createDirectoryIfMissing True dir
-                return dir
-          initializeJobs :: ConnectionPool -> IO ()
-          initializeJobs = runSqlPool $ do
-                jobs <- selectList [] []
-                let decodedJobs = mapMaybe (decodeJobType . entityVal) jobs
-                    recurringTasks = [CleanDatabase, AddSalesReportDay]
-                forM_ recurringTasks $ \task ->
-                    when (task `notElem` decodedJobs) $
-                        enqueueTask Nothing task
-          decodeJobType :: Job -> Maybe Task
-          decodeJobType job =
-                case fromJSON (fromJSONValue $ jobAction job) of
-                    Success j ->
-                        Just j
-                    Error _ ->
-                        Nothing
+
+        lookupDirectory :: String -> FilePath -> IO FilePath
+        lookupDirectory envName defaultPath = do
+            dir <- lookupEnv envName
+                >>= maybe ((++ defaultPath) <$> getCurrentDirectory) return
+            createDirectoryIfMissing True dir
+            return dir
+
+        initializeJobs :: ConnectionPool -> IO ()
+        initializeJobs = runSqlPool $ do
+            jobs <- selectList [] []
+            let decodedJobs = mapMaybe (decodeJobType . entityVal) jobs
+                recurringTasks = [CleanDatabase, AddSalesReportDay]
+            forM_ recurringTasks $ \task ->
+                when (task `notElem` decodedJobs) $
+                    enqueueTask Nothing task
+
+        decodeJobType :: Job -> Maybe Task
+        decodeJobType job =
+            case fromJSON (fromJSONValue $ jobAction job) of
+                Success j ->
+                    Just j
+                Error _ ->
+                    Nothing

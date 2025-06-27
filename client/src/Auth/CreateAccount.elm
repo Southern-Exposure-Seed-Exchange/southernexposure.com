@@ -21,7 +21,7 @@ import Update.Utils exposing (nothingAndNoCommand)
 import User exposing (AuthStatus)
 import Views.HorizontalForm as Form
 
-
+import Decode.Utils as Decode
 
 -- MODEL
 
@@ -69,7 +69,7 @@ type Msg
     | Password String
     | PasswordConfirm String
     | SubmitForm
-    | SubmitResponse (WebData (Result Api.FormErrors AuthStatus))
+    | SubmitResponse (WebData (Result Api.FormErrors ()))
 
 
 update : Routing.Key -> Msg -> Form -> Maybe String -> ( Form, Maybe AuthStatus, Cmd Msg )
@@ -108,13 +108,12 @@ update key msg form maybeSessionToken =
         -- TODO: Better error case handling/feedback
         SubmitResponse response ->
             case response of
-                RemoteData.Success (Ok authStatus) ->
+                RemoteData.Success (Ok ()) ->
                     ( form
-                    , Just authStatus
+                    , Nothing
                     , Cmd.batch
                         [ Routing.newUrl key CreateAccountSuccess
                         , Ports.scrollToTop
-                        , User.storeDetails authStatus
                         , Ports.removeCartSessionToken ()
                         ]
                     )
@@ -139,7 +138,7 @@ createNewAccount : Form -> Maybe String -> Cmd Msg
 createNewAccount form maybeSessionToken =
     Api.post Api.CustomerRegister
         |> Api.withJsonBody (encode form maybeSessionToken)
-        |> Api.withErrorHandler User.decoder
+        |> Api.withErrorHandler Decode.unit
         |> Api.sendRequest SubmitResponse
 
 
@@ -179,13 +178,14 @@ view tagger model =
 
 successView : List (Html msg)
 successView =
-    [ h1 [] [ text "Account Successfully Created" ]
+    [ h1 [] [ text "Verify your email address" ]
     , hr [] []
     , p []
         [ text <|
             String.join " "
-                [ "Congratulations, your new account has been successfully created!"
-                , "A confirmation has been sent to your email address."
+                [ "One last step to complete your registration:"
+                , "please check your email inbox and follow the verification link we've sent you."
+                , "You can safely close this page now."
                 ]
         ]
     ]

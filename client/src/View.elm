@@ -2,6 +2,8 @@ module View exposing (pageDescription, pageImage, pageTitle, view)
 
 import AdvancedSearch
 import Auth.CreateAccount as CreateAccount
+import Auth.VerifyEmail as VerifyEmail
+import Auth.VerificationRequired as VerificationRequired
 import Auth.EditAddress as EditAddress
 import Auth.EditLogin as EditLogin
 import Auth.Login as Login
@@ -49,7 +51,6 @@ import Views.ShippingAdmin as ShippingAdmin
 import Views.StaticPageAdmin as StaticPageAdmin
 import Views.SurchargesAdmin as SurchargesAdmin
 import Views.Utils exposing (pageOverlay, rawHtml)
-
 
 view : Model -> Document Msg
 view ({ route, pageData, navigationData, zone } as model) =
@@ -133,11 +134,17 @@ view ({ route, pageData, navigationData, zone } as model) =
                 CreateAccount ->
                     CreateAccount.view CreateAccountMsg model.createAccountForm
 
+                VerifyEmail _ ->
+                    VerifyEmail.view model.verifyEmailForm LogOut
+
                 CreateAccountSuccess ->
                     CreateAccount.successView
 
                 Login redirectTo clearCart ->
                     Login.view LoginMsg model.loginForm redirectTo clearCart
+                
+                VerificationRequired customerId ->
+                    VerificationRequired.view customerId model.verificationRequiredForm VerificationRequiredMsg
 
                 ResetPassword maybeCode ->
                     ResetPassword.view ResetPasswordMsg model.resetPasswordForm maybeCode
@@ -173,7 +180,7 @@ view ({ route, pageData, navigationData, zone } as model) =
 
                 CheckoutSuccess orderId newAccount ->
                     RemoteData.map2 Tuple.pair pageData.locations pageData.orderDetails
-                        |> withIntermediateText (apply <| Checkout.successView zone LogOut orderId newAccount)
+                        |> withIntermediateText (apply <| Checkout.successView zone orderId newAccount)
 
                 Admin Dashboard ->
                     withIntermediateText (AdminDashboard.view model.adminDashboard zone pageData.adminDashboard)
@@ -396,11 +403,17 @@ pageTitle ({ route, pageData } as model) =
         CreateAccount ->
             "Create an Account"
 
+        VerifyEmail _ ->
+            "Verify your email"
+
         CreateAccountSuccess ->
             "Account Creation Successful"
 
         Login _ _ ->
             "Customer Login"
+        
+        VerificationRequired _ ->
+            "Verification required"
 
         ResetPassword Nothing ->
             "Reset Password"
@@ -587,6 +600,12 @@ pageDescription { route, pageData } =
 
         CreateAccount ->
             "Create a free account to purchase products from our catalog."
+
+        VerifyEmail _ ->
+            "Verify email to continue shopping"
+        
+        VerificationRequired _ ->
+            "Verification required before you're able to login"
 
         ResetPassword _ ->
             "Reset the password to your Southern Exposure Seed Exchange account."

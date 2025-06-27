@@ -12,10 +12,11 @@ import Control.Concurrent.STM (TVar)
 import Data.Pool (Pool, createPool)
 import Data.Text (Text)
 import Database.Persist.Sql (ConnectionPool)
-import Network.Mail.SMTP (SMTPConnection, connectSMTP', closeSMTP)
+import Network.Mail.SMTP (SMTPConnection, connectSMTP', connectSMTPS', closeSMTP)
 import Servant.Server.Experimental.Auth.Cookie (PersistentServerKey, RandomSource)
 import System.Log.FastLogger (TimedFastLogger, LogStr, FormattedTime, ToLogStr(..))
 import Web.Stripe.Client (StripeConfig)
+import Network.Socket (PortNumber)
 
 import Cache (Caches)
 import StoneEdge (StoneEdgeCredentials)
@@ -55,6 +56,7 @@ data Config
     , getAvalaraLogger :: TimedFastLogger
     , getStripeLogger :: TimedFastLogger
     , getServerLogger :: TimedFastLogger
+    , getDeveloperEmail :: Maybe Text
     }
 
 defaultConfig :: Config
@@ -79,11 +81,14 @@ defaultConfig =
         , getAvalaraLogger = undefined
         , getStripeLogger = undefined
         , getServerLogger = undefined
+        , getDeveloperEmail = Nothing
         }
 
 timedLogStr :: ToLogStr a => a -> FormattedTime -> LogStr
 timedLogStr msg time = "[" <> toLogStr time <> "]: " <> toLogStr msg <> "\n"
 
-smtpPool :: String -> Int -> IO (Pool SMTPConnection)
-smtpPool serverName =
-    createPool (connectSMTP' serverName 2525) closeSMTP 1 20
+smtpPool :: Bool -> PortNumber -> String -> Int -> IO (Pool SMTPConnection)
+smtpPool encrypted port serverName =
+    createPool (connect serverName port) closeSMTP 1 20
+    where
+        connect = if encrypted then connectSMTPS' else connectSMTP'

@@ -203,6 +203,7 @@ orderTable ({ lineItems, products } as details) =
                 , td [ class "text-right" ] [ text <| Format.cents amount ]
                 ]
 
+        htmlOrBlank : ({ a | description : String, amount : Cents } -> Html msg) -> Maybe { a | description : String, amount : Cents } -> Html msg
         htmlOrBlank f maybe =
             case maybe of
                 Nothing ->

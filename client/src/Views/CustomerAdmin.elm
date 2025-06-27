@@ -379,6 +379,9 @@ edit zone model locations original =
             InputIsAdmin
             "Is Administrator"
             "IsAdmin"
+        , div [ class "form-group form-row align-items-center" ] 
+              [ div [ class "col-sm-3 col-form-label" ] []
+              , text <| if original.verified then "This user is verified" else "This user is not verified" ]
         , deleteWarningText
         , div [ class "form-group d-flex justify-content-between" ]
             [ Admin.submitOrSavingButton model "Update Customer"

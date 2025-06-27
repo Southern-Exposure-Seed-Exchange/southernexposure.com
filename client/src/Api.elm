@@ -52,6 +52,8 @@ type Endpoint
     | AdvancedSearchData
     | CustomerLogin Bool
     | CustomerRegister
+    | CustomerVerifyEmail String
+    | CustomerRequestVerification Int
     | CustomerAuthorize
     | CustomerLogout
     | CustomerResetRequest
@@ -150,6 +152,13 @@ toUrl endpoint =
 
                 CustomerRegister ->
                     joinPath [ "customers", "register" ]
+                
+                CustomerVerifyEmail uuid  ->
+                    joinPath [ "customers", "verify", uuid ]
+                
+                CustomerRequestVerification customerId ->
+                    joinPath [ "customers", "request-verification"]
+                        ++ withQueryStrings [queryParameter ( "customer", String.fromInt customerId)]
 
                 CustomerAuthorize ->
                     joinPath [ "customers", "authorize" ]

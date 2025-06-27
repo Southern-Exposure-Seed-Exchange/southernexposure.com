@@ -8,9 +8,11 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE ViewPatterns #-}
 module Routes.Customers
     ( CustomerAPI
     , RegistrationParameters(..)
+    , LoginResult(..)
     , createNewCustomer
     , customerRoutes
     ) where
@@ -22,7 +24,7 @@ import Data.Aeson (ToJSON(..), FromJSON(..), (.=), (.:), (.:?), withObject, obje
 import Data.Int (Int64)
 import Data.List (partition)
 import Data.Maybe (fromMaybe)
-import Data.Time.Clock (UTCTime, getCurrentTime, addUTCTime)
+import Data.Time.Clock (UTCTime, getCurrentTime, addUTCTime, diffUTCTime, nominalDay)
 import Data.Typeable (Typeable)
 import Database.Persist
     ( (=.), (==.), Entity(..), get, getBy, insertUnique, insert, update
@@ -31,7 +33,7 @@ import Database.Persist
 import Database.Persist.Sql (toSqlKey)
 import Servant
     ( (:>), (:<|>)(..), AuthProtect, ReqBody, JSON, Get, Post, Put
-    , err403, err404, err500, QueryParam, QueryFlag, Capture, Delete
+    , err403, err404, err500, QueryParam, QueryFlag, Capture, Delete, ServerT, noHeader
     )
 
 import Auth
@@ -44,7 +46,7 @@ import Routes.CommonData
     )
 import Routes.Utils (generateUniqueToken, hashPassword)
 import Server
-import Validation (Validation(..))
+import Validation (Validation(..), singleError)
 import Workers (Task(..), enqueueTask)
 
 import qualified Data.CAProvinceCodes as CACodes
@@ -57,12 +59,15 @@ import qualified Database.Esqueleto.Experimental as E
 import qualified Emails
 import qualified Models.Fields as Fields
 import qualified Validation as V
+import Routes.EmailVerification
 
 
 type CustomerAPI =
          "locations" :> LocationRoute
     :<|> "register" :> RegisterRoute
+    :<|> "verify" :> EmailVerificationRoute
     :<|> "login" :> LoginRoute
+    :<|> "request-verification" :> RequestNewVerificationRoute
     :<|> "logout" :> LogoutRoute
     :<|> "authorize" :> AuthorizeRoute
     :<|> "reset-request" :> ResetRequestRoute
@@ -73,25 +78,15 @@ type CustomerAPI =
     :<|> "address-edit" :> AddressEditRoute
     :<|> "address-delete" :> AddressDeleteRoute
 
-type CustomerRoutes =
-         App LocationData
-    :<|> (RegistrationParameters -> App (Cookied AuthorizationData))
-    :<|> (Bool -> LoginParameters -> App (Cookied AuthorizationData))
-    :<|> App (Cookied ())
-    :<|> (WrappedAuthToken -> AuthorizeParameters -> App (Cookied AuthorizationData))
-    :<|> (ResetRequestParameters -> App ())
-    :<|> (ResetPasswordParameters -> App (Cookied AuthorizationData))
-    :<|> (WrappedAuthToken -> Maybe Int64 -> App (Cookied MyAccountDetails))
-    :<|> (WrappedAuthToken -> EditDetailsParameters -> App (Cookied ()))
-    :<|> (WrappedAuthToken -> App (Cookied AddressDetails))
-    :<|> (WrappedAuthToken -> Int64 -> AddressData -> App (Cookied ()))
-    :<|> (WrappedAuthToken -> Int64 -> App (Cookied ()))
+type CustomerRoutes = ServerT CustomerAPI App
 
 customerRoutes :: CustomerRoutes
 customerRoutes =
          locationRoute
     :<|> registrationRoute
+    :<|> emailVerificationRoute
     :<|> loginRoute
+    :<|> requestNewVerificationRoute
     :<|> logoutRoute
     :<|> authorizeRoute
     :<|> resetRequestRoute
@@ -205,14 +200,12 @@ instance Validation RegistrationParameters where
 
 type RegisterRoute =
        ReqBody '[JSON] RegistrationParameters
-    :> Post '[JSON] (Cookied AuthorizationData)
+    :> Post '[JSON] ()
 
-registrationRoute :: RegistrationParameters -> App (Cookied AuthorizationData)
+registrationRoute :: RegistrationParameters -> App ()
 registrationRoute parameters = do
-    customer <- createNewCustomer Nothing parameters
-    addSessionCookie temporarySession
-        (AuthToken $ customerAuthToken $ entityVal customer)
-        (toAuthorizationData customer)
+    _customer <- createNewCustomer Nothing parameters
+    pure ()
 
 createNewCustomer :: Maybe AvalaraCustomerCode -> RegistrationParameters -> App (Entity Customer)
 createNewCustomer mbAvalaraCode = validate >=> \parameters -> do
@@ -228,17 +221,80 @@ createNewCustomer mbAvalaraCode = validate >=> \parameters -> do
                 , customerStripeId = Nothing
                 , customerAvalaraCode = mbAvalaraCode
                 , customerIsAdmin = False
+                , customerVerified = False
                 }
         (customer,) <$> insertUnique customer
     case maybeCustomerId of
         Nothing ->
             serverError err500
         Just customerId -> do
-            runDB
-                (maybeMergeCarts customerId (rpCartToken parameters)
-                    >> enqueueTask Nothing (SendEmail $ Emails.AccountCreated customerId)
-                )
+            newEmailVerification customerId
+            runDB $ maybeMergeCarts customerId (rpCartToken parameters)
             return (Entity customerId customer)
+
+
+-- VERIFY EMAIL
+
+
+type EmailVerificationRoute =
+    Capture "verificaiton-code" UUID.UUID :>
+    Post '[JSON] (Cookied VerificationStatus)
+
+data VerificationStatus =
+    VerificationSuccess AuthorizationData
+    | VerificationExpired
+
+instance ToJSON VerificationStatus where
+    toJSON VerificationExpired = object [ "status" .= ("expired" :: T.Text)]
+    toJSON (VerificationSuccess authData) =
+        object [ "status" .= ("success" :: T.Text)
+               , "data" .=  authData
+               ]
+
+emailVerificationRoute :: UUID.UUID -> App (Cookied VerificationStatus)
+emailVerificationRoute (UUID.toText -> uuid) = do
+    mVerification <- runDB $ getBy (UniqueVerificationCode uuid)
+    case mVerification of
+        Nothing -> serverError err404
+        Just (Entity _ v) -> do
+            let customerId = verificationCustomerId v
+            currTime <- liftIO getCurrentTime
+            if (currTime `diffUTCTime` verificationCreatedAt v) > nominalDay
+                then verificationExpired customerId
+                else verificationSucceed customerId
+    where
+    verificationExpired customerId = do
+        newEmailVerification customerId
+        pure $ noHeader VerificationExpired
+
+    verificationSucceed customerId = do
+        maybeCustomer <- runDB $ do
+            E.deleteBy (UniqueVerificationCode uuid)
+            E.update $ \ c -> do
+                E.set c [ CustomerVerified E.=. E.val True ]
+                E.where_ $
+                    c E.^. CustomerId E.==. E.val customerId
+            E.get customerId
+        case maybeCustomer of
+            Nothing -> serverError err500
+            Just c@Customer{ customerAuthToken } ->
+                addSessionCookie temporarySession (AuthToken customerAuthToken)
+                        (VerificationSuccess $ toAuthorizationData $ Entity customerId c)
+
+type RequestNewVerificationRoute =
+    QueryParam "customer" CustomerId :> Post '[JSON] ()
+
+requestNewVerificationRoute :: Maybe CustomerId -> App ()
+requestNewVerificationRoute = \case
+    Nothing -> serverError err404
+    Just customerId -> do
+        mCustomer <- runDB $ E.get customerId
+        case mCustomer of
+            Nothing -> singleError "No such account"
+            Just customer ->
+                if customerVerified customer
+                    then singleError "This account is already verified"
+                    else newEmailVerification customerId
 
 -- LOGIN
 
@@ -246,20 +302,38 @@ createNewCustomer mbAvalaraCode = validate >=> \parameters -> do
 type LoginRoute =
        QueryFlag "clearCart"
     :> ReqBody '[JSON] LoginParameters
-    :> Post '[JSON] (Cookied AuthorizationData)
+    :> Post '[JSON] (Cookied (LoginResult AuthorizationData))
 
-loginRoute :: Bool -> LoginParameters -> App (Cookied AuthorizationData)
+data LoginResult a
+    = SuccessfulLogin a
+    | VerificationRequired CustomerId
+
+instance ToJSON a => ToJSON (LoginResult a) where
+    toJSON (SuccessfulLogin authData) =
+        object [ "status" .= ("success" :: T.Text)
+               , "data" .= authData
+                ]
+    toJSON (VerificationRequired customerId) =
+        object [ "status" .= ("verification-required" :: T.Text)
+               , "data" .= customerId
+                ]
+
+loginRoute :: Bool -> LoginParameters -> App (Cookied (LoginResult AuthorizationData))
 loginRoute clearCart LoginParameters { lpEmail, lpPassword, lpCartToken, lpRemember } = do
     e@(Entity customerId customer) <- handle handlePasswordValidationError
         $ runDB $ validatePassword lpEmail lpPassword
-    when clearCart $ runDB $ do
-        mbCart <- getBy $ UniqueCustomerCart $ Just customerId
-        forM_ mbCart $ \(Entity cartId _) ->
-            deleteWhere [CartItemCartId ==. cartId] >> delete cartId
-    runDB $ maybeMergeCarts customerId lpCartToken
-    let sessionSettings = if lpRemember then permanentSession else temporarySession
-    addSessionCookie sessionSettings (makeToken customer)
-        $ toAuthorizationData e
+    if customerVerified customer
+        then do
+            when clearCart $ runDB $ do
+                mbCart <- getBy $ UniqueCustomerCart $ Just customerId
+                forM_ mbCart $ \(Entity cartId _) ->
+                    deleteWhere [CartItemCartId ==. cartId] >> delete cartId
+            runDB $ maybeMergeCarts customerId lpCartToken
+            let sessionSettings = if lpRemember then permanentSession else temporarySession
+            addSessionCookie sessionSettings (makeToken customer)
+                $ SuccessfulLogin $ toAuthorizationData e
+        else
+            pure $ noHeader $ VerificationRequired customerId
 
 
 
@@ -460,11 +534,11 @@ myAccountRoute token maybeLimit = withValidatedCookie token $ \(Entity customerI
     return $ MyAccountDetails orderDetails (customerStoreCredit customer)
     where getOrderDetails customerId = runDB $ do
             let limit = fromMaybe 4 maybeLimit
-            orderData <- E.select $ do 
-                (o E.:& op E.:& sa) <- E.from $ E.table 
-                    `E.innerJoin` E.table 
+            orderData <- E.select $ do
+                (o E.:& op E.:& sa) <- E.from $ E.table
+                    `E.innerJoin` E.table
                         `E.on` (\(o E.:& op) -> op E.^. OrderProductOrderId E.==. o E.^. OrderId)
-                    `E.innerJoin` E.table 
+                    `E.innerJoin` E.table
                         `E.on` (\(o E.:& _ E.:& sa) -> sa E.^. AddressId E.==. o E.^. OrderShippingAddressId)
                 let lineTotal = E.subSelectUnsafe $ E.from E.table >>= \ol_ -> do
                         E.where_ $ ol_ E.^. OrderLineItemOrderId E.==. o E.^. OrderId

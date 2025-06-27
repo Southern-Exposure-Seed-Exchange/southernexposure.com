@@ -940,6 +940,7 @@ type alias AdminEditCustomerData =
     , email : String
     , storeCredit : Cents
     , isAdmin : Bool
+    , verified : Bool
     , stripeId : Maybe String
     , avalaraCode : Maybe String
     , orders : List CustomerOrderData
@@ -948,11 +949,12 @@ type alias AdminEditCustomerData =
 
 adminEditCustomerDataDecoder : Decoder AdminEditCustomerData
 adminEditCustomerDataDecoder =
-    Decode.map7 AdminEditCustomerData
+    Decode.map8 AdminEditCustomerData
         (Decode.field "id" Decode.int)
         (Decode.field "email" Decode.string)
         (Decode.field "storeCredit" centsDecoder)
         (Decode.field "isAdmin" Decode.bool)
+        (Decode.field "verified" Decode.bool)
         (Decode.field "stripeId" <| Decode.nullable Decode.string)
         (Decode.field "avalaraCode" <| Decode.nullable Decode.string)
         (Decode.field "orders" <| Decode.list customerOrderDataDecoder)

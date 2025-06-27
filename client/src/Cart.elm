@@ -10,7 +10,7 @@ module Cart exposing
 import Api
 import Dict exposing (Dict)
 import Html exposing (..)
-import Html.Attributes as A exposing (alt, class, colspan, disabled, src, step, type_, value)
+import Html.Attributes as A exposing (alt, class, colspan, disabled, src, type_, value)
 import Html.Events exposing (onClick, onSubmit)
 import Html.Extra exposing (viewIf)
 import Html.Keyed as Keyed
@@ -103,8 +103,8 @@ updateCart authStatus maybeCartToken { quantities } { items } =
 
         encodedQuantities =
             Encode.object <|
-                [ ( "quantities", Encode.object changed ) ]
-                    ++ encodedCartToken maybeCartToken
+                 ( "quantities", Encode.object changed ) 
+                    :: encodedCartToken maybeCartToken
     in
     if List.isEmpty changed then
         Cmd.none
@@ -123,12 +123,12 @@ removeItem authStatus maybeCartToken itemId =
     let
         encodedDelete =
             Encode.object <|
-                [ ( "quantities"
+                 ( "quantities"
                   , Encode.object
                         [ ( String.fromInt <| fromCartItemId itemId, Encode.int 0 ) ]
                   )
-                ]
-                    ++ encodedCartToken maybeCartToken
+                
+                    :: encodedCartToken maybeCartToken
     in
     case authStatus of
         User.Anonymous ->
@@ -265,8 +265,8 @@ view authStatus ({ quantities } as form_) ({ items, charges } as cartDetails) =
 
         tableFooter =
             tfoot [] <|
-                [ footerRow "font-weight-bold" "Sub-Total" totals.subTotal ]
-                    ++ List.map chargeRow charges.surcharges
+                 footerRow "font-weight-bold" "Sub-Total" totals.subTotal 
+                    :: List.map chargeRow charges.surcharges
                     ++ [ htmlOrBlank chargeRow <|
                             Maybe.map .charge charges.shippingMethod
                        , taxRow

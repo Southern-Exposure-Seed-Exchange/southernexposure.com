@@ -28,7 +28,7 @@ import Database.Persist
     , getBy, selectList, update, updateWhere, delete, deleteWhere, count
     , getEntity, selectFirst, OverflowNatural(..)
     )
-import Servant ((:<|>)(..), (:>), AuthProtect, JSON, Post, ReqBody, err404)
+import Servant ((:<|>)(..), (:>), AuthProtect, JSON, Post, ReqBody, err404, ServerT, noHeader)
 import Web.Stripe ((-&-))
 import Web.Stripe.Card (createCustomerCardByToken, updateCustomerCard, getCustomerCards)
 import Web.Stripe.Charge (createCharge)
@@ -44,16 +44,16 @@ import Models
 import Models.Fields
 import Server
 import Routes.CommonData
-    ( AuthorizationData, toAuthorizationData, CartItemData(..), CartCharges(..)
+    ( toAuthorizationData, CartItemData(..), CartCharges(..)
     , CartCharge(..), getCartItems, getCharges, AddressData(..), toAddressData
     , fromAddressData, ShippingCharge(..), VariantData(..), getVariantPrice
     , OrderDetails(..), toCheckoutOrder, getCheckoutProducts, CheckoutProduct
     , LoginParameters(..), validatePassword, handlePasswordValidationError
-    , PasswordValidationError(..), BaseProductData(..)
+    , PasswordValidationError(..), BaseProductData(..), AuthorizationData
     )
 import Routes.AvalaraUtils (createAvalaraTransaction, createAvalaraCustomer)
-import Routes.Utils (generateUniqueToken, getDisabledCheckoutDetails)
-import Routes.Customers (RegistrationParameters(..), createNewCustomer)
+import Routes.Utils (getDisabledCheckoutDetails)
+import Routes.Customers (RegistrationParameters(..), createNewCustomer, LoginResult (..))
 import Validation (Validation(..))
 import Workers (Task(..), AvalaraTask(..), enqueueTask)
 
@@ -74,13 +74,7 @@ type CheckoutAPI =
     :<|> "login" :> LoginRoute
     :<|> "success" :> SuccessRoute
 
-type CheckoutRoutes =
-         (WrappedAuthToken -> CustomerDetailsParameters -> App (Cookied CheckoutDetailsData))
-    :<|> (WrappedAuthToken -> CustomerPlaceOrderParameters -> App (Cookied PlaceOrderData))
-    :<|> (AnonymousDetailsParameters -> App CheckoutDetailsData)
-    :<|> (AnonymousPlaceOrderParameters -> App (Cookied AnonymousPlaceOrderData))
-    :<|> (CheckoutLoginParameters -> App (Cookied LoginData))
-    :<|> (WrappedAuthToken -> SuccessParameters -> App (Cookied OrderDetails))
+type CheckoutRoutes = ServerT CheckoutAPI App
 
 checkoutRoutes :: CheckoutRoutes
 checkoutRoutes =
@@ -723,7 +717,6 @@ data AnonymousPlaceOrderData =
         { apodOrderId :: OrderId
         , apodLines :: [Entity OrderLineItem]
         , apodProducts :: [CheckoutProduct]
-        , apodAuthorizationData :: AuthorizationData
         }
 
 instance ToJSON AnonymousPlaceOrderData where
@@ -732,17 +725,16 @@ instance ToJSON AnonymousPlaceOrderData where
             [ "orderId" .= apodOrderId orderData
             , "lines" .= apodLines orderData
             , "products" .= apodProducts orderData
-            , "authData" .= apodAuthorizationData orderData
             ]
 
 type AnonymousPlaceOrderRoute =
        ReqBody '[JSON] AnonymousPlaceOrderParameters
-    :> Post '[JSON] (Cookied AnonymousPlaceOrderData)
+    :> Post '[JSON] AnonymousPlaceOrderData
 
 -- | Place an Order using an Anonymous Cart.
 --
 -- A new Customer & Order is created & the Customer is charged.
-anonymousPlaceOrderRoute :: AnonymousPlaceOrderParameters -> App (Cookied AnonymousPlaceOrderData)
+anonymousPlaceOrderRoute :: AnonymousPlaceOrderParameters -> App AnonymousPlaceOrderData
 anonymousPlaceOrderRoute = validate >=> \parameters -> do
     let email = apopEmail parameters
         password = apopPassword parameters
@@ -763,8 +755,6 @@ anonymousPlaceOrderRoute = validate >=> \parameters -> do
             Left PasswordResetRequired ->
                 V.singleFieldError "email"
                     "An Account with this Email exists, but a password reset is required."
-    authToken <- maybe (runDB $ generateUniqueToken UniqueToken)
-        (return . customerAuthToken . entityVal) maybeCustomer
     currentTime <- liftIO getCurrentTime
     (orderId, orderData) <- withPlaceOrderErrors (NewAddress shippingParam) . runDB $ do
         c@(Entity customerId customer) <- case maybeCustomer of
@@ -823,11 +813,10 @@ anonymousPlaceOrderRoute = validate >=> \parameters -> do
                 { apodOrderId = orderId
                 , apodLines = orderLines
                 , apodProducts = products
-                , apodAuthorizationData = toAuthorizationData $ Entity customerId customer
                 }
             )
     runDB $ enqueuePostOrderTasks orderId
-    addSessionCookie temporarySession (AuthToken authToken) orderData
+    pure orderData
 
 
 -- | Get the Customer's StripeCustomerId or create a new Stripe Customer.
@@ -1276,20 +1265,24 @@ instance ToJSON LoginData where
 
 type LoginRoute =
        ReqBody '[JSON] CheckoutLoginParameters
-    :> Post '[JSON] (Cookied LoginData)
+    :> Post '[JSON] (Cookied (LoginResult LoginData))
 
 -- | Attempt to log the customer into their account. Note that this
 -- differs from the Customer's login route - this route removes the
 -- account's cart instead of merging the two together.
-loginRoute :: CheckoutLoginParameters -> App (Cookied LoginData)
+loginRoute :: CheckoutLoginParameters -> App (Cookied (LoginResult LoginData))
 loginRoute CheckoutLoginParameters { clpLogin, clpDetails } = do
     e@(Entity customerId customer) <- handle handlePasswordValidationError
         $ runDB $ validatePassword (lpEmail clpLogin) (lpPassword clpLogin)
-    runDB $ overwriteCustomerCart customerId $ lpCartToken clpLogin
-    details <- withCheckoutDetailsErrors . runDB $ getCustomerDetails e clpDetails
-    let sessionSettings = if lpRemember clpLogin then permanentSession else temporarySession
-        authData = toAuthorizationData e
-    addSessionCookie sessionSettings (makeToken customer) $ LoginData
+    if not (customerVerified customer)
+        then pure $ noHeader (VerificationRequired customerId)
+        else do
+        runDB $ overwriteCustomerCart customerId $ lpCartToken clpLogin
+        details <- withCheckoutDetailsErrors . runDB $ getCustomerDetails e clpDetails
+        let sessionSettings = if lpRemember clpLogin then permanentSession else temporarySession
+            authData = toAuthorizationData e
+
+        addSessionCookie sessionSettings (makeToken customer) $ SuccessfulLogin LoginData
             { ldAuth = authData
             , ldDetails = details
             }

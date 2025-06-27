@@ -5,6 +5,8 @@ module Model exposing
     )
 
 import Auth.CreateAccount as CreateAccount
+import Auth.VerifyEmail as VerifyEmail
+import Auth.VerificationRequired as VerificationRequired
 import Auth.EditAddress as EditAddress
 import Auth.EditLogin as EditLogin
 import Auth.Login as Login
@@ -44,6 +46,8 @@ type alias Model =
     , searchData : Search.Data
     , advancedSearchData : Search.Data
     , createAccountForm : CreateAccount.Form
+    , verifyEmailForm : VerifyEmail.Form
+    , verificationRequiredForm : VerificationRequired.Form
     , loginForm : Login.Form
     , editLoginForm : EditLogin.Form
     , editAddressForm : EditAddress.Form
@@ -99,6 +103,8 @@ initial key route =
     , searchData = Search.initial
     , advancedSearchData = Search.initial
     , createAccountForm = CreateAccount.initial
+    , verifyEmailForm = VerifyEmail.initial
+    , verificationRequiredForm = VerificationRequired.initial
     , loginForm = Login.initial
     , editLoginForm = EditLogin.initial
     , editAddressForm = EditAddress.initial
