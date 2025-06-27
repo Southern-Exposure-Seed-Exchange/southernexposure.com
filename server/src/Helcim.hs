@@ -13,24 +13,24 @@ import Helcim.API as API
     , createCustomer
     , getCustomer
     , purchase
+    , refund
     )
 import Helcim.API.Types.Checkout as Checkout
 import Helcim.API.Types.Customer
 import Helcim.API.Types.Common
-import Helcim.API.Types.Payment
 
 import Config (Config(..))
-import Models.Fields (Cents, toDollars)
 import Server (App)
+import Helcim.API.Types.Payment (PurchaseRequest, PaymentResponse, RefundRequest)
 
-createPurchaseCheckout :: Cents -> Maybe CustomerCode -> App (Either HelcimError CheckoutCreateResponse)
-createPurchaseCheckout centsAmount customerCode = do
+createVerifyCheckout :: App (Either HelcimError CheckoutCreateResponse)
+createVerifyCheckout = do
     authToken <- asks getHelcimAuthKey
     let request = InitializeRequest
-            { ccrPaymentType = Purchase
-            , ccrAmount = toDollars centsAmount
+            { ccrPaymentType = Verify
+            , ccrAmount = 0
             , ccrCurrency = "USD"
-            , Checkout.ccrCustomerCode = customerCode
+            , Checkout.ccrCustomerCode = Nothing
             , ccrInvoiceNumber = Nothing
             , ccrPaymentMethod = Nothing
             , ccrAllowPartial = Nothing
@@ -71,4 +71,11 @@ getCustomer :: CustomerId -> App (Either HelcimError CustomerResponse)
 getCustomer customerId = do
     authToken <- asks getHelcimAuthKey
     let clientAction = API.getCustomer (Just authToken) customerId
+    liftIO $ runHelcimClient clientAction
+
+refund :: RefundRequest -> App (Either HelcimError PaymentResponse)
+refund request = do
+    authToken <- asks getHelcimAuthKey
+    idempotencyKey <- IdempotencyKey <$> liftIO nextRandom
+    let clientAction = API.refund (Just authToken) (Just idempotencyKey) request
     liftIO $ runHelcimClient clientAction

@@ -241,6 +241,10 @@ Job
     retries Int
     deriving Show
 
+HelcimPaymentConfirmation
+    checkoutToken T.Text
+    secretToken T.Text
+    UniqueCheckoutToken checkoutToken
 
 Settings
     disableCheckout Bool

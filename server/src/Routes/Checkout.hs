@@ -2,6 +2,7 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeOperators #-}
 {-# OPTIONS -Wno-deprecations #-}
@@ -12,15 +13,18 @@ module Routes.Checkout
 
 import Control.Applicative ((<|>))
 import Control.Arrow (first)
+import Crypto.Hash (SHA256, Digest, hash)
 import UnliftIO (MonadUnliftIO, MonadIO)
 import UnliftIO.Exception (Exception, throwIO, try, handle)
 import Control.Monad ((>=>), when, unless, void, forM_)
 import Control.Monad.Reader (asks, lift, liftIO)
-import Data.Aeson ((.:), (.:?), (.=), FromJSON(..), ToJSON(..), Value(Object), withObject, object)
+import Data.Aeson ((.:), (.:?), (.=), FromJSON(..), ToJSON(..), Value(Object), encode, withObject, object)
+import qualified Data.ByteString.Lazy as LBS
 import Data.Foldable (asum)
 import Data.Int (Int64)
 import Data.List (partition, find)
 import Data.Maybe (listToMaybe, isJust, isNothing, fromMaybe, mapMaybe)
+import Data.Text.Encoding (encodeUtf8)
 import Data.Time.Clock (getCurrentTime, UTCTime)
 import Data.Typeable (Typeable)
 import Database.Persist
@@ -40,6 +44,9 @@ import Avalara
     , CustomerCode
     )
 import Config
+import Helcim (createPurchaseCheckout)
+import Helcim.API (HelcimError(..), ApiError(..))
+import Helcim.API.Types.Checkout (CheckoutToken(..), CheckoutCreateResponse (..), SecretToken(..))
 import Models
 import Models.Fields
 import Server
@@ -72,6 +79,8 @@ type CheckoutAPI =
     :<|> "anonymous-place-order" :> AnonymousPlaceOrderRoute
     :<|> "login" :> LoginRoute
     :<|> "success" :> SuccessRoute
+    :<|> "checkout-token" :> CheckoutTokenRoute
+    :<|> "validate-payment" :> ValidateHelcimPaymentRoute
 
 type CheckoutRoutes =
          (WrappedAuthToken -> CustomerDetailsParameters -> App (Cookied CheckoutDetailsData))
@@ -80,6 +89,8 @@ type CheckoutRoutes =
     :<|> (AnonymousPlaceOrderParameters -> App (Cookied AnonymousPlaceOrderData))
     :<|> (CheckoutLoginParameters -> App (Cookied LoginData))
     :<|> (WrappedAuthToken -> SuccessParameters -> App (Cookied OrderDetails))
+    :<|> (CheckoutTokenParameters -> App CheckoutToken)
+    :<|> (ValidatePaymentParameters -> App ())
 
 checkoutRoutes :: CheckoutRoutes
 checkoutRoutes =
@@ -89,6 +100,8 @@ checkoutRoutes =
     :<|> anonymousPlaceOrderRoute
     :<|> loginRoute
     :<|> customerSuccessRoute
+    :<|> getCheckoutTokenRoute
+    :<|> validateHelcimPaymentRoute
 
 
 -- COUPON ERRORS
@@ -174,8 +187,6 @@ withCheckoutDetailsErrors =
             handlePriorityShippingErrors priorityError
         DetailsCouponError couponError ->
             handleCouponErrors couponError
-
-
 
 data CustomerDetailsParameters =
     CustomerDetailsParameters
@@ -437,6 +448,8 @@ data PlaceOrderError
     | PlaceOrderCouponError CouponError
     | AvalaraNoTransactionCode
     | PlaceOrderCannotShip ShippingRestrictionError
+    | HelcimPaymentValidationError
+    | HelcimError HelcimError
     deriving (Show, Typeable)
 
 instance Exception PlaceOrderError
@@ -486,6 +499,19 @@ withPlaceOrderErrors shippingAddress =
                 <> "contact us for help. (Error ANTC: No Transction Code Returned)"
         PlaceOrderCannotShip shippingError ->
             handleShippingRestrictionError shippingError
+        HelcimPaymentValidationError ->
+            V.singleError
+                $ "An error occured while validating your payment. Please try again or "
+                <> "contact us for help."
+        HelcimError helcimError -> case helcimError of
+            HelcimClientError _ ->
+                V.singleError
+                    $ "An error occured while processing your payment. Please try again or "
+                    <> "contact us for help."
+            HelcimApiError ApiError { errors } ->
+                V.singleError
+                    $ "An error occured while processing your payment: "
+                    <> T.intercalate ", " (map (T.pack . show) errors)
 
 
 
@@ -1370,6 +1396,65 @@ getOrderAndAddress customerId orderId =
             o E.^. OrderCustomerId E.==. E.val customerId
         return (o, s, b)
 
+-- CHECKOUT TOKEN
+
+newtype CheckoutTokenParameters = CheckoutTokenParameters
+    { ctpAmount :: Cents }
+
+instance FromJSON CheckoutTokenParameters where
+    parseJSON = withObject "CheckoutTokenParameters" $ \v ->
+        CheckoutTokenParameters
+            <$> v .: "amount"
+
+type CheckoutTokenRoute =
+    ReqBody '[JSON] CheckoutTokenParameters :> Post '[JSON] CheckoutToken
+
+getCheckoutTokenRoute :: CheckoutTokenParameters -> App CheckoutToken
+getCheckoutTokenRoute params = do
+    createPurchaseCheckout (ctpAmount params) Nothing >>= \case
+        Left e -> throwIO $ HelcimError e
+        Right CheckoutCreateResponse {..} -> do 
+            runDB $ do
+                let helcimPaymentConfirmation = HelcimPaymentConfirmation
+                        { helcimPaymentConfirmationCheckoutToken = unCheckoutToken ccrCheckoutToken
+                        , helcimPaymentConfirmationSecretToken = unSecretToken ccrSecretToken
+                        }
+                insert_ helcimPaymentConfirmation
+            return ccrCheckoutToken
+
+-- VALIDATE PAYMENT
+
+data ValidatePaymentParameters =
+    ValidatePaymentParameters
+        { vppCheckoutToken :: T.Text
+        , vppData :: Value
+        , vppHash :: T.Text
+        }
+
+instance FromJSON ValidatePaymentParameters where
+    parseJSON = withObject "ValidatePaymentParameters" $ \v ->
+        ValidatePaymentParameters
+            <$> v .: "checkoutToken"
+            <*> v .: "data"
+            <*> v .: "hash"
+
+type ValidateHelcimPaymentRoute =
+    ReqBody '[JSON] ValidatePaymentParameters
+    :> Post '[JSON] ()
+
+
+validateHelcimPaymentRoute :: ValidatePaymentParameters -> App ()
+validateHelcimPaymentRoute ValidatePaymentParameters { vppCheckoutToken, vppData, vppHash } = do
+    mbSecretToken <- runDB $ selectFirst [ HelcimPaymentConfirmationCheckoutToken ==. vppCheckoutToken] []
+    case mbSecretToken of
+        Nothing -> throwIO HelcimPaymentValidationError
+        Just (Entity _ HelcimPaymentConfirmation { helcimPaymentConfirmationSecretToken }) -> do
+            let encodedJSON = encode vppData
+                secretBytes = encodeUtf8 helcimPaymentConfirmationSecretToken
+                combinedBytes = secretBytes <> LBS.toStrict encodedJSON
+                digest = hash combinedBytes :: Digest SHA256
+                hashText = T.pack $ show digest
+            unless (hashText == vppHash) $ throwIO HelcimPaymentValidationError
 
 -- Utils
 
