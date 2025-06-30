@@ -873,16 +873,18 @@ type alias AdminOrderDetails =
     { details : OrderDetails
     , adminComments : List AdminComment
     , stripeId : Maybe String
+    , helcimTransactionId : Maybe Int
     , customerId : Int
     }
 
 
 adminOrderDetailsDecoder : Decoder AdminOrderDetails
 adminOrderDetailsDecoder =
-    Decode.map4 AdminOrderDetails
+    Decode.map5 AdminOrderDetails
         (Decode.field "details" orderDetailsDecoder)
         (Decode.field "adminComments" <| Decode.list adminCommentDecoder)
         (Decode.field "stripeId" <| Decode.nullable Decode.string)
+        (Decode.field "helcimTransactionId" <| Decode.nullable Decode.int)
         (Decode.field "customerId" Decode.int)
 
 
@@ -942,6 +944,7 @@ type alias AdminEditCustomerData =
     , isAdmin : Bool
     , verified : Bool
     , stripeId : Maybe String
+    , helcimCustomerId : Maybe Int
     , avalaraCode : Maybe String
     , orders : List CustomerOrderData
     }
@@ -956,8 +959,12 @@ adminEditCustomerDataDecoder =
         (Decode.field "isAdmin" Decode.bool)
         (Decode.field "verified" Decode.bool)
         (Decode.field "stripeId" <| Decode.nullable Decode.string)
+        (Decode.field "helcimCustomerId" <| Decode.nullable Decode.int)
         (Decode.field "avalaraCode" <| Decode.nullable Decode.string)
-        (Decode.field "orders" <| Decode.list customerOrderDataDecoder)
+        |> Decode.andThen (\partialData ->
+            Decode.map (\orders -> partialData orders)
+            (Decode.field "orders" <| Decode.list customerOrderDataDecoder)
+        )
 
 
 type alias CustomerOrderData =

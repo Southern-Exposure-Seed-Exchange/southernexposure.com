@@ -1,8 +1,9 @@
 port module Ports exposing
     ( PageMetadata
+    , appendHelcimPayIframe
     , cartItemCountChanged
     , collapseMobileMenus
-    , collectStripeToken
+    , helcimMessageReceived
     , initializeOrDestroyHomepageCarousel
     , logPurchase
     , logStatusCode
@@ -11,20 +12,20 @@ port module Ports exposing
     , newCartSessionToken
     , removeAuthDetails
     , removeCartSessionToken
+    , removeHelcimPayIframe
     , scrollToErrorMessage
     , scrollToID
     , scrollToName
     , scrollToTop
     , setCartItemCount
     , setPageTitle
+    , subscribeToHelcimMessages
     , storeAuthDetails
     , storeCartSessionToken
-    , stripeTokenReceived
     , updatePageMetadata
     )
 
 import Json.Encode exposing (Value)
-
 
 
 -- Page Change
@@ -101,13 +102,13 @@ port cartItemCountChanged : (Int -> msg) -> Sub msg
 
 -- Checkout
 
+port subscribeToHelcimMessages : () -> Cmd msg
 
-port collectStripeToken : ( String, Int ) -> Cmd msg
+port helcimMessageReceived : (Value -> msg) -> Sub msg
 
+port removeHelcimPayIframe : () -> Cmd msg
 
-port stripeTokenReceived : (String -> msg) -> Sub msg
-
-
+port appendHelcimPayIframe : String -> Cmd msg
 
 -- SEO / Analytics
 

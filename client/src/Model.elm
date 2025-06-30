@@ -84,6 +84,7 @@ type alias Model =
     , currentUser : AuthStatus
     , zone : Time.Zone
     , key : Routing.Key
+    , helcimUrl : String
     }
 
 
@@ -95,8 +96,8 @@ type alias CartForms =
         }
 
 
-initial : Routing.Key -> Route -> Model
-initial key route =
+initial : Routing.Key -> Route -> String -> Model
+initial key route helcimUrl =
     { navigationData = RemoteData.Loading
     , route = route
     , pageData = PageData.initial
@@ -141,4 +142,5 @@ initial key route =
     , currentUser = User.unauthorized
     , zone = Time.utc
     , key = key
+    , helcimUrl = helcimUrl
     }

@@ -85,6 +85,7 @@ type alias Flags =
     { authUserId : Maybe Int
     , cartSessionToken : Maybe String
     , cartItemCount : Maybe Int
+    , helcimUrl : String
     }
 
 
@@ -102,7 +103,7 @@ init flags url key =
             Routing.authRequired route || (route == Checkout && flags.authUserId /= Nothing)
 
         ( model, cmd ) =
-            Model.initial key route
+            Model.initial key route flags.helcimUrl
                 |> (\m ->
                         { m
                             | maybeSessionToken = flags.cartSessionToken

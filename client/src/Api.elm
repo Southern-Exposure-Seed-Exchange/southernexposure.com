@@ -79,6 +79,8 @@ type Endpoint
     | CheckoutPlaceOrderAnonymous
     | CheckoutLogin
     | CheckoutSuccess
+    | CheckoutHelcimToken
+    | CheckoutHelcimTokenAnonymous
     | AdminCategoryList
     | AdminNewCategory
     | AdminEditCategoryData CategoryId
@@ -239,6 +241,12 @@ toUrl endpoint =
 
                 CheckoutSuccess ->
                     joinPath [ "checkout", "success" ]
+
+                CheckoutHelcimToken ->
+                    joinPath [ "checkout", "helcim-checkout-token" ]
+
+                CheckoutHelcimTokenAnonymous ->
+                    joinPath [ "checkout", "anonymous-helcim-checkout-token" ]
 
                 AdminCategoryList ->
                     joinPath [ "admin", "categories", "list" ]

@@ -255,8 +255,8 @@ updateDetailsForm key orderDetails msg model =
                         |> noCommand
 
 
-details : Zone -> Int -> DetailsForm -> AddressLocations -> PageData.AdminOrderDetails -> List (Html DetailsMsg)
-details zone orderId model locations orderDetails =
+details : Zone -> Int -> String -> DetailsForm -> AddressLocations -> PageData.AdminOrderDetails -> List (Html DetailsMsg)
+details zone orderId helcimUrl model locations orderDetails =
     [ div [] <| OrderDetails.view zone orderId locations orderDetails.details
     , div [ class "text-right" ]
         [ htmlOrBlank
@@ -269,6 +269,16 @@ details zone orderId model locations orderDetails =
                     [ text "View Stripe Charge" ]
             )
             orderDetails.stripeId
+        , htmlOrBlank
+            (\helcimTransactionId ->
+                a
+                    [ href <| helcimUrl ++ "/apollo/card-transactions/" ++ String.fromInt helcimTransactionId
+                    , target "_blank"
+                    , class "btn btn-sm btn-secondary"
+                    ]
+                    [ text "View Helcim Transaction" ]
+            )
+            orderDetails.helcimTransactionId
         , a
             (class "btn btn-sm btn-secondary ml-2"
                 :: target "_blank"
