@@ -79,7 +79,7 @@ type CheckoutAPI =
     :<|> "anonymous-place-order" :> AnonymousPlaceOrderRoute
     :<|> "login" :> LoginRoute
     :<|> "success" :> SuccessRoute
-    :<|> "checkout-token" :> CheckoutTokenRoute
+    :<|> "helcim-token" :> CheckoutTokenRoute
     :<|> "validate-payment" :> ValidateHelcimPaymentRoute
 
 type CheckoutRoutes =

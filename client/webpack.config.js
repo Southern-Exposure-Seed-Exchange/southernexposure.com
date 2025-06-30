@@ -138,6 +138,7 @@ module.exports = {
       ],
       scripts:
         [ 'https://checkout.stripe.com/checkout.js',
+          'https://secure.helcim.app/helcim-pay/services/start.js',
           { "src": 'https://www.googletagmanager.com/gtag/js?id=' + GA_MEASUREMENT_ID,
             "async": true
           }

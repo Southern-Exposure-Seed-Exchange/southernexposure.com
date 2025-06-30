@@ -191,7 +191,30 @@ app.ports.initializeOrDestroyHomepageCarousel.subscribe(function(isHomepage) {
   });
 });
 
+let helcimMessageListener = null;
 
+app.ports.appendHelcimPayIframe.subscribe(function(checkoutToken) {
+  window.appendHelcimPayIframe(checkoutToken);
+})
+
+app.ports.removeHelcimPayIframe.subscribe(function(checkoutToken) {
+  frame = document.getElementById('helcimPayIframe');
+  if (frame instanceof HTMLIFrameElement) {
+    frame.remove();
+    window.removeEventListener('message', helcimMessageListener);
+  }
+})
+
+app.ports.subscribeToHelcimEvents.subscribe(function() {
+  if (helcimMessageListener) {
+    window.removeEventListener('message', helcimMessageListener);
+  }
+  helcimMessageListener = function(event) {
+    app.ports.helcimMessageReceived.send(event.data);
+  }
+
+  window.addEventListener('message', helcimMessageListener);
+})
 /** UTILITIES **/
 
 /* Parse an Int or return null */
