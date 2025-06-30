@@ -5,48 +5,66 @@ name: CI Build
 
 # yamllint disable-line rule:truthy
 on:
-  # Run Daily
-  schedule:
-    - cron: '0 0 * * *'
-  # Run on Push
   push:
-  # Run on Tag Creation
-  create:
-  # Allow Running Manually
-  workflow_dispatch:
+    branches:
+      - master
+      - develop
+  pull_request:
+    branches:
+      - master
+      - develop
 
 jobs:
-  build:
-    name: Build
+  build-frontend:
+    name: Build Frontend
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
-      - name: Cache Stack Artifacts
-        uses: actions/cache@v2
-        with:
-          key: build-${{ github.ref }}-${{ github.sha }}
-          path: |
-            ~/.stack/
-            server/.stack-work/
-          restore-keys: |
-            build-${{ github.ref }}-
-            build-
+      - uses: actions/checkout@v4
+      # Needed to build the frontend
+      - run:
+          echo "CXXFLAGS=-std=c++17" >> $GITHUB_ENV
       - name: Setup Node
-        uses: actions/setup-node@v2
+        uses: actions/setup-node@v4
         with:
-          node-version: 13.x
+          node-version: 18.x
           cache: npm
           cache-dependency-path: client/package-lock.json
-      - name: Setup Stack
-        uses: haskell/actions/setup@v1
+      - name: Cache Client Dependencies
+        uses: actions/cache@v4
         with:
-          enable-stack: true
-          stack-no-global: true
+          path: client/node_modules
+          key: client-${{ github.ref }}-${{ github.sha }}
+
       - name: Install Client Dependencies
-        run: cd client && npm ci && cd ..
+        working-directory: client
+        run: npm ci
+      - name: Build Client Project
+        working-directory: client
+        run: npm run build
+
+  build-backend:
+    name: Build Backend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '8.10.7'
+          enable-stack: true
+          stack-version: 'latest'
+      # Avoid installing GHC via stack
+      - run: |
+          stack config set system-ghc true --global
+          stack config set install-ghc false --global
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.stack
+            server/.stack-work
+          key: server-${{ hashFiles('server/package.yaml', 'server/stack.yaml', 'server/stack.yaml.lock') }}
       - name: Install Server Dependencies
-        run: cd server && stack install --only-dependencies && cd ..
-      - name: Build Project
-        run: ./manage.hs build
-      - name: Verify Client Formatting
-        run: cd client && npx elm-format --validate src
+        working-directory: server
+        run: stack build --ghc-options="-Werror -O1" --only-dependencies
+      - name: Build Server Project
+        working-directory: server
+        run: stack build --ghc-options="-Werror -O1"
