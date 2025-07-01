@@ -1,3 +1,4 @@
+require("bootstrap");
 const { Elm } = require('./Main.elm');
 
 const authUserIdKey = 'authUserId';
