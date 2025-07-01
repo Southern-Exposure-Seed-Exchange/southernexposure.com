@@ -15,6 +15,7 @@ module Routes.Utils
     , makeImageFromBase64
       -- * Servant
     , XML
+    , getClientIP
       -- * General
     , extractRowCount
     , buildWhereQuery
@@ -38,10 +39,12 @@ import Database.Persist
     ( (=.), Entity(..), PersistEntityBackend, PersistEntity, Update, getBy
     )
 import Database.Persist.Sql (SqlBackend)
+import Network.Socket (SockAddr(..), hostAddressToTuple, hostAddress6ToTuple)
 import Servant (Accept(..), MimeRender(..), errBody, err500)
 import System.FilePath ((</>), takeFileName)
 import Text.HTML.SanitizeXSS (filterTags, safeTagName, sanitizeAttribute)
 import Text.HTML.TagSoup (Tag(TagOpen, TagClose))
+import Text.Printf (printf)
 
 import Cache (Caches(getSettingsCache))
 import Config (Config(..))
@@ -60,7 +63,6 @@ import qualified Data.UUID as UUID
 import qualified Data.UUID.V4 as UUID4
 import qualified Database.Esqueleto.Experimental as E
 import qualified Network.HTTP.Media as Media
-
 
 -- PRODUCTS
 
@@ -319,3 +321,25 @@ parseMaybeLocalTime =
             return Nothing
         val ->
             Just <$> parseLocalTime val
+
+-- | Get the Client's IP Address from the 'X-Forwarded-For', 'X-Real-IP'
+-- headers or the 'SockAddr' of the request.
+--
+-- IP address is required for Helcim payment API
+getClientIP :: SockAddr -> Maybe T.Text -> Maybe T.Text -> T.Text
+getClientIP sockAddr forwardedFor realIP = 
+  case forwardedFor of
+    Just xff -> T.takeWhile (/= ',') xff  -- Take first IP if comma-separated
+    Nothing -> case realIP of
+      Just ip -> ip
+      Nothing -> extractIPFromSockAddr sockAddr
+
+extractIPFromSockAddr :: SockAddr -> T.Text
+extractIPFromSockAddr (SockAddrInet _ hostAddr) =
+  let (a, b, c, d) = hostAddressToTuple hostAddr
+  in T.pack $ printf "%d.%d.%d.%d" a b c d
+extractIPFromSockAddr (SockAddrInet6 _ _ hostAddr6 _) =
+  let (a, b, c, d, e, f, g, h) = hostAddress6ToTuple hostAddr6
+  in T.pack $ printf "%x:%x:%x:%x:%x:%x:%x:%x" a b c d e f g h
+extractIPFromSockAddr _ = "unknown"
+

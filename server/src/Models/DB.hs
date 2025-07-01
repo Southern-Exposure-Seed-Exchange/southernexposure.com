@@ -25,6 +25,8 @@ import Models.Fields
 import Models.PersistJSON (JSONValue)
 
 import qualified Data.Text as T
+import qualified Helcim.API.Types.Payment as Helcim (TransactionId)
+import qualified Helcim.API.Types.Customer as Helcim (CustomerId)
 
 -- TODO sand-witch: mkDeleteCascade was deprecated
 share [mkPersist sqlSettings, mkDeleteCascade sqlSettings, mkMigrate "migrateAll"] [persistLowerCase|
@@ -198,6 +200,9 @@ Order
     stripeChargeId StripeChargeId Maybe
     stripeLastFour T.Text Maybe
     stripeIssuer T.Text Maybe
+    helcimTransactionId Helcim.TransactionId Maybe
+    helcimCardNumber T.Text Maybe
+    helcimCardType T.Text Maybe
     avalaraTransactionCode AvalaraTransactionCode Maybe
     createdAt UTCTime
     deriving Show
@@ -245,6 +250,11 @@ HelcimPaymentConfirmation
     checkoutToken T.Text
     secretToken T.Text
     UniqueCheckoutToken checkoutToken
+
+HelcimCustomer
+    customerId Helcim.CustomerId
+    addressId AddressId
+    UniqueHelcimCustomer customerId addressId
 
 Settings
     disableCheckout Bool

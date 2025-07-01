@@ -26,8 +26,9 @@ import Database.Persist
     ( (==.), (=.), Entity(..), Filter, SelectOpt(..), count, get, selectList
     , getEntity, getJustEntity, insert, update, OverflowNatural(..)
     )
+import Network.Socket (SockAddr(..))
 import Servant
-    ( (:<|>)(..), (:>), AuthProtect, QueryParam, Capture, ReqBody, Get, Post
+    ( (:<|>)(..), (:>), AuthProtect, QueryParam, Capture, Header, ReqBody, Get, RemoteHost, Post
     , JSON, err404
     )
 import Text.Read (readMaybe)
@@ -36,6 +37,10 @@ import Web.Stripe.Refund (Amount(..), createRefund)
 
 import Auth (WrappedAuthToken, Cookied, withAdminCookie, validateAdminAndParameters)
 import Avalara (RefundTransactionRequest(..))
+
+import Helcim (refund)
+import Helcim.API (HelcimError)
+import Helcim.API.Types.Payment (RefundRequest(..))
 import Models
     ( OrderId, Order(..), OrderProduct(..), OrderLineItem(..), Customer(customerEmail)
     , Address(..), EntityField(..), CustomerId
@@ -43,13 +48,13 @@ import Models
 import Models.Fields
     ( OrderStatus, Region, Cents(..), LineItemType(..), StripeChargeId(..)
     , AdminOrderComment(..), AvalaraTransactionCode(..), creditLineItemTypes
-    , formatCents
+    , formatCents, toDollars
     )
 import Routes.AvalaraUtils (renderAvalaraError)
 import Routes.CommonData
     ( OrderDetails(..), toCheckoutOrder, getCheckoutProducts, toAddressData
     )
-import Routes.Utils (extractRowCount, buildWhereQuery)
+import Routes.Utils (extractRowCount, buildWhereQuery, getClientIP)
 import Server (App, AppSQL, runDB, serverError, stripeRequest, avalaraRequest)
 import Validation (Validation(..))
 import Workers (Task(Avalara), AvalaraTask(RefundTransaction), enqueueTask)
@@ -71,7 +76,7 @@ type OrderRoutes =
          (WrappedAuthToken -> Maybe Int -> Maybe Int -> Maybe T.Text -> App (Cookied OrderListData))
     :<|> (WrappedAuthToken -> OrderId -> App (Cookied AdminOrderDetails))
     :<|> (WrappedAuthToken -> OrderCommentParameters -> App (Cookied OrderId))
-    :<|> (WrappedAuthToken -> OrderRefundParameters -> App (Cookied OrderId))
+    :<|> (SockAddr -> Maybe T.Text -> Maybe T.Text -> WrappedAuthToken -> OrderRefundParameters -> App (Cookied OrderId))
 
 orderRoutes :: OrderRoutes
 orderRoutes =
@@ -329,7 +334,10 @@ orderCommentRoute = validateAdminAndParameters $ \_ parameters -> do
 
 
 type OrderRefundRoute =
-       AuthProtect "cookie-auth"
+    RemoteHost
+    :> Header "X-Forwarded-For" T.Text
+    :> Header "X-Real-IP" T.Text
+    :> AuthProtect "cookie-auth"
     :> ReqBody '[JSON] OrderRefundParameters
     :> Post '[JSON] (Cookied OrderId)
 
@@ -366,8 +374,9 @@ instance Validation OrderRefundParameters where
 
 data OrderRefundError
     = OrderNotFound
-    | NoStripeCharge
+    | NoCharge
     | StripeRefundError StripeError
+    | HelcimRefundError HelcimError
     | AvalaraError Avalara.ErrorInfo
     deriving (Show)
 
@@ -381,7 +390,7 @@ handleOrderRefundErrors =
     handler = V.singleError . \case
         OrderNotFound ->
             "Could not find this order in the database."
-        NoStripeCharge ->
+        NoCharge ->
             "There is no charge available to refund."
         StripeRefundError stripeError -> T.intercalate ""
             [ "We encountered an error while trying to process the refund: "
@@ -389,22 +398,36 @@ handleOrderRefundErrors =
             , ":"
             , errorMsg stripeError
             ]
+        HelcimRefundError helcimError ->
+            T.intercalate ""
+                [ "We encountered an error while trying to process the refund: "
+                , T.pack $ show helcimError
+                ]
         AvalaraError errInfo ->
             renderAvalaraError errInfo
 
 
-orderRefundRoute :: WrappedAuthToken -> OrderRefundParameters -> App (Cookied OrderId)
-orderRefundRoute = validateAdminAndParameters $ \_ parameters -> do
+orderRefundRoute :: SockAddr -> Maybe T.Text -> Maybe T.Text -> WrappedAuthToken -> OrderRefundParameters -> App (Cookied OrderId)
+orderRefundRoute remoteHost forwardedFor realIP = validateAdminAndParameters $ \_ parameters -> do
     let orderId = orpId parameters
         refundAmount = orpAmount parameters
     mOrder <- runDB $ get orderId
-    handleOrderRefundErrors $ maybeM mOrder OrderNotFound $ \order ->
-        maybeM (orderStripeChargeId order) NoStripeCharge $ \chargeId -> do
-        refundResult <- stripeRequest $ createRefund (fromStripeChargeId chargeId)
-            -&- Amount (fromIntegral $ fromCents refundAmount)
+    handleOrderRefundErrors $ maybeM mOrder OrderNotFound $ \order -> do
+        refundResult <- case (orderStripeChargeId order, orderHelcimTransactionId order) of
+            (Just stripeChargeId, _) -> do
+                fmap (mapLeft StripeRefundError . void) $ stripeRequest $ createRefund (fromStripeChargeId stripeChargeId)
+                    -&- Amount (fromIntegral $ fromCents refundAmount)
+            (Nothing, Just helcimTransactionId) -> do
+                fmap (mapLeft HelcimRefundError . void) $ refund $ RefundRequest
+                    { rrOriginalTransactionId = helcimTransactionId
+                        , rrAmount = toDollars refundAmount
+                        , rrIpAddress = getClientIP remoteHost forwardedFor realIP
+                        , rrEcommerce = Nothing
+                        }
+            (Nothing, Nothing) -> do
+                pure $ Left NoCharge
         case refundResult of
-            Left stripeError ->
-                throwIO $ StripeRefundError stripeError
+            Left err -> throwIO err
             Right _ -> runDB $ do
                 addRefundLineItem orderId refundAmount
                 makeAvalaraRefund (Entity orderId order) refundAmount
@@ -482,6 +505,11 @@ orderRefundRoute = validateAdminAndParameters $ \_ parameters -> do
     makeScientific :: Rational -> Scientific
     makeScientific num =
         (* 100) $ either fst fst $ fromRationalRepetend (Just 4) num
+
+    mapLeft :: (a -> c) -> Either a b -> Either c b
+    mapLeft f = \case
+        Left x -> Left (f x)
+        Right y -> Right y
 
 
 
