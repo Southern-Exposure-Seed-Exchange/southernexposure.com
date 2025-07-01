@@ -9,9 +9,10 @@ import Control.Concurrent.STM (newTVarIO, writeTVar, atomically)
 import Control.Exception (Exception(..), SomeException)
 import Control.Immortal.Queue (processImmortalQueue, closeImmortalQueue)
 import Control.Monad (when, forever, void, forM_)
-import Control.Monad.IO.Class (MonadIO)
+import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Monad.Logger (MonadLoggerIO, runNoLoggingT, runStderrLoggingT)
 import Data.Aeson (Result(..), fromJSON)
+import Data.ByteString.Char8 (pack)
 import Data.Maybe (fromMaybe, mapMaybe)
 import Data.Pool (destroyAllResources)
 import Data.Text.Encoding (decodeUtf8)
@@ -123,8 +124,9 @@ main = do
     log "PostgreSQL pool closed."
     log "Shutdown completed successfully."
     cleanupLoggers
-    where lookupSetting env def =
-            maybe def read <$> lookupEnv env
+    where lookupSetting env def = lookupSettingWith env def read
+          lookupSettingWith :: String -> a -> (String -> a) -> IO a
+          lookupSettingWith env def builder = maybe def builder <$> lookupEnv env
           requireSetting :: String -> IO String
           requireSetting env =
             lookupEnv env
@@ -138,7 +140,23 @@ main = do
                     runStderrLoggingT $ makeSqlPool env
           makeSqlPool :: (MonadIO m, MonadLoggerIO m, MonadUnliftIO m) => Environment -> m ConnectionPool
           makeSqlPool env = do
-                pool <- createPostgresqlPool "dbname=sese-website" $ poolSize env
+                mbDbConnectionString <- liftIO $ lookupEnv "DB_CONNECTION_STRING"
+                connStr <- case mbDbConnectionString of
+                    Just connStr -> return $ pack connStr
+                    Nothing -> do
+                        dbHost <- liftIO $ lookupSettingWith "DB_HOST" "127.0.0.1" pack
+                        dbPort <- liftIO $ lookupSettingWith "DB_PORT" "5432" pack
+                        dbUser <- liftIO $ lookupSettingWith "DB_USER" "sese-website" pack
+                        mbDbPass <- liftIO $ lookupSettingWith "DB_PASS" Nothing (Just . pack)
+                        dbName <- liftIO $ lookupSettingWith "DB_NAME" "sese-website" pack
+                        let connStr = "host=" <> dbHost
+                                <> " port=" <> dbPort
+                                <> " user=" <> dbUser
+                                <> maybe "" (" password=" <>) mbDbPass
+                                <> " dbname=" <> dbName
+                        return connStr
+
+                pool <- createPostgresqlPool connStr $ poolSize env
                 runSqlPool (runMigration migrateAll) pool
                 return pool
           poolSize env =
