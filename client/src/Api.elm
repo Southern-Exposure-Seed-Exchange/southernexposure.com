@@ -233,7 +233,7 @@ toUrl endpoint =
                     joinPath [ "checkout", "success" ]
 
                 CheckoutHelcimToken ->
-                    joinPath [ "checkout", "token" ]
+                    joinPath [ "checkout", "helcim-checkout-token" ]
 
                 AdminCategoryList ->
                     joinPath [ "admin", "categories", "list" ]

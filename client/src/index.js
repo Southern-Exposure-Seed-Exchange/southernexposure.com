@@ -197,7 +197,7 @@ app.ports.appendHelcimPayIframe.subscribe(function(checkoutToken) {
   window.appendHelcimPayIframe(checkoutToken);
 })
 
-app.ports.removeHelcimPayIframe.subscribe(function(checkoutToken) {
+app.ports.removeHelcimPayIframe.subscribe(function() {
   frame = document.getElementById('helcimPayIframe');
   if (frame instanceof HTMLIFrameElement) {
     frame.remove();
@@ -205,7 +205,7 @@ app.ports.removeHelcimPayIframe.subscribe(function(checkoutToken) {
   }
 })
 
-app.ports.subscribeToHelcimEvents.subscribe(function() {
+app.ports.subscribeToHelcimMessages.subscribe(function() {
   if (helcimMessageListener) {
     window.removeEventListener('message', helcimMessageListener);
   }

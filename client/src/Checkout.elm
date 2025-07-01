@@ -183,11 +183,12 @@ type alias CheckoutResponse =
     , authStatus : AuthStatus
     }
 
-type alias HelcimEvent = 
+type alias HelcimEvent =
     { eventName : String
     , eventStatus : String
     , eventMessage : Result String HelcimEventMessage
     }
+
 
 helcimEventDecoder : Decode.Decoder HelcimEvent
 helcimEventDecoder =
@@ -206,7 +207,7 @@ helcimEventDecoder =
                 )
         )
 
-type alias HelcimEventMessage = 
+type alias HelcimEventMessage =
     { status : Int
     , data : HelcimEventData
     }
@@ -237,10 +238,10 @@ encodeHelcimEventData checkoutToken helcimEventData =
         ]
 
 type alias HelcimEventDataInternal =
-    { amount : Int
+    { amount : String
     , approvalCode : String
     , avsResponse : String
-    , cardBatchId : Int
+    , cardBatchId : String
     , cardHolderName : String
     , cardNumber : String
     , cardToken : String
@@ -249,42 +250,40 @@ type alias HelcimEventDataInternal =
     , dateCreated : String
     , invoiceNumber : String
     , status : String
-    , transactionId : Int
+    , transactionId : String
     , transactionType : String
-    , warning : String
     }
 
 helcimEventDataInternalDecoder : Decode.Decoder HelcimEventDataInternal
 helcimEventDataInternalDecoder =
     Decode.map8 HelcimEventDataInternal
-        (Decode.field "amount" Decode.int)
+        (Decode.field "amount" Decode.string)
         (Decode.field "approvalCode" Decode.string)
         (Decode.field "avsResponse" Decode.string)
-        (Decode.field "cardBatchId" Decode.int)
+        (Decode.field "cardBatchId" Decode.string)
         (Decode.field "cardHolderName" Decode.string)
         (Decode.field "cardNumber" Decode.string)
         (Decode.field "cardToken" Decode.string)
         (Decode.field "currency" Decode.string)
         |> Decode.andThen (\partialEventData ->
-            Decode.map7 (\customerCode dateCreated invoiceNumber status transactionId transactionType ->
+            Decode.map6 (\customerCode dateCreated invoiceNumber status transactionId transactionType ->
                 partialEventData customerCode dateCreated invoiceNumber status transactionId transactionType
             )
             (Decode.field "customerCode" Decode.string)
             (Decode.field "dateCreated" Decode.string)
             (Decode.field "invoiceNumber" Decode.string)
             (Decode.field "status" Decode.string)
-            (Decode.field "transactionId" Decode.int)
+            (Decode.field "transactionId" Decode.string)
             (Decode.field "type" Decode.string)
-            (Decode.field "warning" Decode.string)
         )
 
 encodeHelcimEventDataInternal : HelcimEventDataInternal -> Value
 encodeHelcimEventDataInternal helcimEventDataInternal =
     Encode.object
-        [ ( "amount", Encode.int helcimEventDataInternal.amount )
+        [ ( "amount", Encode.string helcimEventDataInternal.amount )
         , ( "approvalCode", Encode.string helcimEventDataInternal.approvalCode )
         , ( "avsResponse", Encode.string helcimEventDataInternal.avsResponse )
-        , ( "cardBatchId", Encode.int helcimEventDataInternal.cardBatchId )
+        , ( "cardBatchId", Encode.string helcimEventDataInternal.cardBatchId )
         , ( "cardHolderName", Encode.string helcimEventDataInternal.cardHolderName )
         , ( "cardNumber", Encode.string helcimEventDataInternal.cardNumber )
         , ( "cardToken", Encode.string helcimEventDataInternal.cardToken )
@@ -293,9 +292,8 @@ encodeHelcimEventDataInternal helcimEventDataInternal =
         , ( "dateCreated", Encode.string helcimEventDataInternal.dateCreated )
         , ( "invoiceNumber", Encode.string helcimEventDataInternal.invoiceNumber )
         , ( "status", Encode.string helcimEventDataInternal.status )
-        , ( "transactionId", Encode.int helcimEventDataInternal.transactionId )
+        , ( "transactionId", Encode.string helcimEventDataInternal.transactionId )
         , ( "type", Encode.string helcimEventDataInternal.transactionType )
-        , ( "warning", Encode.string helcimEventDataInternal.warning )
         ]
 
 
@@ -647,41 +645,40 @@ update msg model authStatus maybeSessionToken checkoutDetails =
             ( { model | checkoutToken = Just token.checkoutToken }, Nothing
             , Cmd.batch [ Ports.appendHelcimPayIframe token.checkoutToken, Ports.subscribeToHelcimMessages () ]
             )
-        
+
         HelcimCheckoutTokenReceived (RemoteData.Success (Err errors)) ->
             { model | errors = errors } |> nothingAndNoCommand
 
         HelcimCheckoutTokenReceived (RemoteData.Failure error) ->
             { model | errors = Api.apiFailureToError error, isProcessing = False } |> nothingAndNoCommand
-        
+
         HelcimCheckoutTokenReceived _ ->
             model |> nothingAndNoCommand
 
         HelcimEventReceived event -> case Decode.decodeValue helcimEventDecoder event of
             Err _ ->
-                { model | errors = Api.addError "" "Invalid HelcimPay.js response." model.errors }
-                    |> nothingAndNoCommand
+                { model | errors = Api.addError "" ("Invalid HelcimPay.js response." ++ (Encode.encode 2 event)) model.errors } |> nothingAndNoCommand
 
             Ok helcimEvent ->
                 if helcimEvent.eventName == "helcim-pay-js-" ++ (model.checkoutToken |> Maybe.withDefault "") then
                     if helcimEvent.eventStatus == "ABORTED" || helcimEvent.eventStatus == "HIDE" then
-                        ( model
+                        ( { model | checkoutToken = Nothing }
                         , Nothing
-                        , Ports.removeHelcimIframe ()
+                        , Ports.removeHelcimPayIframe ()
                         )
                     else case helcimEvent.eventMessage of
                         Err errors -> { model | errors = Api.addError "" errors model.errors } |> nothingAndNoCommand
                         Ok eventMessage ->
                             if eventMessage.data.data.status == "APPROVED" then
-                                ( model, Nothing, Cmd.batch
+                                ( { model | checkoutToken = Nothing }, Nothing, Cmd.batch
                                     [ placeOrder model authStatus Nothing (Just eventMessage.data) checkoutDetails
-                                    , Ports.removeHelcimIframe ()
+                                    , Ports.removeHelcimPayIframe ()
                                     ]
                                 )
                             else
-                                ( { model | errors = Api.addError "" "Helcim purchase was declined." model.errors }
+                                ( { model | checkoutToken = Nothing, errors = Api.addError "" "Helcim purchase was declined." model.errors }
                                 , Nothing
-                                , Ports.removeHelcimIframe ()
+                                , Ports.removeHelcimPayIframe ()
                                 )
                 else
                     model |> nothingAndNoCommand

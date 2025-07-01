@@ -13,7 +13,7 @@ port module Ports exposing
     , newCartSessionToken
     , removeAuthDetails
     , removeCartSessionToken
-    , removeHelcimIframe
+    , removeHelcimPayIframe
     , scrollToErrorMessage
     , scrollToID
     , scrollToName
@@ -114,7 +114,7 @@ port subscribeToHelcimMessages : () -> Cmd msg
 
 port helcimMessageReceived : (Value -> msg) -> Sub msg
 
-port removeHelcimIframe : () -> Cmd msg
+port removeHelcimPayIframe : () -> Cmd msg
 
 port appendHelcimPayIframe : String -> Cmd msg
 
