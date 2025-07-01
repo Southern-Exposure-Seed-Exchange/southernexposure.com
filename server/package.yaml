@@ -116,6 +116,7 @@ library:
         - Avalara
         - Cache
         - Config
+        - Helcim.API
         - Images
         - Models
         - Models.Fields

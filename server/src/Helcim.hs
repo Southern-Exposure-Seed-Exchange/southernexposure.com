@@ -44,9 +44,9 @@ createVerifyCheckout = do
             , ccrDisplayContactFields = Nothing
             , ccrCustomStyling = Just $ CustomStyling
                 { csAppearance = Just "light"
-                , csBrandColor = Just "#158312"
+                , csBrandColor = Just "158312"
                 , csCornerRadius = Just "rounded"
-                , csCtaButtonText = Nothing
+                , csCtaButtonText = Just "pay"
                 }
             , ccrCustomerRequest = Nothing
             , ccrInvoiceRequest = Nothing

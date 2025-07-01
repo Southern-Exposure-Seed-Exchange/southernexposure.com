@@ -87,7 +87,7 @@ type CheckoutRoutes =
     :<|> (SockAddr -> Maybe T.Text -> Maybe T.Text -> AnonymousPlaceOrderParameters -> App (Cookied AnonymousPlaceOrderData))
     :<|> (CheckoutLoginParameters -> App (Cookied LoginData))
     :<|> (WrappedAuthToken -> SuccessParameters -> App (Cookied OrderDetails))
-    :<|> (() -> App CheckoutToken)
+    :<|> App CheckoutTokenData
 
 checkoutRoutes :: CheckoutRoutes
 checkoutRoutes =
@@ -1375,11 +1375,17 @@ getOrderAndAddress customerId orderId =
 
 -- CHECKOUT TOKEN
 
-type CheckoutTokenRoute =
-    ReqBody '[JSON] () :> Post '[JSON] CheckoutToken
+newtype CheckoutTokenData = CheckoutTokenData
+    { ctdToken :: CheckoutToken }
 
-getCheckoutTokenRoute :: () -> App CheckoutToken
-getCheckoutTokenRoute () = do
+instance ToJSON CheckoutTokenData where
+    toJSON (CheckoutTokenData token) =
+        object ["token" .= token]
+
+type CheckoutTokenRoute = Post '[JSON] CheckoutTokenData
+
+getCheckoutTokenRoute :: App CheckoutTokenData
+getCheckoutTokenRoute = do
     createVerifyCheckout >>= \case
         Left e -> throwIO $ HelcimError e
         Right CheckoutCreateResponse {..} -> do
@@ -1389,7 +1395,7 @@ getCheckoutTokenRoute () = do
                         , helcimPaymentConfirmationSecretToken = unSecretToken ccrSecretToken
                         }
                 insert_ helcimPaymentConfirmation
-            return ccrCheckoutToken
+            return CheckoutTokenData { ctdToken = ccrCheckoutToken }
 
 -- VALIDATE PAYMENT
 

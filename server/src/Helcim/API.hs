@@ -20,6 +20,7 @@ newtype ApiToken = ApiToken { unAuthToken :: Text }
     deriving (Show, Eq)
     deriving newtype ToHttpApiData
 
+-- https://api.helcim.com/v2
 baseUrl :: BaseUrl
 baseUrl = BaseUrl Https "api.helcim.com" 443 "/v2"
 
@@ -32,7 +33,7 @@ type AuthHeader = Header "api-token" ApiToken
 type IdempotencyKeyHeader = Header "idempotency-key" IdempotencyKey
 
 type HeclimPayAPI =
-    "helcim-pay" :> "checkout"
+    "helcim-pay" :> "initialize"
         :> AuthHeader
         :> ReqBody '[JSON] InitializeRequest
         :> Post '[JSON] CheckoutCreateResponse
