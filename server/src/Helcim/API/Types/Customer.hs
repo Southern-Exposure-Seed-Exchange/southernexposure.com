@@ -1,9 +1,11 @@
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE StrictData #-}
 {-# LANGUAGE TemplateHaskell #-}
 module Helcim.API.Types.Customer where
 
-import Data.Aeson (FromJSON, ToJSON)
+import Data.Aeson (FromJSON(..), ToJSON, withObject, (.:), (.:?), Value(..))
 import Data.Aeson.TH (deriveToJSON, deriveFromJSON)
 import Data.Text (Text)
 import GHC.Generics (Generic)
@@ -52,6 +54,27 @@ data CustomerResponse = CustomerResponse
     }
     deriving (Show, Generic)
 
+-- When address (either billing or shipping) is not specified, Helcim returns an empty string.
+-- Despite the fact that the API documentation says it has 'object' type.
+-- Hence we need custom FromJSON instance to handle this case.
+instance FromJSON CustomerResponse where
+    parseJSON = withObject "CustomerResponse" $ \o -> do
+        creId              <- o .: "id"
+        creCustomerCode    <- o .: "customerCode"
+        creContactName     <- o .:? "contactName"
+        creBusinessName    <- o .:? "businessName"
+        creCellPhone       <- o .:? "cellPhone"
+
+        billingAddress  <- o .: "billingAddress"
+        creBillingAddress <- case billingAddress of
+            String "" -> pure Nothing
+            v -> Just <$> parseJSON v
+        shippingAddress <- o .: "shippingAddress"
+        creShippingAddress <- case shippingAddress of
+            String "" -> pure Nothing
+            v -> Just <$> parseJSON v
+        creCards           <- o .: "cards"
+        return CustomerResponse {..}
+
 deriveToJSON helcimAesonOptions ''CreateCustomerRequest
 deriveFromJSON helcimAesonOptions ''CustomerCard
-deriveFromJSON helcimAesonOptions ''CustomerResponse
