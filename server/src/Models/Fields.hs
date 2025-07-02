@@ -298,6 +298,33 @@ regionName = \case
     CustomRegion region ->
         region
 
+regionCode :: Region -> T.Text
+regionCode = \case
+    USState code ->
+        StateCodes.toText code
+    USArmedForces code -> case code of
+        AA -> "AA"
+        AE -> "AE"
+        AP -> "AP"
+    -- Helcim needs a 2-letter code for provinces, while
+    -- CACodes sadly don't have a `toText` function, so we
+    -- have to manually map them.
+    CAProvince code -> case code of
+        CACodes.AB -> "AB"
+        CACodes.BC -> "BC"
+        CACodes.MB -> "MB"
+        CACodes.NB -> "NB"
+        CACodes.NL -> "NL"
+        CACodes.NS -> "NS"
+        CACodes.NT -> "NT"
+        CACodes.NU -> "NU"
+        CACodes.ON -> "ON"
+        CACodes.PE -> "PE"
+        CACodes.QC -> "QC"
+        CACodes.SK -> "SK"
+        CACodes.YT -> "YT"
+    CustomRegion region ->
+        T.toUpper region
 
 newtype Country =
     Country { fromCountry :: CountryCode }
@@ -491,6 +518,10 @@ data OrderStatus
     | Processing
     | Refunded
     | Delivered
+    | PaymentProcessing
+    -- Order was created, but the payment has not been processed yet.
+    -- Unlike OrderReceived, which is used for "free" orders, this
+    -- indicates that the order is waiting for payment to be processed.
     deriving (Show, Read, Generic)
 
 instance ToJSON OrderStatus

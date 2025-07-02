@@ -2,7 +2,8 @@
 module Helcim where
 
 import Control.Monad.IO.Class (liftIO)
-import Control.Monad.Reader (asks)
+import Control.Monad.Reader (asks, lift)
+import qualified Data.Text as T
 import Data.UUID.V4 (nextRandom)
 
 import Helcim.API as API
@@ -20,17 +21,18 @@ import Helcim.API.Types.Customer
 import Helcim.API.Types.Common
 
 import Config (Config(..))
-import Server (App)
+import Server (App, AppSQL)
 import Helcim.API.Types.Payment (PurchaseRequest, PaymentResponse, RefundRequest)
+import Models.Fields (Cents, toDollars)
 
-createVerifyCheckout :: App (Either HelcimError CheckoutCreateResponse)
-createVerifyCheckout = do
-    authToken <- asks getHelcimAuthKey
+createPurchaseCheckout :: Cents -> CustomerCode -> Int -> AppSQL (Either HelcimError CheckoutCreateResponse)
+createPurchaseCheckout amount customerCode orderId = do
+    authToken <- lift $ asks getHelcimAuthKey
     let request = InitializeRequest
-            { ccrPaymentType = Verify
-            , ccrAmount = 0
+            { ccrPaymentType = Purchase
+            , ccrAmount = toDollars amount
             , ccrCurrency = "USD"
-            , Checkout.ccrCustomerCode = Nothing
+            , Checkout.ccrCustomerCode = Just customerCode
             , ccrInvoiceNumber = Nothing
             , ccrPaymentMethod = Nothing
             , ccrAllowPartial = Nothing
@@ -49,7 +51,24 @@ createVerifyCheckout = do
                 , csCtaButtonText = Just "pay"
                 }
             , ccrCustomerRequest = Nothing
-            , ccrInvoiceRequest = Nothing
+            , ccrInvoiceRequest = Just Invoice
+                { iInvoiceNumber = Just (T.pack $ show orderId)
+                , iNotes = Nothing
+                , iTipAmount = Nothing
+                , iTax = Nothing
+                , iDiscount = Nothing
+                , iLineItems =
+                    [ LineItem
+                        { liSku = Nothing
+                        , liDescription = Just "Order #" <> Just (T.pack $ show orderId)
+                        , liQuantity = 1
+                        , liPrice = toDollars amount
+                        , liTotal = toDollars amount
+                        , liDiscountAmount = Nothing
+                        , liTaxAmount = Nothing
+                        }
+                    ]
+                }
             }
         clientAction = API.createCheckout (Just authToken) request
     liftIO $ runHelcimClient clientAction

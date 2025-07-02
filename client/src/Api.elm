@@ -77,7 +77,7 @@ type Endpoint
     | CheckoutPlaceOrderAnonymous
     | CheckoutLogin
     | CheckoutSuccess
-    | CheckoutHelcimToken
+    | CheckoutValidateHelcimPayment
     | AdminCategoryList
     | AdminNewCategory
     | AdminEditCategoryData CategoryId
@@ -232,8 +232,8 @@ toUrl endpoint =
                 CheckoutSuccess ->
                     joinPath [ "checkout", "success" ]
 
-                CheckoutHelcimToken ->
-                    joinPath [ "checkout", "helcim-checkout-token" ]
+                CheckoutValidateHelcimPayment ->
+                    joinPath [ "checkout", "validate-payment" ]
 
                 AdminCategoryList ->
                     joinPath [ "admin", "categories", "list" ]

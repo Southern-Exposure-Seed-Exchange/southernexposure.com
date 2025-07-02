@@ -126,6 +126,7 @@ Cart
     customerId CustomerId Maybe
     sessionToken T.Text Maybe
     expirationTime UTCTime Maybe
+    orderId OrderId Maybe
     UniqueCustomerCart customerId !force
     UniqueAnonymousCart sessionToken !force
 

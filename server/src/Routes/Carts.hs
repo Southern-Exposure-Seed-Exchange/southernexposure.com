@@ -538,6 +538,7 @@ getOrCreateCustomerCart customerId = runDB $ do
                         { cartCustomerId = Just customerId
                         , cartSessionToken = Nothing
                         , cartExpirationTime = Nothing
+                        , cartOrderId = Nothing
                         }
             in
             insert cart >>= \cartId -> return (Entity cartId cart)
@@ -565,6 +566,7 @@ getOrCreateAnonymousCart maybeToken =
                     { cartCustomerId = Nothing
                     , cartSessionToken = Just token
                     , cartExpirationTime = Just expiration
+                    , cartOrderId = Nothing
                     }
                 return (token, cart)
           getExpirationTime =

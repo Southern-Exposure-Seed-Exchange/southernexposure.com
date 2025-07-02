@@ -574,6 +574,7 @@ type OrderStatus
     | PaymentFailed
     | Refunded
     | Shipped
+    | PaymentProcessing
 
 
 orderStatusDecoder : Decoder OrderStatus
@@ -598,6 +599,9 @@ orderStatusDecoder =
 
                 "Delivered" ->
                     Decode.succeed Shipped
+
+                "PaymentProcessing" ->
+                    Decode.succeed PaymentProcessing
 
                 _ ->
                     Decode.fail <| "Invalid OrderStatus: " ++ str
@@ -624,6 +628,8 @@ statusText status =
         Shipped ->
             "Shipped"
 
+        PaymentProcessing ->
+            "Payment Processing"
 
 type alias OrderLineItem =
     { itemType : LineItemType

@@ -165,34 +165,55 @@ type Msg
     | Submit
     | SubmitResponse (WebData (Result Api.FormErrors CheckoutResponse))
     | RefreshDetails (WebData (Result Api.FormErrors PageData.CheckoutDetails))
-    | HelcimCheckoutTokenReceived (WebData (Result Api.FormErrors HelcimCheckoutTokenResponse))
     | HelcimEventReceived Decode.Value
-
-type alias HelcimCheckoutTokenResponse =
-    { checkoutToken : String }
-
-helcimCheckoutTokenResponseDecoder : Decode.Decoder HelcimCheckoutTokenResponse
-helcimCheckoutTokenResponseDecoder =
-    Decode.map HelcimCheckoutTokenResponse
-        (Decode.field "token" Decode.string)
+    | PaymentValidated (WebData (Result Api.FormErrors PaymentValidatedResponse))
 
 type alias CheckoutResponse =
     { orderId : Int
     , orderLines : List PageData.OrderLineItem
     , orderProducts : List PageData.OrderProduct
+    , maybeCheckoutToken : Maybe String
     , authStatus : AuthStatus
     }
+anonymousResponseDecoder : Decode.Decoder CheckoutResponse
+anonymousResponseDecoder =
+    Decode.map5 CheckoutResponse
+        (Decode.field "orderId" Decode.int)
+        (Decode.field "lines" <| Decode.list PageData.lineItemDecoder)
+        (Decode.field "products" <| Decode.list PageData.orderProductDecoder)
+        (Decode.field "checkoutToken" (Decode.maybe Decode.string))
+        (Decode.field "authData" User.decoder)
 
-type alias HelcimEvent =
+
+customerResponseDecoder : AuthStatus -> Decode.Decoder CheckoutResponse
+customerResponseDecoder authStatus =
+    Decode.map5 CheckoutResponse
+        (Decode.field "orderId" Decode.int)
+        (Decode.field "lines" <| Decode.list PageData.lineItemDecoder)
+        (Decode.field "products" <| Decode.list PageData.orderProductDecoder)
+        (Decode.field "checkoutToken" (Decode.maybe Decode.string))
+        (Decode.succeed authStatus)
+
+type alias HelcimPayInitEvent =
+    { eventName : String
+    , eventStatus : Bool
+    }
+
+helcimPayInitEventDecoder : Decode.Decoder HelcimPayInitEvent
+helcimPayInitEventDecoder =
+    Decode.map2 HelcimPayInitEvent
+        (Decode.field "eventName" Decode.string)
+        (Decode.field "eventStatus" Decode.bool)
+
+type alias HelcimPayCheckoutEvent =
     { eventName : String
     , eventStatus : String
     , eventMessage : Result String HelcimEventMessage
     }
 
-
-helcimEventDecoder : Decode.Decoder HelcimEvent
-helcimEventDecoder =
-    Decode.map3 HelcimEvent
+helcimPayCheckoutEventDecoder : Decode.Decoder HelcimPayCheckoutEvent
+helcimPayCheckoutEventDecoder =
+    Decode.map3 HelcimPayCheckoutEvent
         (Decode.field "eventName" Decode.string)
         (Decode.field "eventStatus" Decode.string)
         (Decode.field "eventMessage" Decode.string
@@ -206,7 +227,6 @@ helcimEventDecoder =
                             Decode.succeed (Err (Decode.errorToString error))
                 )
         )
-
 type alias HelcimEventMessage =
     { status : Int
     , data : HelcimEventData
@@ -296,23 +316,16 @@ encodeHelcimEventDataInternal helcimEventDataInternal =
         , ( "type", Encode.string helcimEventDataInternal.transactionType )
         ]
 
+type HelcimPayEvent
+    = HelcimPayInit HelcimPayInitEvent
+    | HelcimPayCheckout HelcimPayCheckoutEvent
 
-anonymousResponseDecoder : Decode.Decoder CheckoutResponse
-anonymousResponseDecoder =
-    Decode.map4 CheckoutResponse
-        (Decode.field "orderId" Decode.int)
-        (Decode.field "lines" <| Decode.list PageData.lineItemDecoder)
-        (Decode.field "products" <| Decode.list PageData.orderProductDecoder)
-        (Decode.field "authData" User.decoder)
-
-
-customerResponseDecoder : AuthStatus -> Decode.Decoder CheckoutResponse
-customerResponseDecoder authStatus =
-    Decode.map4 CheckoutResponse
-        (Decode.field "orderId" Decode.int)
-        (Decode.field "lines" <| Decode.list PageData.lineItemDecoder)
-        (Decode.field "products" <| Decode.list PageData.orderProductDecoder)
-        (Decode.succeed authStatus)
+helcimPayEventDecoder : Decode.Decoder HelcimPayEvent
+helcimPayEventDecoder =
+    Decode.oneOf
+        [ Decode.map HelcimPayInit helcimPayInitEventDecoder
+        , Decode.map HelcimPayCheckout helcimPayCheckoutEventDecoder
+        ]
 
 
 type OutMsg
@@ -441,7 +454,7 @@ update msg model authStatus maybeSessionToken checkoutDetails =
 
                         cmd =
                             if freeCheckout && followWithSubmission then
-                                placeOrder model resp.authStatus maybeSessionToken Nothing checkoutDetails_
+                                placeOrder model resp.authStatus maybeSessionToken checkoutDetails_
 
                             else if followWithSubmission then
                                 Ports.collectStripeToken ( customerEmail, finalTotal )
@@ -511,37 +524,40 @@ update msg model authStatus maybeSessionToken checkoutDetails =
                             , logIn True model maybeSessionToken
                             )
 
-                        else if freeCheckout then
-                            ( { model | isProcessing = True }
-                            , Nothing
-                            , placeOrder model authStatus maybeSessionToken Nothing checkoutDetails
-                            )
-
                         else
-                            ( model, Nothing, getHelcimCheckoutToken )
-
+                            ( model
+                            , Nothing
+                            , placeOrder model authStatus maybeSessionToken checkoutDetails
+                            )
                 _ ->
                     ( model, Nothing, Cmd.none )
 
         SubmitResponse (RemoteData.Success (Ok response)) ->
-            let
-                orderId =
-                    response.orderId
+            case response.maybeCheckoutToken of
+                Nothing ->
+                    let
+                        orderId =
+                            response.orderId
 
-                newAuthStatus =
-                    response.authStatus
+                        newAuthStatus =
+                            response.authStatus
 
-                outMsg =
-                    if authStatus == User.Anonymous && newAuthStatus /= authStatus then
-                        AnonymousOrderCompleted orderId newAuthStatus
+                        outMsg =
+                            if authStatus == User.Anonymous && newAuthStatus /= authStatus then
+                                AnonymousOrderCompleted orderId newAuthStatus
 
-                    else
-                        CustomerOrderCompleted orderId
+                            else
+                                CustomerOrderCompleted orderId
 
-                analyticsData =
-                    encodeAnalyticsPurchase orderId response.orderLines response.orderProducts
-            in
-            ( initial, Just outMsg, Ports.logPurchase analyticsData )
+                        analyticsData =
+                            encodeAnalyticsPurchase orderId response.orderLines response.orderProducts
+                    in
+                    ( initial, Just outMsg, Ports.logPurchase analyticsData )
+                Just checkoutToken ->
+                    ( { model | checkoutToken = Just checkoutToken, isProcessing = False }
+                    , Nothing
+                    , Cmd.batch [Ports.appendHelcimPayIframe checkoutToken, Ports.subscribeToHelcimMessages ()]
+                    )
 
         SubmitResponse (RemoteData.Success (Err errors)) ->
             let
@@ -641,40 +657,36 @@ update msg model authStatus maybeSessionToken checkoutDetails =
         RefreshDetails _ ->
             model |> nothingAndNoCommand
 
-        HelcimCheckoutTokenReceived (RemoteData.Success (Ok token)) ->
-            ( { model | checkoutToken = Just token.checkoutToken }, Nothing
-            , Cmd.batch [ Ports.appendHelcimPayIframe token.checkoutToken, Ports.subscribeToHelcimMessages () ]
-            )
-
-        HelcimCheckoutTokenReceived (RemoteData.Success (Err errors)) ->
-            { model | errors = errors } |> nothingAndNoCommand
-
-        HelcimCheckoutTokenReceived (RemoteData.Failure error) ->
-            { model | errors = Api.apiFailureToError error, isProcessing = False } |> nothingAndNoCommand
-
-        HelcimCheckoutTokenReceived _ ->
-            model |> nothingAndNoCommand
-
-        HelcimEventReceived event -> case Decode.decodeValue helcimEventDecoder event of
+        HelcimEventReceived event -> case Decode.decodeValue helcimPayEventDecoder event of
             Err _ ->
-                { model | errors = Api.addError "" ("Invalid HelcimPay.js response." ++ (Encode.encode 2 event)) model.errors } |> nothingAndNoCommand
+                { model | errors = Api.addError "" ("Unexpected HelcimPay.js response." ++ (Encode.encode 2 event)) model.errors } |> nothingAndNoCommand
 
-            Ok helcimEvent ->
-                if helcimEvent.eventName == "helcim-pay-js-" ++ (model.checkoutToken |> Maybe.withDefault "") then
-                    if helcimEvent.eventStatus == "ABORTED" || helcimEvent.eventStatus == "HIDE" then
+            Ok (HelcimPayInit _) -> model |> nothingAndNoCommand
+
+            Ok (HelcimPayCheckout checkoutEvent) ->
+                if checkoutEvent.eventName == "helcim-pay-js-" ++ (model.checkoutToken |> Maybe.withDefault "") then
+                    if checkoutEvent.eventStatus == "HIDE" then
                         ( { model | checkoutToken = Nothing }
                         , Nothing
                         , Ports.removeHelcimPayIframe ()
                         )
-                    else case helcimEvent.eventMessage of
+                    else if checkoutEvent.eventStatus == "ABORTED" then
+                        case checkoutEvent.eventMessage of
+                            Err errors ->
+                                ( { model | checkoutToken = Nothing, errors = Api.addError "" (Encode.encode 2 event) model.errors }
+                                , Nothing
+                                , Ports.removeHelcimPayIframe ()
+                                )
+                            Ok eventMessage ->
+                                ( { model | checkoutToken = Nothing, errors = Api.addError "" (Encode.encode 2 event) model.errors }
+                                , Nothing
+                                , Ports.removeHelcimPayIframe ()
+                                )
+                    else case checkoutEvent.eventMessage of
                         Err errors -> { model | errors = Api.addError "" errors model.errors } |> nothingAndNoCommand
                         Ok eventMessage ->
                             if eventMessage.data.data.status == "APPROVED" then
-                                ( { model | checkoutToken = Nothing }, Nothing, Cmd.batch
-                                    [ placeOrder model authStatus Nothing (Just eventMessage.data) checkoutDetails
-                                    , Ports.removeHelcimPayIframe ()
-                                    ]
-                                )
+                                ( { model | checkoutToken = Nothing }, Nothing, Ports.removeHelcimPayIframe () )
                             else
                                 ( { model | checkoutToken = Nothing, errors = Api.addError "" "Helcim purchase was declined." model.errors }
                                 , Nothing
@@ -682,6 +694,18 @@ update msg model authStatus maybeSessionToken checkoutDetails =
                                 )
                 else
                     model |> nothingAndNoCommand
+
+        PaymentValidated (RemoteData.Success (Ok _)) ->
+            { model | isProcessing = False } |> nothingAndNoCommand
+
+        PaymentValidated (RemoteData.Success (Err errors)) ->
+            { model | errors = errors, isProcessing = False } |> nothingAndNoCommand
+
+        PaymentValidated (RemoteData.Failure error) ->
+            { model | errors = Api.apiFailureToError error, isProcessing = False } |> nothingAndNoCommand
+
+        PaymentValidated _ ->
+            model |> nothingAndNoCommand
 
 
 selectAddress : Int -> CheckoutAddress
@@ -994,16 +1018,31 @@ logIn followWithSubmission model maybeSessionToken =
         |> Api.sendRequest (LogInResponse followWithSubmission)
 
 
-getHelcimCheckoutToken : Cmd Msg
-getHelcimCheckoutToken = 
-    Api.post Api.CheckoutHelcimToken
-        |> Api.withErrorHandler helcimCheckoutTokenResponseDecoder
-        |> Api.sendRequest HelcimCheckoutTokenReceived
+-- getHelcimCheckoutToken : Cmd Msg
+-- getHelcimCheckoutToken = 
+--     Api.post Api.CheckoutHelcimToken
+--         |> Api.withErrorHandler helcimCheckoutTokenResponseDecoder
+--         |> Api.sendRequest HelcimCheckoutTokenReceived
 
-placeOrder : Form -> AuthStatus -> Maybe String -> Maybe HelcimEventData -> WebData PageData.CheckoutDetails -> Cmd Msg
-placeOrder model authStatus maybeSessionToken helcimEventData checkoutDetails =
+type alias PaymentValidatedResponse =
+    { status : String }
+
+helcimPaymentValidatedResponseDecoder : Decode.Decoder PaymentValidatedResponse
+helcimPaymentValidatedResponseDecoder =
+    Decode.map PaymentValidatedResponse
+        (Decode.field "status" Decode.string)
+
+validateHelcimPayment : Form -> HelcimEventData -> Cmd Msg
+validateHelcimPayment model helcimEventData =
+    Api.post Api.CheckoutValidateHelcimPayment
+        |> Api.withJsonBody (encodeHelcimEventData (model.checkoutToken |> Maybe.withDefault "") helcimEventData)
+        |> Api.withErrorHandler helcimPaymentValidatedResponseDecoder
+        |> Api.sendRequest PaymentValidated
+
+placeOrder : Form -> AuthStatus -> Maybe String -> WebData PageData.CheckoutDetails -> Cmd Msg
+placeOrder model authStatus maybeSessionToken checkoutDetails =
     let
-    
+
         customerData =
             Encode.object
                 [ ( "shippingAddress", encodedShippingAddress )
@@ -1012,7 +1051,6 @@ placeOrder model authStatus maybeSessionToken helcimEventData checkoutDetails =
                 , ( "priorityShipping", Encode.bool model.priorityShipping )
                 , ( "couponCode", encodeStringAsMaybe model.couponCode )
                 , ( "comment", Encode.string model.comment )
-                , ( "helcimEventData", encodeMaybe (encodeHelcimEventData (Maybe.withDefault "" model.checkoutToken)) helcimEventData )
                 ]
 
         anonymousData =
@@ -1025,7 +1063,6 @@ placeOrder model authStatus maybeSessionToken helcimEventData checkoutDetails =
                 , ( "sessionToken", encodeMaybe Encode.string maybeSessionToken )
                 , ( "email", Encode.string model.email )
                 , ( "password", Encode.string model.password )
-                , ( "helcimEventData", encodeMaybe (encodeHelcimEventData (Maybe.withDefault "" model.checkoutToken)) helcimEventData )
                 ]
 
         encodedStoreCredit =

@@ -47,7 +47,7 @@ data Invoice = Invoice
     , iTipAmount     :: Maybe Double
     , iTax           :: Maybe Tax
     , iDiscount      :: Maybe Discount
-    , iLineItems     :: Maybe [LineItem]
+    , iLineItems     :: [LineItem]
     } deriving (Show, Generic)
 
 data Tax = Tax
@@ -65,7 +65,7 @@ data LineItem = LineItem
     , liDescription    :: Maybe Text
     , liQuantity       :: Int
     , liPrice          :: Scientific
-    , liTotal          :: Int
+    , liTotal          :: Scientific
     , liTaxAmount      :: Maybe Scientific
     , liDiscountAmount :: Maybe Scientific
     } deriving (Show, Generic)
