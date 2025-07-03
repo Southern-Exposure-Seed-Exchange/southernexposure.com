@@ -10,6 +10,8 @@
 {-# LANGUAGE TypeOperators #-}
 module Routes.Customers
     ( CustomerAPI
+    , RegistrationParameters(..)
+    , createNewCustomer
     , customerRoutes
     ) where
 
@@ -35,7 +37,7 @@ import Servant
 import Auth
 import Models
 import Models.Fields
-    (ArmedForcesRegionCode, armedForcesRegion, Cents(..), creditLineItemTypes)
+    (AvalaraCustomerCode, ArmedForcesRegionCode, armedForcesRegion, Cents(..), creditLineItemTypes)
 import Routes.CommonData
     ( AuthorizationData, toAuthorizationData, AddressData(..), toAddressData
     , fromAddressData, LoginParameters(..), validatePassword, handlePasswordValidationError
@@ -206,9 +208,16 @@ type RegisterRoute =
     :> Post '[JSON] (Cookied AuthorizationData)
 
 registrationRoute :: RegistrationParameters -> App (Cookied AuthorizationData)
-registrationRoute = validate >=> \parameters -> do
+registrationRoute parameters = do
+    customer <- createNewCustomer Nothing parameters
+    addSessionCookie temporarySession
+        (AuthToken $ customerAuthToken $ entityVal customer)
+        (toAuthorizationData customer)
+
+createNewCustomer :: Maybe AvalaraCustomerCode -> RegistrationParameters -> App (Entity Customer)
+createNewCustomer mbAvalaraCode = validate >=> \parameters -> do
     encryptedPass <- hashPassword $ rpPassword parameters
-    (authToken, customer, maybeCustomerId) <- runDB $ do
+    (customer, maybeCustomerId) <- runDB $ do
         authToken <- generateUniqueToken UniqueToken
         let customer = Customer
                 { customerEmail = rpEmail parameters
@@ -217,21 +226,19 @@ registrationRoute = validate >=> \parameters -> do
                 , customerEncryptedPassword = encryptedPass
                 , customerAuthToken = authToken
                 , customerStripeId = Nothing
-                , customerAvalaraCode = Nothing
+                , customerAvalaraCode = mbAvalaraCode
                 , customerIsAdmin = False
                 }
-        (authToken, customer,) <$> insertUnique customer
+        (customer,) <$> insertUnique customer
     case maybeCustomerId of
         Nothing ->
             serverError err500
-        Just customerId ->
+        Just customerId -> do
             runDB
                 (maybeMergeCarts customerId (rpCartToken parameters)
                     >> enqueueTask Nothing (SendEmail $ Emails.AccountCreated customerId)
                 )
-            >> addSessionCookie temporarySession (AuthToken authToken)
-                (toAuthorizationData $ Entity customerId customer)
-
+            return (Entity customerId customer)
 
 -- LOGIN
 

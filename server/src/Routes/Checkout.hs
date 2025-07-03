@@ -52,7 +52,8 @@ import Routes.CommonData
     , PasswordValidationError(..), BaseProductData(..)
     )
 import Routes.AvalaraUtils (createAvalaraTransaction, createAvalaraCustomer)
-import Routes.Utils (hashPassword, generateUniqueToken, getDisabledCheckoutDetails)
+import Routes.Utils (generateUniqueToken, getDisabledCheckoutDetails)
+import Routes.Customers (RegistrationParameters(..), createNewCustomer)
 import Validation (Validation(..))
 import Workers (Task(..), AvalaraTask(..), enqueueTask)
 
@@ -768,21 +769,12 @@ anonymousPlaceOrderRoute = validate >=> \parameters -> do
     (orderId, orderData) <- withPlaceOrderErrors (NewAddress shippingParam) . runDB $ do
         c@(Entity customerId customer) <- case maybeCustomer of
             Nothing -> do
-                encryptedPass <- lift . hashPassword $ apopPassword parameters
                 avalaraCustomerCode <- makeAvalaraCustomer
-                let customer = Customer
-                        { customerEmail = email
-                        , customerStoreCredit = Cents 0
-                        , customerMemberNumber = ""
-                        , customerEncryptedPassword = encryptedPass
-                        , customerAuthToken = authToken
-                        , customerStripeId = Nothing
-                        , customerAvalaraCode = avalaraCustomerCode
-                        , customerIsAdmin = False
-                        }
-                customerId <- insert customer
-                mergeAnonymousCart (apopCartToken parameters) customerId
-                return $ Entity customerId customer
+                lift $ createNewCustomer avalaraCustomerCode $ RegistrationParameters
+                    { rpEmail = email
+                    , rpPassword = password
+                    , rpCartToken = Just (apopCartToken parameters)
+                    }
             Just c@(Entity customerId customer) -> do
                 overwriteCustomerCart customerId . Just $ apopCartToken parameters
                 case customerAvalaraCode customer of
