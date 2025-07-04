@@ -45,6 +45,7 @@ ghc-options:
 dependencies:
     - base >= 4.7 && < 5
     - aeson
+    - aeson-casing
     - async
     - base64-bytestring
     - bcrypt
@@ -64,6 +65,7 @@ dependencies:
     - hostname
     - http-api-data
     - http-client
+    - http-client-tls
     - http-media
     - http-types
     - immortal-queue
@@ -79,6 +81,7 @@ dependencies:
     - resource-pool
     - req
     - scientific
+    - servant-client
     - servant-server
     - sitemap-gen
     - smtp-mail

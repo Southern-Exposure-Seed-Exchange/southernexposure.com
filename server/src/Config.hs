@@ -22,6 +22,7 @@ import Cache (Caches)
 import StoneEdge (StoneEdgeCredentials)
 
 import qualified Avalara
+import qualified Helcim.API as Helcim (ApiToken)
 
 
 data Environment
@@ -45,6 +46,7 @@ data Config
     , getSmtpUser :: String
     , getSmtpPass :: String
     , getStripeConfig :: StripeConfig
+    , getHelcimAuthKey :: Helcim.ApiToken
     , getStoneEdgeAuth :: StoneEdgeCredentials
     , getCookieSecret :: PersistentServerKey
     , getCookieEntropySource :: RandomSource
@@ -71,6 +73,7 @@ defaultConfig =
         , getSmtpUser = undefined
         , getSmtpPass = undefined
         , getStripeConfig = undefined
+        , getHelcimAuthKey = undefined
         , getStoneEdgeAuth = undefined
         , getCookieSecret = undefined
         , getCookieEntropySource = undefined

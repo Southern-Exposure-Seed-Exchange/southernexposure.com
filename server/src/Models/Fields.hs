@@ -299,6 +299,19 @@ regionName = \case
         region
 
 
+-- Convert the Region to a 2-letter code textual representation.
+regionCode :: Region -> T.Text
+regionCode = \case
+    USState code ->
+        StateCodes.toText code
+    USArmedForces code -> case code of
+        AA -> "AA"
+        AE -> "AE"
+        AP -> "AP"
+    CAProvince code -> T.pack (show code)
+    CustomRegion region ->
+        T.toUpper region
+
 newtype Country =
     Country { fromCountry :: CountryCode }
     deriving (Show, Read, Eq, Ord)

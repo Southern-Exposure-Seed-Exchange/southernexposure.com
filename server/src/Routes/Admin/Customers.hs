@@ -26,6 +26,7 @@ import Servant
     )
 
 import Auth (Cookied, WrappedAuthToken, withAdminCookie, validateAdminAndParameters)
+import qualified Helcim.API.Types.Customer as Helcim (CustomerId(..))
 import Models
     ( CustomerId, Customer(..), Address(..), EntityField(..), Unique(..)
     , Order(..), OrderId, getOrderTotal, AddressId
@@ -197,6 +198,7 @@ data CustomerEditData =
         , cedIsAdmin :: Bool
         , cedVerified :: Bool
         , cedStripeId :: Maybe StripeCustomerId
+        , cedHelcimCustomerId :: Maybe Helcim.CustomerId
         , cedAvalaraCode :: Maybe AvalaraCustomerCode
         , cedOrders :: [OrderData]
         } deriving (Show)
@@ -210,6 +212,7 @@ instance ToJSON CustomerEditData where
             , "isAdmin" .= cedIsAdmin
             , "verified" .= cedVerified
             , "stripeId" .= cedStripeId
+            , "helcimCustomerId" .= cedHelcimCustomerId
             , "avalaraCode" .= cedAvalaraCode
             , "orders" .= cedOrders
             ]
@@ -248,6 +251,7 @@ customerEditDataRoute t customerId = withAdminCookie t $ \_ ->
                 , cedIsAdmin = customerIsAdmin customer
                 , cedVerified = customerVerified customer
                 , cedStripeId = customerStripeId customer
+                , cedHelcimCustomerId = customerHelcimCustomerId customer
                 , cedAvalaraCode = customerAvalaraCode customer
                 , cedOrders = orders
                 }
@@ -389,6 +393,7 @@ customerDeleteRoute t customerId = withAdminCookie t $ \_ -> runDB $ do
                 , customerEncryptedPassword = hashedPassword
                 , customerAuthToken = token
                 , customerStripeId = Nothing
+                , customerHelcimCustomerId = Nothing
                 , customerAvalaraCode = Nothing
                 , customerIsAdmin = False
                 , customerVerified = False

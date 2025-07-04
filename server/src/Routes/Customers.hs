@@ -219,6 +219,7 @@ createNewCustomer mbAvalaraCode = validate >=> \parameters -> do
                 , customerEncryptedPassword = encryptedPass
                 , customerAuthToken = authToken
                 , customerStripeId = Nothing
+                , customerHelcimCustomerId = Nothing
                 , customerAvalaraCode = mbAvalaraCode
                 , customerIsAdmin = False
                 , customerVerified = False

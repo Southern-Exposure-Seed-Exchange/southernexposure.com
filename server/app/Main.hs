@@ -36,6 +36,8 @@ import Api
 import Auth (sessionEntropy, mkPersistentServerKey)
 import Cache (initializeCaches, emptyCache)
 import Config
+
+import qualified Helcim.API as Helcim (ApiToken(..))
 import Models
 import Models.PersistJSON (JSONValue(..))
 import Paths_sese_website (version)
@@ -65,6 +67,7 @@ main = do
     (smtpUser, smtpPass, emailPool) <- makeSMTPPool log env
     devMail <- makeDevMail log env
     stripeToken <- fromMaybe "" <$> lookupEnv "STRIPE_TOKEN"
+    helcimToken <- requireSetting "HELCIM_TOKEN"
     cookieSecret <- mkPersistentServerKey . C.pack . fromMaybe ""
         <$> lookupEnv "COOKIE_SECRET"
     entropySource <- sessionEntropy
@@ -91,6 +94,7 @@ main = do
             , getSmtpUser = smtpUser
             , getSmtpPass = smtpPass
             , getStripeConfig = StripeConfig (StripeKey $ C.pack stripeToken) Nothing
+            , getHelcimAuthKey = Helcim.ApiToken $ T.pack helcimToken
             , getStoneEdgeAuth = stoneEdgeAuth
             , getCookieSecret = cookieSecret
             , getCookieEntropySource = entropySource
