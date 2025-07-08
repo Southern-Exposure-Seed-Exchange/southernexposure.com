@@ -45,7 +45,6 @@ type CheckoutAddress
     = ExistingAddress AddressId
     | NewAddress Address.Form
 
-
 type alias Form =
     { email : String
     , password : String
@@ -62,8 +61,10 @@ type alias Form =
     , couponCode : String
     , comment : String
     , errors : Api.FormErrors
+    , isPaymentProcessing : Bool
     , isProcessing : Bool
     , checkoutToken : Maybe String
+    , confirmationModel : Maybe PaymentConfirmationModel
     }
 
 
@@ -84,8 +85,10 @@ initial =
     , couponCode = ""
     , comment = ""
     , errors = Api.initialErrors
+    , isPaymentProcessing = False
     , isProcessing = False
     , checkoutToken = Nothing
+    , confirmationModel = Nothing
     }
 
 
@@ -131,8 +134,10 @@ initialWithDefaults shippingAddresses billingAddresses restrictionsError =
     , couponCode = ""
     , comment = ""
     , errors = errors
+    , isPaymentProcessing = False
     , isProcessing = False
     , checkoutToken = Nothing
+    , confirmationModel = Nothing
     }
 
 
@@ -168,6 +173,8 @@ type Msg
     | RefreshDetails (WebData (Result Api.FormErrors PageData.CheckoutDetails))
     | HelcimCheckoutTokenReceived (WebData (Result Api.FormErrors HelcimCheckoutTokenResponse))
     | HelcimEventReceived Decode.Value
+    | ConfirmPayment
+    | CancelPayment
 
 type alias HelcimCheckoutTokenResponse =
     { checkoutToken : String }
@@ -510,7 +517,7 @@ update key msg model authStatus maybeSessionToken checkoutDetails =
                             )
 
                         else
-                            ( model, Nothing, getHelcimCheckoutToken authStatus )
+                            ( { model | isPaymentProcessing = True }, Nothing, getHelcimCheckoutToken authStatus )
 
                 _ ->
                     ( model, Nothing, Cmd.none )
@@ -637,17 +644,17 @@ update key msg model authStatus maybeSessionToken checkoutDetails =
             )
 
         HelcimCheckoutTokenReceived (RemoteData.Success (Err errors)) ->
-            { model | errors = errors, isProcessing = False } |> nothingAndNoCommand
+            { model | errors = errors, isPaymentProcessing = False } |> nothingAndNoCommand
 
         HelcimCheckoutTokenReceived (RemoteData.Failure error) ->
-            { model | errors = Api.apiFailureToError error, isProcessing = False } |> nothingAndNoCommand
+            { model | errors = Api.apiFailureToError error, isPaymentProcessing = False } |> nothingAndNoCommand
 
         HelcimCheckoutTokenReceived _ ->
-            { model | isProcessing = False } |> nothingAndNoCommand
+            { model | isPaymentProcessing = False } |> nothingAndNoCommand
 
         HelcimEventReceived event -> case Decode.decodeValue helcimPayEventDecoder event of
             Err _ ->
-                { model | errors = Api.addError "" "Unexpected HelcimPay.js response." model.errors, isProcessing = False } |> nothingAndNoCommand
+                { model | errors = Api.addError "" "Unexpected HelcimPay.js response." model.errors, isPaymentProcessing = False } |> nothingAndNoCommand
 
             Ok (HelcimPayInit _) -> model |> nothingAndNoCommand
 
@@ -655,6 +662,15 @@ update key msg model authStatus maybeSessionToken checkoutDetails =
                 case checkoutDetails of
                     RemoteData.Success details -> handleHelcimCheckoutEvent model details checkoutEvent
                     _ -> ( model, Nothing, Cmd.none )
+        ConfirmPayment ->
+            case model.confirmationModel of
+                Nothing -> model |> nothingAndNoCommand
+                Just confirmationModel ->
+                    ( { model | confirmationModel = Nothing, isProcessing = True }
+                    , Nothing
+                    , placeOrder model authStatus maybeSessionToken (Just (confirmationModel.cardToken, confirmationModel.customerCode)) checkoutDetails
+                    )
+        CancelPayment -> { model | confirmationModel = Nothing } |> nothingAndNoCommand
 
 
 selectAddress : Int -> CheckoutAddress
@@ -1103,41 +1119,48 @@ handleHelcimCheckoutEvent : Form -> PageData.CheckoutDetails -> HelcimPayCheckou
 handleHelcimCheckoutEvent model checkoutDetails checkoutEvent =
     if checkoutEvent.eventName == "helcim-pay-js-" ++ (model.checkoutToken |> Maybe.withDefault "") then
         if checkoutEvent.eventStatus == "HIDE" then
-            ( { model | checkoutToken = Nothing, isProcessing = False }
+            ( { model | checkoutToken = Nothing, isPaymentProcessing = False }
             , Nothing
             , Ports.removeHelcimPayIframe ()
             )
         else if checkoutEvent.eventStatus == "ABORTED" then
             case checkoutEvent.eventMessage of
                 Err errors ->
-                    ( { model | checkoutToken = Nothing, isProcessing = False, errors = Api.addError "" errors model.errors }
+                    ( { model | checkoutToken = Nothing, isPaymentProcessing = False, errors = Api.addError "" errors model.errors }
                     , Nothing
                     , Ports.removeHelcimPayIframe ()
                     )
                 Ok _ ->
-                    ( { model | checkoutToken = Nothing, isProcessing = False
+                    ( { model | checkoutToken = Nothing, isPaymentProcessing = False
                       , errors = Api.addError "" "Unexpected HelcimPay.js response for ABORTED event." model.errors
                       }
                     , Nothing
                     , Ports.removeHelcimPayIframe ()
                     )
         else case checkoutEvent.eventMessage of
-            Err errors -> { model | errors = Api.addError "" errors model.errors, isProcessing = False } |> nothingAndNoCommand
+            Err errors -> { model | errors = Api.addError "" errors model.errors, isPaymentProcessing = False } |> nothingAndNoCommand
             Ok eventMessage ->
                 if eventMessage.data.data.status == "APPROVED" then
-                    ( { model | checkoutToken = Nothing, isProcessing = True }, Nothing,
-                        Cmd.batch
-                            [ placeOrder model authStatus maybeSessionToken (Just (eventMessage.data.data.cardToken, eventMessage.data.data.customerCode)) checkoutDetails
-                            , Ports.removeHelcimPayIframe ()
-                            ]
+                    ( { model
+                        | checkoutToken = Nothing
+                        , isPaymentProcessing = False
+                        , confirmationModel = Just (initPaymentConfirmation
+                            eventMessage.data.data.cardNumber
+                            (getFinalTotal checkoutDetails model.storeCredit)
+                            eventMessage.data.data.cardToken
+                            eventMessage.data.data.customerCode)
+                      }
+                    , Nothing
+                    , Ports.removeHelcimPayIframe ()
                     )
                 else
-                    ( { model | checkoutToken = Nothing, isProcessing = False, errors = Api.addError "" "Helcim purchase was declined." model.errors }
+                    ( { model | checkoutToken = Nothing, isPaymentProcessing = False, errors = Api.addError "" "Helcim purchase was declined." model.errors }
                     , Nothing
                     , Ports.removeHelcimPayIframe ()
                     )
     else
-                            model |> nothingAndNoCommand
+        model |> nothingAndNoCommand
+
 {-| TODO: This is probably repeated other places, stick in a Json.Utils module.
 -}
 encodeMaybe : (a -> Value) -> Maybe a -> Value
@@ -1486,7 +1509,7 @@ view model authStatus locations checkoutDetails =
             finalTotal <= 0
 
         buttonContents =
-            if model.isProcessing then
+            if model.isPaymentProcessing || model.isProcessing then
                 [ text "Placing Order..."
                 , icon "spinner fa-spin ml-2"
                 ]
@@ -1499,6 +1522,14 @@ view model authStatus locations checkoutDetails =
 
         processingOverlay =
             pageOverlay model.isProcessing "Processing..."
+
+        paymentConfirmationOverlay =
+            case model.confirmationModel of
+                Nothing ->
+                    text ""
+
+                Just confirmationModel ->
+                    viewConfirmationOverlay confirmationModel
     in
     [ h1 [] [ text "Checkout" ]
     , hr [] []
@@ -1509,6 +1540,7 @@ view model authStatus locations checkoutDetails =
       else
         form [ onSubmit Submit ]
             [ processingOverlay
+            , paymentConfirmationOverlay
             , genericErrorText hasErrors
             , div [ class "mb-3" ] [ generalErrors ]
             , registrationCard
@@ -2118,3 +2150,42 @@ successView zone orderId newAccountCreated locations orderDetails =
     , commentHtml
     , OrderDetails.orderTable orderDetails
     ]
+
+type alias PaymentConfirmationModel =
+    { showConfirmation : Bool
+    , amount : Cents
+    , f4l6Card : String
+    , cardToken : String
+    , customerCode : String
+    }
+
+initPaymentConfirmation : String -> Cents -> String -> String -> PaymentConfirmationModel
+initPaymentConfirmation f4l6Card amount cardToken customerCode =
+    { showConfirmation = False
+    , amount = amount
+    , f4l6Card = f4l6Card
+    , cardToken = cardToken
+    , customerCode = customerCode
+    }
+
+viewConfirmationOverlay : PaymentConfirmationModel -> Html Msg
+viewConfirmationOverlay model = div [ class "card-page-overlay" ]
+    [ div [ class "card h-30" ]
+        [ div [ class "card-body" ]
+            [ h4 [ class "card-title" ] [ text "Confirm Payment" ]
+            , [ text "Please confirm your payment details before proceeding:"
+              , text ("Amount: " ++ Format.cents model.amount)
+              , text ("Payment method ending in '" ++ String.slice 6 10 model.f4l6Card ++ "'")
+              ]
+                |> List.intersperse (br [] [])
+                |> Html.address []
+            , div [ class "form-group" ]
+                [ button [ class "btn btn-primary", type_ "button", onClick ConfirmPayment ]
+                    [ text "Confirm Payment" ]
+                , button [ class "btn btn-secondary ml-3", type_ "button", onClick CancelPayment ]
+                    [ text "Cancel" ]
+                ]
+            ]
+        ]
+    ]
+
