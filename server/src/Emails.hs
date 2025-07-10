@@ -127,16 +127,7 @@ send cfg email =
                 _ ->
                     []
 
-
-        -- TODO: Make this configurable - real domain is needed in several
-        -- places(here & Feeds)
-        domainName =
-            case getEnv cfg of
-                Development ->
-                    "http://localhost:7000"
-                Production ->
-                    "https://www.southernexposure.com"
-
+        domainName = L.fromStrict $ getBaseUrl cfg
 
         (subject, message) =
             case email of
@@ -150,7 +141,7 @@ send cfg email =
                 OrderPlacedData parameters ->
                     OrderPlaced.get parameters
                 EmailVerificationData _ vCode ->
-                    EmailVerification.get domainName (L.fromStrict vCode) 
+                    EmailVerification.get domainName (L.fromStrict vCode)
 
         (plainMessage, htmlMessage) =
             case email of

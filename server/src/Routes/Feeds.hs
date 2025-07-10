@@ -22,7 +22,7 @@ import Web.Sitemap.Gen
     )
 
 import Cache (Caches(..), CategoryPredecessorCache, queryCategoryPredecessorCache)
-import Config (Config(getCaches))
+import Config (Config(getCaches, getBaseUrl))
 import Models
 import Models.Fields (Milligrams(..), LotSize(..), renderLotSize, toDollars)
 import Routes.Utils (XML, activeVariantExists)
@@ -78,14 +78,12 @@ sitemapRoute = do
             , "quick-order"
             , "cart"
             ]
+    base <- asks getBaseUrl
     let urls =
             map makeCategoryUrl categories
                 <> map makeProductUrl products
                 <> map makePageUrl pages
                 <> map makeUrl staticPages
-        -- TODO: Move our URL into a Config field
-        base =
-            "https://www.southernexposure.com"
         urlsWithBase =
             map (\url -> url { sitemapLocation = base <> sitemapLocation url }) urls
     return $ renderSitemap $ Sitemap urlsWithBase
@@ -135,10 +133,9 @@ sitemapRoute = do
 type SitemapIndexRoute =
           Get '[XML] LBS.ByteString
 
-sitemapIndexRoute :: Monad m => m LBS.ByteString
-sitemapIndexRoute =
-    let baseUrl = "https://www.southernexposure.com"
-    in
+sitemapIndexRoute :: App LBS.ByteString
+sitemapIndexRoute = do
+    baseUrl <- asks getBaseUrl
     return $ renderSitemapIndex $ SitemapIndex
         [ IndexEntry { indexLocation = baseUrl <> "/sitemap.xml", indexLastModified = Nothing }
         , IndexEntry { indexLocation = baseUrl <> "/blog/sitemap.xml.gz", indexLastModified = Nothing }
@@ -153,6 +150,7 @@ type MerchantFeedRoute =
 
 merchantFeedRoute :: App LBS.ByteString
 merchantFeedRoute = do
+    baseUrl <- asks getBaseUrl
     currentTime <- liftIO getCurrentTime
     isCheckoutDisabled <- readCache $ settingsDisableCheckout . getSettingsCache
     (variantSales, categorySales, products, categories) <- runDB $ do
@@ -166,8 +164,8 @@ merchantFeedRoute = do
             , CategorySaleEndDate >=. currentTime
             ]
             []
-        psVs <- E.select $ do 
-            (p E.:& v) <- E.from $ E.table `E.innerJoin` E.table 
+        psVs <- E.select $ do
+            (p E.:& v) <- E.from $ E.table `E.innerJoin` E.table
                 `E.on` \(p E.:& v) -> v E.^. ProductVariantProductId E.==. p E.^. ProductId
             E.where_ $ v E.^. ProductVariantIsActive
             return (p, v)
@@ -178,26 +176,25 @@ merchantFeedRoute = do
         return (vs, catSale, psVsCs, cs)
     let categoryMap = foldr (\(Entity cId c) m -> M.insert cId c m) M.empty categories
     categoryCache <- asks getCaches >>= fmap getCategoryPredecessorCache . liftIO . readTVarIO
-    let convert = convertProduct isCheckoutDisabled categoryCache categoryMap variantSales categorySales
+    let convert = convertProduct baseUrl isCheckoutDisabled categoryCache categoryMap variantSales categorySales
     return $ GMerch.renderFeed $ map convert products
 
 convertProduct
-    :: Bool
+    :: T.Text
+    -> Bool
     -> CategoryPredecessorCache
     -> M.Map CategoryId Category
     -> [ProductSale]
     -> [CategorySale]
     -> (Entity Product, Entity ProductVariant, [Entity ProductToCategory])
     -> GMerch.Product
-convertProduct checkoutDisabled predCache categoryMap prodSales catSales (Entity _ prod, Entity variantId variant, categories) =
+convertProduct baseUrl checkoutDisabled predCache categoryMap prodSales catSales (Entity _ prod, Entity variantId variant, categories) =
     let
         fullSku =
             productBaseSku prod <> productVariantSkuSuffix variant
         lotSize =
             maybe "" (\ls -> ", " <> renderLotSize ls)
                 $ productVariantLotSize variant
-        baseUrl =
-            "https://www.southernexposure.com"
         productUrl =
             baseUrl <> "/products/"
         imageUrl =
