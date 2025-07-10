@@ -40,3 +40,16 @@ RUN stack build --ghc-options="-Werror -O1" --only-dependencies sese-website
 # Actually build server
 COPY server .
 RUN stack build --ghc-options="-Werror -O1" --copy-bins
+
+FROM nginx:1.29.0 AS frontend
+COPY --from=frontend-builder /southernexposure/client/dist /usr/share/nginx/html
+COPY client/nginx/nginx.conf /etc/nginx/conf.d/default.conf
+EXPOSE 8080
+
+FROM debian:bookworm-slim AS backend
+RUN apt-get -y update && apt-get install -y libpq5
+COPY --from=backend-builder /root/.local/bin/sese-website-exe /usr/local/bin/sese-website-exe
+COPY server/scripts/entrypoint.sh /usr/local/bin/entrypoint.sh
+EXPOSE 3000
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+CMD ["sese-website-exe"]
