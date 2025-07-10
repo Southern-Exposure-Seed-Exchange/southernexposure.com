@@ -57,6 +57,7 @@ data Config
     , getStripeLogger :: TimedFastLogger
     , getServerLogger :: TimedFastLogger
     , getDeveloperEmail :: Maybe Text
+    , getBaseUrl :: Text
     }
 
 defaultConfig :: Config
@@ -82,6 +83,7 @@ defaultConfig =
         , getStripeLogger = undefined
         , getServerLogger = undefined
         , getDeveloperEmail = Nothing
+        , getBaseUrl = "http://localhost:7000"
         }
 
 timedLogStr :: ToLogStr a => a -> FormattedTime -> LogStr

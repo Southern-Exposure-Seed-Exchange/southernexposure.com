@@ -75,6 +75,7 @@ main = do
     avalaraCompanyCode <- Avalara.CompanyCode . T.pack <$> requireSetting "AVATAX_COMPANY_CODE"
     avalaraSourceLocation <- T.pack . fromMaybe "DEFAULT" <$> lookupEnv "AVATAX_LOCATION_CODE"
     dbPool <- makePool env
+    baseUrl <- makeDomainName env
     initializeJobs dbPool
     log "Initialized database pool."
     cache <- newTVarIO emptyCache
@@ -102,6 +103,7 @@ main = do
             , getStripeLogger = stripeLogger
             , getServerLogger = serverLogger
             , getDeveloperEmail = devMail
+            , getBaseUrl = baseUrl
             }
     log "Starting 2 worker threads."
     workers <- processImmortalQueue $ taskQueueConfig 2 cfg
@@ -125,7 +127,7 @@ main = do
     log "Shutdown completed successfully."
     cleanupLoggers
 
-    where 
+    where
         lookupSetting env def = lookupSettingWith env def read
 
         lookupSettingWith :: String -> a -> (String -> a) -> IO a
@@ -142,7 +144,7 @@ main = do
               Just {} | env == Production -> do
                     log "DEV_MAIL variable ignored: server is in Production mode"
                     pure Nothing
-              Nothing | env == Development -> 
+              Nothing | env == Development ->
                     error "DEV_MAIL is required in the development setup"
               _ -> pure mDev
 
@@ -154,7 +156,7 @@ main = do
                 Development ->
                     runStderrLoggingT $ makeSqlPool env
 
-        makeSMTPPool (log :: T.Text -> IO ()) env = do 
+        makeSMTPPool (log :: T.Text -> IO ()) env = do
             smtpServer <- fromMaybe "" <$> lookupEnv "SMTP_SERVER"
             smtpUser <- fromMaybe "" <$> lookupEnv "SMTP_USER"
             smtpPass <- fromMaybe "" <$> lookupEnv "SMTP_PASS"
@@ -164,6 +166,13 @@ main = do
             log $ "Initialized SMTP Pool at " <> T.pack smtpServer <> "."
             pure (smtpUser, smtpPass, emailPool)
 
+        makeDomainName env = do
+            let defUrl = case env of
+                    Development ->
+                        "http://localhost:7000"
+                    Production ->
+                        "https://www.southernexposure.com"
+            lookupSettingWith "BASE_URL" defUrl T.pack
 
         makeSqlPool :: (MonadIO m, MonadLoggerIO m, MonadUnliftIO m) => Environment -> m ConnectionPool
         makeSqlPool env = do
