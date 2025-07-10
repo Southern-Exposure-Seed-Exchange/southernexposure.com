@@ -1,6 +1,8 @@
 module Auth.Login exposing
     ( Form
     , Msg
+    , LoginStatus(..)
+    , loginDecoder
     , initial
     , update
     , view
@@ -19,7 +21,7 @@ import Routing exposing (Route(..), reverse)
 import Update.Utils exposing (nothingAndNoCommand)
 import User exposing (AuthStatus, UserId(..))
 import Views.Utils exposing (autocomplete, emailInput, routeLinkAttributes)
-
+import Json.Decode as Decode exposing (Decoder)
 
 
 -- MODEL
@@ -66,8 +68,21 @@ type Msg
     | Password String
     | Remember Bool
     | SubmitForm (Maybe String) Bool
-    | SubmitResponse (WebData (Result Api.FormErrors AuthStatus))
+    | SubmitResponse (WebData (Result Api.FormErrors (LoginStatus AuthStatus)))
 
+type LoginStatus a
+    = LoginCompleted a
+    | ErrVerificationRequired Int
+
+loginDecoder : Decoder a -> Decoder (LoginStatus a)
+loginDecoder innerDecoder =
+  Decode.field "status" Decode.string
+    |> Decode.andThen (\status ->
+      if status == "verification-required"
+        then Decode.map ErrVerificationRequired 
+                (Decode.field "data" Decode.int)
+        else Decode.map LoginCompleted
+                (Decode.field "data" innerDecoder))
 
 update : Routing.Key -> Msg -> Form -> Maybe String -> ( Form, Maybe AuthStatus, Cmd Msg )
 update key msg model maybeSessionToken =
@@ -92,7 +107,7 @@ update key msg model maybeSessionToken =
 
         SubmitResponse response ->
             case response of
-                RemoteData.Success (Ok authStatus) ->
+                RemoteData.Success (Ok (LoginCompleted authStatus)) ->
                     let
                         redirectCmd =
                             case model.redirectTo of
@@ -112,6 +127,12 @@ update key msg model maybeSessionToken =
                         , rememberAuth model.remember authStatus
                         , Ports.removeCartSessionToken ()
                         ]
+                    )
+                
+                RemoteData.Success (Ok (ErrVerificationRequired customerId)) ->
+                    ( initial
+                    , Nothing
+                    , Routing.newUrl key (VerificationRequired customerId)
                     )
 
                 RemoteData.Success (Err errors) ->
@@ -140,7 +161,7 @@ login : Form -> Maybe String -> Bool -> Cmd Msg
 login form maybeSessionToken clearCart =
     Api.post (Api.CustomerLogin clearCart)
         |> Api.withJsonBody (encode form maybeSessionToken)
-        |> Api.withErrorHandler User.decoder
+        |> Api.withErrorHandler (loginDecoder User.decoder)
         |> Api.sendRequest SubmitResponse
 
 

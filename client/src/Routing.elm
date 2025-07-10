@@ -30,8 +30,10 @@ type Route
     | SearchResults Search.Data Pagination.Data
     | PageDetails String (Maybe String)
     | CreateAccount
+    | VerifyEmail String
     | CreateAccountSuccess
     | Login (Maybe String) Bool
+    | VerificationRequired Int
     | ResetPassword (Maybe String)
     | MyAccount
     | EditLogin
@@ -120,6 +122,7 @@ parseRoute =
         accountParser =
             Url.oneOf
                 [ Url.map Login (Url.s "login" <?> Query.string "redirect" <?> parseFlag "clearCart")
+                , Url.map VerificationRequired (Url.s "unverified" </> Url.int)
                 , Url.map CreateAccount (Url.s "create")
                 , Url.map CreateAccountSuccess (Url.s "create" </> Url.s "success")
                 , Url.map ResetPassword (Url.s "reset-password" <?> Query.string "code")
@@ -127,11 +130,8 @@ parseRoute =
                 , Url.map EditLogin (Url.s "edit")
                 , Url.map EditAddress (Url.s "addresses")
                 , Url.map OrderDetails (Url.s "order" </> Url.int)
+                , Url.map VerifyEmail (Url.s "verify" </> Url.string)
                 ]
-
-        clearCartQueryParser =
-            Query.string "clearCart"
-                |> Query.map (Maybe.map (always True) >> Maybe.withDefault False)
 
         adminParser =
             Url.oneOf
@@ -308,6 +308,9 @@ reverse route =
 
         CreateAccount ->
             joinPath [ "account", "create" ]
+        
+        VerifyEmail uuid -> 
+            joinPath [ "account", "verify", uuid ]
 
         CreateAccountSuccess ->
             joinPath [ "account", "create", "success" ]
@@ -326,6 +329,9 @@ reverse route =
                                 ]
             in
             joinPath [ "account", "login" ] ++ queryParams
+
+        VerificationRequired customerId ->
+            joinPath [ "account", "unverified", String.fromInt customerId]
 
         ResetPassword _ ->
             joinPath [ "account", "reset-password" ]
@@ -572,11 +578,17 @@ authRequired route =
 
         CreateAccount ->
             False
+        
+        VerifyEmail _ ->
+            False
 
         CreateAccountSuccess ->
             True
 
         Login _ _ ->
+            False
+        
+        VerificationRequired _ ->
             False
 
         ResetPassword _ ->

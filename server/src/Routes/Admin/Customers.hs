@@ -22,7 +22,7 @@ import Data.Time (UTCTime)
 import Data.Text.Encoding (encodeUtf8, decodeUtf8)
 import Servant
     ( (:<|>)(..), (:>), AuthProtect, QueryParam, Capture, ReqBody, Get, Patch
-    , Delete, JSON, err404
+    , Delete, JSON, err404, ServerT
     )
 
 import Auth (Cookied, WrappedAuthToken, withAdminCookie, validateAdminAndParameters)
@@ -50,11 +50,7 @@ type CustomerAPI =
     :<|> "edit" :> CustomerEditRoute
     :<|> "delete" :> CustomerDeleteRoute
 
-type CustomerRoutes =
-         (WrappedAuthToken -> Maybe Int -> Maybe Int -> Maybe T.Text -> App (Cookied CustomerListData))
-    :<|> (WrappedAuthToken -> CustomerId -> App (Cookied CustomerEditData))
-    :<|> (WrappedAuthToken -> CustomerEditParameters -> App (Cookied CustomerId))
-    :<|> (WrappedAuthToken -> CustomerId -> App (Cookied ()))
+type CustomerRoutes = ServerT CustomerAPI App
 
 customerRoutes :: CustomerRoutes
 customerRoutes =
@@ -113,15 +109,15 @@ customerListRoute t mPage mPerPage maybeQuery = withAdminCookie t $ \_ -> do
             if T.null query then
                 count ([] :: [Filter Customer])
             else
-                extractRowCount . E.select $ do 
-                    (c E.:& a) <- E.from $ E.table `E.leftJoin` E.table 
-                        `E.on` \(c E.:& a) -> 
+                extractRowCount . E.select $ do
+                    (c E.:& a) <- E.from $ E.table `E.leftJoin` E.table
+                        `E.on` \(c E.:& a) ->
                                 E.just (c E.^. CustomerId) E.==. a E.?. AddressCustomerId
                                 E.&&. E.just (E.val True) E.==. a E.?. AddressIsActive
                     E.where_ $ whereQuery c a query
                     return $ E.countDistinct $ c E.^. CustomerId
-        customerResult <- E.select $ do 
-            (c E.:& a) <- E.from $ E.table `E.leftJoin` E.table `E.on` 
+        customerResult <- E.select $ do
+            (c E.:& a) <- E.from $ E.table `E.leftJoin` E.table `E.on`
                 \(c E.:& a) ->
                     let activeAddressFilter =
                             if T.null query then
@@ -199,6 +195,7 @@ data CustomerEditData =
         , cedEmail :: T.Text
         , cedStoreCredit :: Cents
         , cedIsAdmin :: Bool
+        , cedVerified :: Bool
         , cedStripeId :: Maybe StripeCustomerId
         , cedAvalaraCode :: Maybe AvalaraCustomerCode
         , cedOrders :: [OrderData]
@@ -211,6 +208,7 @@ instance ToJSON CustomerEditData where
             , "email" .= cedEmail
             , "storeCredit" .= cedStoreCredit
             , "isAdmin" .= cedIsAdmin
+            , "verified" .= cedVerified
             , "stripeId" .= cedStripeId
             , "avalaraCode" .= cedAvalaraCode
             , "orders" .= cedOrders
@@ -233,6 +231,7 @@ instance ToJSON OrderData where
             , "status" .= odStatus
             , "shipping" .= odShipping
             , "total" .= odTotal
+
             ]
 
 customerEditDataRoute :: WrappedAuthToken -> CustomerId -> App (Cookied CustomerEditData)
@@ -247,6 +246,7 @@ customerEditDataRoute t customerId = withAdminCookie t $ \_ ->
                 , cedEmail = customerEmail customer
                 , cedStoreCredit = customerStoreCredit customer
                 , cedIsAdmin = customerIsAdmin customer
+                , cedVerified = customerVerified customer
                 , cedStripeId = customerStripeId customer
                 , cedAvalaraCode = customerAvalaraCode customer
                 , cedOrders = orders
@@ -254,8 +254,8 @@ customerEditDataRoute t customerId = withAdminCookie t $ \_ ->
   where
     getOrders :: App [OrderData]
     getOrders = runDB $ do
-        os <- E.select $ do 
-            (o E.:& sa) <- E.from $ E.table `E.innerJoin` E.table 
+        os <- E.select $ do
+            (o E.:& sa) <- E.from $ E.table `E.innerJoin` E.table
                 `E.on` \(o E.:& sa) -> sa E.^. AddressId E.==. o E.^. OrderShippingAddressId
             E.where_ $ o E.^. OrderCustomerId E.==. E.val customerId
             E.orderBy [E.desc $ o E.^. OrderCreatedAt]
@@ -391,6 +391,7 @@ customerDeleteRoute t customerId = withAdminCookie t $ \_ -> runDB $ do
                 , customerStripeId = Nothing
                 , customerAvalaraCode = Nothing
                 , customerIsAdmin = False
+                , customerVerified = False
                 }
         Just (Entity cId _) ->
             return cId

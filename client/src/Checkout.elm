@@ -36,8 +36,7 @@ import Views.Aria as Aria
 import Views.Format as Format
 import Views.HorizontalForm exposing (genericErrorText)
 import Views.Utils exposing (decimalInput, disableGrammarly, emailInput, icon, pageOverlay, rawHtml, routeLinkAttributes)
-
-
+import Auth.Login as Login
 
 -- Model
 
@@ -158,7 +157,9 @@ type Msg
     | ApplyCoupon
     | RemoveCoupon
     | LogIn
-    | LogInResponse Bool (WebData (Result Api.FormErrors { authStatus : AuthStatus, details : PageData.CheckoutDetails }))
+    | LogInResponse Bool (WebData (Result Api.FormErrors (
+                Login.LoginStatus { authStatus : AuthStatus, details : PageData.CheckoutDetails }
+            )))
     | Submit
     | TokenReceived String
     | SubmitResponse (WebData (Result Api.FormErrors CheckoutResponse))
@@ -169,30 +170,27 @@ type alias CheckoutResponse =
     { orderId : Int
     , orderLines : List PageData.OrderLineItem
     , orderProducts : List PageData.OrderProduct
-    , authStatus : AuthStatus
     }
 
 
 anonymousResponseDecoder : Decode.Decoder CheckoutResponse
 anonymousResponseDecoder =
-    Decode.map4 CheckoutResponse
+    Decode.map3 CheckoutResponse
         (Decode.field "orderId" Decode.int)
         (Decode.field "lines" <| Decode.list PageData.lineItemDecoder)
         (Decode.field "products" <| Decode.list PageData.orderProductDecoder)
-        (Decode.field "authData" User.decoder)
 
 
-customerResponseDecoder : AuthStatus -> Decode.Decoder CheckoutResponse
-customerResponseDecoder authStatus =
-    Decode.map4 CheckoutResponse
+customerResponseDecoder : Decode.Decoder CheckoutResponse
+customerResponseDecoder =
+    Decode.map3 CheckoutResponse
         (Decode.field "orderId" Decode.int)
         (Decode.field "lines" <| Decode.list PageData.lineItemDecoder)
         (Decode.field "products" <| Decode.list PageData.orderProductDecoder)
-        (Decode.succeed authStatus)
 
 
 type OutMsg
-    = AnonymousOrderCompleted Int AuthStatus
+    = AnonymousOrderCompleted Int
     | CustomerOrderCompleted Int
     | DetailsRefreshed PageData.CheckoutDetails
     | LoggedIn AuthStatus PageData.CheckoutDetails
@@ -203,8 +201,14 @@ subscriptions =
     Ports.stripeTokenReceived TokenReceived
 
 
-update : Msg -> Form -> AuthStatus -> Maybe String -> WebData PageData.CheckoutDetails -> ( Form, Maybe OutMsg, Cmd Msg )
-update msg model authStatus maybeSessionToken checkoutDetails =
+update : Routing.Key ->
+         Msg ->
+         Form ->
+         AuthStatus ->
+         Maybe String ->
+         WebData PageData.CheckoutDetails ->
+         ( Form, Maybe OutMsg, Cmd Msg )
+update key msg model authStatus maybeSessionToken checkoutDetails =
     case msg of
         Email email ->
             { model | email = email } |> nothingAndNoCommand
@@ -291,7 +295,7 @@ update msg model authStatus maybeSessionToken checkoutDetails =
 
         LogInResponse followWithSubmission response ->
             case response of
-                RemoteData.Success (Ok resp) ->
+                RemoteData.Success (Ok (Login.LoginCompleted resp)) ->
                     let
                         checkoutDetails_ =
                             RemoteData.Success resp.details
@@ -348,6 +352,11 @@ update msg model authStatus maybeSessionToken checkoutDetails =
                             , Ports.scrollToTop
                             )
 
+                RemoteData.Success (Ok (Login.ErrVerificationRequired customerId)) ->
+                    ( initial
+                    , Nothing
+                    , Routing.newUrl key (VerificationRequired customerId)
+                    )
                 RemoteData.Success (Err errors) ->
                     ( { model | isProcessing = False, errors = errors }
                     , Nothing
@@ -417,12 +426,10 @@ update msg model authStatus maybeSessionToken checkoutDetails =
                 orderId =
                     response.orderId
 
-                newAuthStatus =
-                    response.authStatus
 
                 outMsg =
-                    if authStatus == User.Anonymous && newAuthStatus /= authStatus then
-                        AnonymousOrderCompleted orderId newAuthStatus
+                    if authStatus == User.Anonymous then
+                        AnonymousOrderCompleted orderId
 
                     else
                         CustomerOrderCompleted orderId
@@ -837,7 +844,7 @@ logIn followWithSubmission model maybeSessionToken =
     in
     Api.post Api.CheckoutLogin
         |> Api.withJsonBody loginData
-        |> Api.withErrorHandler responseDecoder
+        |> Api.withErrorHandler (Login.loginDecoder responseDecoder)
         |> Api.sendRequest (LogInResponse followWithSubmission)
 
 
@@ -937,7 +944,7 @@ placeOrder model authStatus maybeSessionToken stripeTokenId checkoutDetails =
                     anonymousResponseDecoder
 
                 User.Authorized _ ->
-                    customerResponseDecoder authStatus
+                    customerResponseDecoder
     in
     case authStatus of
         User.Anonymous ->
@@ -1868,22 +1875,20 @@ summaryTable ({ items, charges } as checkoutDetails) creditString couponCode cou
         ]
 
 
-successView : Time.Zone -> msg -> Int -> Bool -> AddressLocations -> PageData.OrderDetails -> List (Html msg)
-successView zone logoutMsg orderId newAccountCreated locations orderDetails =
+successView : Time.Zone -> Int -> Bool -> AddressLocations -> PageData.OrderDetails -> List (Html msg)
+successView zone orderId newAccountCreated locations orderDetails =
     let
         newAccountAlert =
             if not newAccountCreated then
                 text ""
 
             else
-                div [ class "alert alert-info clearfix" ]
-                    [ button [ class "btn btn-primary float-right ml-3", onClick logoutMsg ]
-                        [ text "Log Out" ]
-                    , text <|
-                        "You have been automatically logged into "
-                            ++ "your new account. If you are using a public computer, "
-                            ++ "please log out to keep your account details private."
-                    ]
+                text <| String.join " "
+                [ "One last step to complete your registration:"
+                , "please check your email inbox and follow the verification link we've sent you."
+                , "You can safely close this page now."
+                ]
+
 
         commentHtml =
             if not (String.isEmpty orderDetails.order.comment) then

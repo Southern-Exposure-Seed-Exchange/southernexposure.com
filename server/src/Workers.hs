@@ -210,6 +210,8 @@ taskQueueConfig threadCount cfg@Config { getPool, getServerLogger, getCaches } =
                 "Customer #" <> showSqlKey cId <> " Requested Password Reset Email"
             Emails.PasswordResetSuccess cId ->
                 "Customer #" <> showSqlKey cId <> " Password Reset Succeeded Email"
+            Emails.EmailVerification cId _ ->
+                "Customer #" <> showSqlKey cId <> " Email Verification Email"
             Emails.OrderPlaced oId ->
                 "Order #" <> showSqlKey oId <> " Placed Email"
         CleanDatabase ->

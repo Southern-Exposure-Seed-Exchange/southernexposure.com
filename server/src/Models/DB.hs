@@ -99,9 +99,17 @@ Customer
     stripeId StripeCustomerId Maybe
     avalaraCode AvalaraCustomerCode Maybe
     isAdmin Bool default=false
+    verified Bool default=true
     UniqueToken authToken
     UniqueAvalaraCustomer avalaraCode !force
     UniqueEmail email
+
+Verification
+    code T.Text
+    customerId CustomerId OnDeleteCascade
+    createdAt UTCTime
+    UniqueVerificationCode code
+    UniqueCustomerToVerify customerId
 
 PasswordReset
     customerId CustomerId

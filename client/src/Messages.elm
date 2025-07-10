@@ -3,6 +3,8 @@ module Messages exposing (Msg(..))
 import AdvancedSearch
 import Api
 import Auth.CreateAccount as CreateAccount
+import Auth.VerifyEmail as VerifyEmail
+import Auth.VerificationRequired as VerificationRequired
 import Auth.EditAddress as EditAddress
 import Auth.EditLogin as EditLogin
 import Auth.Login as Login
@@ -64,7 +66,9 @@ type Msg
     | SearchMsg SiteSearch.Msg
     | AdvancedSearchMsg AdvancedSearch.Msg
     | CreateAccountMsg CreateAccount.Msg
+    | VerifyEmailMsg VerifyEmail.Msg
     | LoginMsg Login.Msg
+    | VerificationRequiredMsg VerificationRequired.Msg
     | ResetPasswordMsg ResetPassword.Msg
     | EditLoginMsg EditLogin.Msg
     | EditAddressMsg EditAddress.Msg

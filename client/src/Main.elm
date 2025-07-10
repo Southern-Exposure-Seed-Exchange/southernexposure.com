@@ -4,6 +4,8 @@ import Address
 import AdvancedSearch
 import Api
 import Auth.CreateAccount as CreateAccount
+import Auth.VerifyEmail as VerifyEmail
+import Auth.VerificationRequired as VerificationRequired
 import Auth.EditAddress as EditAddress
 import Auth.EditLogin as EditLogin
 import Auth.Login as Login
@@ -200,10 +202,18 @@ fetchDataForRoute ({ route, pageData, key } as model) =
                 CreateAccount ->
                     doNothing
 
+                VerifyEmail uuid ->
+                    ( pageData
+                    , Cmd.map VerifyEmailMsg (VerifyEmail.verifyEmail uuid)
+                    )
+
                 CreateAccountSuccess ->
                     doNothing
 
                 Login _ _ ->
+                    doNothing
+                
+                VerificationRequired _ ->
                     doNothing
 
                 ResetPassword _ ->
@@ -959,6 +969,17 @@ update msg ({ pageData, key } as model) =
               }
             , Cmd.map CreateAccountMsg cmd
             )
+        VerifyEmailMsg subMsg ->
+            let
+                ( updatedForm, maybeAuthStatus, cmd ) =
+                    VerifyEmail.update subMsg model.verifyEmailForm
+            in
+            ( { model
+                | verifyEmailForm = updatedForm
+                , currentUser = maybeAuthStatus |> Maybe.withDefault model.currentUser
+              }
+            , Cmd.map VerifyEmailMsg cmd
+            )
 
         LoginMsg subMsg ->
             let
@@ -979,6 +1000,14 @@ update msg ({ pageData, key } as model) =
               }
             , Cmd.batch [ Cmd.map LoginMsg cmd, cartItemsCommand ]
             )
+        
+        VerificationRequiredMsg subMsg -> 
+            let
+                (updatedForm, cmd) = VerificationRequired.update subMsg model.verificationRequiredForm 
+            in
+                ( {model | verificationRequiredForm = updatedForm} 
+                , Cmd.map VerificationRequiredMsg cmd
+                )
 
         ResetPasswordMsg subMsg ->
             let
@@ -1058,6 +1087,7 @@ update msg ({ pageData, key } as model) =
 
         CheckoutMsg subMsg ->
             let
+                handleOutMsg : Maybe Checkout.OutMsg -> (Model, Cmd msg) -> (Model, Cmd msg)
                 handleOutMsg maybeMsg ( model_, cmd ) =
                     case maybeMsg of
                         Just (Checkout.CustomerOrderCompleted orderId) ->
@@ -1069,14 +1099,13 @@ update msg ({ pageData, key } as model) =
                                 ]
                             )
 
-                        Just (Checkout.AnonymousOrderCompleted orderId newAuthStatus) ->
-                            ( { model_ | cartItemCount = 0, currentUser = newAuthStatus }
+                        Just (Checkout.AnonymousOrderCompleted orderId) ->
+                            ( { model_ | cartItemCount = 0 }
                             , Cmd.batch
-                                [ cmd
+                                [ cmd -- TODO sand-witch: write suggestion to verify email there
                                 , Routing.newUrl key <| CheckoutSuccess orderId True
                                 , Ports.setCartItemCount 0
                                 , Ports.removeCartSessionToken ()
-                                , User.storeDetails newAuthStatus
                                 ]
                             )
 
@@ -1108,7 +1137,8 @@ update msg ({ pageData, key } as model) =
                         Nothing ->
                             ( model_, cmd )
             in
-            Checkout.update subMsg
+            Checkout.update key
+                subMsg
                 model.checkoutForm
                 model.currentUser
                 model.maybeSessionToken
@@ -1773,10 +1803,16 @@ runOnCurrentWebData runner { pageData, route } =
         CreateAccount ->
             nothingRunner
 
+        VerifyEmail _ ->
+            nothingRunner
+
         CreateAccountSuccess ->
             nothingRunner
 
         Login _ _ ->
+            nothingRunner
+
+        VerificationRequired _ ->
             nothingRunner
 
         ResetPassword _ ->
@@ -2061,11 +2097,17 @@ resetForm oldRoute model =
         CreateAccount ->
             { model | createAccountForm = CreateAccount.initial }
 
+        VerifyEmail _ ->
+            model
+
         CreateAccountSuccess ->
             model
 
         Login _ _ ->
             { model | loginForm = Login.initial }
+
+        VerificationRequired _ ->
+            model
 
         ResetPassword _ ->
             { model | resetPasswordForm = ResetPassword.initial }

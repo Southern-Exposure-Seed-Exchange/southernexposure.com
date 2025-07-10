@@ -71,6 +71,7 @@ dependencies:
     - markdown
     - mime-mail
     - mtl
+    - network
     - pandoc
     - persistent
     - persistent-template
