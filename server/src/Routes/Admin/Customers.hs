@@ -397,6 +397,7 @@ customerDeleteRoute t customerId = withAdminCookie t $ \_ -> runDB $ do
                 , customerAvalaraCode = Nothing
                 , customerIsAdmin = False
                 , customerVerified = False
+                , customerEphemeral = False
                 }
         Just (Entity cId _) ->
             return cId

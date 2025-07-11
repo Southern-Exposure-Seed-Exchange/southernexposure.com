@@ -51,6 +51,7 @@ import Views.ShippingAdmin as ShippingAdmin
 import Views.StaticPageAdmin as StaticPageAdmin
 import Views.SurchargesAdmin as SurchargesAdmin
 import Views.Utils exposing (pageOverlay, rawHtml)
+import User exposing (unauthorized)
 
 view : Model -> Document Msg
 view ({ route, pageData, navigationData, zone, helcimUrl } as model) =
@@ -142,7 +143,7 @@ view ({ route, pageData, navigationData, zone, helcimUrl } as model) =
 
                 Login redirectTo clearCart ->
                     Login.view LoginMsg model.loginForm redirectTo clearCart
-                
+
                 VerificationRequired customerId ->
                     VerificationRequired.view customerId model.verificationRequiredForm VerificationRequiredMsg
 
@@ -178,9 +179,10 @@ view ({ route, pageData, navigationData, zone, helcimUrl } as model) =
                         |> withIntermediateText (apply <| Checkout.view model.checkoutForm model.currentUser)
                         |> List.map (Html.map CheckoutMsg)
 
-                CheckoutSuccess orderId newAccount ->
+                CheckoutSuccess orderId _ ->
                     RemoteData.map2 Tuple.pair pageData.locations pageData.orderDetails
-                        |> withIntermediateText (apply <| Checkout.successView zone orderId newAccount)
+                        |> withIntermediateText
+                            (apply <| Checkout.successView zone orderId (model.currentUser == unauthorized))
 
                 Admin Dashboard ->
                     withIntermediateText (AdminDashboard.view model.adminDashboard zone pageData.adminDashboard)
@@ -411,7 +413,7 @@ pageTitle ({ route, pageData } as model) =
 
         Login _ _ ->
             "Customer Login"
-        
+
         VerificationRequired _ ->
             "Verification required"
 
@@ -603,7 +605,7 @@ pageDescription { route, pageData } =
 
         VerifyEmail _ ->
             "Verify email to continue shopping"
-        
+
         VerificationRequired _ ->
             "Verification required before you're able to login"
 

@@ -4,6 +4,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE MultiWayIf #-}
 module Routes.CommonData
     ( ProductData
     , getProductData
@@ -456,11 +457,13 @@ validatePassword email password = do
                 usesPolicy =
                     BCrypt.hashUsesPolicy BCrypt.slowerBcryptHashingPolicy
                         hashedPassword
-            if isValid && usesPolicy then
-                return e
-            else if isValid then
-                makeNewPasswordHash customerId >> return e
-            else
+            if | customerEphemeral customer
+                -> hashAnyways $ throwIO NoCustomer
+               | isValid && usesPolicy
+                -> return e
+               | isValid
+                -> makeNewPasswordHash customerId >> return e
+               | otherwise ->
                 validateZencartPassword e
         Nothing ->
             hashAnyways $ throwIO NoCustomer
@@ -610,13 +613,13 @@ getCartItems
     :: (E.SqlExpr (Entity Cart) -> E.SqlExpr (E.Value Bool))        -- ^ The `E.where_` query
     -> AppSQL [CartItemData]
 getCartItems whereQuery = do
-    items <- E.select $ do 
+    items <- E.select $ do
         (ci E.:& c E.:& v E.:& p) <- E.from $ E.table
-            `E.innerJoin` E.table 
+            `E.innerJoin` E.table
                 `E.on` (\(ci E.:& c) -> c E.^. CartId E.==. ci E.^. CartItemCartId)
-            `E.innerJoin` E.table 
+            `E.innerJoin` E.table
                 `E.on` (\(ci E.:& _ E.:& v) -> v E.^. ProductVariantId E.==. ci E.^. CartItemProductVariantId)
-            `E.innerJoin` E.table 
+            `E.innerJoin` E.table
                 `E.on` (\(_ E.:& v E.:& p) -> p E.^. ProductId E.==. v E.^. ProductVariantProductId)
         E.where_ $ whereQuery c
         E.orderBy [E.asc $ p E.^. ProductName]
@@ -1143,11 +1146,11 @@ instance ToJSON CheckoutProduct where
 
 getCheckoutProducts :: OrderId -> AppSQL [CheckoutProduct]
 getCheckoutProducts orderId = do
-    orderProducts <- E.select $ do 
+    orderProducts <- E.select $ do
         (op E.:& v E.:& p) <-  E.from $ E.table
-            `E.innerJoin` E.table 
+            `E.innerJoin` E.table
                 `E.on` (\(op E.:& v) -> v E.^. ProductVariantId E.==. op E.^. OrderProductProductVariantId)
-            `E.innerJoin` E.table 
+            `E.innerJoin` E.table
                 `E.on` (\(_ E.:& v E.:& p) -> p E.^. ProductId E.==. v E.^. ProductVariantProductId)
         E.where_ $ op E.^. OrderProductOrderId E.==. E.val orderId
         return (op, v , p)

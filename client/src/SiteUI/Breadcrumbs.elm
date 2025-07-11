@@ -66,10 +66,10 @@ view route pageData =
 
                 CreateAccount ->
                     singleItem "Create an Account"
-                
+
                 VerifyEmail _ ->
                     singleItem "Verify an email"
-                
+
                 VerificationRequired _ ->
                     singleItem "Email verification required"
 

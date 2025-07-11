@@ -103,6 +103,7 @@ Customer
     avalaraCode AvalaraCustomerCode Maybe
     isAdmin Bool default=false
     verified Bool default=true
+    ephemeral Bool default=false
     UniqueToken authToken
     UniqueAvalaraCustomer avalaraCode !force
     UniqueEmail email
@@ -215,6 +216,12 @@ Order
     avalaraTransactionCode AvalaraTransactionCode Maybe
     createdAt UTCTime
     deriving Show
+
+GuestOrder
+    orderId OrderId OnDeleteCascade
+    token T.Text
+    UniqueGuestToken token
+    UniqueGuestOrder orderId
 
 OrderLineItem json
     orderId OrderId

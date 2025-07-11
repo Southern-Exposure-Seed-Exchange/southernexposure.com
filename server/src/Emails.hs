@@ -139,7 +139,7 @@ send cfg email =
                 PasswordResetSuccessData _ ->
                     PasswordReset.getSuccess
                 OrderPlacedData parameters ->
-                    OrderPlaced.get parameters
+                    OrderPlaced.get domainName parameters
                 EmailVerificationData _ vCode ->
                     EmailVerification.get domainName (L.fromStrict vCode)
 

@@ -4,13 +4,14 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE RecordWildCards #-}
 module Emails.OrderPlaced (Parameters(..), fetchData, get) where
 
 import Control.Monad (when, unless)
 import Control.Monad.IO.Class (MonadIO)
 import Data.Maybe (listToMaybe, fromMaybe, isJust)
 import Data.Time (formatTime, defaultTimeLocale, hoursToTimeZone, utcToZonedTime)
-import Database.Persist (Entity(..), selectFirst)
+import Database.Persist (Entity(..), selectFirst, unOverflowNatural)
 import Text.Blaze.Renderer.Text (renderMarkup)
 
 import Models
@@ -23,6 +24,8 @@ import qualified Database.Persist as P
 import qualified Text.Blaze.Html as H
 import qualified Text.Blaze.Html5 as H
 import qualified Text.Blaze.Html5.Attributes as A
+import Data.Foldable
+import Data.String (fromString)
 
 
 data Parameters =
@@ -34,6 +37,7 @@ data Parameters =
         , lineItems :: [OrderLineItem]
         , products :: ProductData
         , messageText :: T.Text
+        , guestToken :: Maybe T.Text
         }
 
 type ProductData = [(OrderProduct, Product, ProductVariant, Maybe SeedAttribute)]
@@ -43,57 +47,63 @@ fetchData :: (Monad m, MonadIO m) => OrderId -> E.SqlPersistT m (Maybe Parameter
 fetchData orderId = do
     messageText <- maybe "" (settingsOrderPlacedEmailMessage . entityVal)
         <$> selectFirst [] []
-    maybeCustomerOrderAddresses <- fmap listToMaybe . E.select $ do 
-        (c E.:& o E.:& sa E.:& ba) <- E.from $ E.table @Customer
+    maybeCustomerOrderAddresses <- E.selectOne $ do
+        (c E.:& o E.:& sa E.:& ba E.:& go) <- E.from $ E.table @Customer
             `E.innerJoin` E.table @Order
                 `E.on` (\(c E.:& o) -> c E.^. CustomerId E.==. o E.^. OrderCustomerId)
             `E.innerJoin` E.table @Address
                 `E.on` (\(_ E.:& o E.:& sa) -> sa E.^. AddressId E.==. o E.^. OrderShippingAddressId)
             `E.leftJoin` E.table @Address
-                `E.on` (\(_ E.:& o E.:& _ E.:& ba) -> ba E.?. AddressId E.==. o E.^. OrderBillingAddressId) 
-            
+                `E.on` (\(_ E.:& o E.:& _ E.:& ba) -> ba E.?. AddressId E.==. o E.^. OrderBillingAddressId)
+            `E.leftJoin` E.table @GuestOrder
+                `E.on` (\(_ E.:& o E.:& _ E.:& _ E.:& go) -> E.just (o E.^. OrderId) E.==. go E.?. GuestOrderOrderId)
+
         E.where_ $ o E.^. OrderId E.==. E.val orderId
-        return (c, o, sa, ba)
+        return (c, o, sa, ba, go E.?. GuestOrderToken)
     lineItems <- map entityVal <$> P.selectList [OrderLineItemOrderId P.==. orderId] []
-    productData <- fmap productDataFromEntities . E.select $ do 
-        (op E.:& pv E.:& p E.:& msa) <- E.from $ E.table 
-            `E.innerJoin` E.table 
+    productData <- fmap productDataFromEntities . E.select $ do
+        (op E.:& pv E.:& p E.:& msa) <- E.from $ E.table
+            `E.innerJoin` E.table
                 `E.on` (\(op E.:& pv) -> pv E.^. ProductVariantId E.==. op E.^. OrderProductProductVariantId)
-            `E.innerJoin` E.table 
+            `E.innerJoin` E.table
                 `E.on` (\(_ E.:& pv E.:& p) -> p E.^. ProductId E.==. pv E.^. ProductVariantProductId)
             `E.leftJoin` E.table
-                `E.on` (\(_ E.:& p E.:& msa) -> 
+                `E.on` (\(_ E.:& p E.:& msa) ->
                     msa E.?. SeedAttributeProductId E.==. E.just (p E.^. ProductId))
-                
+
         E.where_ $ op E.^. OrderProductOrderId E.==. E.val orderId
         return (op, p, pv, msa)
     return $ case maybeCustomerOrderAddresses of
         Nothing ->
             Nothing
-        Just (Entity _ customer, order, Entity _ shipping, maybeBilling) ->
-            Just $ Parameters customer (entityVal <$> maybeBilling) shipping order lineItems productData messageText
+        Just (Entity _ customer, order, Entity _ shipping, maybeBilling, maybeGuestToken) ->
+            Just $ Parameters
+                    { billingAddress = entityVal <$> maybeBilling
+                    , shippingAddress = shipping
+                    , products = productData
+                    , guestToken = E.unValue maybeGuestToken
+                    , ..
+                    }
     where productDataFromEntities =
             map (\(a, b, c, d) -> (entityVal a, entityVal b, entityVal c, entityVal <$> d))
 
 
-get :: Parameters -> (String, L.Text)
-get Parameters { shippingAddress, billingAddress, order, products, lineItems, messageText } =
+get :: L.Text -> Parameters -> (String, L.Text)
+get baseUrl params@Parameters { order } =
     ( "Southern Exposure Seed Exchange - Order #" <> showOrderId (entityKey order) <> " Confirmation"
-    , renderMarkup $ render shippingAddress billingAddress order products lineItems messageText
+    , renderMarkup $ render baseUrl params
     )
 
 showOrderId :: OrderId -> String
 showOrderId = show . E.unSqlBackendKey . unOrderKey
 
 
-render :: Address
-       -> Maybe Address
-       -> Entity Order
-       -> [(OrderProduct, Product, ProductVariant, Maybe SeedAttribute)]
-       -> [OrderLineItem]
-       -> T.Text
-       -> H.Html
-render shippingAddress billingAddress (Entity orderId order) productData lineItems preamble =
+render :: L.Text ->  Parameters -> H.Html
+render baseUrl Parameters
+        { order = Entity orderId order
+        , products = productData
+        , messageText = preamble
+        , .. } =
     let
         customerName =
             addressName $ fromMaybe shippingAddress billingAddress
@@ -128,6 +138,11 @@ render shippingAddress billingAddress (Entity orderId order) productData lineIte
                 addressTable shippingAddress billingAddress
                 orderTable productData lineItems
                 H.br
+                for_ guestToken $ \tok -> do
+                    let link = fromString $
+                            L.unpack baseUrl <> "/checkout/success/" <> show (E.fromSqlKey orderId)
+                                <> "?token=" <> T.unpack tok
+                    H.a H.! A.href link $ H.p "Live order status"
                 H.p "Thank You,"
                 H.p "Southern Exposure Seed Exchange"
 
@@ -250,7 +265,7 @@ orderTable productData lineItems =
                 H.td . H.text $ productName prod
                 H.td H.! alignCenter $ H.text isOrganic
                 H.td . H.text . formatCents $ price
-                H.td H.! alignCenter $ H.text . T.pack . show $ quantity
+                H.td H.! alignCenter $ H.text . T.pack . show $ unOverflowNatural quantity
                 (H.td H.! alignLeft) . H.text . formatCents $ total
           discountRow =
               maybe (return ())

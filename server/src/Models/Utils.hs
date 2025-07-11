@@ -223,7 +223,7 @@ mergeCarts (Entity keepId _) (Entity mergeId _) = do
 -- | Get the first matching customer with the given email, searching by
 -- ignoring the casing.
 getCustomerByEmail :: T.Text -> AppSQL (Maybe (Entity Customer))
-getCustomerByEmail email = fmap listToMaybe . E.select $ do 
+getCustomerByEmail email = E.selectOne $ do
     c <- E.from $ E.table
     E.where_ $ E.lower_ (c E.^. CustomerEmail) E.==. E.val (T.toLower email)
     return c

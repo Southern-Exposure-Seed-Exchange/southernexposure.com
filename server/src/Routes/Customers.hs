@@ -18,7 +18,7 @@ module Routes.Customers
     ) where
 
 import UnliftIO.Exception (throwIO, Exception, try, handle)
-import Control.Monad ((>=>), (<=<), when, void, forM_)
+import Control.Monad ((>=>), (<=<), when, void, forM_, unless)
 import Control.Monad.IO.Class (liftIO)
 import Data.Aeson (ToJSON(..), FromJSON(..), (.=), (.:), (.:?), withObject, object)
 import Data.Int (Int64)
@@ -39,7 +39,7 @@ import Servant
 import Auth
 import Models
 import Models.Fields
-    (AvalaraCustomerCode, ArmedForcesRegionCode, armedForcesRegion, Cents(..), creditLineItemTypes)
+    (ArmedForcesRegionCode, armedForcesRegion, Cents(..), creditLineItemTypes)
 import Routes.CommonData
     ( AuthorizationData, toAuthorizationData, AddressData(..), toAddressData
     , fromAddressData, LoginParameters(..), validatePassword, handlePasswordValidationError
@@ -204,32 +204,44 @@ type RegisterRoute =
 
 registrationRoute :: RegistrationParameters -> App ()
 registrationRoute parameters = do
-    _customer <- createNewCustomer Nothing parameters
+    _customer <- createNewCustomer False parameters
     pure ()
 
-createNewCustomer :: Maybe AvalaraCustomerCode -> RegistrationParameters -> App (Entity Customer)
-createNewCustomer mbAvalaraCode = validate >=> \parameters -> do
+createNewCustomer :: Bool -> RegistrationParameters -> App (Entity Customer)
+createNewCustomer ephemeral = validate >=> \parameters -> do
     encryptedPass <- hashPassword $ rpPassword parameters
     (customer, maybeCustomerId) <- runDB $ do
-        authToken <- generateUniqueToken UniqueToken
-        let customer = Customer
-                { customerEmail = rpEmail parameters
-                , customerStoreCredit = Cents 0
-                , customerMemberNumber = ""
-                , customerEncryptedPassword = encryptedPass
-                , customerAuthToken = authToken
-                , customerStripeId = Nothing
-                , customerHelcimCustomerId = Nothing
-                , customerAvalaraCode = mbAvalaraCode
-                , customerIsAdmin = False
-                , customerVerified = False
-                }
-        (customer,) <$> insertUnique customer
+        mCustomer <- getCustomerByEmail (rpEmail parameters)
+        case mCustomer of
+            Just (Entity cId oldCustomer) -> do
+                update cId
+                    [ CustomerEphemeral =. ephemeral
+                    , CustomerEncryptedPassword =. encryptedPass
+                    ]
+                get cId >>= \case
+                    Nothing -> pure (oldCustomer, Nothing)
+                    Just c -> pure (c, Just cId)
+            Nothing -> do
+                authToken <- generateUniqueToken UniqueToken
+                let customer = Customer
+                        { customerEmail = rpEmail parameters
+                        , customerStoreCredit = Cents 0
+                        , customerMemberNumber = ""
+                        , customerEncryptedPassword = encryptedPass
+                        , customerAuthToken = authToken
+                        , customerStripeId = Nothing
+                        , customerHelcimCustomerId = Nothing
+                        , customerAvalaraCode = Nothing
+                        , customerIsAdmin = False
+                        , customerVerified = False
+                        , customerEphemeral = ephemeral
+                        }
+                (customer,) <$> insertUnique customer
     case maybeCustomerId of
         Nothing ->
             serverError err500
         Just customerId -> do
-            newEmailVerification customerId
+            unless ephemeral $ newEmailVerification customerId
             runDB $ maybeMergeCarts customerId (rpCartToken parameters)
             return (Entity customerId customer)
 
