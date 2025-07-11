@@ -295,8 +295,8 @@ updateEditForm key original msg model =
                     noCommand { model | isSaving = False }
 
 
-edit : Zone -> EditForm -> AddressLocations -> PageData.AdminEditCustomerData -> List (Html EditMsg)
-edit zone model locations original =
+edit : Zone -> String -> EditForm -> AddressLocations -> PageData.AdminEditCustomerData -> List (Html EditMsg)
+edit zone helcimUrl model locations original =
     let
         valueWithFallback s1 s2 =
             s1 model |> Maybe.withDefault (s2 original)
@@ -350,6 +350,16 @@ edit zone model locations original =
                     [ text "View on Stripe" ]
             )
             original.stripeId
+        , htmlOrBlank
+            (\helcimCustomerId ->
+                a
+                    [ href <| helcimUrl ++ "/platform/customers/" ++ String.fromInt helcimCustomerId
+                    , target "_blank"
+                    , class "btn btn-sm btn-secondary"
+                    ]
+                    [ text "View on Helcim" ]
+            )
+            original.helcimCustomerId
         , htmlOrBlank
             (\avalaraCode ->
                 a

@@ -53,7 +53,7 @@ import Views.SurchargesAdmin as SurchargesAdmin
 import Views.Utils exposing (pageOverlay, rawHtml)
 
 view : Model -> Document Msg
-view ({ route, pageData, navigationData, zone } as model) =
+view ({ route, pageData, navigationData, zone, helcimUrl } as model) =
     let
         middleContent =
             case route of
@@ -219,7 +219,7 @@ view ({ route, pageData, navigationData, zone } as model) =
 
                 Admin (AdminOrderDetails orderId) ->
                     RemoteData.map2 Tuple.pair pageData.locations pageData.adminOrderDetails
-                        |> withIntermediateText (apply <| OrderAdmin.details zone orderId model.orderDetailsForm)
+                        |> withIntermediateText (apply <| OrderAdmin.details zone orderId helcimUrl model.orderDetailsForm)
                         |> List.map (Html.map OrderDetailsMsg)
 
                 NotFound ->
@@ -234,7 +234,7 @@ view ({ route, pageData, navigationData, zone } as model) =
 
                 Admin (CustomerEdit _) ->
                     RemoteData.map2 Tuple.pair pageData.locations pageData.adminEditCustomer
-                        |> withIntermediateText (apply <| CustomerAdmin.edit zone model.editCustomerForm)
+                        |> withIntermediateText (apply <| CustomerAdmin.edit zone helcimUrl model.editCustomerForm)
                         |> List.map (Html.map EditCustomerMsg)
 
                 Admin ProductList ->

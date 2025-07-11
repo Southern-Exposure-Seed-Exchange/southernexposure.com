@@ -29,6 +29,7 @@ import UnliftIO.Exception (Exception, throwIO, handle)
 import Data.Bifunctor (first)
 import Data.Char (isDigit)
 import Data.Maybe (fromMaybe, mapMaybe, listToMaybe, maybeToList)
+import Data.List (find)
 import Data.Text (Text)
 import Data.Text.Encoding (decodeUtf8)
 import Data.Time
@@ -48,6 +49,7 @@ import Models.Fields
     ( Cents(..), mkCents, Country(..), Region(..), OrderStatus(..), LineItemType(..)
     , StripeChargeId(..), AdminOrderComment(..), renderLotSize
     )
+import Helcim.API.Types.Payment (TransactionId(..))
 import Server
 import StoneEdge
 import Numeric.Natural (Natural)
@@ -319,25 +321,30 @@ transformOrder (order, createdAt, customer, shipping, maybeBilling, maybeCoupon,
             ", " <> renderLotSize ls
     transformCreditCard :: Maybe StoneEdgeOrderPayment
     transformCreditCard =
-        case orderStripeChargeId $ entityVal order of
-            Nothing ->
-                Nothing
-            Just transactionId ->
-                let maybeCredit = listToMaybe $ mapMaybe (\i ->
-                            if orderLineItemType (entityVal i) == StoreCreditLine then
-                                Just $ orderLineItemAmount $ entityVal i
-                            else Nothing
-                        ) items
-                in Just . StoneEdgeOrderCreditCard $ StoneEdgePaymentCreditCard
+        let maybeCredit = orderLineItemAmount . entityVal <$>
+                find (\i -> orderLineItemType (entityVal i) == StoreCreditLine) items
+        in case (orderStripeChargeId $ entityVal order, orderHelcimTransactionId $ entityVal order) of
+            (Just transactionId, _) ->
+                Just . StoneEdgeOrderCreditCard $ StoneEdgePaymentCreditCard
                     { sepccTransactionId =
-                        Just . (\(Stripe.ChargeId i) -> i)
-                            $ fromStripeChargeId transactionId
+                    Just . (\(Stripe.ChargeId i) -> i)
+                        $ fromStripeChargeId transactionId
                     , sepccCardNumber = orderStripeLastFour $ entityVal order
                     , sepccIssuer = fromMaybe "" . orderStripeIssuer $ entityVal order
                     , sepccAmount = Just . StoneEdgeCents $
-                        secCents (setGrandTotal transformTotals)
-                            - maybe 0 (fromIntegral . fromCents) maybeCredit
+                    secCents (setGrandTotal transformTotals)
+                        - maybe 0 (fromIntegral . fromCents) maybeCredit
                     }
+            (Nothing, Just (TransactionId transactionId)) ->
+                Just . StoneEdgeOrderCreditCard $ StoneEdgePaymentCreditCard
+                    { sepccTransactionId = Just $ T.pack $ show transactionId
+                    , sepccCardNumber = orderHelcimCardNumber $ entityVal order
+                    , sepccIssuer = fromMaybe "" . orderHelcimCardType $ entityVal order
+                    , sepccAmount = Just . StoneEdgeCents $
+                    secCents (setGrandTotal transformTotals) - maybe 0 (fromIntegral . fromCents) maybeCredit
+                    }
+            (Nothing, Nothing) ->
+                Nothing
     transformTotals :: StoneEdgeTotals
     transformTotals =
         let productTotal =

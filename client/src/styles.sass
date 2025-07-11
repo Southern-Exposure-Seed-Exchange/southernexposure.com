@@ -271,6 +271,24 @@ body > div.container, body > nav.container
     opacity: 0
     z-index: -999
 
+.card-page-overlay
+  display: flex
+  flex-direction: column
+  align-items: center
+  justify-content: center
+  position: fixed
+  top: 0
+  left: 0
+  height: 100%
+  width: 100%
+  background: linear-gradient(rgba($black, 0.6), rgba($black, 0.6))
+  transition: opacity 0.3s ease-in
+  z-index: 999
+  color: $dark-brown
+  &.hidden
+    opacity: 0
+    z-index: -999
+
 .gallery-modal
   /* Fix z-index relative to input-groups buttons */
   position: fixed

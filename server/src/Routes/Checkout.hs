@@ -2,6 +2,7 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeOperators #-}
 {-# OPTIONS -Wno-deprecations #-}
@@ -28,11 +29,8 @@ import Database.Persist
     , getBy, selectList, update, updateWhere, delete, deleteWhere, count
     , getEntity, selectFirst, OverflowNatural(..)
     )
-import Servant ((:<|>)(..), (:>), AuthProtect, JSON, Post, ReqBody, err404, ServerT, noHeader)
-import Web.Stripe ((-&-))
-import Web.Stripe.Card (createCustomerCardByToken, updateCustomerCard, getCustomerCards)
-import Web.Stripe.Charge (createCharge)
-import Web.Stripe.Customer (Email(..), createCustomer, updateCustomer)
+import Network.Socket (SockAddr(..))
+import Servant ((:<|>)(..), (:>), AuthProtect, Header, JSON, Post, RemoteHost, ReqBody, err404, ServerT, noHeader)
 
 import Auth
 import Avalara
@@ -40,6 +38,14 @@ import Avalara
     , CustomerCode
     )
 import Config
+import Helcim (createVerifyCheckout, getCustomer, getCustomers, purchase, updateCustomer)
+import Helcim.API (HelcimError(..), ApiError(..))
+import Helcim.API.Types.Checkout (CheckoutToken(..), CheckoutCreateResponse (..))
+import Helcim.API.Types.Common (CardToken(..))
+import Helcim.API.Types.Customer (CustomerResponse(..), CreateCustomerRequest(..), GetCustomersRequest(..))
+import qualified Helcim.API.Types.Customer as Helcim
+import Helcim.API.Types.Payment (CardData(..), TransactionResponse(..), PurchaseRequest(..), Status(..))
+import Helcim.Utils (addressToHelcimAddress)
 import Models
 import Models.Fields
 import Server
@@ -52,7 +58,7 @@ import Routes.CommonData
     , PasswordValidationError(..), BaseProductData(..), AuthorizationData
     )
 import Routes.AvalaraUtils (createAvalaraTransaction, createAvalaraCustomer)
-import Routes.Utils (getDisabledCheckoutDetails)
+import Routes.Utils (getDisabledCheckoutDetails, getClientIP)
 import Routes.Customers (RegistrationParameters(..), createNewCustomer, LoginResult (..))
 import Validation (Validation(..))
 import Workers (Task(..), AvalaraTask(..), enqueueTask)
@@ -62,8 +68,6 @@ import qualified Data.Text as T
 import qualified Database.Esqueleto.Experimental as E
 import qualified Emails
 import qualified Validation as V
-import qualified Web.Stripe as Stripe
-import qualified Web.Stripe.Types as Stripe
 
 
 type CheckoutAPI =
@@ -73,6 +77,8 @@ type CheckoutAPI =
     :<|> "anonymous-place-order" :> AnonymousPlaceOrderRoute
     :<|> "login" :> LoginRoute
     :<|> "success" :> SuccessRoute
+    :<|> "helcim-checkout-token" :> CheckoutTokenRoute
+    :<|> "anonymous-helcim-checkout-token" :> AnonymousCheckoutTokenRoute
 
 type CheckoutRoutes = ServerT CheckoutAPI App
 
@@ -84,6 +90,8 @@ checkoutRoutes =
     :<|> anonymousPlaceOrderRoute
     :<|> loginRoute
     :<|> customerSuccessRoute
+    :<|> getCheckoutTokenRoute
+    :<|> anonymousGetCheckoutTokenRoute
 
 
 -- COUPON ERRORS
@@ -169,8 +177,6 @@ withCheckoutDetailsErrors =
             handlePriorityShippingErrors priorityError
         DetailsCouponError couponError ->
             handleCouponErrors couponError
-
-
 
 data CustomerDetailsParameters =
     CustomerDetailsParameters
@@ -427,11 +433,13 @@ data PlaceOrderError
     | StripeTokenRequired
     | NotEnoughStoreCredit
     | NoShippingMethod
-    | StripeError Stripe.StripeError
     | CardChargeError
     | PlaceOrderCouponError CouponError
     | AvalaraNoTransactionCode
     | PlaceOrderCannotShip ShippingRestrictionError
+    | NoHelcimCustomer
+    | HelcimError HelcimError
+    | HelcimPaymentDeclined
     deriving (Show, Typeable)
 
 instance Exception PlaceOrderError
@@ -467,8 +475,6 @@ withPlaceOrderErrors shippingAddress =
         NotEnoughStoreCredit ->
             V.singleFieldError "store-credit"
                 "You cannot apply more store credit than you have."
-        StripeError stripeError ->
-            V.singleError $ Stripe.errorMsg stripeError
         CardChargeError ->
             V.singleError
                 $ "An error occured while charging your card. Please try again or "
@@ -481,6 +487,21 @@ withPlaceOrderErrors shippingAddress =
                 <> "contact us for help. (Error ANTC: No Transction Code Returned)"
         PlaceOrderCannotShip shippingError ->
             handleShippingRestrictionError shippingError
+        NoHelcimCustomer ->
+            V.singleError
+                $ "An error occured while processing your payment details. Please try again or "
+                <> "contact us for help."
+        HelcimError helcimError -> case helcimError of
+            HelcimClientError _ ->
+                V.singleError
+                    $ "An error occured while processing your payment. Please try again or "
+                    <> "contact us for help."
+            HelcimApiError ApiError { errors } ->
+                V.singleError
+                    $ "An error occured while processing your payment: "
+                    <> T.intercalate ", " (map (T.pack . show) errors)
+        HelcimPaymentDeclined ->
+            V.singleError "Your payment was declined. Please try again or contact us for help."
 
 
 
@@ -509,7 +530,7 @@ data CustomerPlaceOrderParameters =
         , cpopPriorityShipping :: Bool
         , cpopCouponCode :: Maybe T.Text
         , cpopComment :: T.Text
-        , cpopStripeToken :: Maybe T.Text
+        , cpopHelcimData :: Maybe (CardToken, Helcim.CustomerCode)
         }
 
 instance FromJSON CustomerPlaceOrderParameters where
@@ -521,7 +542,12 @@ instance FromJSON CustomerPlaceOrderParameters where
             <*> v .: "priorityShipping"
             <*> v .:? "couponCode"
             <*> v .: "comment"
-            <*> v .:? "stripeToken"
+            <*> do
+                v .:? "helcimToken" >>= maybe
+                    (return Nothing)
+                    (\cardToken -> do
+                        customerCode <- v .: "helcimCustomerCode"
+                        return $ Just (cardToken, customerCode))
 
 instance Validation CustomerPlaceOrderParameters where
     validators parameters = do
@@ -530,7 +556,7 @@ instance Validation CustomerPlaceOrderParameters where
         checkoutDisabled <- fst <$> getDisabledCheckoutDetails
         return $
             ( "", [ ( "There was an error processing your payment, please try again."
-                    , whenJust T.null $ cpopStripeToken parameters )
+                    , whenJust T.null $ unCardToken . fst <$> cpopHelcimData parameters )
                   , ( "Sorry, we have temporarily stopped accepting Orders. "
                         <> "Please check our Homepage for updates."
                     , checkoutDisabled
@@ -573,7 +599,10 @@ instance ToJSON PlaceOrderData where
             ]
 
 type CustomerPlaceOrderRoute =
-       AuthProtect "cookie-auth"
+    RemoteHost
+    :> Header "X-Forwarded-For" T.Text
+    :> Header "X-Real-IP" T.Text
+    :> AuthProtect "cookie-auth"
     :> ReqBody '[JSON] CustomerPlaceOrderParameters
     :> Post '[JSON] (Cookied PlaceOrderData)
 
@@ -583,10 +612,10 @@ type CustomerPlaceOrderRoute =
 -- If the Customer has a StripeId, add a new Card & set it as their
 -- Default. Otherwise create a new Stripe Customer for them. Then charge
 -- the Stripe Customer.
-customerPlaceOrderRoute :: WrappedAuthToken -> CustomerPlaceOrderParameters -> App (Cookied PlaceOrderData)
-customerPlaceOrderRoute = validateCookieAndParameters $ \ce@(Entity customerId customer) parameters -> do
+customerPlaceOrderRoute :: SockAddr -> Maybe T.Text -> Maybe T.Text -> WrappedAuthToken -> CustomerPlaceOrderParameters -> App (Cookied PlaceOrderData)
+customerPlaceOrderRoute remoteHost forwardedFor realIP = validateCookieAndParameters $ \ce@(Entity customerId customer) parameters -> do
     let shippingParameter = cpopShippingAddress parameters
-        maybeStripeToken = cpopStripeToken parameters
+        maybeHelcimData = cpopHelcimData parameters
     currentTime <- liftIO getCurrentTime
     orderId <- withPlaceOrderErrors shippingParameter . runDB $ do
         (maybeBillingAddress, shippingAddress, order@(Entity orderId _), preTaxTotal, cartId, appliedCredit) <-
@@ -600,11 +629,10 @@ customerPlaceOrderRoute = validateCookieAndParameters $ \ce@(Entity customerId c
         let remainingCredit = maybe 0 (\c -> c - appliedCredit) $ cpopStoreCredit parameters
         when (preTaxTotal > 0 || preTaxTotal + appliedCredit > 0 ) $
             withAvalaraTransaction order preTaxTotal remainingCredit ce shippingAddress maybeBillingAddress $ \orderTotal ->
-                when (orderTotal >= 50) $ case (maybeBillingAddress, maybeStripeToken) of
-                    (Just (Entity _ billingAddress), Just stripeToken) -> do
-                        stripeCustomerId <- getOrCreateStripeCustomer ce stripeToken
-                        setCustomerCard customer stripeCustomerId billingAddress stripeToken
-                        chargeCustomer stripeCustomerId orderId orderTotal
+                when (orderTotal >= 50) $ case (maybeBillingAddress, maybeHelcimData) of
+                    (Just (Entity _ billingAddress), Just (helcimToken, customerCode)) -> do
+                        getAndUpdateHelcimCustomerByCode customerId customer customerCode billingAddress (entityVal shippingAddress)
+                        helcimCharge helcimToken customerCode (getClientIP remoteHost forwardedFor realIP) orderId orderTotal
                     (Nothing, _) ->
                         throwIO BillingAddressRequired
                     (_, Nothing) ->
@@ -669,7 +697,7 @@ data AnonymousPlaceOrderParameters =
         , apopCouponCode :: Maybe T.Text
         , apopComment :: T.Text
         , apopCartToken :: T.Text
-        , apopStripeToken :: Maybe T.Text
+        , apopHelcimData :: Maybe (CardToken, Helcim.CustomerCode)
         }
 
 instance FromJSON AnonymousPlaceOrderParameters where
@@ -683,7 +711,12 @@ instance FromJSON AnonymousPlaceOrderParameters where
             <*> v .:? "couponCode"
             <*> v .: "comment"
             <*> v .: "sessionToken"
-            <*> v .: "stripeToken"
+            <*> do
+                v .:? "helcimToken" >>= maybe
+                    (return Nothing)
+                    (\cardToken -> do
+                        customerCode <- v .: "helcimCustomerCode"
+                        return $ Just (cardToken, customerCode))
 
 instance Validation AnonymousPlaceOrderParameters where
     validators parameters = do
@@ -728,14 +761,17 @@ instance ToJSON AnonymousPlaceOrderData where
             ]
 
 type AnonymousPlaceOrderRoute =
-       ReqBody '[JSON] AnonymousPlaceOrderParameters
+       RemoteHost
+    :> Header "X-Forwarded-For" T.Text
+    :> Header "X-Real-IP" T.Text
+    :> ReqBody '[JSON] AnonymousPlaceOrderParameters
     :> Post '[JSON] AnonymousPlaceOrderData
 
 -- | Place an Order using an Anonymous Cart.
 --
 -- A new Customer & Order is created & the Customer is charged.
-anonymousPlaceOrderRoute :: AnonymousPlaceOrderParameters -> App AnonymousPlaceOrderData
-anonymousPlaceOrderRoute = validate >=> \parameters -> do
+anonymousPlaceOrderRoute :: SockAddr -> Maybe T.Text -> Maybe T.Text -> AnonymousPlaceOrderParameters -> App AnonymousPlaceOrderData
+anonymousPlaceOrderRoute remoteHost forwardedFor realIP = validate >=> \parameters -> do
     let email = apopEmail parameters
         password = apopPassword parameters
         shippingParam = apopShippingAddress parameters
@@ -757,7 +793,7 @@ anonymousPlaceOrderRoute = validate >=> \parameters -> do
                     "An Account with this Email exists, but a password reset is required."
     currentTime <- liftIO getCurrentTime
     (orderId, orderData) <- withPlaceOrderErrors (NewAddress shippingParam) . runDB $ do
-        c@(Entity customerId customer) <- case maybeCustomer of
+        (Entity customerId customer) <- case maybeCustomer of
             Nothing -> do
                 avalaraCustomerCode <- makeAvalaraCustomer
                 lift $ createNewCustomer avalaraCustomerCode $ RegistrationParameters
@@ -792,13 +828,10 @@ anonymousPlaceOrderRoute = validate >=> \parameters -> do
         when (preTaxTotal > 0)
             $ withAvalaraTransaction order preTaxTotal 0 customerEntity shippingEntity billingEntity
             $ \orderTotal ->
-                case (maybeBillingAddress, apopStripeToken parameters) of
-                    (Just billingAddress, Just stripeToken) -> do
-                        stripeCustomerId <- getOrCreateStripeCustomer c
-                            stripeToken
-                        update customerId [CustomerStripeId =. Just stripeCustomerId]
-                        setCustomerCard customer stripeCustomerId billingAddress stripeToken
-                        chargeCustomer stripeCustomerId orderId orderTotal
+                case (billingEntity, apopHelcimData parameters) of
+                    (Just (Entity _ billingAddress), Just (cardToken, customerCode)) -> do
+                        getAndUpdateHelcimCustomerByCode customerId customer customerCode billingAddress shippingAddress
+                        helcimCharge cardToken customerCode (getClientIP remoteHost forwardedFor realIP) orderId orderTotal
                     (Nothing, _) ->
                         throwIO BillingAddressRequired
                     (_, Nothing) ->
@@ -818,62 +851,38 @@ anonymousPlaceOrderRoute = validate >=> \parameters -> do
     runDB $ enqueuePostOrderTasks orderId
     pure orderData
 
+-- | Get a Helcim Customer by their CustomerCode.
+-- And update their billing & shipping addresses with the current order's values. Map the Helcim Customer id
+-- with the Customer in the database.
+getAndUpdateHelcimCustomerByCode :: CustomerId -> Customer -> Helcim.CustomerCode -> Address -> Address -> AppSQL ()
+getAndUpdateHelcimCustomerByCode customerId customer helcimCustomerCode billingAddress shippingAddress = do
+    mbHelcimCustomerId <- lift $ getCustomers GetCustomersRequest
+        { gcrSearch = Nothing
+        , gcrCustomerCode = Just helcimCustomerCode
+        , gcrLimit = Just 1
+        , gcrPage = Just 1
+        , gcrIncludeCards = Nothing
+        } >>= either (throwIO . HelcimError) (return . fmap creId . listToMaybe)
+    case mbHelcimCustomerId of
+        Just helcimCustomerId -> do
+            -- Update Helcim Customer billing & shipping addresses with values from the current order
+            updateHelcimCustomer helcimCustomerId customer billingAddress shippingAddress
+            update customerId [CustomerHelcimCustomerId =. Just helcimCustomerId]
+        -- Something went wrong
+        -- CustomerCode is obtained from Helcim response, so it should exist
+        Nothing -> throwIO NoHelcimCustomer
 
--- | Get the Customer's StripeCustomerId or create a new Stripe Customer.
---
--- Throws 'StripeError'.
-getOrCreateStripeCustomer :: Entity Customer -> T.Text -> AppSQL StripeCustomerId
-getOrCreateStripeCustomer (Entity customerId customer) stripeToken =
-    case customerStripeId customer of
-        Just stripeId ->
-            return stripeId
-        Nothing -> do
-            newId <- createStripeCustomer (customerEmail customer) stripeToken
-            update customerId [CustomerStripeId =. Just newId]
-            return newId
-
--- | Create a Stripe Customer with an Email & Token.
---
--- Throws 'StripeError'.
-createStripeCustomer :: T.Text -> T.Text -> AppSQL StripeCustomerId
-createStripeCustomer email stripeToken =
-    lift (stripeRequest $ createCustomer -&- Email email -&- Stripe.TokenId stripeToken)
-        >>= either (throwIO . StripeError)
-            (return . StripeCustomerId . Stripe.customerId)
-
--- | Set the Customer's default Stripe Card. Uses the first card if the
--- customer had no StripeId before, or creates a new card using the
--- StripeToken if the Stripe Customer existed. Sets the address of the Card
--- to the Billing Address.
---
--- Throws 'StripeError'.
-setCustomerCard :: Customer -> StripeCustomerId -> Address -> T.Text -> AppSQL ()
-setCustomerCard customer stripeCustomerId billingAddress stripeToken = do
-    stripeCardId <- case customerStripeId customer of
-        Nothing ->
-            getFirstStripeCard stripeCustomerId
-        Just _ -> do
-            -- Already Had Customer, Create New Card w/ Token
-            requestResult <- lift . stripeRequest $
-                createCustomerCardByToken (fromStripeCustomerId stripeCustomerId)
-                    (Stripe.TokenId stripeToken)
-            either (throwIO . StripeError) (return . Stripe.cardId) requestResult
-    updateCardAddress stripeCustomerId stripeCardId billingAddress
-    lift (stripeRequest (updateCustomer (fromStripeCustomerId stripeCustomerId)
-        -&- Stripe.DefaultCard stripeCardId))
-        >>= either (throwIO . StripeError) (void . return)
-
--- | Update the Name & Address of a Stripe Card.
-updateCardAddress :: StripeCustomerId -> Stripe.CardId -> Address -> AppSQL ()
-updateCardAddress stripeCustomerId stripeCardId billingAddress =
-    lift . void . stripeRequest $
-        updateCustomerCard (fromStripeCustomerId stripeCustomerId) stripeCardId
-            -&- Stripe.Name (addressFirstName billingAddress <> " " <> addressLastName billingAddress)
-            -&- Stripe.AddressLine1 (addressAddressOne billingAddress)
-            -&- Stripe.AddressLine2 (addressAddressTwo billingAddress)
-            -&- Stripe.AddressCity (addressCity billingAddress)
-            -&- Stripe.AddressState (regionName $ addressState billingAddress)
-
+updateHelcimCustomer :: Helcim.CustomerId -> Customer -> Address -> Address -> AppSQL ()
+updateHelcimCustomer helcimCustomerId customer billingAddress shippingAddress = do
+    -- Update Helcim Customer billing & shipping addresses with provided values
+    void $ lift $ (updateCustomer helcimCustomerId $ CreateCustomerRequest
+        { ccrCustomerCode = Nothing
+        , ccrContactName = Just (customerEmail customer)
+        , ccrBusinessName = Just $ addressCompanyName billingAddress
+        , ccrCellPhone = Nothing
+        , ccrBillingAddress = Just $ addressToHelcimAddress billingAddress
+        , ccrShippingAddress = Just $ addressToHelcimAddress shippingAddress
+        }) >>= either (throwIO . HelcimError) return
 
 -- | Commit an uncommited Avalara Sales Tax Transaction. Throws
 -- a 'PlaceOrderError' on failure.
@@ -1010,45 +1019,39 @@ withAvalaraTransaction order@(Entity orderId _) preTaxTotal storeCredit c@(Entit
                     [ OrderLineItemAmount +=. appliedCredit ]
 
 
-
--- | Charge a Stripe Customer for an Order or throw a validation error.
-chargeCustomer :: StripeCustomerId -> OrderId -> Cents -> AppSQL ()
-chargeCustomer stripeCustomerId orderId orderTotal = do
-    chargeResult <- lift $ stripeRequest
-        (createCharge (toStripeAmount orderTotal) Stripe.USD
-            -&- fromStripeCustomerId stripeCustomerId)
-    case chargeResult of
+helcimCharge :: CardToken -> Helcim.CustomerCode -> T.Text -> OrderId -> Cents -> AppSQL ()
+helcimCharge cardToken customerCode ipAddress orderId orderTotal = do
+    purchaseResult <- lift $ Helcim.purchase PurchaseRequest
+        { prqIpAddress = ipAddress
+        , prqEcommerce = Nothing
+        , prqTerminalId = Nothing
+        , prqCurrency = "USD"
+        , prqAmount = toDollars orderTotal
+        , prqCustomerCode = Just customerCode
+        , prqInvoiceNumber = Nothing
+        , prqBillingAddress = Nothing
+        , prqInvoice = Nothing
+        , prqCardData = CardData { cdCardToken = cardToken }
+        }
+    case purchaseResult of
         Left err ->
             update orderId [OrderStatus =. PaymentFailed]
-                >> throwIO (StripeError err)
-        Right stripeCharge ->
-            let
-                stripeChargeId =
-                    StripeChargeId $ Stripe.chargeId stripeCharge
-                stripeLastFour =
-                    Stripe.cardLastFour <$> Stripe.chargeCreditCard stripeCharge
-                stripeIssuer =
-                    T.pack . show . Stripe.cardBrand <$> Stripe.chargeCreditCard stripeCharge
-            in
-                update orderId
-                    [ OrderStatus =. PaymentReceived
-                    , OrderStripeChargeId =. Just stripeChargeId
-                    , OrderStripeLastFour =. stripeLastFour
-                    , OrderStripeIssuer =. stripeIssuer
-                    ]
-
-
--- | Return the first Stripe Card Id for a Stripe Customer. This is useful
--- for getting new CardId after creating a Stripe Customer from a Stripe
--- Token.
-getFirstStripeCard :: StripeCustomerId -> AppSQL Stripe.CardId
-getFirstStripeCard stripeCustomerId =
-    lift (stripeRequest (getCustomerCards (fromStripeCustomerId stripeCustomerId)
-            -&- Stripe.Limit 1))
-        >>= either (throwIO . StripeError)
-            (return . fmap Stripe.cardId . listToMaybe . Stripe.list)
-        >>= maybe (throwIO CardChargeError) return
-
+                >> throwIO (HelcimError err)
+        Right purchaseResponse ->
+            case trStatus purchaseResponse of
+                Declined ->
+                    update orderId [OrderStatus =. PaymentFailed]
+                        >> throwIO HelcimPaymentDeclined
+                Approved -> do
+                    let helcimTransactionId = trTransactionId purchaseResponse
+                        helcimCardNumber = trCardNumber purchaseResponse
+                        helcimCardType = trCardType purchaseResponse
+                    update orderId
+                        [ OrderStatus =. PaymentReceived
+                        , OrderHelcimTransactionId =. Just helcimTransactionId
+                        , OrderHelcimCardNumber =. helcimCardNumber
+                        , OrderHelcimCardType =. Just helcimCardType
+                        ]
 
 -- | Create an Order and it's Line Items & Products, returning the ID, Total,
 -- & Applied Store Credit.
@@ -1088,6 +1091,9 @@ createOrder ce@(Entity customerId customer) cartId shippingEntity billingId mayb
             , orderStripeChargeId = Nothing
             , orderStripeLastFour = Nothing
             , orderStripeIssuer = Nothing
+            , orderHelcimTransactionId = Nothing
+            , orderHelcimCardNumber = Nothing
+            , orderHelcimCardType = Nothing
             , orderCouponId = Nothing
             , orderCreatedAt = currentTime
             }
@@ -1344,17 +1350,50 @@ instance Exception SuccessError
 
 getOrderAndAddress :: CustomerId -> OrderId -> AppSQL (Maybe (Entity Order, Entity Address, Maybe (Entity Address)))
 getOrderAndAddress customerId orderId =
-    fmap listToMaybe . E.select $ do  
-        (o E.:& s E.:& b) <- E.from $ E.table 
-            `E.innerJoin` E.table 
+    fmap listToMaybe . E.select $ do
+        (o E.:& s E.:& b) <- E.from $ E.table
+            `E.innerJoin` E.table
                 `E.on` (\(o E.:& s) -> o E.^. OrderShippingAddressId E.==. s E.^. AddressId)
-            `E.leftJoin` E.table 
+            `E.leftJoin` E.table
                 `E.on` (\(o E.:& _ E.:& b) -> o E.^. OrderBillingAddressId E.==. b E.?. AddressId)
         E.where_ $
             o E.^. OrderId E.==. E.val orderId E.&&.
             o E.^. OrderCustomerId E.==. E.val customerId
         return (o, s, b)
 
+-- CHECKOUT TOKEN
+
+newtype CheckoutTokenData = CheckoutTokenData
+    { ctdToken :: CheckoutToken }
+
+instance ToJSON CheckoutTokenData where
+    toJSON (CheckoutTokenData token) =
+        object ["token" .= token]
+
+-- When the user is authenticated,
+-- we can get their corresponding Helcim Customer id (if it exists) or create a new one.
+type CheckoutTokenRoute = AuthProtect "cookie-auth" :> Post '[JSON] (Cookied CheckoutTokenData)
+
+getCheckoutTokenRoute :: WrappedAuthToken -> App (Cookied CheckoutTokenData)
+getCheckoutTokenRoute token = withValidatedCookie token $ \(Entity _ customer) ->
+    getCheckoutToken (customerHelcimCustomerId customer)
+
+type AnonymousCheckoutTokenRoute = Post '[JSON] CheckoutTokenData
+
+anonymousGetCheckoutTokenRoute :: App CheckoutTokenData
+anonymousGetCheckoutTokenRoute = do
+    getCheckoutToken Nothing
+
+getCheckoutToken :: Maybe Helcim.CustomerId -> App CheckoutTokenData
+getCheckoutToken mbHelcimCustomerId = do
+    mbCustomerCode <- case mbHelcimCustomerId of
+        Just helcimCustomerId -> do
+            getCustomer helcimCustomerId >>= either (throwIO . HelcimError) (return . Just . creCustomerCode)
+        Nothing -> return Nothing
+    createVerifyCheckout mbCustomerCode >>= \case
+        Left e -> throwIO $ HelcimError e
+        Right CheckoutCreateResponse {..} ->
+            return CheckoutTokenData { ctdToken = ccrCheckoutToken }
 
 -- Utils
 

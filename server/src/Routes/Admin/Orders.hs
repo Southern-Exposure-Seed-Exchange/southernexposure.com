@@ -11,9 +11,10 @@ module Routes.Admin.Orders
     ) where
 
 import UnliftIO.Exception (Exception, try, throwIO)
-import Control.Monad ((>=>), forM, join, void)
+import Control.Monad ((>=>), forM, join, unless, void)
 import Control.Monad.Trans (MonadIO, lift, liftIO)
 import Data.Aeson (ToJSON(..), FromJSON(..), (.=), (.:), object, withObject)
+import Data.Bifunctor (first)
 import Data.List (sortOn)
 import Data.Maybe (fromMaybe)
 import Data.Ratio ((%))
@@ -26,16 +27,23 @@ import Database.Persist
     ( (==.), (=.), Entity(..), Filter, SelectOpt(..), count, get, selectList
     , getEntity, getJustEntity, insert, update, OverflowNatural(..)
     )
+import Network.Socket (SockAddr(..))
 import Servant
-    ( (:<|>)(..), (:>), AuthProtect, QueryParam, Capture, ReqBody, Get, Post
+    ( (:<|>)(..), (:>), AuthProtect, QueryParam, Capture, Header, ReqBody, Get, RemoteHost, Post
     , JSON, err404
     )
+import Servant.Server.Internal (ServerT)
 import Text.Read (readMaybe)
 import Web.Stripe ((-&-), StripeError(..))
 import Web.Stripe.Refund (Amount(..), createRefund)
 
 import Auth (WrappedAuthToken, Cookied, withAdminCookie, validateAdminAndParameters)
 import Avalara (RefundTransactionRequest(..))
+
+import Helcim (refund, reverse, getCardBatch, getTransaction)
+import Helcim.API (HelcimError)
+import Helcim.API.Types.CardBatch (CardBatchResponse(..))
+import Helcim.API.Types.Payment (RefundRequest(..), ReverseRequest(..), TransactionResponse(..), TransactionId)
 import Models
     ( OrderId, Order(..), OrderProduct(..), OrderLineItem(..), Customer(customerEmail)
     , Address(..), EntityField(..), CustomerId
@@ -43,13 +51,13 @@ import Models
 import Models.Fields
     ( OrderStatus, Region, Cents(..), LineItemType(..), StripeChargeId(..)
     , AdminOrderComment(..), AvalaraTransactionCode(..), creditLineItemTypes
-    , formatCents
+    , formatCents, toDollars
     )
 import Routes.AvalaraUtils (renderAvalaraError)
 import Routes.CommonData
     ( OrderDetails(..), toCheckoutOrder, getCheckoutProducts, toAddressData
     )
-import Routes.Utils (extractRowCount, buildWhereQuery)
+import Routes.Utils (extractRowCount, buildWhereQuery, getClientIP)
 import Server (App, AppSQL, runDB, serverError, stripeRequest, avalaraRequest)
 import Validation (Validation(..))
 import Workers (Task(Avalara), AvalaraTask(RefundTransaction), enqueueTask)
@@ -67,11 +75,7 @@ type OrderAPI =
     :<|> "comment" :> OrderCommentRoute
     :<|> "refund" :> OrderRefundRoute
 
-type OrderRoutes =
-         (WrappedAuthToken -> Maybe Int -> Maybe Int -> Maybe T.Text -> App (Cookied OrderListData))
-    :<|> (WrappedAuthToken -> OrderId -> App (Cookied AdminOrderDetails))
-    :<|> (WrappedAuthToken -> OrderCommentParameters -> App (Cookied OrderId))
-    :<|> (WrappedAuthToken -> OrderRefundParameters -> App (Cookied OrderId))
+type OrderRoutes = ServerT OrderAPI App
 
 orderRoutes :: OrderRoutes
 orderRoutes =
@@ -141,12 +145,12 @@ orderListRoute token maybePage maybePerPage maybeQuery = withAdminCookie token $
                 count ([] :: [Filter Order])
             else
                 extractRowCount . E.select $ do
-                    (o E.:& c E.:& sa) <- E.from $ E.table 
+                    (o E.:& c E.:& sa) <- E.from $ E.table
                         `E.leftJoin` E.table
-                            `E.on` (\(o E.:& c) -> 
+                            `E.on` (\(o E.:& c) ->
                                 E.just (o E.^. OrderCustomerId) E.==. c E.?. CustomerId)
                         `E.leftJoin` E.table
-                            `E.on` (\(o E.:& _ E.:& sa) -> 
+                            `E.on` (\(o E.:& _ E.:& sa) ->
                                 E.just (o E.^. OrderShippingAddressId) E.==. sa E.?. AddressId)
                     E.where_ $ makeQuery o c sa query
                     return E.countRows
@@ -162,11 +166,11 @@ orderListRoute token maybePage maybePerPage maybeQuery = withAdminCookie token $
                 else
                     E.select $ do
                         (o E.:& c E.:& sa) <- E.from $ E.table
-                            `E.leftJoin` E.table 
-                                `E.on` (\(o E.:& c) -> 
+                            `E.leftJoin` E.table
+                                `E.on` (\(o E.:& c) ->
                                     E.just (o E.^. OrderCustomerId) E.==. c E.?. CustomerId)
                             `E.leftJoin` E.table
-                                `E.on` (\(o E.:& _ E.:& sa) -> 
+                                `E.on` (\(o E.:& _ E.:& sa) ->
                                     E.just (o E.^. OrderShippingAddressId) E.==. sa E.?. AddressId)
                         E.limit $ fromIntegral perPage
                         E.offset $ fromIntegral offset
@@ -241,6 +245,7 @@ data AdminOrderDetails =
         { aodDetails :: OrderDetails
         , aodAdminComments :: [AdminOrderComment]
         , aodStripeId :: Maybe StripeChargeId
+        , aodHelcimTransactionId :: Maybe TransactionId
         , aodCustomerId :: CustomerId
         } deriving (Show)
 
@@ -250,6 +255,7 @@ instance ToJSON AdminOrderDetails where
             [ "details" .= aodDetails
             , "adminComments" .= aodAdminComments
             , "stripeId" .= aodStripeId
+            , "helcimTransactionId" .= aodHelcimTransactionId
             , "customerId" .= aodCustomerId
             ]
 
@@ -271,6 +277,7 @@ orderDetailsRoute token orderId = withAdminCookie token $ \_ -> runDB $ do
         { aodDetails = details
         , aodAdminComments = sortOn adminCommentTime $ orderAdminComments order
         , aodStripeId = orderStripeChargeId order
+        , aodHelcimTransactionId = orderHelcimTransactionId order
         , aodCustomerId = orderCustomerId order
         }
 
@@ -329,7 +336,10 @@ orderCommentRoute = validateAdminAndParameters $ \_ parameters -> do
 
 
 type OrderRefundRoute =
-       AuthProtect "cookie-auth"
+    RemoteHost
+    :> Header "X-Forwarded-For" T.Text
+    :> Header "X-Real-IP" T.Text
+    :> AuthProtect "cookie-auth"
     :> ReqBody '[JSON] OrderRefundParameters
     :> Post '[JSON] (Cookied OrderId)
 
@@ -366,8 +376,10 @@ instance Validation OrderRefundParameters where
 
 data OrderRefundError
     = OrderNotFound
-    | NoStripeCharge
+    | NoCharge
     | StripeRefundError StripeError
+    | HelcimRefundError HelcimError
+    | HelcimPartialRefundImpossible
     | AvalaraError Avalara.ErrorInfo
     deriving (Show)
 
@@ -381,7 +393,7 @@ handleOrderRefundErrors =
     handler = V.singleError . \case
         OrderNotFound ->
             "Could not find this order in the database."
-        NoStripeCharge ->
+        NoCharge ->
             "There is no charge available to refund."
         StripeRefundError stripeError -> T.intercalate ""
             [ "We encountered an error while trying to process the refund: "
@@ -389,22 +401,61 @@ handleOrderRefundErrors =
             , ":"
             , errorMsg stripeError
             ]
+        HelcimRefundError helcimError ->
+            T.intercalate ""
+                [ "We encountered an error while trying to process the refund: "
+                , T.pack $ show helcimError
+                ]
+        HelcimPartialRefundImpossible -> T.intercalate " "
+            [ "Card batch for the charge wasn't settled yet, so processing a partial refund is not possible."
+            , "If you need to do a partial refund, please settle the card batch in the Helcim web UI first."
+            ]
         AvalaraError errInfo ->
             renderAvalaraError errInfo
 
 
-orderRefundRoute :: WrappedAuthToken -> OrderRefundParameters -> App (Cookied OrderId)
-orderRefundRoute = validateAdminAndParameters $ \_ parameters -> do
+orderRefundRoute :: SockAddr -> Maybe T.Text -> Maybe T.Text -> WrappedAuthToken -> OrderRefundParameters -> App (Cookied OrderId)
+orderRefundRoute remoteHost forwardedFor realIP = validateAdminAndParameters $ \_ parameters -> do
     let orderId = orpId parameters
         refundAmount = orpAmount parameters
     mOrder <- runDB $ get orderId
-    handleOrderRefundErrors $ maybeM mOrder OrderNotFound $ \order ->
-        maybeM (orderStripeChargeId order) NoStripeCharge $ \chargeId -> do
-        refundResult <- stripeRequest $ createRefund (fromStripeChargeId chargeId)
-            -&- Amount (fromIntegral $ fromCents refundAmount)
+    handleOrderRefundErrors $ maybeM mOrder OrderNotFound $ \order -> do
+        refundResult <- case (orderStripeChargeId order, orderHelcimTransactionId order) of
+            (Just stripeChargeId, _) -> do
+                result <- stripeRequest $ createRefund (fromStripeChargeId stripeChargeId)
+                    -&- Amount (fromIntegral $ fromCents refundAmount)
+                pure $ first StripeRefundError (void result)
+            (Nothing, Just helcimTransactionId) -> do
+                transaction <- getTransaction helcimTransactionId
+                    >>= either (throwIO . HelcimRefundError) return
+                let isFullRefund = toDollars refundAmount == trAmount transaction
+                    cardBatchId = trCardBatchId transaction
+                cardBatch <- getCardBatch cardBatchId
+                    >>= either (throwIO . HelcimRefundError) return
+                let isCardBatchClosed = cbrClosed cardBatch
+
+                -- See https://devdocs.helcim.com/docs/payments#refunding-and-reversing-payments
+                -- to get the idea of how Helcim handles refunds.
+                -- If the card batch is closed, we can partially refund the payment.
+                -- If the card batch is not closed, we can only _fully_ reverse the payment.
+                if isCardBatchClosed then
+                    fmap (first HelcimRefundError . void) $ refund $ RefundRequest
+                        { refrOriginalTransactionId = helcimTransactionId
+                        , refrAmount = toDollars refundAmount
+                        , refrIpAddress = getClientIP remoteHost forwardedFor realIP
+                        , refrEcommerce = Nothing
+                        }
+                else do
+                    unless isFullRefund $ throwIO HelcimPartialRefundImpossible
+                    fmap (first HelcimRefundError . void) $ Helcim.reverse $ ReverseRequest
+                        { revrCardTransactionId = helcimTransactionId
+                        , revrIpAddress = getClientIP remoteHost forwardedFor realIP
+                        , revrEcommerce = Nothing
+                        }
+            (Nothing, Nothing) -> do
+                pure $ Left NoCharge
         case refundResult of
-            Left stripeError ->
-                throwIO $ StripeRefundError stripeError
+            Left err -> throwIO err
             Right _ -> runDB $ do
                 addRefundLineItem orderId refundAmount
                 makeAvalaraRefund (Entity orderId order) refundAmount

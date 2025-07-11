@@ -5,7 +5,6 @@ const authUserIdKey = 'authUserId';
 const cartTokenKey = 'cartSessionToken';
 const cartItemCountKey = 'cartItemCount';
 
-
 /** FLAGS **/
 var cartToken = localStorage.getItem(cartTokenKey);
 var cartItemCount = localStorage.getItem(cartItemCountKey);
@@ -18,24 +17,10 @@ var app = Elm.Main.init({
       authUserId: userId,
       cartSessionToken: cartToken,
       cartItemCount: intOrNull(cartItemCount),
+      helcimUrl: helcimUrl,
     },
   },
 );
-
-
-/** STRIPE **/
-var stripeHandler = StripeCheckout.configure({
-  key: STRIPE_API_KEY,
-  locale: 'auto',
-  name: 'Southern Exposure',
-  image: '/static/img/logos/sese.png',
-  zipCode: true,
-  token: function(token) {
-    /** STRIPE SUBSCRIPTION **/
-    app.ports.stripeTokenReceived.send(token.id)
-  }
-});
-
 
 /** ANALYTICS **/
 window.dataLayer = window.dataLayer || [];
@@ -133,19 +118,6 @@ app.ports.setCartItemCount.subscribe(function(itemCount) {
   localStorage.setItem(cartItemCountKey, itemCount);
 });
 
-
-/* Open the Stripe Checkout Popup */
-app.ports.collectStripeToken.subscribe(function(portData) {
-  var [customerEmail, checkoutTotal] = portData;
-  stripeHandler.open({
-    email: customerEmail,
-    amount: checkoutTotal,
-  });
-  window.addEventListener('popstate', function() {
-    stripeHandler.close();
-  });
-});
-
 /* Update the Page's Meta Elements & Send a Page Hit to Analytics */
 app.ports.updatePageMetadata.subscribe(function(portData) {
   var url = portData.url,
@@ -191,7 +163,30 @@ app.ports.initializeOrDestroyHomepageCarousel.subscribe(function(isHomepage) {
   });
 });
 
+let helcimMessageListener = null;
 
+app.ports.appendHelcimPayIframe.subscribe(function(checkoutToken) {
+  window.appendHelcimPayIframe(checkoutToken);
+})
+
+app.ports.removeHelcimPayIframe.subscribe(function() {
+  frame = document.getElementById('helcimPayIframe');
+  if (frame instanceof HTMLIFrameElement) {
+    frame.remove();
+    window.removeEventListener('message', helcimMessageListener);
+  }
+})
+
+app.ports.subscribeToHelcimMessages.subscribe(function() {
+  if (helcimMessageListener) {
+    window.removeEventListener('message', helcimMessageListener);
+  }
+  helcimMessageListener = function(event) {
+    app.ports.helcimMessageReceived.send(event.data);
+  }
+
+  window.addEventListener('message', helcimMessageListener);
+})
 /** UTILITIES **/
 
 /* Parse an Int or return null */
