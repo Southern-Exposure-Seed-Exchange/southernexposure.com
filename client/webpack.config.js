@@ -13,8 +13,9 @@ var OptimizeCSSAssetsPlugin = require('optimize-css-assets-webpack-plugin');
 var RobotsTxtPlugin = require('robotstxt-webpack-plugin');
 
 var isProduction = process.env.NODE_ENV === 'production';
+var isHelcimProduction = process.env.HELCIM_ENV === 'production';
 
-var helcimUrl = isProduction ? "https://southern-exposure-seed-exchange.myhelcim.com" : "https://test-southern-exposure-seed-exchange.myhelcim.com";
+var helcimUrl = isHelcimProduction ? "https://southern-exposure-seed-exchange.myhelcim.com" : "https://test-southern-exposure-seed-exchange.myhelcim.com";
 
 const GA_MEASUREMENT_ID = 'UA-5070189-1';
 

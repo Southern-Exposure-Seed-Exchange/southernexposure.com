@@ -28,6 +28,8 @@ ENV CXXFLAGS=-std=c++17
 RUN npm --prefix client install
 # Actually build client
 COPY client ./client
+ARG HELCIM_ENV
+ENV HELCIM_ENV=$HELCIM_ENV
 RUN npm --prefix client run build
 
 FROM base AS backend-builder
@@ -48,8 +50,10 @@ EXPOSE 8080
 
 FROM debian:bookworm-slim AS backend
 RUN apt-get -y update && apt-get install -y libpq5
+RUN useradd -m -U -d /home/sese -s /bin/bash sese
 COPY --from=backend-builder /root/.local/bin/sese-website-exe /usr/local/bin/sese-website-exe
 COPY server/scripts/entrypoint.sh /usr/local/bin/entrypoint.sh
 EXPOSE 3000
+USER sese
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 CMD ["sese-website-exe"]

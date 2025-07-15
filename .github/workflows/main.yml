@@ -107,6 +107,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Prepare env
+        run:
+          echo "HELCIM_ENV=${{ github.ref == 'refs/heads/master' && 'production' || 'staging' }}" >> $GITHUB_ENV
+
+
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v3
         with:
@@ -128,3 +133,5 @@ jobs:
           push: ${{ github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/master' }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          args: |
+            HELCIM_ENV
