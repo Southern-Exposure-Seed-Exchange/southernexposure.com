@@ -28,6 +28,8 @@ ENV CXXFLAGS=-std=c++17
 RUN npm --prefix client install
 # Actually build client
 COPY client ./client
+ARG HELCIM_ENV
+ENV HELCIM_ENV=$HELCIM_ENV
 RUN npm --prefix client run build
 
 FROM base AS backend-builder
