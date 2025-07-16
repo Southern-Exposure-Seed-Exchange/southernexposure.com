@@ -1,0 +1,71 @@
+services:
+  backend:
+    image: ${BACKEND_IMAGE:-ghcr.io/southern-exposure-seed-exchange/sese-backend}:${BACKEND_TAG:-latest}
+    container_name: sese-backend
+    ports:
+      - 127.0.0.1:3000:3000
+    environment:
+      - ENV=Production
+      - PORT=3000
+      - MEDIA=/home/sese/media
+      - LOGS=/home/sese/backend-logs
+      - BASE_URL=${BASE_URL}
+      - AVATAX_ENVIRONMENT=${AVATAX_ENVIRONMENT}
+      - AVATAX_COMPANY_CODE=${AVATAX_COMPANY_CODE}
+      - AVATAX_ACCOUNT_ID_FILE=/run/secrets/avatax_account_id
+      - AVATAX_COMPANY_ID_FILE=/run/secrets/avatax_company_id
+      - AVATAX_LICENSE_KEY_FILE=/run/secrets/avatax_license_key
+      - STONE_EDGE_USER=${STONE_EDGE_USER}
+      - STONE_EDGE_PASS_FILE=/run/secrets/stone_edge_pass
+      - STONE_EDGE_CODE_FILE=/run/secrets/stone_edge_code
+      - DB_HOST=${DB_HOST}
+      - DB_PORT=${DB_PORT}
+      - DB_NAME=${DB_NAME}
+      - DB_USER=${DB_USER}
+      - DB_PASS_FILE=/run/secrets/db_pass
+      - SMTP_SERVER=${SMTP_SERVER}
+      - SMTP_USER=${SMTP_USER}
+      - SMTP_PASS_FILE=/run/secrets/smtp_pass
+      - HELCIM_TOKEN_FILE=/run/secrets/helcim_token
+      - STRIPE_TOKEN_FILE=/run/secrets/stripe_token
+    secrets:
+      - avatax_account_id
+      - avatax_company_id
+      - avatax_license_key
+      - stone_edge_pass
+      - stone_edge_code
+      - db_pass
+      - smtp_pass
+      - helcim_token
+      - stripe_token
+    # At the moment logs and media are stored in the container. They need to be exposed
+    # to the host machine for persistence and access from nginx and logrotate.
+    volumes:
+      - ${MEDIA:-/var/www/media}:/home/sese/media
+      - ${LOGS:-/var/www/backend-logs}:/home/sese/backend-logs
+
+  frontend:
+    image: ${FRONTEND_IMAGE:-ghcr.io/southern-exposure-seed-exchange/sese-frontend}:${FRONTEND_TAG:-latest}
+    container_name: sese-frontend
+    ports:
+      - 127.0.0.1:8080:8080
+
+secrets:
+  avatax_account_id:
+    environment: AVATAX_ACCOUNT_ID
+  avatax_company_id:
+    environment: AVATAX_COMPANY_ID
+  avatax_license_key:
+    environment: AVATAX_LICENSE_KEY
+  stone_edge_pass:
+    environment: STONE_EDGE_PASS
+  stone_edge_code:
+    environment: STONE_EDGE_CODE
+  db_pass:
+    environment: DB_PASS
+  smtp_pass:
+    environment: SMTP_PASS
+  helcim_token:
+    environment: HELCIM_TOKEN
+  stripe_token:
+    environment: STRIPE_TOKEN
