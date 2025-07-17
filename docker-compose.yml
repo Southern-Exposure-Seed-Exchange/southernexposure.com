@@ -28,6 +28,7 @@ services:
       - SMTP_PASS_FILE=/run/secrets/smtp_pass
       - HELCIM_TOKEN_FILE=/run/secrets/helcim_token
       - STRIPE_TOKEN_FILE=/run/secrets/stripe_token
+      - COOKIE_SECRET_FILE=/run/secrets/cookie_secret
     secrets:
       - avatax_account_id
       - avatax_company_id
@@ -38,6 +39,7 @@ services:
       - smtp_pass
       - helcim_token
       - stripe_token
+      - cookie_secret
     # At the moment logs and media are stored in the container. They need to be exposed
     # to the host machine for persistence and access from nginx and logrotate.
     volumes:
@@ -69,3 +71,5 @@ secrets:
     environment: HELCIM_TOKEN
   stripe_token:
     environment: STRIPE_TOKEN
+  cookie_secret:
+    environment: COOKIE_SECRET

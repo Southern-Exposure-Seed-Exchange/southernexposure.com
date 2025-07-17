@@ -40,4 +40,6 @@ file_env "HELCIM_TOKEN"
 file_env "DB_PASS"
 file_env "SMTP_PASS"
 
+file_env "COOKIE_SECRET"
+
 exec "$@"
