@@ -447,25 +447,24 @@ validatePassword :: T.Text -> T.Text -> AppSQL (Entity Customer)
 validatePassword email password = do
     maybeCustomer <- getCustomerByEmail email
     case maybeCustomer of
-        Just e@(Entity customerId customer) -> do
-            when (T.null $ customerEncryptedPassword customer) resetRequiredError
+        Just e@(Entity customerId customer)
+            | Just storedPassword <- customerEncryptedPassword customer -> do
+            when (T.null storedPassword) resetRequiredError
             let hashedPassword =
-                    encodeUtf8 $ customerEncryptedPassword customer
+                    encodeUtf8 storedPassword
                 isValid =
                     BCrypt.validatePassword hashedPassword
                         (encodeUtf8 password)
                 usesPolicy =
                     BCrypt.hashUsesPolicy BCrypt.slowerBcryptHashingPolicy
                         hashedPassword
-            if | customerEphemeral customer
-                -> hashAnyways $ throwIO NoCustomer
-               | isValid && usesPolicy
+            if | isValid && usesPolicy
                 -> return e
                | isValid
                 -> makeNewPasswordHash customerId >> return e
                | otherwise ->
-                validateZencartPassword e
-        Nothing ->
+                validateZencartPassword e storedPassword
+        _ ->
             hashAnyways $ throwIO NoCustomer
   where
     resetRequiredError =
@@ -482,9 +481,9 @@ validatePassword email password = do
     -- Try to use Zencart's password hashing scheme to validate the
     -- user's password. If it is valid, upgrade to the BCrypt hashing
     -- scheme.
-    validateZencartPassword :: Entity Customer -> AppSQL (Entity Customer)
-    validateZencartPassword e@(Entity customerId customer) =
-        case T.splitOn ":" (customerEncryptedPassword customer) of
+    validateZencartPassword :: Entity Customer -> T.Text -> AppSQL (Entity Customer)
+    validateZencartPassword e@(Entity customerId _) storedPassword =
+        case T.splitOn ":" storedPassword of
             [passwordHash, salt] ->
                 if T.length salt == 2 then
                     let isValid =
@@ -509,7 +508,7 @@ validatePassword email password = do
         newHash <- maybe
             (throwIO MisconfiguredHashingPolicy)
             (return . decodeUtf8) maybeNewHash
-        update customerId [CustomerEncryptedPassword =. newHash]
+        update customerId [CustomerEncryptedPassword =. Just newHash]
 
 data PasswordValidationError
     = AuthorizationError

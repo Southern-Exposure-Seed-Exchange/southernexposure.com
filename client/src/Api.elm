@@ -240,7 +240,7 @@ toUrl endpoint =
                     joinPath [ "checkout", "success" ]
 
                 GuestCheckoutSuccess ->
-                    joinPath [ "checkout", "guest-success" ]
+                    joinPath [ "checkout", "anonymous-success" ]
 
                 CheckoutHelcimToken ->
                     joinPath [ "checkout", "helcim-checkout-token" ]

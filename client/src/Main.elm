@@ -236,7 +236,7 @@ fetchDataForRoute ({ route, pageData, key } as model) =
                 EditAddress ->
                     getAddressDetails model.currentUser pageData
 
-                OrderDetails orderId ->
+                OrderDetails orderId token ->
                     case model.currentUser of
                         User.Authorized _ ->
                             { pageData | orderDetails = RemoteData.Loading }
@@ -244,7 +244,13 @@ fetchDataForRoute ({ route, pageData, key } as model) =
                                 |> batchCommand (getCheckoutSuccessDetails orderId)
 
                         User.Anonymous ->
-                            doNothing
+                            case token of
+                                Nothing -> doNothing
+                                Just tok ->
+                                    { pageData | orderDetails = RemoteData.Loading }
+                                        |> fetchLocationsOnce
+                                        |> batchCommand (getGuestCheckoutSuccessDetails orderId tok)
+
 
                 Cart ->
                     pageData
@@ -647,7 +653,7 @@ getCustomerCartItemsCount =
         |> Api.sendRequest GetCartItemCount
 
 
-getCheckoutSuccessDetails : Int ->  Cmd Msg
+getCheckoutSuccessDetails : Int -> Cmd Msg
 getCheckoutSuccessDetails orderId =
     checkoutSuccessDetailsBuilder Api.CheckoutSuccess <|
             Encode.object
@@ -1849,7 +1855,7 @@ runOnCurrentWebData runner { pageData, route } =
             RemoteData.map2 Tuple.pair pageData.locations pageData.addressDetails
                 |> justRunner
 
-        OrderDetails _ ->
+        OrderDetails _ _ ->
             RemoteData.map2 Tuple.pair pageData.locations pageData.orderDetails
                 |> justRunner
 
@@ -2141,7 +2147,7 @@ resetForm oldRoute model =
         EditAddress ->
             { model | editAddressForm = EditAddress.initial }
 
-        OrderDetails _ ->
+        OrderDetails _ _ ->
             model
 
         Cart ->

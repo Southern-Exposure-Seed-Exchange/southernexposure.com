@@ -38,7 +38,7 @@ type Route
     | MyAccount
     | EditLogin
     | EditAddress
-    | OrderDetails Int
+    | OrderDetails Int (Maybe String)
     | Cart
     | QuickOrder
     | Checkout
@@ -129,7 +129,7 @@ parseRoute =
                 , Url.map MyAccount Url.top
                 , Url.map EditLogin (Url.s "edit")
                 , Url.map EditAddress (Url.s "addresses")
-                , Url.map OrderDetails (Url.s "order" </> Url.int)
+                , Url.map OrderDetails (Url.s "order" </> Url.int <?> Query.string "token")
                 , Url.map VerifyEmail (Url.s "verify" </> Url.string)
                 ]
 
@@ -345,8 +345,13 @@ reverse route =
         EditAddress ->
             joinPath [ "account", "addresses" ]
 
-        OrderDetails orderId ->
+        OrderDetails orderId token ->
             joinPath [ "account", "order", String.fromInt orderId ]
+                ++ withQueryStrings
+                    [ case token of
+                        Nothing -> ""
+                        Just tok -> queryParameter ("token", tok)
+                    ]
 
         Cart ->
             joinPath [ "cart" ]
@@ -608,8 +613,8 @@ authRequired route =
         EditAddress ->
             True
 
-        OrderDetails _ ->
-            True
+        OrderDetails _ token ->
+            token == Nothing
 
         Cart ->
             False

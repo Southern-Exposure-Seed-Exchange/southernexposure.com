@@ -140,12 +140,12 @@ noMatches :: (PersistEntityBackend e ~ SqlBackend, PersistEntity e)
 noMatches filters =
     isJust <$> runDB (selectFirst filters [])
 
--- | Ensure a a Customer with the given email doesn't exist.
+-- | Ensure a registered (i.e., non-ephemeral) Customer with the given email doesn't exist.
 uniqueCustomer :: T.Text -> App Bool
 uniqueCustomer email = runDB $ do
     mCustomer <- getCustomerByEmail email
     case mCustomer of
-        Just (Entity _ c) -> pure $ not $ customerEphemeral c
+        Just (Entity _ c) -> pure $ isJust $ customerEncryptedPassword c
         _ -> pure False
 
 exists :: (PersistEntityBackend r ~ SqlBackend, PersistEntity r)

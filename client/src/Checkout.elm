@@ -1122,7 +1122,7 @@ view model authStatus locations checkoutDetails =
                 NewAddress addrForm ->
                     addrForm.errors
 
-        registrationCard =
+        guestCard =
             case authStatus of
                 User.Authorized _ ->
                     text ""
@@ -1133,7 +1133,7 @@ view model authStatus locations checkoutDetails =
                             [ h4 [ class "d-flex flex-wrap align-items-baseline" ]
                                 [ span [ class "mr-4" ] [ text "Contact details" ]
                                 ]
-                            , registrationForm model
+                            , guestForm model
                             ]
                         ]
 
@@ -1369,7 +1369,7 @@ view model authStatus locations checkoutDetails =
             , paymentConfirmationOverlay
             , genericErrorText hasErrors
             , div [ class "mb-3" ] [ generalErrors ]
-            , registrationCard
+            , guestCard
             , div [ class "row mb-3" ]
                 [ addressForm
                     { cardTitle = "Shipping Details"
@@ -1433,8 +1433,8 @@ view model authStatus locations checkoutDetails =
     ]
 
 
-registrationForm : Form -> Html Msg
-registrationForm model =
+guestForm : Form -> Html Msg
+guestForm model =
     let
         -- TODO: Use Views.Form when we pull it out of the Address module.
         fieldLabel inputId content =
@@ -1490,10 +1490,7 @@ registrationForm model =
         [ div [ class "col-md-4" ]
             [ wrapper
                 [ fieldLabel "emailInput" "Email"
-                , div []
-                    [ emailField
-                    , div [class "text-info"] [text "We will use it to provide you status updates"]
-                    ]
+                , emailField
                 , errorHtml emailErrors
                 ]
             ]

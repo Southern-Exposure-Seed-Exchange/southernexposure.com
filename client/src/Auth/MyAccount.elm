@@ -88,7 +88,7 @@ orderTable zone locations orderSummaries =
                 , td [ class "text-center" ]
                     [ a
                         (class "btn btn-light btn-sm"
-                            :: routeLinkAttributes (OrderDetails id)
+                            :: routeLinkAttributes (OrderDetails id Nothing)
                         )
                         [ text "View" ]
                     ]
@@ -106,7 +106,7 @@ orderTable zone locations orderSummaries =
                     [ div [] [ text <| PageData.statusText status ]
                     , div [ class "ml-auto" ] [ text <| Format.cents total ]
                     ]
-                , a (class "mb-1 btn btn-light btn-block" :: routeLinkAttributes (OrderDetails id))
+                , a (class "mb-1 btn btn-light btn-block" :: routeLinkAttributes (OrderDetails id Nothing))
                     [ text "View Order Details" ]
                 ]
 

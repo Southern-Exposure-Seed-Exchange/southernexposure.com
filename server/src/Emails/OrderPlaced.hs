@@ -37,7 +37,6 @@ data Parameters =
         , lineItems :: [OrderLineItem]
         , products :: ProductData
         , messageText :: T.Text
-        , guestToken :: Maybe T.Text
         }
 
 type ProductData = [(OrderProduct, Product, ProductVariant, Maybe SeedAttribute)]
@@ -48,18 +47,16 @@ fetchData orderId = do
     messageText <- maybe "" (settingsOrderPlacedEmailMessage . entityVal)
         <$> selectFirst [] []
     maybeCustomerOrderAddresses <- E.selectOne $ do
-        (c E.:& o E.:& sa E.:& ba E.:& go) <- E.from $ E.table @Customer
+        (c E.:& o E.:& sa E.:& ba) <- E.from $ E.table @Customer
             `E.innerJoin` E.table @Order
                 `E.on` (\(c E.:& o) -> c E.^. CustomerId E.==. o E.^. OrderCustomerId)
             `E.innerJoin` E.table @Address
                 `E.on` (\(_ E.:& o E.:& sa) -> sa E.^. AddressId E.==. o E.^. OrderShippingAddressId)
             `E.leftJoin` E.table @Address
                 `E.on` (\(_ E.:& o E.:& _ E.:& ba) -> ba E.?. AddressId E.==. o E.^. OrderBillingAddressId)
-            `E.leftJoin` E.table @GuestOrder
-                `E.on` (\(_ E.:& o E.:& _ E.:& _ E.:& go) -> E.just (o E.^. OrderId) E.==. go E.?. GuestOrderOrderId)
 
         E.where_ $ o E.^. OrderId E.==. E.val orderId
-        return (c, o, sa, ba, go E.?. GuestOrderToken)
+        return (c, o, sa, ba)
     lineItems <- map entityVal <$> P.selectList [OrderLineItemOrderId P.==. orderId] []
     productData <- fmap productDataFromEntities . E.select $ do
         (op E.:& pv E.:& p E.:& msa) <- E.from $ E.table
@@ -76,12 +73,11 @@ fetchData orderId = do
     return $ case maybeCustomerOrderAddresses of
         Nothing ->
             Nothing
-        Just (Entity _ customer, order, Entity _ shipping, maybeBilling, maybeGuestToken) ->
+        Just (Entity _ customer, order, Entity _ shipping, maybeBilling) ->
             Just $ Parameters
                     { billingAddress = entityVal <$> maybeBilling
                     , shippingAddress = shipping
                     , products = productData
-                    , guestToken = E.unValue maybeGuestToken
                     , ..
                     }
     where productDataFromEntities =
@@ -138,9 +134,9 @@ render baseUrl Parameters
                 addressTable shippingAddress billingAddress
                 orderTable productData lineItems
                 H.br
-                for_ guestToken $ \tok -> do
+                for_ (orderGuestToken order) $ \tok -> do
                     let link = fromString $
-                            L.unpack baseUrl <> "/checkout/success/" <> show (E.fromSqlKey orderId)
+                            L.unpack baseUrl <> "/account/order/" <> show (E.fromSqlKey orderId)
                                 <> "?token=" <> T.unpack tok
                     H.a H.! A.href link $ H.p "Live order status"
                 H.p "Thank You,"

@@ -104,7 +104,7 @@ view route pageData =
                     , activeItem "Edit Addresses"
                     ]
 
-                OrderDetails orderId ->
+                OrderDetails orderId _ ->
                     [ inactiveItem "My Account" MyAccount
                     , activeItem <| "Order #" ++ String.fromInt orderId
                     ]

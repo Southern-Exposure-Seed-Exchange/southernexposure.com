@@ -162,7 +162,7 @@ view ({ route, pageData, navigationData, zone, helcimUrl } as model) =
                         |> withIntermediateText (apply <| EditAddress.view model.editAddressForm)
                         |> List.map (Html.map EditAddressMsg)
 
-                OrderDetails orderId ->
+                OrderDetails orderId _ ->
                     RemoteData.map2 Tuple.pair pageData.locations pageData.orderDetails
                         |> withIntermediateText (apply <| OrderDetails.view zone orderId)
 
@@ -432,7 +432,7 @@ pageTitle ({ route, pageData } as model) =
         EditAddress ->
             "Edit Addresses"
 
-        OrderDetails orderId ->
+        OrderDetails orderId _ ->
             "Order #" ++ String.fromInt orderId
 
         Cart ->
@@ -645,7 +645,7 @@ pageDescription { route, pageData } =
         EditAddress ->
             ""
 
-        OrderDetails _ ->
+        OrderDetails _ _ ->
             ""
 
         Admin _ ->

@@ -59,7 +59,7 @@ import Routes.CommonData
     )
 import Routes.AvalaraUtils (createAvalaraTransaction, createAvalaraCustomer)
 import Routes.Utils (getDisabledCheckoutDetails, getClientIP, generateUniqueToken)
-import Routes.Customers (RegistrationParameters(..), createNewCustomer)
+import Routes.Customers (RegistrationParametersWith(..), registerNewCustomer)
 import Validation (Validation(..))
 import Workers (Task(..), AvalaraTask(..), enqueueTask)
 
@@ -78,7 +78,7 @@ type CheckoutAPI =
     :<|> "anonymous-details" :> AnonymousDetailsRoute
     :<|> "anonymous-place-order" :> AnonymousPlaceOrderRoute
     :<|> "success" :> SuccessRoute
-    :<|> "guest-success" :> GuestSuccessRoute
+    :<|> "anonymous-success" :> AnonymousSuccessRoute
     :<|> "helcim-checkout-token" :> CheckoutTokenRoute
     :<|> "anonymous-helcim-checkout-token" :> AnonymousCheckoutTokenRoute
 
@@ -91,7 +91,7 @@ checkoutRoutes =
     :<|> anonymousDetailsRoute
     :<|> anonymousPlaceOrderRoute
     :<|> customerSuccessRoute
-    :<|> guestSuccessRoute
+    :<|> anonymousSuccessRoute
     :<|> getCheckoutTokenRoute
     :<|> anonymousGetCheckoutTokenRoute
 
@@ -663,7 +663,7 @@ customerPlaceOrderRoute remoteHost forwardedFor realIP = validateCookieAndParame
                 >>= maybe (throwIO CartNotFound) return
             (order, orderTotal, appliedCredit) <- createOrder
                 customer cartId shippingAddress (entityKey <$> billingAddress)
-                maybeStoreCredit priorityShipping maybeCouponCode comment currentTime
+                maybeStoreCredit priorityShipping maybeCouponCode Nothing comment currentTime
             return (billingAddress, shippingAddress, order, orderTotal, cartId, appliedCredit)
           getOrInsertAddress :: AddressType -> CustomerId -> CustomerAddress -> AppSQL (Entity Address)
           getOrInsertAddress addrType customerId = \case
@@ -785,10 +785,11 @@ anonymousPlaceOrderRoute remoteHost forwardedFor realIP = validate >=> \paramete
         let shippingEntity = Entity shippingId shippingAddress
             billingEntity = Entity <$> billingId <*> maybeBillingAddress
             customerEntity = Entity customerId customer
+        guestToken <- generateUniqueToken (UniqueGuestToken . Just)
         (order@(Entity orderId _), preTaxTotal, _) <- createOrder
             (Entity customerId customer) cartId shippingEntity billingId Nothing
             (apopPriorityShipping parameters) (apopCouponCode parameters)
-            (apopComment parameters) currentTime
+            (Just guestToken) (apopComment parameters) currentTime
         when (preTaxTotal > 0)
             $ withAvalaraTransaction order preTaxTotal 0 customerEntity shippingEntity billingEntity
             $ \orderTotal ->
@@ -804,7 +805,6 @@ anonymousPlaceOrderRoute remoteHost forwardedFor realIP = validate >=> \paramete
         reduceQuantities orderId
         orderLines <- selectList [OrderLineItemOrderId ==. orderId] []
         products <- getCheckoutProducts orderId
-        guestToken <- generateGuestToken orderId
         return
             ( orderId
             , AnonymousPlaceOrderData
@@ -824,11 +824,11 @@ anonymousPlaceOrderRoute remoteHost forwardedFor realIP = validate >=> \paramete
                 makeAvalaraCustomer = createAvalaraCustomer email
                     $ fromMaybe shippingParam billingParam
 
-            (Entity cId c) <- lift $ createNewCustomer True RegistrationParameters
+            (Entity cId c) <- lift $ registerNewCustomer RegistrationParameters
                     { rpEmail = email
-                    , rpPassword = "00000000"
+                    , rpPassword = Nothing
                     , rpCartToken = Nothing
-                        }
+                    }
             overwriteCustomerCart cId . Just $ apopCartToken parameters
             avalaraCode <- case customerAvalaraCode c of
                 Just avalaraCode -> pure (Just avalaraCode)
@@ -838,14 +838,6 @@ anonymousPlaceOrderRoute remoteHost forwardedFor realIP = validate >=> \paramete
                     return avalaraCustomerCode
             pure $ Entity cId c { customerAvalaraCode = avalaraCode
                                 }
-
-        generateGuestToken orderId = do
-            guestToken <- generateUniqueToken UniqueGuestToken
-            _ <- insert GuestOrder
-                { guestOrderOrderId = orderId
-                , guestOrderToken = guestToken
-                }
-            pure guestToken
 
 -- | Get a Helcim Customer by their CustomerCode.
 -- And update their billing & shipping addresses with the current order's values. Map the Helcim Customer id
@@ -1069,18 +1061,23 @@ createOrder
     -- ^ Enable Priority Shipping
     -> Maybe T.Text
     -- ^ Coupon Code
+    -> Maybe T.Text
+    -- ^ Optional guest token (must be unique)
     -> T.Text
     -- ^ Order Comment
     -> UTCTime
     -- ^ Current Time
     -> AppSQL (Entity Order, Cents, Cents)
-createOrder ce@(Entity customerId customer) cartId shippingEntity billingId maybeStoreCredit priorityShipping maybeCouponCode comment currentTime = do
+createOrder ce@(Entity customerId customer) cartId shippingEntity
+            billingId maybeStoreCredit priorityShipping maybeCouponCode
+            maybeGuestToken comment currentTime = do
     items <- getCartItems $ \c -> c E.^. CartId E.==. E.val cartId
     let order = Order
             { orderCustomerId = customerId
             , orderStatus = OrderReceived
             , orderBillingAddressId = billingId
             , orderShippingAddressId = entityKey shippingEntity
+            , orderGuestToken = maybeGuestToken
             , orderCustomerComment = comment
             , orderAdminComments = []
             , orderAvalaraTransactionCode = Nothing
@@ -1292,25 +1289,24 @@ getOrderDetails externalOrderId customerId = do
             , odShippingAddress = toAddressData shipping
             , odBillingAddress = toAddressData <$> billing
             }
-data GuestSuccessParameters = MkGuestSuccessParameters
-    { gspOrderId :: Int64
-    , gspSession :: UUID.UUID
+data AnonymousSuccessParameters = MkAnonymousSuccessParameters
+    { aspOrderId :: Int64
+    , aspSession :: UUID.UUID
     }
 
-instance FromJSON GuestSuccessParameters where
-    parseJSON = withObject "GuestSuccessParameters" $ \o ->
-        MkGuestSuccessParameters <$> o .: "orderId" <*> o .: "token"
+instance FromJSON AnonymousSuccessParameters where
+    parseJSON = withObject "AnonymousSuccessParameters" $ \o ->
+        MkAnonymousSuccessParameters <$> o .: "orderId" <*> o .: "token"
 
-type GuestSuccessRoute =
-    ReqBody '[JSON] GuestSuccessParameters :> Post '[JSON] OrderDetails
+type AnonymousSuccessRoute =
+    ReqBody '[JSON] AnonymousSuccessParameters :> Post '[JSON] OrderDetails
 
-guestSuccessRoute :: GuestSuccessParameters -> App OrderDetails
-guestSuccessRoute gsp = do
+anonymousSuccessRoute :: AnonymousSuccessParameters -> App OrderDetails
+anonymousSuccessRoute asp = do
     mbOrderAndCustomer <- runDB $ runMaybeT $ do
-        guestOrder <- MaybeT $ getBy $ UniqueGuestToken $ UUID.toText $ gspSession gsp
-        let orderId = guestOrderOrderId $ entityVal guestOrder
-        guard (E.fromSqlKey orderId == gspOrderId gsp)
-        order <- MaybeT $ get orderId
+        Entity orderId order <-
+            MaybeT $ getBy $ UniqueGuestToken $ Just $ UUID.toText $ aspSession asp
+        guard (E.fromSqlKey orderId == aspOrderId asp)
         pure (orderCustomerId order, orderId)
     case mbOrderAndCustomer of
         Nothing -> serverError err404
