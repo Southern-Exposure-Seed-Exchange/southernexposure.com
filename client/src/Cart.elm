@@ -103,7 +103,7 @@ updateCart authStatus maybeCartToken { quantities } { items } =
 
         encodedQuantities =
             Encode.object <|
-                 ( "quantities", Encode.object changed ) 
+                 ( "quantities", Encode.object changed )
                     :: encodedCartToken maybeCartToken
     in
     if List.isEmpty changed then
@@ -127,7 +127,7 @@ removeItem authStatus maybeCartToken itemId =
                   , Encode.object
                         [ ( String.fromInt <| fromCartItemId itemId, Encode.int 0 ) ]
                   )
-                
+
                     :: encodedCartToken maybeCartToken
     in
     case authStatus of
@@ -180,23 +180,26 @@ view authStatus ({ quantities } as form_) ({ items, charges } as cartDetails) =
                 ]
 
         buttons =
-            div [ class "form-group text-right cart-buttons" ]
-                [ button
-                    [ class "btn btn-success d-none d-sm-inline-block"
-                    , type_ "submit"
-                    , disabled formIsUnchanged
+            div [class "form-group"]
+            [
+                div [ class "form-group text-right cart-buttons" ]
+                    [ button
+                        [ class "btn btn-success d-none d-sm-inline-block"
+                        , type_ "submit"
+                        , disabled formIsUnchanged
+                        ]
+                        [ icon "refresh", text " Update" ]
+                    , a (class "btn btn-primary ml-md-2" :: routeLinkAttributes Checkout)
+                        [ icon "shopping-cart", text <|
+                            if authStatus == unauthorized
+                                then " Checkout as a guest"
+                                else " Checkout" ]
                     ]
-                    [ icon "refresh", text " Update" ]
-                , a (class "btn btn-primary ml-md-2" :: routeLinkAttributes checkoutRoute)
-                    [ icon "shopping-cart", text " Checkout" ]
-                ]
-
-        checkoutRoute =
-            if authStatus == unauthorized then
-                Login (Just <| reverse <| Checkout) True
-
-            else
-                Checkout
+                , viewIf (authStatus == unauthorized) <| a
+                    (class "btn-link btn font-weight-bold p-0 text-right col ml" ::
+                        routeLinkAttributes (Login (Just <| reverse <| Checkout) True))
+                    [ text "Already have an Account?" ]
+            ]
 
         tableHeader =
             thead []
@@ -265,7 +268,7 @@ view authStatus ({ quantities } as form_) ({ items, charges } as cartDetails) =
 
         tableFooter =
             tfoot [] <|
-                 footerRow "font-weight-bold" "Sub-Total" totals.subTotal 
+                 footerRow "font-weight-bold" "Sub-Total" totals.subTotal
                     :: List.map chargeRow charges.surcharges
                     ++ [ htmlOrBlank chargeRow <|
                             Maybe.map .charge charges.shippingMethod

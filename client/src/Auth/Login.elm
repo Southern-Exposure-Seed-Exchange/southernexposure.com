@@ -79,7 +79,7 @@ loginDecoder innerDecoder =
   Decode.field "status" Decode.string
     |> Decode.andThen (\status ->
       if status == "verification-required"
-        then Decode.map ErrVerificationRequired 
+        then Decode.map ErrVerificationRequired
                 (Decode.field "data" Decode.int)
         else Decode.map LoginCompleted
                 (Decode.field "data" innerDecoder))
@@ -128,7 +128,7 @@ update key msg model maybeSessionToken =
                         , Ports.removeCartSessionToken ()
                         ]
                     )
-                
+
                 RemoteData.Success (Ok (ErrVerificationRequired customerId)) ->
                     ( initial
                     , Nothing

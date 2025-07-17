@@ -15,9 +15,9 @@ import Control.Applicative ((<|>))
 import Control.Arrow (first)
 import UnliftIO (MonadUnliftIO, MonadIO)
 import UnliftIO.Exception (Exception, throwIO, try, handle)
-import Control.Monad ((>=>), when, unless, void, forM_)
+import Control.Monad ((>=>), when, unless, void, forM_, guard)
 import Control.Monad.Reader (asks, lift, liftIO)
-import Data.Aeson ((.:), (.:?), (.=), FromJSON(..), ToJSON(..), Value(Object), withObject, object)
+import Data.Aeson ((.:), (.:?), (.=), FromJSON(..), ToJSON(..), withObject, object)
 import Data.Foldable (asum)
 import Data.Int (Int64)
 import Data.List (partition, find)
@@ -30,7 +30,7 @@ import Database.Persist
     , getEntity, selectFirst, OverflowNatural(..)
     )
 import Network.Socket (SockAddr(..))
-import Servant ((:<|>)(..), (:>), AuthProtect, Header, JSON, Post, RemoteHost, ReqBody, err404, ServerT, noHeader)
+import Servant ((:<|>)(..), (:>), AuthProtect, Header, JSON, Post, RemoteHost, ReqBody, err404, ServerT)
 
 import Auth
 import Avalara
@@ -50,16 +50,16 @@ import Models
 import Models.Fields
 import Server
 import Routes.CommonData
-    ( toAuthorizationData, CartItemData(..), CartCharges(..)
+    ( CartItemData(..), CartCharges(..)
     , CartCharge(..), getCartItems, getCharges, AddressData(..), toAddressData
     , fromAddressData, ShippingCharge(..), VariantData(..), getVariantPrice
     , OrderDetails(..), toCheckoutOrder, getCheckoutProducts, CheckoutProduct
-    , LoginParameters(..), validatePassword, handlePasswordValidationError
-    , PasswordValidationError(..), BaseProductData(..), AuthorizationData
+
+    , BaseProductData(..)
     )
 import Routes.AvalaraUtils (createAvalaraTransaction, createAvalaraCustomer)
-import Routes.Utils (getDisabledCheckoutDetails, getClientIP)
-import Routes.Customers (RegistrationParameters(..), createNewCustomer, LoginResult (..))
+import Routes.Utils (getDisabledCheckoutDetails, getClientIP, generateUniqueToken)
+import Routes.Customers (RegistrationParametersWith(..), registerNewCustomer)
 import Validation (Validation(..))
 import Workers (Task(..), AvalaraTask(..), enqueueTask)
 
@@ -68,6 +68,8 @@ import qualified Data.Text as T
 import qualified Database.Esqueleto.Experimental as E
 import qualified Emails
 import qualified Validation as V
+import qualified Data.UUID as UUID
+import Control.Monad.Trans.Maybe ( MaybeT(MaybeT, runMaybeT) )
 
 
 type CheckoutAPI =
@@ -75,8 +77,8 @@ type CheckoutAPI =
     :<|> "customer-place-order" :> CustomerPlaceOrderRoute
     :<|> "anonymous-details" :> AnonymousDetailsRoute
     :<|> "anonymous-place-order" :> AnonymousPlaceOrderRoute
-    :<|> "login" :> LoginRoute
     :<|> "success" :> SuccessRoute
+    :<|> "anonymous-success" :> AnonymousSuccessRoute
     :<|> "helcim-checkout-token" :> CheckoutTokenRoute
     :<|> "anonymous-helcim-checkout-token" :> AnonymousCheckoutTokenRoute
 
@@ -88,8 +90,8 @@ checkoutRoutes =
     :<|> customerPlaceOrderRoute
     :<|> anonymousDetailsRoute
     :<|> anonymousPlaceOrderRoute
-    :<|> loginRoute
     :<|> customerSuccessRoute
+    :<|> anonymousSuccessRoute
     :<|> getCheckoutTokenRoute
     :<|> anonymousGetCheckoutTokenRoute
 
@@ -452,7 +454,7 @@ withPlaceOrderErrors shippingAddress =
                 $ "We couldn't find any items in your Cart. This usually means "
                 <> "that your Order has been successfully submitted but we "
                 <> "encountered an error while sending your confirmation email, please "
-                <> "check yur Order History to verify and contact us if needed."
+                <> "check your Order History to verify and contact us if needed."
         NoShippingMethod ->
             case shippingAddress of
                 ExistingAddress _ _ ->
@@ -661,7 +663,7 @@ customerPlaceOrderRoute remoteHost forwardedFor realIP = validateCookieAndParame
                 >>= maybe (throwIO CartNotFound) return
             (order, orderTotal, appliedCredit) <- createOrder
                 customer cartId shippingAddress (entityKey <$> billingAddress)
-                maybeStoreCredit priorityShipping maybeCouponCode comment currentTime
+                maybeStoreCredit priorityShipping maybeCouponCode Nothing comment currentTime
             return (billingAddress, shippingAddress, order, orderTotal, cartId, appliedCredit)
           getOrInsertAddress :: AddressType -> CustomerId -> CustomerAddress -> AppSQL (Entity Address)
           getOrInsertAddress addrType customerId = \case
@@ -690,7 +692,6 @@ customerPlaceOrderRoute remoteHost forwardedFor realIP = validateCookieAndParame
 data AnonymousPlaceOrderParameters =
     AnonymousPlaceOrderParameters
         { apopEmail :: T.Text
-        , apopPassword :: T.Text
         , apopShippingAddress :: AddressData
         , apopBillingAddress :: Maybe AddressData
         , apopPriorityShipping :: Bool
@@ -704,7 +705,6 @@ instance FromJSON AnonymousPlaceOrderParameters where
     parseJSON = withObject "AnonymousPlaceOrderParameters" $ \v ->
         AnonymousPlaceOrderParameters
             <$> v .: "email"
-            <*> v .: "password"
             <*> v .: "shippingAddress"
             <*> v .: "billingAddress"
             <*> v .: "priorityShipping"
@@ -729,11 +729,6 @@ instance Validation AnonymousPlaceOrderParameters where
               , [ V.required $ apopEmail parameters
                 ]
               )
-            , ( "password"
-              , [ V.required $ apopPassword parameters
-                , V.minimumLength 8 $ apopPassword parameters
-                ]
-              )
             , ( ""
               , [ ( "Sorry, we have temporarily stopped accepting Orders. "
                         <> "Please check our Homepage for updates."
@@ -748,6 +743,7 @@ instance Validation AnonymousPlaceOrderParameters where
 data AnonymousPlaceOrderData =
     AnonymousPlaceOrderData
         { apodOrderId :: OrderId
+        , apodGuestToken :: T.Text
         , apodLines :: [Entity OrderLineItem]
         , apodProducts :: [CheckoutProduct]
         }
@@ -756,6 +752,7 @@ instance ToJSON AnonymousPlaceOrderData where
     toJSON orderData =
         object
             [ "orderId" .= apodOrderId orderData
+            , "guestToken" .= apodGuestToken orderData
             , "lines" .= apodLines orderData
             , "products" .= apodProducts orderData
             ]
@@ -772,44 +769,11 @@ type AnonymousPlaceOrderRoute =
 -- A new Customer & Order is created & the Customer is charged.
 anonymousPlaceOrderRoute :: SockAddr -> Maybe T.Text -> Maybe T.Text -> AnonymousPlaceOrderParameters -> App AnonymousPlaceOrderData
 anonymousPlaceOrderRoute remoteHost forwardedFor realIP = validate >=> \parameters -> do
-    let email = apopEmail parameters
-        password = apopPassword parameters
-        shippingParam = apopShippingAddress parameters
+    let shippingParam = apopShippingAddress parameters
         billingParam = apopBillingAddress parameters
-        makeAvalaraCustomer = createAvalaraCustomer email
-            $ fromMaybe shippingParam billingParam
-    maybeCustomer <-
-        try (runDB $ validatePassword email password) >>= \case
-            Right e ->
-                return $ Just e
-            Left NoCustomer ->
-                return Nothing
-            Left e@MisconfiguredHashingPolicy ->
-                handlePasswordValidationError e
-            Left AuthorizationError ->
-                V.singleFieldError "email" "An Account with this Email already exists."
-            Left PasswordResetRequired ->
-                V.singleFieldError "email"
-                    "An Account with this Email exists, but a password reset is required."
     currentTime <- liftIO getCurrentTime
     (orderId, orderData) <- withPlaceOrderErrors (NewAddress shippingParam) . runDB $ do
-        (Entity customerId customer) <- case maybeCustomer of
-            Nothing -> do
-                avalaraCustomerCode <- makeAvalaraCustomer
-                lift $ createNewCustomer avalaraCustomerCode $ RegistrationParameters
-                    { rpEmail = email
-                    , rpPassword = password
-                    , rpCartToken = Just (apopCartToken parameters)
-                    }
-            Just c@(Entity customerId customer) -> do
-                overwriteCustomerCart customerId . Just $ apopCartToken parameters
-                case customerAvalaraCode customer of
-                    Just _ -> return c
-                    Nothing -> do
-                        avalaraCustomerCode <- makeAvalaraCustomer
-                        update customerId [CustomerAvalaraCode =. avalaraCustomerCode]
-                        return $ Entity customerId customer
-                            { customerAvalaraCode = avalaraCustomerCode }
+        Entity customerId customer <- createAnonymousCustomer parameters
         (Entity cartId _) <- getBy (UniqueCustomerCart $ Just customerId)
             >>= maybe (throwIO CartNotFound) return
         let shippingAddress = fromAddressData Shipping customerId
@@ -817,14 +781,15 @@ anonymousPlaceOrderRoute remoteHost forwardedFor realIP = validate >=> \paramete
             maybeBillingAddress = fromAddressData Billing customerId
                 <$> billingParam
         shippingId <- insert shippingAddress
-        billingId <- sequence $ insert <$> maybeBillingAddress
+        billingId <- mapM insert maybeBillingAddress
         let shippingEntity = Entity shippingId shippingAddress
             billingEntity = Entity <$> billingId <*> maybeBillingAddress
             customerEntity = Entity customerId customer
+        guestToken <- generateUniqueToken (UniqueGuestToken . Just)
         (order@(Entity orderId _), preTaxTotal, _) <- createOrder
             (Entity customerId customer) cartId shippingEntity billingId Nothing
             (apopPriorityShipping parameters) (apopCouponCode parameters)
-            (apopComment parameters) currentTime
+            (Just guestToken) (apopComment parameters) currentTime
         when (preTaxTotal > 0)
             $ withAvalaraTransaction order preTaxTotal 0 customerEntity shippingEntity billingEntity
             $ \orderTotal ->
@@ -844,12 +809,35 @@ anonymousPlaceOrderRoute remoteHost forwardedFor realIP = validate >=> \paramete
             ( orderId
             , AnonymousPlaceOrderData
                 { apodOrderId = orderId
+                , apodGuestToken = guestToken
                 , apodLines = orderLines
                 , apodProducts = products
                 }
             )
     runDB $ enqueuePostOrderTasks orderId
     pure orderData
+    where
+        createAnonymousCustomer parameters = do
+            let email = apopEmail parameters
+                shippingParam = apopShippingAddress parameters
+                billingParam = apopBillingAddress parameters
+                makeAvalaraCustomer = createAvalaraCustomer email
+                    $ fromMaybe shippingParam billingParam
+
+            (Entity cId c) <- lift $ registerNewCustomer RegistrationParameters
+                    { rpEmail = email
+                    , rpPassword = Nothing
+                    , rpCartToken = Nothing
+                    }
+            overwriteCustomerCart cId . Just $ apopCartToken parameters
+            avalaraCode <- case customerAvalaraCode c of
+                Just avalaraCode -> pure (Just avalaraCode)
+                Nothing -> do
+                    avalaraCustomerCode <- makeAvalaraCustomer
+                    update cId [CustomerAvalaraCode =. avalaraCustomerCode]
+                    return avalaraCustomerCode
+            pure $ Entity cId c { customerAvalaraCode = avalaraCode
+                                }
 
 -- | Get a Helcim Customer by their CustomerCode.
 -- And update their billing & shipping addresses with the current order's values. Map the Helcim Customer id
@@ -1073,18 +1061,23 @@ createOrder
     -- ^ Enable Priority Shipping
     -> Maybe T.Text
     -- ^ Coupon Code
+    -> Maybe T.Text
+    -- ^ Optional guest token (must be unique)
     -> T.Text
     -- ^ Order Comment
     -> UTCTime
     -- ^ Current Time
     -> AppSQL (Entity Order, Cents, Cents)
-createOrder ce@(Entity customerId customer) cartId shippingEntity billingId maybeStoreCredit priorityShipping maybeCouponCode comment currentTime = do
+createOrder ce@(Entity customerId customer) cartId shippingEntity
+            billingId maybeStoreCredit priorityShipping maybeCouponCode
+            maybeGuestToken comment currentTime = do
     items <- getCartItems $ \c -> c E.^. CartId E.==. E.val cartId
     let order = Order
             { orderCustomerId = customerId
             , orderStatus = OrderReceived
             , orderBillingAddressId = billingId
             , orderShippingAddressId = entityKey shippingEntity
+            , orderGuestToken = maybeGuestToken
             , orderCustomerComment = comment
             , orderAdminComments = []
             , orderAvalaraTransactionCode = Nothing
@@ -1241,58 +1234,6 @@ enqueuePostOrderTasks orderId =
         , RemoveSoldOutProducts orderId
         ]
 
-
--- LOGIN
-
-data CheckoutLoginParameters =
-    CheckoutLoginParameters
-        { clpLogin :: LoginParameters
-        , clpDetails :: CustomerDetailsParameters
-        }
-
-instance FromJSON CheckoutLoginParameters where
-    parseJSON = withObject "CheckoutLoginParameters" $ \v ->
-        CheckoutLoginParameters
-            <$> parseJSON (Object v)
-            <*> parseJSON (Object v)
-
-data LoginData =
-    LoginData
-        { ldAuth :: AuthorizationData
-        , ldDetails :: CheckoutDetailsData
-        }
-
-instance ToJSON LoginData where
-    toJSON ld =
-        object
-            [ "authData" .= ldAuth ld
-            , "details" .= ldDetails ld
-            ]
-
-type LoginRoute =
-       ReqBody '[JSON] CheckoutLoginParameters
-    :> Post '[JSON] (Cookied (LoginResult LoginData))
-
--- | Attempt to log the customer into their account. Note that this
--- differs from the Customer's login route - this route removes the
--- account's cart instead of merging the two together.
-loginRoute :: CheckoutLoginParameters -> App (Cookied (LoginResult LoginData))
-loginRoute CheckoutLoginParameters { clpLogin, clpDetails } = do
-    e@(Entity customerId customer) <- handle handlePasswordValidationError
-        $ runDB $ validatePassword (lpEmail clpLogin) (lpPassword clpLogin)
-    if not (customerVerified customer)
-        then pure $ noHeader (VerificationRequired customerId)
-        else do
-        runDB $ overwriteCustomerCart customerId $ lpCartToken clpLogin
-        details <- withCheckoutDetailsErrors . runDB $ getCustomerDetails e clpDetails
-        let sessionSettings = if lpRemember clpLogin then permanentSession else temporarySession
-            authData = toAuthorizationData e
-
-        addSessionCookie sessionSettings (makeToken customer) $ SuccessfulLogin LoginData
-            { ldAuth = authData
-            , ldDetails = details
-            }
-
 -- | Delete the Customer's existing cart and move the anonymous cart to the
 -- Customer.
 overwriteCustomerCart :: CustomerId -> Maybe T.Text -> AppSQL ()
@@ -1323,9 +1264,20 @@ type SuccessRoute =
 
 customerSuccessRoute :: WrappedAuthToken -> SuccessParameters -> App (Cookied OrderDetails)
 customerSuccessRoute token parameters = withValidatedCookie token $ \(Entity customerId _) ->
-    handle handleError . runDB $ do
+    runOrderDetails $ getOrderDetails (E.toSqlKey $ cspOrderId parameters) customerId
+
+
+runOrderDetails :: AppSQL a -> App a
+runOrderDetails =
+    handle handleError . runDB
+    where handleError = \case
+            OrderNotFound ->
+                serverError err404
+
+getOrderDetails :: OrderId -> CustomerId -> AppSQL OrderDetails
+getOrderDetails externalOrderId customerId = do
         (e@(Entity orderId _), shipping, billing) <-
-            getOrderAndAddress customerId (E.toSqlKey $ cspOrderId parameters)
+            getOrderAndAddress customerId externalOrderId
                 >>= maybe (throwIO OrderNotFound) return
         lineItems <-
             selectList [OrderLineItemOrderId ==. orderId] []
@@ -1337,9 +1289,29 @@ customerSuccessRoute token parameters = withValidatedCookie token $ \(Entity cus
             , odShippingAddress = toAddressData shipping
             , odBillingAddress = toAddressData <$> billing
             }
-    where handleError = \case
-            OrderNotFound ->
-                serverError err404
+data AnonymousSuccessParameters = MkAnonymousSuccessParameters
+    { aspOrderId :: Int64
+    , aspSession :: UUID.UUID
+    }
+
+instance FromJSON AnonymousSuccessParameters where
+    parseJSON = withObject "AnonymousSuccessParameters" $ \o ->
+        MkAnonymousSuccessParameters <$> o .: "orderId" <*> o .: "token"
+
+type AnonymousSuccessRoute =
+    ReqBody '[JSON] AnonymousSuccessParameters :> Post '[JSON] OrderDetails
+
+anonymousSuccessRoute :: AnonymousSuccessParameters -> App OrderDetails
+anonymousSuccessRoute asp = do
+    mbOrderAndCustomer <- runDB $ runMaybeT $ do
+        Entity orderId order <-
+            MaybeT $ getBy $ UniqueGuestToken $ Just $ UUID.toText $ aspSession asp
+        guard (E.fromSqlKey orderId == aspOrderId asp)
+        pure (orderCustomerId order, orderId)
+    case mbOrderAndCustomer of
+        Nothing -> serverError err404
+        Just (customerId, orderId) ->
+            runOrderDetails $ getOrderDetails orderId customerId
 
 data SuccessError
     = OrderNotFound

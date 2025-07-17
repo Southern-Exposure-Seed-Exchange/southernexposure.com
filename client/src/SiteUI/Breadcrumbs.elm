@@ -66,10 +66,10 @@ view route pageData =
 
                 CreateAccount ->
                     singleItem "Create an Account"
-                
+
                 VerifyEmail _ ->
                     singleItem "Verify an email"
-                
+
                 VerificationRequired _ ->
                     singleItem "Email verification required"
 
@@ -104,7 +104,7 @@ view route pageData =
                     , activeItem "Edit Addresses"
                     ]
 
-                OrderDetails orderId ->
+                OrderDetails orderId _ ->
                     [ inactiveItem "My Account" MyAccount
                     , activeItem <| "Order #" ++ String.fromInt orderId
                     ]

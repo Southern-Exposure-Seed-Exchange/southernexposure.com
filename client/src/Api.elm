@@ -77,8 +77,8 @@ type Endpoint
     | CheckoutPlaceOrderCustomer
     | CheckoutDetailsAnonymous
     | CheckoutPlaceOrderAnonymous
-    | CheckoutLogin
     | CheckoutSuccess
+    | GuestCheckoutSuccess
     | CheckoutHelcimToken
     | CheckoutHelcimTokenAnonymous
     | AdminCategoryList
@@ -154,10 +154,10 @@ toUrl endpoint =
 
                 CustomerRegister ->
                     joinPath [ "customers", "register" ]
-                
+
                 CustomerVerifyEmail uuid  ->
                     joinPath [ "customers", "verify", uuid ]
-                
+
                 CustomerRequestVerification customerId ->
                     joinPath [ "customers", "request-verification"]
                         ++ withQueryStrings [queryParameter ( "customer", String.fromInt customerId)]
@@ -236,11 +236,11 @@ toUrl endpoint =
                 CheckoutPlaceOrderAnonymous ->
                     joinPath [ "checkout", "anonymous-place-order" ]
 
-                CheckoutLogin ->
-                    joinPath [ "checkout", "login" ]
-
                 CheckoutSuccess ->
                     joinPath [ "checkout", "success" ]
+
+                GuestCheckoutSuccess ->
+                    joinPath [ "checkout", "anonymous-success" ]
 
                 CheckoutHelcimToken ->
                     joinPath [ "checkout", "helcim-checkout-token" ]

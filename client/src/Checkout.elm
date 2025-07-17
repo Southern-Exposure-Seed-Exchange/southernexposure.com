@@ -16,7 +16,7 @@ import Address exposing (AddressId(..))
 import Api
 import Dict
 import Html exposing (..)
-import Html.Attributes as A exposing (alt, attribute, checked, class, colspan, for, id, minlength, name, required, rows, src, step, type_, value)
+import Html.Attributes as A exposing (alt, attribute, checked, class, colspan, for, id, href, name, required, rows, src, step, type_, value)
 import Html.Events exposing (onCheck, onClick, onInput, onSubmit)
 import Html.Extra exposing (viewIf)
 import Json.Decode as Decode
@@ -28,15 +28,14 @@ import PageData exposing (LineItemType(..))
 import Ports
 import Product exposing (variantPrice)
 import RemoteData exposing (WebData)
-import Routing exposing (Route(..))
+import Routing exposing (Route(..), reverse)
 import Time
 import Update.Utils exposing (nothingAndNoCommand)
 import User exposing (AuthStatus)
 import Views.Aria as Aria
 import Views.Format as Format
 import Views.HorizontalForm exposing (genericErrorText)
-import Views.Utils exposing (decimalInput, disableGrammarly, emailInput, icon, pageOverlay, rawHtml, routeLinkAttributes)
-import Auth.Login as Login
+import Views.Utils exposing (decimalInput, disableGrammarly, emailInput, icon, pageOverlay, rawHtml)
 
 -- Model
 
@@ -47,10 +46,6 @@ type CheckoutAddress
 
 type alias Form =
     { email : String
-    , password : String
-    , passwordConfirm : String
-    , rememberMe : Bool
-    , isLoginForm : Bool
     , shippingAddress : CheckoutAddress
     , makeShippingDefault : Bool
     , billingAddress : CheckoutAddress
@@ -71,10 +66,6 @@ type alias Form =
 initial : Form
 initial =
     { email = ""
-    , password = ""
-    , passwordConfirm = ""
-    , rememberMe = True
-    , isLoginForm = False
     , shippingAddress = NewAddress Address.initialForm
     , makeShippingDefault = False
     , billingAddress = NewAddress Address.initialForm
@@ -120,10 +111,6 @@ initialWithDefaults shippingAddresses billingAddresses restrictionsError =
                 |> Maybe.withDefault Api.initialErrors
     in
     { email = ""
-    , password = ""
-    , passwordConfirm = ""
-    , rememberMe = True
-    , isLoginForm = False
     , shippingAddress = shippingAddress
     , makeShippingDefault = isNew shippingAddress
     , billingAddress = billingAddress
@@ -147,10 +134,6 @@ initialWithDefaults shippingAddresses billingAddresses restrictionsError =
 
 type Msg
     = Email String
-    | Password String
-    | PasswordConfirm String
-    | ToggleRememberMe Bool
-    | ToggleLoginForm Bool
     | SelectShipping Int
     | ToggleShippingDefault Bool
     | ShippingMsg Address.Msg
@@ -164,10 +147,6 @@ type Msg
     | Comment String
     | ApplyCoupon
     | RemoveCoupon
-    | LogIn
-    | LogInResponse Bool (WebData (Result Api.FormErrors (
-                Login.LoginStatus { authStatus : AuthStatus, details : PageData.CheckoutDetails }
-            )))
     | Submit
     | SubmitResponse (WebData (Result Api.FormErrors CheckoutResponse))
     | RefreshDetails (WebData (Result Api.FormErrors PageData.CheckoutDetails))
@@ -185,7 +164,8 @@ helcimCheckoutTokenResponseDecoder =
         (Decode.field "token" Decode.string)
 
 type alias CheckoutResponse =
-    { orderId : Int
+    { guestToken : String
+    , orderId : Int
     , orderLines : List PageData.OrderLineItem
     , orderProducts : List PageData.OrderProduct
     }
@@ -298,7 +278,8 @@ helcimPayEventDecoder =
 
 anonymousResponseDecoder : Decode.Decoder CheckoutResponse
 anonymousResponseDecoder =
-    Decode.map3 CheckoutResponse
+    Decode.map4 CheckoutResponse
+        (Decode.field "guestToken" Decode.string)
         (Decode.field "orderId" Decode.int)
         (Decode.field "lines" <| Decode.list PageData.lineItemDecoder)
         (Decode.field "products" <| Decode.list PageData.orderProductDecoder)
@@ -306,14 +287,14 @@ anonymousResponseDecoder =
 
 customerResponseDecoder : Decode.Decoder CheckoutResponse
 customerResponseDecoder =
-    Decode.map3 CheckoutResponse
+    Decode.map3 (CheckoutResponse "")
         (Decode.field "orderId" Decode.int)
         (Decode.field "lines" <| Decode.list PageData.lineItemDecoder)
         (Decode.field "products" <| Decode.list PageData.orderProductDecoder)
 
 
 type OutMsg
-    = AnonymousOrderCompleted Int
+    = AnonymousOrderCompleted Int String
     | CustomerOrderCompleted Int
     | DetailsRefreshed PageData.CheckoutDetails
     | LoggedIn AuthStatus PageData.CheckoutDetails
@@ -324,29 +305,16 @@ subscriptions =
     Ports.helcimMessageReceived HelcimEventReceived
 
 
-update : Routing.Key ->
-         Msg ->
+update : Msg ->
          Form ->
          AuthStatus ->
          Maybe String ->
          WebData PageData.CheckoutDetails ->
          ( Form, Maybe OutMsg, Cmd Msg )
-update key msg model authStatus maybeSessionToken checkoutDetails =
+update msg model authStatus maybeSessionToken checkoutDetails =
     case msg of
         Email email ->
             { model | email = email } |> nothingAndNoCommand
-
-        Password password ->
-            { model | password = password } |> nothingAndNoCommand
-
-        PasswordConfirm passwordConfirm ->
-            { model | passwordConfirm = passwordConfirm } |> nothingAndNoCommand
-
-        ToggleRememberMe val ->
-            { model | rememberMe = val } |> nothingAndNoCommand
-
-        ToggleLoginForm val ->
-            { model | isLoginForm = val } |> nothingAndNoCommand
 
         SelectShipping addressId ->
             { model
@@ -410,86 +378,6 @@ update key msg model authStatus maybeSessionToken checkoutDetails =
         Comment comment ->
             { model | comment = comment } |> nothingAndNoCommand
 
-        LogIn ->
-            ( { model | isProcessing = True }
-            , Nothing
-            , logIn False model maybeSessionToken
-            )
-
-        LogInResponse followWithSubmission response ->
-            case response of
-                RemoteData.Success (Ok (Login.LoginCompleted resp)) ->
-                    let
-                        checkoutDetails_ =
-                            RemoteData.Success resp.details
-
-                        (Cents finalTotal) =
-                            getFinalTotal resp.details model.storeCredit
-
-                        freeCheckout =
-                            PageData.isFreeCheckout checkoutDetails_
-                                || (finalTotal == 0)
-
-                        isProcessing =
-                            followWithSubmission && freeCheckout
-
-                        cmd =
-                            if freeCheckout && followWithSubmission then
-                                placeOrder model resp.authStatus maybeSessionToken Nothing checkoutDetails_
-
-                            else if followWithSubmission then
-                                getHelcimCheckoutToken authStatus
-
-                            else
-                                Cmd.none
-                    in
-                    case resp.details.restrictionsError of
-                        Nothing ->
-                            ( { model
-                                | isProcessing = isProcessing
-                                , email = ""
-                                , password = ""
-                                , passwordConfirm = ""
-                              }
-                            , Just <| LoggedIn resp.authStatus resp.details
-                            , cmd
-                            )
-
-                        Just err ->
-                            ( { model
-                                | isProcessing = False
-                                , email = ""
-                                , password = ""
-                                , passwordConfirm = ""
-                                , errors = Api.addError "" err Api.initialErrors
-                              }
-                            , Just <| LoggedIn resp.authStatus resp.details
-                            , Ports.scrollToTop
-                            )
-
-                RemoteData.Success (Ok (Login.ErrVerificationRequired customerId)) ->
-                    ( initial
-                    , Nothing
-                    , Routing.newUrl key (VerificationRequired customerId)
-                    )
-                RemoteData.Success (Err errors) ->
-                    ( { model | isProcessing = False, errors = errors }
-                    , Nothing
-                    , Ports.scrollToTop
-                    )
-
-                RemoteData.Failure error ->
-                    ( { model
-                        | isProcessing = False
-                        , errors = Api.apiFailureToError error
-                      }
-                    , Nothing
-                    , Ports.scrollToTop
-                    )
-
-                _ ->
-                    { model | isProcessing = False } |> nothingAndNoCommand
-
         Submit ->
             case checkoutDetails of
                 RemoteData.Success details ->
@@ -500,17 +388,9 @@ update key msg model authStatus maybeSessionToken checkoutDetails =
                         freeCheckout =
                             PageData.isFreeCheckout checkoutDetails || finalTotal == 0
 
-                        isAnonymous =
-                            authStatus == User.unauthorized
                     in
                     validateForm model (not freeCheckout) <|
-                        if model.isLoginForm && isAnonymous then
-                            ( { model | isProcessing = True }
-                            , Nothing
-                            , logIn True model maybeSessionToken
-                            )
-
-                        else if freeCheckout then
+                        if freeCheckout then
                             ( { model | isProcessing = True }
                             , Nothing
                             , placeOrder model authStatus maybeSessionToken Nothing checkoutDetails
@@ -530,7 +410,7 @@ update key msg model authStatus maybeSessionToken checkoutDetails =
 
                 outMsg =
                     if authStatus == User.Anonymous then
-                        AnonymousOrderCompleted orderId
+                        AnonymousOrderCompleted orderId response.guestToken
 
                     else
                         CustomerOrderCompleted orderId
@@ -825,12 +705,6 @@ validateForm model validateBilling validResult =
                     && Dict.isEmpty shippingErrors
 
         modelErrors =
-            if model.password /= model.passwordConfirm && not model.isLoginForm then
-                Dict.update "passwordConfirm"
-                    (always <| Just [ "Your passwords do not match." ])
-                    Api.initialErrors
-
-            else
                 Api.initialErrors
 
         shippingErrors =
@@ -950,39 +824,6 @@ encodeStringAsMaybe str =
         Encode.string str
 
 
-logIn : Bool -> Form -> Maybe String -> Cmd Msg
-logIn followWithSubmission model maybeSessionToken =
-    let
-        encodedAddress =
-            case model.shippingAddress of
-                ExistingAddress _ ->
-                    Encode.null
-
-                NewAddress f ->
-                    Address.encode f
-
-        loginData =
-            Encode.object
-                [ ( "email", Encode.string model.email )
-                , ( "password", Encode.string model.password )
-                , ( "sessionToken", Maybe.withDefault Encode.null <| Maybe.map Encode.string maybeSessionToken )
-                , ( "remember", Encode.bool model.rememberMe )
-                , ( "address", encodedAddress )
-                , ( "couponCode", encodeStringAsMaybe model.couponCode )
-                , ( "priorityShipping", Encode.bool model.priorityShipping )
-                ]
-
-        responseDecoder =
-            Decode.map2 (\auth details -> { authStatus = auth, details = details })
-                (Decode.field "authData" User.decoder)
-                (Decode.field "details" PageData.checkoutDetailsDecoder)
-    in
-    Api.post Api.CheckoutLogin
-        |> Api.withJsonBody loginData
-        |> Api.withErrorHandler (Login.loginDecoder responseDecoder)
-        |> Api.sendRequest (LogInResponse followWithSubmission)
-
-
 getHelcimCheckoutToken : AuthStatus -> Cmd Msg
 getHelcimCheckoutToken authStatus =
     case authStatus of
@@ -1023,7 +864,6 @@ placeOrder model authStatus maybeSessionToken helcimData checkoutDetails =
                 , ( "comment", Encode.string model.comment )
                 , ( "sessionToken", encodeMaybe Encode.string maybeSessionToken )
                 , ( "email", Encode.string model.email )
-                , ( "password", Encode.string model.password )
                 ] ++ (helcimData |> Maybe.map (\(helcimToken, helcimCustomerCode) ->
                     [ ( "helcimToken", Encode.string helcimToken )
                     , ( "helcimCustomerCode", Encode.string helcimCustomerCode )
@@ -1282,32 +1122,18 @@ view model authStatus locations checkoutDetails =
                 NewAddress addrForm ->
                     addrForm.errors
 
-        registrationCard =
+        guestCard =
             case authStatus of
                 User.Authorized _ ->
                     text ""
 
                 User.Anonymous ->
-                    let
-                        ( titleText, buttonText ) =
-                            if model.isLoginForm then
-                                ( "Login", "Create an Account" )
-
-                            else
-                                ( "Create an Account", "Already have an Account?" )
-                    in
                     div [ class "mb-3" ]
                         [ div [ class "" ]
                             [ h4 [ class "d-flex flex-wrap align-items-baseline" ]
-                                [ span [ class "mr-4" ] [ text titleText ]
-                                , button
-                                    [ class "btn-link btn font-weight-bold p-0"
-                                    , type_ "button"
-                                    , onClick <| ToggleLoginForm <| not model.isLoginForm
-                                    ]
-                                    [ text buttonText ]
+                                [ span [ class "mr-4" ] [ text "Contact details" ]
                                 ]
-                            , registrationForm model
+                            , guestForm model
                             ]
                         ]
 
@@ -1543,7 +1369,7 @@ view model authStatus locations checkoutDetails =
             , paymentConfirmationOverlay
             , genericErrorText hasErrors
             , div [ class "mb-3" ] [ generalErrors ]
-            , registrationCard
+            , guestCard
             , div [ class "row mb-3" ]
                 [ addressForm
                     { cardTitle = "Shipping Details"
@@ -1607,8 +1433,8 @@ view model authStatus locations checkoutDetails =
     ]
 
 
-registrationForm : Form -> Html Msg
-registrationForm model =
+guestForm : Form -> Html Msg
+guestForm model =
     let
         -- TODO: Use Views.Form when we pull it out of the Address module.
         fieldLabel inputId content =
@@ -1644,54 +1470,6 @@ registrationForm model =
         emailErrors =
             Dict.get "email" model.errors |> Maybe.withDefault []
 
-        passwordInput =
-            input
-                [ id "passwordInput"
-                , inputClass passwordErrors
-                , name "password"
-                , type_ "password"
-                , required True
-                , onInput Password
-                , value model.password
-                , autocomplete "new-password"
-                , minlength 8
-                ]
-                []
-
-        passwordErrors =
-            Dict.get "password" model.errors |> Maybe.withDefault []
-
-        passwordConfirmInput =
-            input
-                [ id "passwordConfirmInput"
-                , inputClass confirmErrors
-                , name "passwordConfirm"
-                , type_ "password"
-                , required True
-                , onInput PasswordConfirm
-                , value model.passwordConfirm
-                , autocomplete "new-password"
-                , minlength 8
-                ]
-                []
-
-        confirmErrors =
-            Dict.get "passwordConfirm" model.errors |> Maybe.withDefault []
-
-        rememberCheckbox =
-            div [ class "form-check d-inline-block" ]
-                [ label [ class "form-check-label" ]
-                    [ input
-                        [ class "form-check-input"
-                        , type_ "checkbox"
-                        , onCheck <| ToggleRememberMe
-                        , checked model.rememberMe
-                        ]
-                        []
-                    , text "Stay Signed In"
-                    ]
-                ]
-
         errorHtml errors =
             if List.isEmpty errors then
                 text ""
@@ -1716,34 +1494,6 @@ registrationForm model =
                 , errorHtml emailErrors
                 ]
             ]
-        , div [ class "col-md-4" ]
-            [ wrapper
-                [ fieldLabel "passwordInput" "Password"
-                , passwordInput
-                , errorHtml passwordErrors
-                ]
-            ]
-        , viewIf (not model.isLoginForm) <|
-            div [ class "col-md-4" ]
-                [ wrapper
-                    [ fieldLabel "passwordConfirmInput" "Confirm Password"
-                    , passwordConfirmInput
-                    , errorHtml confirmErrors
-                    ]
-                ]
-        , viewIf model.isLoginForm <|
-            div [ class "col-md-4 d-flex align-items-end" ]
-                [ div [ class "form-group w-100 mb-2" ]
-                    [ button [ class "btn btn-primary btn-block", type_ "button", onClick LogIn ]
-                        [ text "Log In" ]
-                    ]
-                ]
-        , viewIf model.isLoginForm <|
-            div [ class "col-12 justify-content-between mb-2 d-flex" ]
-                [ rememberCheckbox
-                , a (routeLinkAttributes <| ResetPassword Nothing)
-                    [ text "Forgot your password?" ]
-                ]
         ]
 
 
@@ -2086,17 +1836,22 @@ summaryTable ({ items, charges } as checkoutDetails) creditString couponCode cou
 
 
 successView : Time.Zone -> Int -> Bool -> AddressLocations -> PageData.OrderDetails -> List (Html msg)
-successView zone orderId newAccountCreated locations orderDetails =
+successView zone orderId guest locations orderDetails =
     let
         newAccountAlert =
-            if not newAccountCreated then
+            if not guest then
                 text ""
 
-            else
-                text <| String.join " "
-                [ "One last step to complete your registration:"
-                , "please check your email inbox and follow the verification link we've sent you."
-                , "You can safely close this page now."
+            else div [ class "alert alert-info clearfix d-flex justify-content-between" ]
+                [ text <| String.join " "
+                    [ "To enhance your experience, consider registering on our website"
+                    , "to view order history"
+                    ]
+                , a
+                    [ class "btn btn-primary ml-1"
+                    , href <| reverse CreateAccount
+                    ]
+                    [ text "Create an Account" ]
                 ]
 
 
@@ -2188,4 +1943,3 @@ viewConfirmationOverlay model = div [ class "card-page-overlay" ]
             ]
         ]
     ]
-

@@ -213,7 +213,7 @@ fetchDataForRoute ({ route, pageData, key } as model) =
 
                 Login _ _ ->
                     doNothing
-                
+
                 VerificationRequired _ ->
                     doNothing
 
@@ -236,7 +236,7 @@ fetchDataForRoute ({ route, pageData, key } as model) =
                 EditAddress ->
                     getAddressDetails model.currentUser pageData
 
-                OrderDetails orderId ->
+                OrderDetails orderId token ->
                     case model.currentUser of
                         User.Authorized _ ->
                             { pageData | orderDetails = RemoteData.Loading }
@@ -244,7 +244,13 @@ fetchDataForRoute ({ route, pageData, key } as model) =
                                 |> batchCommand (getCheckoutSuccessDetails orderId)
 
                         User.Anonymous ->
-                            doNothing
+                            case token of
+                                Nothing -> doNothing
+                                Just tok ->
+                                    { pageData | orderDetails = RemoteData.Loading }
+                                        |> fetchLocationsOnce
+                                        |> batchCommand (getGuestCheckoutSuccessDetails orderId tok)
+
 
                 Cart ->
                     pageData
@@ -286,7 +292,7 @@ fetchDataForRoute ({ route, pageData, key } as model) =
                                 |> fetchLocationsOnce
                                 |> getDetails
 
-                CheckoutSuccess orderId _ ->
+                CheckoutSuccess orderId token ->
                     case model.currentUser of
                         User.Authorized _ ->
                             { pageData | orderDetails = RemoteData.Loading }
@@ -294,7 +300,12 @@ fetchDataForRoute ({ route, pageData, key } as model) =
                                 |> batchCommand (getCheckoutSuccessDetails orderId)
 
                         User.Anonymous ->
-                            ( pageData, redirectIfAuthRequired key model.route )
+                            case token of
+                                Just tok ->
+                                    { pageData | orderDetails = RemoteData.Loading }
+                                        |> fetchLocationsOnce
+                                        |> batchCommand (getGuestCheckoutSuccessDetails orderId tok)
+                                Nothing -> ( pageData, redirectIfAuthRequired key model.route )
 
                 Admin Dashboard ->
                     { pageData | adminDashboard = RemoteData.Loading }
@@ -644,11 +655,25 @@ getCustomerCartItemsCount =
 
 getCheckoutSuccessDetails : Int -> Cmd Msg
 getCheckoutSuccessDetails orderId =
-    Api.post Api.CheckoutSuccess
-        |> Api.withJsonBody (Encode.object [ ( "orderId", Encode.int orderId ) ])
+    checkoutSuccessDetailsBuilder Api.CheckoutSuccess <|
+            Encode.object
+                [ ( "orderId", Encode.int orderId )
+                ]
+
+getGuestCheckoutSuccessDetails : Int -> String -> Cmd Msg
+getGuestCheckoutSuccessDetails orderId token =
+    checkoutSuccessDetailsBuilder Api.GuestCheckoutSuccess <|
+            Encode.object
+                [ ( "orderId", Encode.int orderId )
+                , ( "token", Encode.string token )
+                ]
+
+checkoutSuccessDetailsBuilder : Api.Endpoint -> Encode.Value -> Cmd Msg
+checkoutSuccessDetailsBuilder endpoint body =
+    Api.post endpoint
+        |> Api.withJsonBody body
         |> Api.withJsonResponse PageData.orderDetailsDecoder
         |> Api.sendRequest GetCheckoutSuccessDetails
-
 
 logOut : Cmd Msg
 logOut =
@@ -1001,12 +1026,12 @@ update msg ({ pageData, key } as model) =
               }
             , Cmd.batch [ Cmd.map LoginMsg cmd, cartItemsCommand ]
             )
-        
-        VerificationRequiredMsg subMsg -> 
+
+        VerificationRequiredMsg subMsg ->
             let
-                (updatedForm, cmd) = VerificationRequired.update subMsg model.verificationRequiredForm 
+                (updatedForm, cmd) = VerificationRequired.update subMsg model.verificationRequiredForm
             in
-                ( {model | verificationRequiredForm = updatedForm} 
+                ( {model | verificationRequiredForm = updatedForm}
                 , Cmd.map VerificationRequiredMsg cmd
                 )
 
@@ -1095,16 +1120,16 @@ update msg ({ pageData, key } as model) =
                             ( { model_ | cartItemCount = 0 }
                             , Cmd.batch
                                 [ cmd
-                                , Routing.newUrl key <| CheckoutSuccess orderId False
+                                , Routing.newUrl key <| CheckoutSuccess orderId Nothing
                                 , Ports.setCartItemCount 0
                                 ]
                             )
 
-                        Just (Checkout.AnonymousOrderCompleted orderId) ->
+                        Just (Checkout.AnonymousOrderCompleted orderId token) ->
                             ( { model_ | cartItemCount = 0 }
                             , Cmd.batch
-                                [ cmd -- TODO sand-witch: write suggestion to verify email there
-                                , Routing.newUrl key <| CheckoutSuccess orderId True
+                                [ cmd
+                                , Routing.newUrl key <| CheckoutSuccess orderId (Just token)
                                 , Ports.setCartItemCount 0
                                 , Ports.removeCartSessionToken ()
                                 ]
@@ -1138,7 +1163,7 @@ update msg ({ pageData, key } as model) =
                         Nothing ->
                             ( model_, cmd )
             in
-            Checkout.update key
+            Checkout.update
                 subMsg
                 model.checkoutForm
                 model.currentUser
@@ -1830,7 +1855,7 @@ runOnCurrentWebData runner { pageData, route } =
             RemoteData.map2 Tuple.pair pageData.locations pageData.addressDetails
                 |> justRunner
 
-        OrderDetails _ ->
+        OrderDetails _ _ ->
             RemoteData.map2 Tuple.pair pageData.locations pageData.orderDetails
                 |> justRunner
 
@@ -2122,7 +2147,7 @@ resetForm oldRoute model =
         EditAddress ->
             { model | editAddressForm = EditAddress.initial }
 
-        OrderDetails _ ->
+        OrderDetails _ _ ->
             model
 
         Cart ->

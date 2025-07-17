@@ -350,7 +350,7 @@ customerEditRoute = validateAdminAndParameters $ \_ parameters -> do
                 passwordHash <- hashPassword password
                 newToken <- runDB $ generateUniqueToken UniqueToken
                 return
-                    [ CustomerEncryptedPassword =. passwordHash
+                    [ CustomerEncryptedPassword =. Just passwordHash
                     , CustomerAuthToken =. newToken
                     ]
             else
@@ -390,7 +390,7 @@ customerDeleteRoute t customerId = withAdminCookie t $ \_ -> runDB $ do
                 { customerEmail = "gardens+deleted@southernexposure.com"
                 , customerStoreCredit = 0
                 , customerMemberNumber = ""
-                , customerEncryptedPassword = hashedPassword
+                , customerEncryptedPassword = Just hashedPassword
                 , customerAuthToken = token
                 , customerStripeId = Nothing
                 , customerHelcimCustomerId = Nothing

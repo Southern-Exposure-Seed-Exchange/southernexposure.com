@@ -96,13 +96,13 @@ paginatedSelect maybeSorting maybePage maybePerPage productFilters =
           offset =
             (page - 1) * perPage
           productsSelect ordering = do
-            products <- E.select $ do 
+            products <- E.select $ do
                 (p E.:& sa E.:& pToC) <- E.from $ E.table
-                    `E.leftJoin` E.table 
+                    `E.leftJoin` E.table
                         `E.on` (\(p E.:& sa) -> E.just (p E.^. ProductId) E.==. sa E.?. SeedAttributeProductId)
-                    `E.leftJoin` E.table 
+                    `E.leftJoin` E.table
                         `E.on` (\(p E.:& _ E.:& pToC) -> E.just (p E.^. ProductId) E.==. pToC E.?. ProductToCategoryProductId)
-                
+
                 E.where_ $ productFilters p sa pToC E.&&. activeVariantExists p
                 void $ ordering p
                 E.limit perPage
@@ -118,17 +118,17 @@ variantSorted :: (E.SqlExpr (E.Value (Maybe Cents)) -> [E.SqlExpr E.OrderBy])
 variantSorted ordering offset perPage filters = do
     productsAndPrice <- E.select $ do
         (p E.:& v E.:& sa E.:& pToC) <- E.from $ E.table
-            `E.innerJoin` E.table 
+            `E.innerJoin` E.table
                 `E.on` (\(p E.:& v) -> p E.^. ProductId E.==. v E.^. ProductVariantProductId
                                  E.&&. v E.^. ProductVariantIsActive E.==. E.val True)
-            `E.leftJoin` E.table 
-                `E.on` (\(p E.:& _ E.:& sa) -> 
+            `E.leftJoin` E.table
+                `E.on` (\(p E.:& _ E.:& sa) ->
                         E.just (p E.^. ProductId) E.==. sa E.?. SeedAttributeProductId)
-            `E.leftJoin` E.table 
-                `E.on` (\(p E.:& _ E.:& _ E.:& pToC) -> 
+            `E.leftJoin` E.table
+                `E.on` (\(p E.:& _ E.:& _ E.:& pToC) ->
                         E.just (p E.^. ProductId) E.==. pToC E.?. ProductToCategoryProductId)
-        
-        let minPrice = E.min_ $ v E.^. ProductVariantPrice 
+
+        let minPrice = E.min_ $ v E.^. ProductVariantPrice
         E.distinctOnOrderBy (ordering minPrice ++ [E.asc $ p E.^. ProductName]) $ do
             E.groupBy $ p E.^. ProductId
             E.where_ $ filters p sa pToC
@@ -144,11 +144,11 @@ countProducts
     :: (E.SqlExpr (Entity Product) -> E.SqlExpr (Maybe (Entity SeedAttribute)) -> E.SqlExpr (Maybe (Entity ProductToCategory)) -> E.SqlExpr (E.Value Bool))
     -> AppSQL Int
 countProducts filters =
-    extractRowCount . E.select $ do 
+    extractRowCount . E.select $ do
         (p E.:& sa E.:& pToC) <- E.from $ E.table
-            `E.leftJoin` E.table 
+            `E.leftJoin` E.table
                 `E.on` (\(p E.:& sa) -> E.just (p E.^. ProductId) E.==. sa E.?. SeedAttributeProductId)
-            `E.leftJoin` E.table 
+            `E.leftJoin` E.table
                 `E.on` (\(p E.:& _ E.:& pToC) -> E.just (p E.^. ProductId) E.==. pToC E.?. ProductToCategoryProductId)
         E.where_ $ filters p sa pToC E.&&. activeVariantExists p
         return (E.countRows :: E.SqlExpr (E.Value Int))
@@ -167,8 +167,8 @@ generateUniqueToken :: (PersistEntityBackend r ~ SqlBackend, PersistEntity r)
                     => (T.Text -> Unique r) -> AppSQL T.Text
 generateUniqueToken uniqueConstraint = do
     token <- UUID.toText <$> liftIO UUID4.nextRandom
-    maybeCustomer <- getBy $ uniqueConstraint token
-    case maybeCustomer of
+    maybeEntity <- getBy $ uniqueConstraint token
+    case maybeEntity of
         Just _ ->
             generateUniqueToken uniqueConstraint
         Nothing ->
@@ -327,7 +327,7 @@ parseMaybeLocalTime =
 --
 -- IP address is required for Helcim payment API
 getClientIP :: SockAddr -> Maybe T.Text -> Maybe T.Text -> T.Text
-getClientIP sockAddr forwardedFor realIP = 
+getClientIP sockAddr forwardedFor realIP =
   case forwardedFor of
     Just xff -> T.takeWhile (/= ',') xff  -- Take first IP if comma-separated
     Nothing -> case realIP of
@@ -342,4 +342,3 @@ extractIPFromSockAddr (SockAddrInet6 _ _ hostAddr6 _) =
   let (a, b, c, d, e, f, g, h) = hostAddress6ToTuple hostAddr6
   in T.pack $ printf "%x:%x:%x:%x:%x:%x:%x:%x" a b c d e f g h
 extractIPFromSockAddr _ = "unknown"
-

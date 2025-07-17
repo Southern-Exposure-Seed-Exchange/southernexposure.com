@@ -38,11 +38,11 @@ type Route
     | MyAccount
     | EditLogin
     | EditAddress
-    | OrderDetails Int
+    | OrderDetails Int (Maybe String)
     | Cart
     | QuickOrder
     | Checkout
-    | CheckoutSuccess Int Bool
+    | CheckoutSuccess Int (Maybe String)
     | Admin AdminRoute
     | Redirect String
     | NotFound
@@ -129,7 +129,7 @@ parseRoute =
                 , Url.map MyAccount Url.top
                 , Url.map EditLogin (Url.s "edit")
                 , Url.map EditAddress (Url.s "addresses")
-                , Url.map OrderDetails (Url.s "order" </> Url.int)
+                , Url.map OrderDetails (Url.s "order" </> Url.int <?> Query.string "token")
                 , Url.map VerifyEmail (Url.s "verify" </> Url.string)
                 ]
 
@@ -204,7 +204,7 @@ parseRoute =
                 , Url.map Cart (Url.s "cart")
                 , Url.map QuickOrder (Url.s "quick-order")
                 , Url.map Checkout (Url.s "checkout")
-                , Url.map CheckoutSuccess (Url.s "checkout" </> Url.s "success" </> Url.int <?> parseFlag "newAccount")
+                , Url.map CheckoutSuccess (Url.s "checkout" </> Url.s "success" </> Url.int <?> Query.string "token")
                 , Url.map Admin <| Url.s "admin" </> adminParser
                 , redirectParser
                 , Url.map PageDetails (Url.string </> Url.fragment identity)
@@ -308,8 +308,8 @@ reverse route =
 
         CreateAccount ->
             joinPath [ "account", "create" ]
-        
-        VerifyEmail uuid -> 
+
+        VerifyEmail uuid ->
             joinPath [ "account", "verify", uuid ]
 
         CreateAccountSuccess ->
@@ -345,8 +345,13 @@ reverse route =
         EditAddress ->
             joinPath [ "account", "addresses" ]
 
-        OrderDetails orderId ->
+        OrderDetails orderId token ->
             joinPath [ "account", "order", String.fromInt orderId ]
+                ++ withQueryStrings
+                    [ case token of
+                        Nothing -> ""
+                        Just tok -> queryParameter ("token", tok)
+                    ]
 
         Cart ->
             joinPath [ "cart" ]
@@ -357,9 +362,14 @@ reverse route =
         Checkout ->
             joinPath [ "checkout" ]
 
-        CheckoutSuccess orderId newAccount ->
+        CheckoutSuccess orderId token ->
             joinPath [ "checkout", "success", String.fromInt orderId ]
-                ++ withQueryStrings [ queryFlag "newAccount" newAccount ]
+                ++ withQueryStrings
+                    [ case token of
+                        Nothing -> ""
+                        Just tok -> queryParameter ("token", tok)
+                    ]
+
 
         Admin adminRoute ->
             reverseAdmin adminRoute
@@ -578,7 +588,7 @@ authRequired route =
 
         CreateAccount ->
             False
-        
+
         VerifyEmail _ ->
             False
 
@@ -587,7 +597,7 @@ authRequired route =
 
         Login _ _ ->
             False
-        
+
         VerificationRequired _ ->
             False
 
@@ -603,8 +613,8 @@ authRequired route =
         EditAddress ->
             True
 
-        OrderDetails _ ->
-            True
+        OrderDetails _ token ->
+            token == Nothing
 
         Cart ->
             False
@@ -615,8 +625,8 @@ authRequired route =
         Checkout ->
             False
 
-        CheckoutSuccess _ _ ->
-            True
+        CheckoutSuccess _ token ->
+            token == Nothing
 
         Admin _ ->
             True

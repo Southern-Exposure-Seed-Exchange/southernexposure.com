@@ -9,21 +9,21 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE StandaloneDeriving #-}
 module Routes.Customers
     ( CustomerAPI
-    , RegistrationParameters(..)
+    , RegistrationParametersWith(..)
     , LoginResult(..)
-    , createNewCustomer
+    , registerNewCustomer
     , customerRoutes
     ) where
 
 import UnliftIO.Exception (throwIO, Exception, try, handle)
-import Control.Monad ((>=>), (<=<), when, void, forM_)
 import Control.Monad.IO.Class (liftIO)
 import Data.Aeson (ToJSON(..), FromJSON(..), (.=), (.:), (.:?), withObject, object)
 import Data.Int (Int64)
 import Data.List (partition)
-import Data.Maybe (fromMaybe)
+import Data.Maybe (fromMaybe, isNothing)
 import Data.Time.Clock (UTCTime, getCurrentTime, addUTCTime, diffUTCTime, nominalDay)
 import Data.Typeable (Typeable)
 import Database.Persist
@@ -39,7 +39,7 @@ import Servant
 import Auth
 import Models
 import Models.Fields
-    (AvalaraCustomerCode, ArmedForcesRegionCode, armedForcesRegion, Cents(..), creditLineItemTypes)
+    (ArmedForcesRegionCode, armedForcesRegion, Cents(..), creditLineItemTypes)
 import Routes.CommonData
     ( AuthorizationData, toAuthorizationData, AddressData(..), toAddressData
     , fromAddressData, LoginParameters(..), validatePassword, handlePasswordValidationError
@@ -60,6 +60,7 @@ import qualified Emails
 import qualified Models.Fields as Fields
 import qualified Validation as V
 import Routes.EmailVerification
+import Control.Monad.Identity
 
 
 type CustomerAPI =
@@ -164,13 +165,16 @@ locationRoute =
 
 -- REGISTER
 
+type RegistrationParameters = RegistrationParametersWith Identity
 
-data RegistrationParameters =
+data RegistrationParametersWith f =
     RegistrationParameters
         { rpEmail :: T.Text
-        , rpPassword :: T.Text
+        , rpPassword :: f T.Text
         , rpCartToken :: Maybe T.Text
-        } deriving (Show)
+        }
+
+deriving instance Show RegistrationParameters
 
 instance FromJSON RegistrationParameters where
     parseJSON =
@@ -180,7 +184,7 @@ instance FromJSON RegistrationParameters where
                 <*> v .: "password"
                 <*> v .:? "sessionToken"
 
-instance Validation RegistrationParameters where
+instance Validation (RegistrationParametersWith Maybe) where
     -- TODO: Better validation, validate emails, compare to Zencart
     validators parameters = do
         emailDoesntExist <- V.uniqueCustomer $ rpEmail parameters
@@ -192,9 +196,9 @@ instance Validation RegistrationParameters where
                 ]
               )
             , ( "password"
-              , [ V.required $ rpPassword parameters
-                , V.minimumLength 8 $ rpPassword parameters
-                ]
+              , concatMap (\pass -> [ V.required pass
+                , V.minimumLength 8 pass
+                ]) $ rpPassword parameters
               )
             ]
 
@@ -204,32 +208,46 @@ type RegisterRoute =
 
 registrationRoute :: RegistrationParameters -> App ()
 registrationRoute parameters = do
-    _customer <- createNewCustomer Nothing parameters
+    _customer <- registerNewCustomer
+                    parameters
+                        { rpPassword = Just $ runIdentity $ rpPassword parameters
+                        }
     pure ()
 
-createNewCustomer :: Maybe AvalaraCustomerCode -> RegistrationParameters -> App (Entity Customer)
-createNewCustomer mbAvalaraCode = validate >=> \parameters -> do
-    encryptedPass <- hashPassword $ rpPassword parameters
+-- | Create a new customer, or update an ephemeral one
+registerNewCustomer :: RegistrationParametersWith Maybe -> App (Entity Customer)
+registerNewCustomer = validate >=> \parameters -> do
+    encryptedPass <- traverse hashPassword $ rpPassword parameters
     (customer, maybeCustomerId) <- runDB $ do
-        authToken <- generateUniqueToken UniqueToken
-        let customer = Customer
-                { customerEmail = rpEmail parameters
-                , customerStoreCredit = Cents 0
-                , customerMemberNumber = ""
-                , customerEncryptedPassword = encryptedPass
-                , customerAuthToken = authToken
-                , customerStripeId = Nothing
-                , customerHelcimCustomerId = Nothing
-                , customerAvalaraCode = mbAvalaraCode
-                , customerIsAdmin = False
-                , customerVerified = False
-                }
-        (customer,) <$> insertUnique customer
+        mCustomer <- getCustomerByEmail (rpEmail parameters)
+        case mCustomer of
+            Just (Entity cId oldCustomer) -> do
+                update cId
+                    [ CustomerEncryptedPassword =. encryptedPass
+                    ]
+                get cId >>= \case
+                    Nothing -> pure (oldCustomer, Nothing)
+                    Just c -> pure (c, Just cId)
+            Nothing -> do
+                authToken <- generateUniqueToken UniqueToken
+                let customer = Customer
+                        { customerEmail = rpEmail parameters
+                        , customerStoreCredit = Cents 0
+                        , customerMemberNumber = ""
+                        , customerEncryptedPassword = encryptedPass
+                        , customerAuthToken = authToken
+                        , customerStripeId = Nothing
+                        , customerHelcimCustomerId = Nothing
+                        , customerAvalaraCode = Nothing
+                        , customerIsAdmin = False
+                        , customerVerified = False
+                        }
+                (customer,) <$> insertUnique customer
     case maybeCustomerId of
         Nothing ->
             serverError err500
         Just customerId -> do
-            newEmailVerification customerId
+            unless (isNothing encryptedPass) $ newEmailVerification customerId
             runDB $ maybeMergeCarts customerId (rpCartToken parameters)
             return (Entity customerId customer)
 
@@ -406,11 +424,8 @@ resetRequestRoute :: ResetRequestParameters -> App ()
 resetRequestRoute = validate >=> \parameters -> do
     maybeCustomer <- runDB . getCustomerByEmail $ rrpEmail parameters
     case maybeCustomer of
-        Nothing ->
-            (UUID.toText <$> liftIO UUID4.nextRandom)
-            >> (addUTCTime (15 * 60) <$> liftIO getCurrentTime)
-            >> return ()
-        Just (Entity customerId _) -> do
+        Just (Entity customerId customer)
+            | Just {} <- customerEncryptedPassword customer -> do
             resetCode <- UUID.toText <$> liftIO UUID4.nextRandom
             expirationTime <- addUTCTime (15 * 60) <$> liftIO getCurrentTime
             let passwordReset =
@@ -423,6 +438,10 @@ resetRequestRoute = validate >=> \parameters -> do
                 deleteWhere [PasswordResetCustomerId ==. customerId]
                 resetId <- insert passwordReset
                 enqueueTask Nothing $ SendEmail $ Emails.PasswordReset customerId resetId
+        _ ->
+            (UUID.toText <$> liftIO UUID4.nextRandom)
+            >> (addUTCTime (15 * 60) <$> liftIO getCurrentTime)
+            >> return ()
 
 
 data ResetPasswordParameters =
@@ -474,7 +493,7 @@ resetPasswordRoute = validate >=> \parameters ->
                         token <- generateUniqueToken UniqueToken
                         update customerId
                             [ CustomerAuthToken =. token
-                            , CustomerEncryptedPassword =. newHash
+                            , CustomerEncryptedPassword =. Just newHash
                             ]
                         delete resetId
                         maybeMergeCarts customerId (rppCartToken parameters)
@@ -626,7 +645,7 @@ editDetailsRoute :: WrappedAuthToken -> EditDetailsParameters -> App (Cookied ()
 editDetailsRoute token p = withValidatedCookie token $ \(Entity customerId customer) -> do
     (parameters, _) <- validate (p, customer)
     maybeHash <- mapM hashPassword $ edpPassword parameters
-    void . runDB . update customerId $ updateFields (edpEmail parameters) maybeHash
+    void . runDB . update customerId $ updateFields (edpEmail parameters) (fmap Just maybeHash)
     where updateFields maybeEmail maybePassword =
             maybe [] (\e -> [CustomerEmail =. e]) maybeEmail
                 ++ maybe [] (\e -> [CustomerEncryptedPassword =. e]) maybePassword

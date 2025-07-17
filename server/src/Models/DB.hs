@@ -96,7 +96,7 @@ Customer
     email T.Text
     storeCredit Cents
     memberNumber T.Text
-    encryptedPassword T.Text
+    encryptedPassword T.Text Maybe
     authToken T.Text
     stripeId StripeCustomerId Maybe
     helcimCustomerId Helcim.CustomerId Maybe
@@ -200,6 +200,7 @@ Address
 
 Order
     customerId CustomerId
+    guestToken T.Text Maybe
     status OrderStatus
     billingAddressId AddressId Maybe
     shippingAddressId AddressId
@@ -214,6 +215,7 @@ Order
     helcimCardType T.Text Maybe
     avalaraTransactionCode AvalaraTransactionCode Maybe
     createdAt UTCTime
+    UniqueGuestToken guestToken !force -- NB: two NULL values are not considered equal
     deriving Show
 
 OrderLineItem json
