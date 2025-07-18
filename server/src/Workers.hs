@@ -59,7 +59,7 @@ import Emails (EmailType, getEmailData)
 import Images (makeImageConfig, scaleExistingImage, optimizeImage)
 import Models
 import Models.PersistJSON (JSONValue(..))
-import Models.Fields (AvalaraTransactionCode(..), Cents(..))
+import Models.Fields (AvalaraTransactionCode(..), Cents(..), plusCents)
 import Routes.AvalaraUtils (createAvalaraTransaction)
 import Server (avalaraRequest)
 
@@ -286,13 +286,13 @@ taskQueueConfig threadCount cfg@Config { getPool, getServerLogger, getCaches } =
                 e ->
                     throwIO $ RequestFailed e
         CreateTransaction orderId -> flip runReaderT cfg $ do
-            result <- fmap listToMaybe . runSql $ E.select $ do 
-                (o E.:& sa E.:& ba E.:& c) <- E.from $ E.table 
-                    `E.innerJoin` E.table 
+            result <- fmap listToMaybe . runSql $ E.select $ do
+                (o E.:& sa E.:& ba E.:& c) <- E.from $ E.table
+                    `E.innerJoin` E.table
                         `E.on` (\(o E.:& sa) -> o E.^. OrderShippingAddressId E.==. sa E.^. AddressId)
-                    `E.leftJoin` E.table 
+                    `E.leftJoin` E.table
                         `E.on` (\(o E.:& _ E.:& ba) -> o E.^. OrderBillingAddressId E.==. ba E.?. AddressId)
-                    `E.innerJoin` E.table 
+                    `E.innerJoin` E.table
                         `E.on` (\(o E.:& _ E.:& _ E.:& c) -> c E.^. CustomerId E.==. o E.^. OrderCustomerId)
                 E.where_ $ o E.^. OrderId E.==. E.val orderId
                 return (o, sa, ba, c)
@@ -349,7 +349,7 @@ cleanDatabase :: SqlPersistT IO ()
 cleanDatabase = do
     currentTime <- lift getCurrentTime
     deleteWhere [PasswordResetExpirationTime <. currentTime]
-    -- TODO sand-witch: "The DeleteCascade module is deprecated. 
+    -- TODO sand-witch: "The DeleteCascade module is deprecated.
     -- You can now set cascade behavior directly on entities in the quasiquoter."
     deleteCascadeWhere [CartExpirationTime <. Just currentTime]
     deactivateCoupons currentTime
@@ -370,8 +370,8 @@ cleanDatabase = do
 -- | Remove Cart Items for sold-out variants from the order.
 removeSoldOutVariants :: OrderId -> SqlPersistT IO ()
 removeSoldOutVariants orderId = do
-    soldOut <- E.select $ do 
-        (op E.:& pv) <- E.from $ E.table `E.innerJoin` E.table 
+    soldOut <- E.select $ do
+        (op E.:& pv) <- E.from $ E.table `E.innerJoin` E.table
             `E.on`  \(op E.:& pv) -> pv E.^. ProductVariantId E.==. op E.^. OrderProductProductVariantId
         E.where_ $ pv E.^. ProductVariantQuantity E.<=. E.val 0
             E.&&. op E.^. OrderProductOrderId E.==. E.val orderId
@@ -408,12 +408,12 @@ updateSalesCache cacheTVar orderId = do
                 [ newReport { sdTotal = total } ]
             [sale] ->
                 if sdDay newReport == sdDay sale then
-                    [ sale { sdTotal = total + sdTotal sale } ]
+                    [ sale { sdTotal = total `plusCents` sdTotal sale } ]
                 else
-                    [ sale, newReport { sdTotal = total + sdTotal sale } ]
+                    [ sale, newReport { sdTotal = total `plusCents` sdTotal sale } ]
             sale : nextSale : rest ->
                 if date >= sdDay sale && date < sdDay nextSale then
-                    sale { sdTotal = total + sdTotal sale } : rest
+                    sale { sdTotal = total `plusCents` sdTotal sale } : rest
                 else
                     sale : updateReport total date (nextSale : rest) newReport
 
@@ -474,7 +474,7 @@ updateSalesReports reports zone reportDate reportUpdater =
         in
         SalesData
             { sdDay = toTime zone day
-            , sdTotal = 0
+            , sdTotal = Cents 0
             }
     -- Build a Monthly SalesData item for the given date, starting at the
     -- first of the month, local time.
@@ -486,7 +486,7 @@ updateSalesReports reports zone reportDate reportUpdater =
         in
         SalesData
             { sdDay = toTime zone startOfMonth
-            , sdTotal = 0
+            , sdTotal = Cents 0
             }
 
 -- Convert a Day to a UTCTime representing midnight in the local timezone.

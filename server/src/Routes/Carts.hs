@@ -18,7 +18,7 @@ import Data.Maybe (fromMaybe, listToMaybe)
 import Data.Time.Clock (getCurrentTime, addUTCTime)
 import Database.Persist
     ( (+=.), (=.), (==.), Entity(..), get, getBy, insert, insertEntity, update
-    , updateWhere, upsertBy, deleteWhere, OverflowNatural(..)
+    , updateWhere, upsertBy, deleteWhere
     )
 import Database.Persist.Sql (toSqlKey)
 import Numeric.Natural (Natural)
@@ -160,12 +160,12 @@ customerAddRoute = validateCookieAndParameters $ \(Entity customerId _) paramete
             CartItem
                 { cartItemCartId = cartId
                 , cartItemProductVariantId = productVariant
-                , cartItemQuantity = OverflowNatural quantity
+                , cartItemQuantity = fromIntegral quantity
                 }
     in do
         (Entity cartId _) <- getOrCreateCustomerCart customerId
         void . runDB $ upsertBy (UniqueCartItem cartId productVariant)
-            (item cartId) [CartItemQuantity +=. OverflowNatural quantity]
+            (item cartId) [CartItemQuantity +=. fromIntegral quantity]
 
 
 data AnonymousAddParameters =
@@ -209,12 +209,12 @@ anonymousAddRoute = validate >=> \parameters ->
             CartItem
                 { cartItemCartId = cartId
                 , cartItemProductVariantId = productVariant
-                , cartItemQuantity = OverflowNatural quantity
+                , cartItemQuantity = fromIntegral quantity
                 }
     in do
         (token, Entity cartId _) <- getOrCreateAnonymousCart maybeSessionToken
         void . runDB $ upsertBy (UniqueCartItem cartId productVariant)
-            (item cartId) [CartItemQuantity +=. OverflowNatural quantity]
+            (item cartId) [CartItemQuantity +=. fromIntegral quantity]
         return token
 
 
@@ -371,7 +371,7 @@ updateOrDeleteItems cartId =
             else
                 updateWhere
                     [ CartItemId ==. toSqlKey key, CartItemCartId ==. cartId ]
-                    [ CartItemQuantity =. OverflowNatural val ]
+                    [ CartItemQuantity =. fromIntegral val ]
         )
         (return ())
 
@@ -511,8 +511,8 @@ upsertQuickOrderItem cartId item = do
 
 getVariantsByItem :: QuickOrderItem -> App [Entity ProductVariant]
 getVariantsByItem item =
-    runDB $ E.select $ do 
-        (v E.:& p) <- E.from $ E.table `E.innerJoin` E.table 
+    runDB $ E.select $ do
+        (v E.:& p) <- E.from $ E.table `E.innerJoin` E.table
             `E.on` \(v E.:& p) -> v E.^. ProductVariantProductId E.==. p E.^. ProductId
         let fullSku = E.lower_ $ p E.^. ProductBaseSku E.++. v E.^. ProductVariantSkuSuffix
         E.where_ $

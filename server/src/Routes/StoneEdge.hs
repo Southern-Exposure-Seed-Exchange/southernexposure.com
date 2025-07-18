@@ -47,14 +47,11 @@ import Config
 import Models
 import Models.Fields
     ( Cents(..), mkCents, Country(..), Region(..), OrderStatus(..), LineItemType(..)
-    , StripeChargeId(..), AdminOrderComment(..), renderLotSize
+    , StripeChargeId(..), AdminOrderComment(..), renderLotSize, timesQuantity, sumPrices, plusCents, subtractCents
     )
 import Helcim.API.Types.Payment (TransactionId(..))
 import Server
 import StoneEdge
-import Numeric.Natural (Natural)
-import Data.Coerce (coerce)
-import Database.Persist.Class.PersistField (OverflowNatural(..))
 
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.Text as T
@@ -193,14 +190,14 @@ downloadOrdersRoute DownloadOrdersRequest { dorLastOrder, dorStartNumber, dorBat
                     return ()
     rawOrderData <- runDB $ do
         orders <- E.select $ do
-            (o E.:& c E.:& sa E.:& ba E.:& cp) <- E.from $ E.table 
-                `E.innerJoin` E.table 
+            (o E.:& c E.:& sa E.:& ba E.:& cp) <- E.from $ E.table
+                `E.innerJoin` E.table
                     `E.on` (\(o E.:& c) -> o E.^. OrderCustomerId E.==. c E.^. CustomerId)
                 `E.innerJoin` E.table
                     `E.on` (\(o E.:& _ E.:& sa) -> o E.^. OrderShippingAddressId E.==. sa E.^. AddressId)
-                `E.leftJoin` E.table 
+                `E.leftJoin` E.table
                     `E.on` (\(o E.:& _ E.:& _ E.:& ba) -> o E.^. OrderBillingAddressId E.==. ba E.?. AddressId)
-                `E.leftJoin` E.table 
+                `E.leftJoin` E.table
                     `E.on` (\(o E.:& _ E.:& _ E.:& _ E.:& cp) -> o E.^. OrderCouponId E.==. cp E.?. CouponId)
 
             E.where_ $ orderIdFilter o
@@ -215,11 +212,11 @@ downloadOrdersRoute DownloadOrdersRequest { dorLastOrder, dorStartNumber, dorBat
                 (adminCommentContent comment,)
                     <$> convertToLocalTime (adminCommentTime comment)
             lineItems <- selectList [OrderLineItemOrderId ==. entityKey o] []
-            products <- E.select $ do 
-                (op E.:& v E.:& p) <- E.from $ E.table 
-                    `E.innerJoin` E.table 
+            products <- E.select $ do
+                (op E.:& v E.:& p) <- E.from $ E.table
+                    `E.innerJoin` E.table
                         `E.on` (\(op E.:& v) -> op E.^. OrderProductProductVariantId E.==. v E.^. ProductVariantId)
-                    `E.innerJoin` E.table 
+                    `E.innerJoin` E.table
                         `E.on` (\(_ E.:& v E.:& p) -> v E.^. ProductVariantProductId E.==. p E.^. ProductId)
                 E.where_ $ op E.^. OrderProductOrderId E.==. E.val (entityKey o)
                 return (op, p, v)
@@ -300,13 +297,13 @@ transformOrder (order, createdAt, customer, shipping, maybeBilling, maybeCoupon,
         :: (Entity OrderProduct, Entity Product, Entity ProductVariant)
         -> StoneEdgeOrderProduct
     transformProduct (Entity lineId orderProd, Entity _ prod, Entity _ variant) =
-        let q = fromIntegral . coerce @_ @Natural $ orderProductQuantity orderProd
+        let q = orderProductQuantity orderProd
             p = orderProductPrice orderProd
-            t = Cents $ fromIntegral q * fromCents p
+            t = p `timesQuantity` q
         in StoneEdgeOrderProduct
             { seopSKU = productBaseSku prod <> productVariantSkuSuffix variant
             , seopName = productName prod <> lotSuffix variant
-            , seopQuantity = q
+            , seopQuantity = fromIntegral q
             , seopItemPrice = convertCents p
             , seopProductType = Just TangibleProduct
             , seopTaxable = Just True
@@ -348,8 +345,8 @@ transformOrder (order, createdAt, customer, shipping, maybeBilling, maybeCoupon,
     transformTotals :: StoneEdgeTotals
     transformTotals =
         let productTotal =
-                sum $ map (\(Entity _ op, _, _) ->
-                        mkCents (orderProductQuantity op) * orderProductPrice op
+                sumPrices $ map (\(Entity _ op, _, _) ->
+                        orderProductPrice op `timesQuantity` orderProductQuantity op
                     )
                     products
             (discounts, surcharges, maybeShipping, maybeCouponLine, maybeTaxLine) = foldl
@@ -370,19 +367,20 @@ transformOrder (order, createdAt, customer, shipping, maybeBilling, maybeCoupon,
                         RefundLine ->
                             (ds, ss, mShip, mCoupon, mTax)
                         TaxLine ->
-                            if orderLineItemAmount (entityVal item) /= 0 then
+                            if orderLineItemAmount (entityVal item) /= mkCents 0 then
                                 (ds, ss, mShip, mCoupon, Just item)
                             else
                                 (ds, ss, mShip, mCoupon, mTax)
                 ) ([], [], Nothing, Nothing, Nothing) items
-            subTotal = productTotal - sum (map (orderLineItemAmount . entityVal) discounts)
+            subTotal = productTotal `subtractCents` sumPrices (map (orderLineItemAmount . entityVal) discounts)
             grandTotal =
-                productTotal
-                    + maybe 0 (orderLineItemAmount . entityVal) maybeTaxLine
-                    + maybe 0 (orderLineItemAmount . entityVal) maybeShipping
-                    + sum (map (orderLineItemAmount . entityVal) surcharges)
-                    - sum (map (orderLineItemAmount . entityVal) discounts)
-                    - maybe 0 (orderLineItemAmount . entityVal) maybeCouponLine
+                let zero = mkCents 0
+                in productTotal
+                    `plusCents` maybe zero (orderLineItemAmount . entityVal) maybeTaxLine
+                    `plusCents` maybe zero (orderLineItemAmount . entityVal) maybeShipping
+                    `plusCents` sumPrices (map (orderLineItemAmount . entityVal) surcharges)
+                    `subtractCents` sumPrices (map (orderLineItemAmount . entityVal) discounts)
+                    `subtractCents` maybe zero (orderLineItemAmount . entityVal) maybeCouponLine
         in StoneEdgeTotals
             { setProductTotal = convertCents productTotal
             , setDiscount = map transformDiscount discounts

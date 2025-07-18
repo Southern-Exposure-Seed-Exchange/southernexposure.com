@@ -63,7 +63,7 @@ import Data.Text.Encoding (encodeUtf8, decodeUtf8)
 import Data.Time (UTCTime, getCurrentTime)
 import Database.Persist
     ( (=.), (==.), (>=.), (<=.), Entity(..), SelectOpt(Asc), selectList, getBy
-    , update, OverflowNatural(..)
+    , update
     )
 import Numeric.Natural (Natural)
 import Servant (errBody, err500)
@@ -543,7 +543,7 @@ data CartItemData =
         { cidItemId :: CartItemId
         , cidProduct :: BaseProductData
         , cidVariant :: VariantData
-        , cidQuantity :: Natural
+        , cidQuantity :: Int64
         }
 
 instance ToJSON CartItemData where
@@ -669,8 +669,8 @@ getCharges maybeShipping maybeAvalaraCustomer items maybeCoupon priorityShipping
             adCountry <$> maybeShipping
         subTotal =
             foldl (\acc item -> acc + itemTotal item) 0 items
-        itemTotal item =
-            fromIntegral (cidQuantity item) * fromCents (getVariantPrice $ cidVariant item)
+        itemTotal item = fromCents $
+            getVariantPrice (cidVariant item) `timesQuantity` cidQuantity item
         couponCredit ms (Entity _ coupon) =
             if couponMinimumOrder coupon <= Cents subTotal then
                 Just $ CartCharge
@@ -699,10 +699,10 @@ getCharges maybeShipping maybeAvalaraCustomer items maybeCoupon priorityShipping
         sumGrandTotal avalaraStatus cc =
             let preTaxTotal =
                     ccProductTotal cc
-                        + sum (map ccAmount $ ccSurcharges cc)
-                        + mAmt (listToMaybe . map scCharge . ccShippingMethods)
-                        + mAmt ccPriorityShippingFee
-                        - mAmt ccCouponDiscount
+                        `plusCents` sumPrices (map ccAmount $ ccSurcharges cc)
+                        `plusCents` mAmt (listToMaybe . map scCharge . ccShippingMethods)
+                        `plusCents` mAmt ccPriorityShippingFee
+                        `subtractCents` mAmt ccCouponDiscount
             in do
             taxCharge <- case avalaraStatus of
                 AvalaraEnabled ->
@@ -713,7 +713,7 @@ getCharges maybeShipping maybeAvalaraCustomer items maybeCoupon priorityShipping
                 _ ->
                     return (taxLine preTaxTotal)
             return cc
-                { ccGrandTotal = preTaxTotal + ccAmount taxCharge
+                { ccGrandTotal = preTaxTotal `plusCents` ccAmount taxCharge
                 , ccTax = taxCharge
                 }
             where mAmt f = maybe (Cents 0) ccAmount $ f cc
@@ -728,11 +728,11 @@ getCharges maybeShipping maybeAvalaraCustomer items maybeCoupon priorityShipping
             , ccPriorityShippingFee = priorityCharge shippingMethods
             , ccProductTotal = Cents subTotal
             , ccCouponDiscount = maybeCoupon >>= couponCredit shippingMethods
-            , ccGrandTotal = 0
+            , ccGrandTotal = mkCents 0
             }
   where
     blankCharge =
-        CartCharge "" 0
+        CartCharge "" (mkCents 0)
     getTaxQuote :: CartCharges -> AppSQL CartCharge
     getTaxQuote cc = flip (maybe $ return blankCharge) maybeShipping $ \shippingAddress -> do
         date <- liftIO getCurrentTime
@@ -751,7 +751,7 @@ getCharges maybeShipping maybeAvalaraCustomer items maybeCoupon priorityShipping
             debitLines =
                 surchargeLines <> shippingLine <> priorityLine
             discount =
-                toDollars $ sum $ map ccAmount $ maybeToList $ ccCouponDiscount cc
+                toDollars $ sumPrices $ map ccAmount $ maybeToList $ ccCouponDiscount cc
             address =
                 Avalara.Address
                     { Avalara.addrSingleLocation = Nothing
@@ -822,7 +822,7 @@ getCharges maybeShipping maybeAvalaraCustomer items maybeCoupon priorityShipping
 
 -- | Calculate the discount of a Coupon, given the Coupon, a list of
 -- shipping methods, & the order sub-total.
-calculateCouponDiscount :: Coupon -> [CartCharge] -> Natural -> Cents
+calculateCouponDiscount :: Coupon -> [CartCharge] -> Int64 -> Cents
 calculateCouponDiscount coupon shipMethods subTotal =
     case (couponDiscount coupon, shipMethods) of
         (FreeShipping, m:_) ->
@@ -835,7 +835,7 @@ calculateCouponDiscount coupon shipMethods subTotal =
         (PercentageDiscount percent, _) ->
             Cents . round $ toRational subTotal * (fromIntegral percent % 100)
 
-calculatePriorityFee :: [ShippingCharge] -> Natural -> Maybe Cents
+calculatePriorityFee :: [ShippingCharge] -> Int64 -> Maybe Cents
 calculatePriorityFee shipMethods subTotal =
     case shipMethods of
         ShippingCharge _ (Just fee) True:_ ->
@@ -872,7 +872,7 @@ getSurcharges items =
                 else
                     Just $ CartCharge (surchargeDescription surcharge) amount
 
-getShippingMethods :: Maybe Country -> [CartItemData] -> Natural -> AppSQL [ShippingCharge]
+getShippingMethods :: Maybe Country -> [CartItemData] -> Int64 -> AppSQL [ShippingCharge]
 getShippingMethods maybeCountry items subTotal =
     case maybeCountry of
         Nothing ->
@@ -886,7 +886,7 @@ getShippingMethods maybeCountry items subTotal =
                     country `elem` shippingMethodCountries method
                 validProducts =
                     null (shippingMethodCategoryIds method)
-                        || all isValidProduct (map cidProduct items)
+                        || all (isValidProduct . cidProduct) items
                 isValidProduct prod =
                      not . null $ bpdCategories prod `intersect` shippingMethodCategoryIds method
                 thresholdAmount rates =
@@ -922,7 +922,7 @@ getShippingMethods maybeCountry items subTotal =
                             (Just $ shippingMethodPriorityRate method)
                             priorityEnabled
                 priorityExcluded =
-                    any productExcludesPriority (map cidProduct items)
+                    any (productExcludesPriority . cidProduct) items
                 productExcludesPriority prod =
                     not . null $ bpdCategories prod `intersect`
                         shippingMethodExcludedPriorityCategoryIds method
@@ -1159,6 +1159,6 @@ getCheckoutProducts orderId = do
                 { cpName = productName product
                 , cpSku = productBaseSku product <> productVariantSkuSuffix variant
                 , cpLotSize = productVariantLotSize variant
-                , cpQuantity = coerce $ orderProductQuantity orderProd
+                , cpQuantity = fromIntegral $ orderProductQuantity orderProd
                 , cpPrice = orderProductPrice orderProd
                 }

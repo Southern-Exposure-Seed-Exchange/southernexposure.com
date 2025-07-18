@@ -31,7 +31,7 @@ import Models
     ( CustomerId, Customer(..), Address(..), EntityField(..), Unique(..)
     , Order(..), OrderId, getOrderTotal, AddressId
     )
-import Models.Fields (Cents, StripeCustomerId, OrderStatus, AvalaraCustomerCode)
+import Models.Fields (Cents, StripeCustomerId, OrderStatus, AvalaraCustomerCode, mkCents)
 import Routes.CommonData (AddressData, toAddressData)
 import Routes.Utils (extractRowCount, buildWhereQuery, hashPassword, generateUniqueToken, mapUpdate)
 import Server (App, AppSQL, runDB, serverError)
@@ -388,7 +388,7 @@ customerDeleteRoute t customerId = withAdminCookie t $ \_ -> runDB $ do
             token <- generateUniqueToken UniqueToken
             insert Customer
                 { customerEmail = "gardens+deleted@southernexposure.com"
-                , customerStoreCredit = 0
+                , customerStoreCredit = mkCents 0
                 , customerMemberNumber = ""
                 , customerEncryptedPassword = Just hashedPassword
                 , customerAuthToken = token
