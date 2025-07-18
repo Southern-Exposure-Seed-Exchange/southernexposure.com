@@ -94,6 +94,9 @@ instance FromJSON CustomerResponse where
                     String "" -> pure Nothing
                     v -> Just <$> parseJSON v
 
+deriveToJSON helcimAesonOptions ''CustomerCard
+deriveToJSON helcimAesonOptions ''CustomerResponse
+
 deriveToJSON helcimAesonOptions ''CreateCustomerRequest
 deriveToJSON helcimAesonOptions ''GetCustomersRequest
 deriveFromJSON helcimAesonOptions ''CustomerCard
