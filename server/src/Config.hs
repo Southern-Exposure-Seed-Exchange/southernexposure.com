@@ -58,6 +58,7 @@ data Config
     , getAvalaraLogger :: TimedFastLogger
     , getStripeLogger :: TimedFastLogger
     , getServerLogger :: TimedFastLogger
+    , getHelcimLogger :: TimedFastLogger
     , getDeveloperEmail :: Maybe Text
     , getBaseUrl :: Text
     }
@@ -85,6 +86,7 @@ defaultConfig =
         , getAvalaraLogger = undefined
         , getStripeLogger = undefined
         , getServerLogger = undefined
+        , getHelcimLogger = undefined
         , getDeveloperEmail = Nothing
         , getBaseUrl = "http://localhost:7000"
         }

@@ -8,7 +8,7 @@ module Helcim.API.Types.CardBatch
 
 import Data.Text (Text)
 import Data.Aeson (FromJSON, ToJSON)
-import Data.Aeson.TH (deriveFromJSON)
+import Data.Aeson.TH (deriveJSON)
 import Data.Scientific (Scientific)
 import GHC.Generics (Generic)
 import Servant (ToHttpApiData)
@@ -35,4 +35,4 @@ data CardBatchResponse = CardBatchResponse
     , cbrCountDeclined       :: Maybe Int -- Expects '1' or '0'
     }
 
-deriveFromJSON helcimAesonOptions ''CardBatchResponse
+deriveJSON helcimAesonOptions ''CardBatchResponse

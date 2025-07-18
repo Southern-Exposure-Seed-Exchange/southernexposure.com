@@ -34,31 +34,54 @@ import Helcim.API.Types.Checkout as Checkout
 import Helcim.API.Types.Customer
 import Helcim.API.Types.Common
 
-import Config (Config(..))
+import Config (Config(..), Environment (..), timedLogStr)
 import Server (App)
 import Helcim.API.Types.CardBatch (CardBatchId, CardBatchResponse)
 import Helcim.API.Types.Payment (PurchaseRequest, TransactionResponse, RefundRequest, ReverseRequest, TransactionId)
+import Data.Aeson
+import Control.Monad (when)
+import Control.Exception
 
 -- Abstracted helper for Helcim actions with idempotency
 runHelcimWithIdempotency
-    :: (Maybe ApiToken -> Maybe IdempotencyKey -> req -> ClientM res)
+    :: (ToJSON req, ToJSON res) -- for log purposes only
+    => (Maybe ApiToken -> Maybe IdempotencyKey -> req -> ClientM res)
     -> req
     -> App (Either HelcimError res)
 runHelcimWithIdempotency apiFunc request = do
     authToken <- asks getHelcimAuthKey
     idempotencyKey <- IdempotencyKey <$> liftIO nextRandom
-    let clientAction = apiFunc (Just authToken) (Just idempotencyKey) request
-    liftIO $ runHelcimClient clientAction
+    let clientAction = apiFunc (Just authToken) (Just idempotencyKey)
+    runHelcimCLientLogged clientAction request
 
 -- Abstracted helper for Helcim actions without idempotency
 runHelcim
-    :: (Maybe ApiToken -> req -> ClientM res)
+    :: (ToJSON req, ToJSON res) -- for log purposes only
+    => (Maybe ApiToken -> req -> ClientM res)
     -> req
     -> App (Either HelcimError res)
 runHelcim apiFunc request = do
     authToken <- asks getHelcimAuthKey
-    let clientAction = apiFunc (Just authToken) request
-    liftIO $ runHelcimClient clientAction
+    let clientAction = apiFunc (Just authToken)
+    runHelcimCLientLogged clientAction request
+
+runHelcimCLientLogged :: (ToJSON req, ToJSON res) => (req -> ClientM res) -> req -> App (Either HelcimError res)
+runHelcimCLientLogged action request = do
+    logger <- asks getHelcimLogger
+    mode <- asks getEnv
+    res <- liftIO $ runHelcimClient $ action request
+    case res of
+      Left err -> do
+        log_ logger encode request
+        log_ logger displayException err
+      Right resp ->
+        when (mode == Development) $ do
+            log_ logger encode request
+            log_ logger encode resp
+    pure res
+    where
+        log_ logger encoding logee =
+            liftIO $ logger $ timedLogStr $ encoding logee
 
 createVerifyCheckout :: Maybe CustomerCode -> App (Either HelcimError CheckoutCreateResponse)
 createVerifyCheckout customerCode = do

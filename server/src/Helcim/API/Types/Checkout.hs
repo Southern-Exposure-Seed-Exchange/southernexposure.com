@@ -15,7 +15,7 @@ module Helcim.API.Types.Checkout
 import Data.Aeson (FromJSON, ToJSON)
 import qualified Data.Aeson as Aeson
 import Data.Scientific (Scientific)
-import Data.Aeson.TH (deriveToJSON, deriveFromJSON)
+import Data.Aeson.TH (deriveToJSON, deriveJSON)
 import Data.Text (Text)
 import Data.Map (Map)
 import GHC.Generics (Generic)
@@ -93,6 +93,9 @@ newtype SecretToken = SecretToken
     deriving (Show, Generic)
     deriving newtype FromJSON
 
+instance ToJSON SecretToken where
+    toJSON _ = Aeson.toJSON @Text "<REDACTED>"
+
 -- | Datatype that represents the response from the https://api.helcim.com/v2/helcim-pay/initialize API endpoint.
 data CheckoutCreateResponse = CheckoutCreateResponse
     { ccrCheckoutToken :: CheckoutToken
@@ -103,4 +106,4 @@ deriveToJSON helcimAesonOptions ''InitializeRequest
 deriveToJSON helcimAesonOptions ''CustomStyling
 deriveToJSON helcimAesonOptions ''CustomerRequest
 
-deriveFromJSON helcimAesonOptions ''CheckoutCreateResponse
+deriveJSON helcimAesonOptions ''CheckoutCreateResponse

@@ -58,7 +58,7 @@ import Prelude hiding (log)
 main :: IO ()
 main = do
     env <- lookupSetting "ENV" Development
-    (avalaraLogger, stripeLogger, serverLogger, cleanupLoggers) <- makeLoggers env
+    (avalaraLogger, stripeLogger, serverLogger, helcimLogger, cleanupLoggers) <- makeLoggers env
     let log = logMsg serverLogger
     log "SESE API Server starting up."
     port <- lookupSetting "PORT" 3000
@@ -106,6 +106,7 @@ main = do
             , getAvalaraLogger = avalaraLogger
             , getStripeLogger = stripeLogger
             , getServerLogger = serverLogger
+            , getHelcimLogger = helcimLogger
             , getDeveloperEmail = devMail
             , getBaseUrl = baseUrl
             }
@@ -267,7 +268,7 @@ main = do
                         ++ "\n\n\tValid value are `Production` or `Sandbox`"
             return Avalara.Config {..}
 
-        makeLoggers :: Environment -> IO (TimedFastLogger, TimedFastLogger, TimedFastLogger, IO ())
+        makeLoggers :: Environment -> IO (TimedFastLogger, TimedFastLogger, TimedFastLogger, TimedFastLogger, IO ())
         makeLoggers env = do
             timeCache <- newTimeCache "%Y-%m-%dT%T"
             case env of
@@ -276,7 +277,8 @@ main = do
                     (avalara, aClean) <- makeLogger (LogStdout defaultBufSize)
                     (stripe, stripeClean) <- makeLogger (LogStdout defaultBufSize)
                     (server, servClean) <- makeLogger (LogStdout defaultBufSize)
-                    return (avalara, stripe, server, aClean >> stripeClean >> servClean)
+                    (helcim, helcimClean) <- makeLogger (LogStdout defaultBufSize)
+                    return (avalara, stripe, server, helcim, aClean >> stripeClean >> servClean >> helcimClean)
                 Production -> do
                     logDir <- lookupDirectory "LOGS" "/logs/"
                     let makeLogger fp = newTimedFastLogger timeCache
@@ -285,7 +287,8 @@ main = do
                     (avalara, aClean) <- makeLogger $ logDir ++ "/avalara.log"
                     (stripe, stripeClean) <- makeLogger $ logDir ++ "/stripe.log"
                     (server, servClean) <- makeLogger $ logDir ++ "/server.log"
-                    return (avalara, stripe, server, aClean >> stripeClean >> servClean)
+                    (helcim, helcimClean) <- makeLogger $ logDir ++ "/helcim.log"
+                    return (avalara, stripe, server, helcim, aClean >> stripeClean >> servClean >> helcimClean)
 
         lookupDirectory :: String -> FilePath -> IO FilePath
         lookupDirectory envName defaultPath = do
