@@ -1,6 +1,5 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -15,11 +14,10 @@ import Data.Ratio ((%), numerator, denominator)
 import Data.Scientific (Scientific, scientific)
 import Data.StateCodes (StateCode)
 import Data.Time (UTCTime)
-import Database.Persist (PersistField(..), OverflowNatural(..))
+import Database.Persist (PersistField(..))
 import Database.Persist.Sql (PersistFieldSql(..), SqlType(SqlString))
 import Database.Persist.TH (derivePersistField)
 import GHC.Generics (Generic)
-import Numeric.Natural (Natural)
 import Text.Read (readMaybe, readPrec)
 import Data.Coerce (coerce)
 
@@ -28,24 +26,52 @@ import qualified Data.CAProvinceCodes as CACodes
 import qualified Data.StateCodes as StateCodes
 import qualified Data.Text as T
 import qualified Web.Stripe.Types as Stripe
+import Data.Int
+import qualified Data.Foldable
+import GHC.Stack
+import Control.Monad
 
 -- | Cents are used to do any currency-related arithmetic & are represented
 -- as arbitrary-percision numbers.
 newtype Cents =
-    Cents { fromCents :: Natural }
-    deriving newtype (Eq, Ord, Num, ToJSON, FromJSON)
-    deriving (PersistField, PersistFieldSql) via OverflowNatural -- TODO sand-witch: improve this behavior
+    Cents { fromCents :: Int64 }
+    deriving newtype (Eq, Ord, ToJSON, Show, PersistField, PersistFieldSql)
 
-mkCents :: OverflowNatural -> Cents
-mkCents = coerce
-
--- | Fallback to the `Natural` instance.
-instance Show Cents where
-    show = show . fromCents
-
--- | Fallback to the `Natural` instance.
 instance Read Cents where
-    readPrec = Cents <$> readPrec
+    readPrec = do
+        val <- readPrec
+        when (val < 0) $ fail "Negative cents aren't allowed"
+        pure (Cents val)
+
+instance FromJSON Cents where
+    parseJSON v = do
+        val <- parseJSON v
+        when (val < 0) $ fail "Negative cents aren't allowed"
+        pure (Cents val)
+
+timesQuantity :: HasCallStack => Cents -> Int64 -> Cents
+timesQuantity x y
+    | y < 0 = error ("Negative quantity isn't allowed: " <> show x <> ", " <> show y)
+    | otherwise = coerce ((*) @Int64) x y
+
+plusCents :: Cents -> Cents -> Cents
+plusCents = coerce ((+) @Int64)
+
+subtractCents :: HasCallStack => Cents -> Cents -> Cents
+subtractCents x y
+    | x < y = error ("Negatvie cents aren't allowed: " <> show x <> ", " <> show y)
+    | otherwise = coerce ((-) @Int64) x y
+
+infixl 6 `plusCents`     -- the same as +
+infixl 6 `subtractCents` -- the same as -
+infixl 7 `timesQuantity` -- the same as *
+
+sumPrices :: Foldable f => f Cents -> Cents
+sumPrices = Data.Foldable.foldl' plusCents (Cents 0)
+{-# SPECIALISE sumPrices :: [Cents] -> Cents #-}
+
+mkCents :: Int64 -> Cents
+mkCents = coerce
 
 formatCents :: Cents -> T.Text
 formatCents (Cents c) =
@@ -86,20 +112,11 @@ fromDollars dollars =
 -- | Milligrams are used to do any weight-related arithmetic & are
 -- represented as arbitrary-percision numbers.
 newtype Milligrams =
-    Milligrams { fromMilligrams :: Natural }
-    deriving newtype (Eq, Ord, ToJSON, FromJSON)
-    deriving (PersistField, PersistFieldSql) via OverflowNatural -- TODO sand-witch: improve this behavior
+    Milligrams { fromMilligrams :: Int64 }
+    deriving newtype (Eq, Ord, ToJSON, FromJSON, Show, Read, PersistField, PersistFieldSql)
 
-mkMilligrams :: OverflowNatural -> Milligrams
+mkMilligrams :: Int64 -> Milligrams
 mkMilligrams = coerce
-
--- | Fallback to the 'Natural' instance.
-instance Show Milligrams where
-    show = show . fromMilligrams
-
--- | Fallback to the 'Natural' instance.
-instance Read Milligrams where
-    readPrec = Milligrams <$> readPrec
 
 -- | Prettify the milligrams by turning some values into pounds.
 -- Note: When changing matches, update the client code in Models.Fields as
@@ -344,7 +361,7 @@ instance FromJSON Country where
 
 type Threshold = Cents
 
-type Percent = Natural
+type Percent = Int64
 
 data ShippingRate
     = Flat Threshold Cents

@@ -15,9 +15,9 @@ module Routes.Admin.ShippingMethods
 import Control.Monad.Reader (forM_)
 import Data.Aeson (ToJSON(..), FromJSON(..), (.=), (.:), object, withObject, withText)
 import Data.Maybe (mapMaybe, isJust)
-import Database.Persist 
+import Database.Persist
     ( (/<-.), Entity(..), SelectOpt(Asc)
-    , selectList, deleteWhere, insertMany_, replace, OverflowNatural(..))
+    , selectList, deleteWhere, insertMany_, replace)
 import Numeric.Natural (Natural)
 import Servant ((:<|>)(..), (:>), AuthProtect, ReqBody, Get, Post, JSON)
 
@@ -175,19 +175,19 @@ shippingDataRoute = flip withAdminCookie $ \_ -> do
             , mdCountries = shippingMethodCountries
             , mdRates = map makeRateData shippingMethodRates
             , mdPriorityFee = priorityFee
-            , mdPriorityRate = priorityRate
+            , mdPriorityRate = fromIntegral priorityRate
             , mdPriorityEnabled = shippingMethodIsPriorityEnabled
             , mdCategories = shippingMethodCategoryIds
             , mdPriorityCategories = shippingMethodExcludedPriorityCategoryIds
-            , mdPriority = unOverflowNatural shippingMethodPriority
+            , mdPriority = fromIntegral shippingMethodPriority
             , mdIsActive = shippingMethodIsActive
             }
     makeRateData :: ShippingRate -> RateData
     makeRateData = \case
         Flat t a ->
-            RateData t (fromCents a) FlatRate
+            RateData t (fromIntegral $ fromCents a) FlatRate
         Percentage t a ->
-            RateData t a PercentRate
+            RateData t (fromIntegral a) PercentRate
 
 
 -- UPDATE
@@ -248,16 +248,16 @@ shippingUpdateRoute = validateAdminAndParameters $ \_ ShippingUpdateParameters {
             { shippingMethodDescription = mdDescription
             , shippingMethodCountries = mdCountries
             , shippingMethodRates = map makeRate mdRates
-            , shippingMethodPriorityRate = PriorityShippingFee mdPriorityFee mdPriorityRate
+            , shippingMethodPriorityRate = PriorityShippingFee mdPriorityFee (fromIntegral mdPriorityRate)
             , shippingMethodIsPriorityEnabled = mdPriorityEnabled
             , shippingMethodCategoryIds = mdCategories
             , shippingMethodExcludedPriorityCategoryIds = mdPriorityCategories
-            , shippingMethodPriority = OverflowNatural mdPriority
+            , shippingMethodPriority = fromIntegral mdPriority
             , shippingMethodIsActive = mdIsActive
             }
     makeRate :: RateData -> ShippingRate
     makeRate RateData {..} = case rdType of
         FlatRate ->
-            Flat rdThreshold $ Cents rdAmount
+            Flat rdThreshold $ Cents (fromIntegral rdAmount)
         PercentRate ->
-            Percentage rdThreshold rdAmount
+            Percentage rdThreshold (fromIntegral rdAmount)

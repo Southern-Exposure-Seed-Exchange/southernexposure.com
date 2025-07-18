@@ -61,6 +61,7 @@ import qualified Models.Fields as Fields
 import qualified Validation as V
 import Routes.EmailVerification
 import Control.Monad.Identity
+import Data.Coerce
 
 
 type CustomerAPI =
@@ -584,7 +585,7 @@ myAccountRoute token maybeLimit = withValidatedCookie token $ \(Entity customerI
             let
                 productQuantity =
                     orderProduct E.^. OrderProductQuantity
-                productPrice =
+                productPrice = coerce @_ @(E.SqlExpr (E.Value Int64)) $
                     orderProduct E.^. OrderProductPrice
                 subTotal =
                     sum0_ $ E.castNum productQuantity E.*. productPrice

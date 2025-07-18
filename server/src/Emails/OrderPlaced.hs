@@ -9,13 +9,13 @@ module Emails.OrderPlaced (Parameters(..), fetchData, get) where
 
 import Control.Monad (when, unless)
 import Control.Monad.IO.Class (MonadIO)
-import Data.Maybe (listToMaybe, fromMaybe, isJust)
+import Data.Maybe (fromMaybe, isJust)
 import Data.Time (formatTime, defaultTimeLocale, hoursToTimeZone, utcToZonedTime)
-import Database.Persist (Entity(..), selectFirst, unOverflowNatural)
+import Database.Persist (Entity(..), selectFirst)
 import Text.Blaze.Renderer.Text (renderMarkup)
 
 import Models
-import Models.Fields (mkCents, regionName, formatCents, LineItemType(..))
+import Models.Fields (regionName, formatCents, LineItemType(..), timesQuantity, sumPrices)
 
 import qualified Data.Text as T
 import qualified Data.Text.Lazy as L
@@ -185,10 +185,10 @@ orderTable :: [(OrderProduct, Product, ProductVariant, Maybe SeedAttribute)] -> 
 orderTable productData lineItems =
     let
         subTotal =
-            sum $ map (\(op, _, _, _) -> orderProductPrice op * mkCents (orderProductQuantity op))
+            sumPrices $ map (\(op, _, _, _) -> orderProductPrice op `timesQuantity` orderProductQuantity op)
                 productData
         maybeTaxLine =
-            listToMaybe $ filter ((== TaxLine) . orderLineItemType) lineItems
+            find ((== TaxLine) . orderLineItemType) lineItems
         -- TODO: turn this tuple into a type, & do this in a separate
         -- function in the Models.Utils module. Use that function & type in
         -- the OrderDetails route so we don't have to do the same exact
@@ -253,7 +253,7 @@ orderTable productData lineItems =
             H.tr $ do
                 let price = orderProductPrice orderProd
                     quantity = orderProductQuantity orderProd
-                    total = price * mkCents quantity
+                    total = price `timesQuantity` quantity
                     isOrganic = flip (maybe "") mAttr $ \attr ->
                         if seedAttributeIsOrganic attr then "✔" else ""
                 H.td . H.text $ productBaseSku prod <> productVariantSkuSuffix variant
@@ -261,7 +261,7 @@ orderTable productData lineItems =
                 H.td . H.text $ productName prod
                 H.td H.! alignCenter $ H.text isOrganic
                 H.td . H.text . formatCents $ price
-                H.td H.! alignCenter $ H.text . T.pack . show $ unOverflowNatural quantity
+                H.td H.! alignCenter $ H.text . T.pack $ show quantity
                 (H.td H.! alignLeft) . H.text . formatCents $ total
           discountRow =
               maybe (return ())

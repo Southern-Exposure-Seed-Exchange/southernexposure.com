@@ -18,7 +18,7 @@ module Models.DB where
 import Control.Monad.IO.Class (MonadIO)
 import Data.Int (Int64)
 import Data.Time.Clock (UTCTime)
-import Database.Persist.Sql (SqlPersistT, Entity(..), OverflowNatural, selectList, insertEntity, delete, replace)
+import Database.Persist.Sql (SqlPersistT, Entity(..), selectList, insertEntity, delete, replace)
 import Database.Persist.TH
 
 import Models.Fields
@@ -141,7 +141,7 @@ Cart
 CartItem
     cartId CartId
     productVariantId ProductVariantId
-    quantity OverflowNatural
+    quantity Int64
     UniqueCartItem cartId productVariantId
 
 
@@ -161,7 +161,7 @@ ShippingMethod
     categoryIds [CategoryId]
     excludedPriorityCategoryIds [CategoryId]
     isActive Bool
-    priority OverflowNatural
+    priority Int64
     isPriorityEnabled Bool default=True
 
 
@@ -173,8 +173,8 @@ Coupon
     discount CouponType
     minimumOrder Cents
     expirationDate UTCTime
-    totalUses OverflowNatural
-    usesPerCustomer OverflowNatural
+    totalUses Int64
+    usesPerCustomer Int64
     createdAt UTCTime
     UniqueCoupon code
     deriving Show
@@ -228,7 +228,7 @@ OrderLineItem json
 OrderProduct
     orderId OrderId
     productVariantId ProductVariantId
-    quantity OverflowNatural
+    quantity Int64
     price Cents
     UniqueOrderProduct orderId productVariantId
     deriving Show

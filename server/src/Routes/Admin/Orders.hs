@@ -25,7 +25,7 @@ import Data.Time
     )
 import Database.Persist
     ( (==.), (=.), Entity(..), Filter, SelectOpt(..), count, get, selectList
-    , getEntity, getJustEntity, insert, update, OverflowNatural(..)
+    , getEntity, getJustEntity, insert, update
     )
 import Network.Socket (SockAddr(..))
 import Servant
@@ -51,7 +51,7 @@ import Models
 import Models.Fields
     ( OrderStatus, Region, Cents(..), LineItemType(..), StripeChargeId(..)
     , AdminOrderComment(..), AvalaraTransactionCode(..), creditLineItemTypes
-    , formatCents, toDollars
+    , formatCents, toDollars, timesQuantity, sumPrices
     )
 import Routes.AvalaraUtils (renderAvalaraError)
 import Routes.CommonData
@@ -498,7 +498,7 @@ orderRefundRoute remoteHost forwardedFor realIP = validateAdminAndParameters $ \
                 return ()
             Just trans@(AvalaraTransactionCode companyCode transactionCode) -> do
                 orderTotal <- getOrderTotal orderId
-                refunds <- sum . map (orderLineItemAmount . entityVal)
+                refunds <- sumPrices . map (orderLineItemAmount . entityVal)
                     <$> selectList
                         [ OrderLineItemOrderId ==. orderId
                         , OrderLineItemType ==. RefundLine
@@ -547,11 +547,11 @@ getOrderTotal orderId = do
     let (credits, debits) =
             L.partition isCreditLine lineItems
         productTotal =
-            sum $ map finalProductPrice products
+            sumPrices $ map finalProductPrice products
         creditTotal =
-            sum $ map (orderLineItemAmount . entityVal) credits
+            sumPrices $ map (orderLineItemAmount . entityVal) credits
         debitTotal =
-            sum $ map (orderLineItemAmount . entityVal) debits
+            sumPrices $ map (orderLineItemAmount . entityVal) debits
 
     return $ centsInt productTotal + centsInt debitTotal - centsInt creditTotal
   where
@@ -562,7 +562,7 @@ getOrderTotal orderId = do
     -- | Caclulate the total price + tax for a Product.
     finalProductPrice :: Entity OrderProduct -> Cents
     finalProductPrice (Entity _ p) =
-        fromIntegral (unOverflowNatural $ orderProductQuantity p) * orderProductPrice p
+        orderProductPrice p `timesQuantity` orderProductQuantity p
     -- | Convert Cents to an Integer so it can handle negative numbers.
     centsInt :: Cents -> Integer
     centsInt (Cents c) =

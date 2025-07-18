@@ -14,7 +14,7 @@ import Control.Monad.Reader (MonadReader, MonadIO, asks, liftIO, lift)
 import Data.Maybe (listToMaybe)
 import Database.Persist
     ( (==.), (!=.), (=.), Entity(..), PersistEntityBackend, PersistEntity
-    , selectList, getBy, update, OverflowNatural(..)
+    , selectList, getBy, update
     )
 import Database.Persist.Sql (SqlBackend)
 
@@ -23,7 +23,7 @@ import Config (Config(..))
 import Models
 import Models.Fields
     ( LineItemType(..), AvalaraCustomerCode(..), creditLineItemTypes
-    , renderLotSize, toDollars, Country(..)
+    , renderLotSize, toDollars, Country(..), sumPrices
     )
 import Routes.CommonData (AddressData(..), addressToAvalara, toAddressData)
 import Server
@@ -143,11 +143,11 @@ createAvalaraTransaction
     -> E.SqlPersistT m (Maybe Avalara.Transaction)
 createAvalaraTransaction (Entity orderId order) shippingAddress billingAddress customer alreadyCharged = do
     items <- selectList [OrderLineItemOrderId ==. orderId, OrderLineItemType !=. TaxLine] []
-    products <- E.select $ do 
+    products <- E.select $ do
         (op E.:& v E.:& p) <- E.from $ E.table
-            `E.innerJoin` E.table 
+            `E.innerJoin` E.table
                 `E.on` (\(op E.:& v) -> op E.^. OrderProductProductVariantId E.==. v E.^. ProductVariantId)
-            `E.innerJoin` E.table 
+            `E.innerJoin` E.table
                 `E.on` (\(_ E.:& v E.:& p) -> v E.^. ProductVariantProductId E.==. p E.^. ProductId)
         E.where_ $ op E.^. OrderProductOrderId E.==. E.val orderId
         return (op, p, v)
@@ -159,7 +159,7 @@ createAvalaraTransaction (Entity orderId order) shippingAddress billingAddress c
                 (\i -> orderLineItemType (entityVal i) `elem` creditLineItemTypes)
                 items
         discount =
-            toDollars $ sum
+            toDollars $ sumPrices
                 $ map orderLineItemAmount
                 $ filter ((/= StoreCreditLine) . orderLineItemType)
                 $ map entityVal credits
@@ -220,7 +220,7 @@ createAvalaraTransaction (Entity orderId order) shippingAddress billingAddress c
     makeProductLine :: (Entity OrderProduct, Entity Product, Entity ProductVariant) -> Avalara.LineItem
     makeProductLine (Entity _ orderProd, Entity _ prod, Entity _ variant) =
         let quantity =
-                fromIntegral $ unOverflowNatural $ orderProductQuantity orderProd
+                fromIntegral $ orderProductQuantity orderProd
             singlePrice =
                 toDollars $ orderProductPrice orderProd
             fullSku =

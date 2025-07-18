@@ -107,7 +107,7 @@ getMass :: Entity ProductVariant -> Natural
 getMass v =
     case productVariantLotSize (entityVal v) of
         Just (Mass (Milligrams m)) ->
-            m
+            fromIntegral m
         _ ->
             0
 

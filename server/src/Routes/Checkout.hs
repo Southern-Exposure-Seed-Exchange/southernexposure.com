@@ -27,7 +27,7 @@ import Data.Typeable (Typeable)
 import Database.Persist
     ( (==.), (=.), (-=.), (+=.), Entity(..), insert, insert_, insertEntity, get
     , getBy, selectList, update, updateWhere, delete, deleteWhere, count
-    , getEntity, selectFirst, OverflowNatural(..)
+    , getEntity, selectFirst
     )
 import Network.Socket (SockAddr(..))
 import Servant ((:<|>)(..), (:>), AuthProtect, Header, JSON, Post, RemoteHost, ReqBody, err404, ServerT)
@@ -325,7 +325,7 @@ anonymousDetailsRoute parameters =
                 , cddBillingAddresses = []
                 , cddItems = items
                 , cddCharges = charges
-                , cddStoreCredit = 0
+                , cddStoreCredit = mkCents 0
                 , cddIsDisabled = isDisabled
                 , cddDisabledMessage = disabledMsg
                 , cddRestrictionsError = restrictions
@@ -348,7 +348,7 @@ getCoupon currentTime maybeCustomerId couponCode = do
                 $ throwIO CouponExpired
             when (couponTotalUses coupon /= 0) $ do
                 totalUses <- count [OrderCouponId ==. Just couponId]
-                when (totalUses >= fromIntegral (unOverflowNatural $ couponTotalUses coupon))
+                when (totalUses >= fromIntegral (couponTotalUses coupon))
                     $ throwIO CouponMaxUses
             when (couponUsesPerCustomer coupon /= 0) $
                 checkCustomerUses e
@@ -362,7 +362,7 @@ getCoupon currentTime maybeCustomerId couponCode = do
                         [ OrderCouponId ==. Just couponId
                         , OrderCustomerId ==. customerId
                         ]
-                    when (customerUses >= fromIntegral (unOverflowNatural $ couponUsesPerCustomer coupon))
+                    when (customerUses >= fromIntegral (couponUsesPerCustomer coupon))
                         $ throwIO CouponCustomerMaxUses
                 Nothing -> return ()
 
@@ -626,12 +626,12 @@ customerPlaceOrderRoute remoteHost forwardedFor realIP = validateCookieAndParame
                 (cpopCouponCode parameters) (cpopComment parameters) currentTime
         when (appliedCredit > customerStoreCredit customer) $
             throwIO NotEnoughStoreCredit
-        when (appliedCredit > 0) $
+        when (appliedCredit > mkCents 0) $
             update customerId [CustomerStoreCredit -=. appliedCredit]
-        let remainingCredit = maybe 0 (\c -> c - appliedCredit) $ cpopStoreCredit parameters
-        when (preTaxTotal > 0 || preTaxTotal + appliedCredit > 0 ) $
+        let remainingCredit = maybe (mkCents 0) (`subtractCents` appliedCredit) $ cpopStoreCredit parameters
+        when (preTaxTotal > mkCents 0 || preTaxTotal `plusCents` appliedCredit > mkCents 0 ) $
             withAvalaraTransaction order preTaxTotal remainingCredit ce shippingAddress maybeBillingAddress $ \orderTotal ->
-                when (orderTotal >= 50) $ case (maybeBillingAddress, maybeHelcimData) of
+                when (orderTotal >= mkCents 50) $ case (maybeBillingAddress, maybeHelcimData) of
                     (Just (Entity _ billingAddress), Just (helcimToken, customerCode)) -> do
                         getAndUpdateHelcimCustomerByCode customerId customer customerCode billingAddress (entityVal shippingAddress)
                         helcimCharge helcimToken customerCode (getClientIP remoteHost forwardedFor realIP) orderId orderTotal
@@ -790,8 +790,8 @@ anonymousPlaceOrderRoute remoteHost forwardedFor realIP = validate >=> \paramete
             (Entity customerId customer) cartId shippingEntity billingId Nothing
             (apopPriorityShipping parameters) (apopCouponCode parameters)
             (Just guestToken) (apopComment parameters) currentTime
-        when (preTaxTotal > 0)
-            $ withAvalaraTransaction order preTaxTotal 0 customerEntity shippingEntity billingEntity
+        when (preTaxTotal > mkCents 0)
+            $ withAvalaraTransaction order preTaxTotal (mkCents 0) customerEntity shippingEntity billingEntity
             $ \orderTotal ->
                 case (billingEntity, apopHelcimData parameters) of
                     (Just (Entity _ billingAddress), Just (cardToken, customerCode)) -> do
@@ -948,14 +948,14 @@ withAvalaraTransaction order@(Entity orderId _) preTaxTotal storeCredit c@(Entit
                 Just taxTransaction -> do
                     let taxTotal =
                             if status == AvalaraEnabled then
-                                maybe 0 fromDollars (Avalara.tTotalTax taxTransaction)
+                                maybe (mkCents 0) fromDollars (Avalara.tTotalTax taxTransaction)
                             else
-                                0
+                                mkCents 0
                         appliedCredit = min storeCredit taxTotal
-                        orderTotal = taxTotal + preTaxTotal - appliedCredit
+                        orderTotal = taxTotal `plusCents` preTaxTotal `subtractCents` appliedCredit
                     when (appliedCredit > customerStoreCredit customer) $
                         throwIO NotEnoughStoreCredit
-                    when (appliedCredit > 0) $
+                    when (appliedCredit > mkCents 0) $
                             update customerId [CustomerStoreCredit -=. appliedCredit]
                     try (innerAction orderTotal) >>= \case
                         Right () -> do
@@ -966,7 +966,7 @@ withAvalaraTransaction order@(Entity orderId _) preTaxTotal storeCredit c@(Entit
                             let transactionCode = AvalaraTransactionCode companyCode
                                     <$> Avalara.tCode taxTransaction
                             update orderId [OrderAvalaraTransactionCode =. transactionCode]
-                            when (status == AvalaraEnabled && taxTotal > 0) $
+                            when (status == AvalaraEnabled && taxTotal > mkCents 0) $
                                 insert_ OrderLineItem
                                     { orderLineItemOrderId = orderId
                                     , orderLineItemType = TaxLine
@@ -975,7 +975,7 @@ withAvalaraTransaction order@(Entity orderId _) preTaxTotal storeCredit c@(Entit
                                     }
                             when (status == AvalaraTesting) $
                                 voidOrEnqueueTransaction taxTransaction
-                            when (appliedCredit > 0) $
+                            when (appliedCredit > mkCents 0) $
                                 updateStoreCredit appliedCredit
                         Left (err :: PlaceOrderError) -> do
                             voidOrEnqueueTransaction taxTransaction
@@ -1096,18 +1096,18 @@ createOrder ce@(Entity customerId customer) cartId shippingEntity
     when (isJust maybeCouponId) $
         update orderId [OrderCouponId =. maybeCouponId]
     productTotals <- createProducts items orderId
-    let totalCharges = lineTotal + fromIntegral (fromCents $ sum productTotals)
+    let totalCharges = lineTotal + fromIntegral (fromCents $ sumPrices productTotals)
         orderEntity = Entity orderId order
     if totalCharges < 0 then
         -- TODO: Throw an error? This means credits > charges which shouldn't happen...
-        return (orderEntity, 0, 0)
+        return (orderEntity, mkCents 0, mkCents 0)
     else
         let totalInCents = Cents $ fromIntegral totalCharges in
         case maybeStoreCredit of
             Nothing ->
-                return (orderEntity, totalInCents, 0)
+                return (orderEntity, totalInCents, mkCents 0)
             Just c ->
-                if c > 0 && totalInCents > 0 then do
+                if c > mkCents 0 && totalInCents > mkCents 0 then do
                     let storeCredit = min (customerStoreCredit customer) $ min totalInCents c
                     insert_ OrderLineItem
                         { orderLineItemOrderId = orderId
@@ -1115,9 +1115,9 @@ createOrder ce@(Entity customerId customer) cartId shippingEntity
                         , orderLineItemDescription = "Store Credit"
                         , orderLineItemAmount = storeCredit
                         }
-                    return (orderEntity, totalInCents - storeCredit, storeCredit)
+                    return (orderEntity, totalInCents `subtractCents` storeCredit, storeCredit)
                 else
-                    return (orderEntity, totalInCents, 0)
+                    return (orderEntity, totalInCents, mkCents 0)
 
 
 -- | Delete a Cart & all it's Items.
@@ -1173,7 +1173,7 @@ createLineItems currentTime (Entity customerId customer) shippingAddress items o
         maybe (return Nothing) (fmap Just . insertEntity . makeLine CouponDiscountLine)
             $ ccCouponDiscount charges
     maybeTaxLine <-
-        if ccAmount (ccTax charges) > 0 then
+        if ccAmount (ccTax charges) > mkCents 0 then
             fmap Just . insertEntity . makeLine TaxLine $ ccTax charges
         else
             return Nothing
@@ -1204,13 +1204,13 @@ createLineItems currentTime (Entity customerId customer) shippingAddress items o
 createProducts :: [CartItemData] -> OrderId -> AppSQL [Cents]
 createProducts items orderId =
     mapM (fmap calculateTotal <$> insertEntity . makeProduct) items
-    where calculateTotal (Entity _ prod) = -- TODO sand-witch: we should not convert quantity into cents
-            orderProductPrice prod * (mkCents $ orderProductQuantity prod)
+    where calculateTotal (Entity _ prod) =
+            orderProductPrice prod `timesQuantity` orderProductQuantity prod
           makeProduct CartItemData { cidVariant, cidQuantity } =
             OrderProduct
                 { orderProductOrderId = orderId
                 , orderProductProductVariantId = vdId cidVariant
-                , orderProductQuantity = OverflowNatural cidQuantity
+                , orderProductQuantity = cidQuantity
                 , orderProductPrice = getVariantPrice cidVariant
                 }
 
@@ -1221,7 +1221,7 @@ reduceQuantities orderId =
     selectList [OrderProductOrderId ==. orderId] [] >>=
     mapM_ (\(Entity _ p) ->
         update (orderProductProductVariantId p)
-            [ProductVariantQuantity -=. fromIntegral (unOverflowNatural $ orderProductQuantity p)]
+            [ProductVariantQuantity -=. orderProductQuantity p]
     )
 
 

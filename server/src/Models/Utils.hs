@@ -273,13 +273,13 @@ applyVATax preTaxTotal =
 
 -- | Calculate the total tax from all of an Order's Products.
 getOrderTax :: [OrderLineItem] -> Cents
-getOrderTax = sum . map orderLineItemAmount . filter ((==) TaxLine . orderLineItemType)
+getOrderTax = sumPrices . map orderLineItemAmount . filter ((==) TaxLine . orderLineItemType)
 
 -- | Calculate the total price from all of an Order's Products.
 getOrderSubtotal :: [OrderProduct] -> Cents
-getOrderSubtotal = sum . map
+getOrderSubtotal = sumPrices . map
     (\prod ->
-        orderProductPrice prod * mkCents (orderProductQuantity prod)
+        orderProductPrice prod `timesQuantity` orderProductQuantity prod
     )
 
 -- | Calculate the sum of all OrderLineItem charge's for an Order.
