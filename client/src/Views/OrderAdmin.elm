@@ -100,7 +100,7 @@ list zone locations currentQuery { query } orders =
                 , td [] [ text order.email ]
                 , td [] [ text order.street ]
                 , td [] [ text <| Maybe.withDefault "" <| Locations.regionName locations order.state ]
-                , td [] [ text <| PageData.statusText order.status ]
+                , td [] [ text <| order.status ]
                 , td [] [ text <| Format.cents order.total ]
                 , td []
                     [ a (routeLinkAttributes <| Admin <| AdminOrderDetails order.id)

@@ -39,7 +39,7 @@ import Servant
 import Auth
 import Models
 import Models.Fields
-    (ArmedForcesRegionCode, armedForcesRegion, Cents(..), creditLineItemTypes)
+    (ArmedForcesRegionCode, armedForcesRegion, Cents(..), creditLineItemTypes, showOrderStatus)
 import Routes.CommonData
     ( AuthorizationData, toAuthorizationData, AddressData(..), toAddressData
     , fromAddressData, LoginParameters(..), validatePassword, handlePasswordValidationError
@@ -529,7 +529,7 @@ data MyAccountOrderDetails =
     MyAccountOrderDetails
         { maodId :: OrderId
         , maodShippingAddress :: AddressData
-        , maodOrderStatus :: Fields.OrderStatus
+        , maodOrderStatus :: T.Text
         , maodOrderTotal :: Cents
         , maodCreated :: UTCTime
         }
@@ -577,6 +577,7 @@ myAccountRoute token maybeLimit = withValidatedCookie token $ \(Entity customerI
                     ( o E.^. OrderId
                     , sa
                     , o E.^. OrderStatus
+                    , o E.^. OrderStoneEdgeStatus
                     , calculateTotal op lineTotal creditTotal
                     , o E.^. OrderCreatedAt
                     )
@@ -591,11 +592,11 @@ myAccountRoute token maybeLimit = withValidatedCookie token $ \(Entity customerI
                     sum0_ $ E.castNum productQuantity E.*. productPrice
             in
                 subTotal E.+. lineTotal E.-. creditTotal
-          makeDetails (orderId, shippingAddress, status, total, createdAt) =
+          makeDetails (orderId, shippingAddress, status, mbStoneEdgeStatus, total, createdAt) =
               MyAccountOrderDetails
                 { maodId = E.unValue orderId
                 , maodShippingAddress = toAddressData shippingAddress
-                , maodOrderStatus = E.unValue status
+                , maodOrderStatus = fromMaybe (showOrderStatus $ E.unValue status) $ E.unValue mbStoneEdgeStatus
                 , maodOrderTotal = Cents $ round (E.unValue total :: Rational)
                 , maodCreated = E.unValue createdAt
                 }

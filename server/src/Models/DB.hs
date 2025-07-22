@@ -202,6 +202,7 @@ Order
     customerId CustomerId
     guestToken T.Text Maybe
     status OrderStatus
+    stoneEdgeStatus T.Text Maybe
     billingAddressId AddressId Maybe
     shippingAddressId AddressId
     customerComment T.Text
@@ -233,6 +234,13 @@ OrderProduct
     UniqueOrderProduct orderId productVariantId
     deriving Show
 
+OrderDelivery
+    orderId OrderId
+    trackNumber T.Text
+    trackCarrier T.Text
+    trackPickupDate T.Text
+    UniqueOrderDelivery orderId trackNumber trackCarrier
+    deriving Show
 
 ProductSale
     price Cents

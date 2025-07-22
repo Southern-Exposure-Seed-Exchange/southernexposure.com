@@ -523,6 +523,15 @@ data OrderStatus
     | Delivered
     deriving (Show, Read, Generic)
 
+showOrderStatus :: OrderStatus -> T.Text
+showOrderStatus = \case
+    OrderReceived -> "Order Received"
+    PaymentReceived -> "Payment Received"
+    PaymentFailed -> "Payment Failed"
+    Processing -> "Processing"
+    Refunded -> "Refunded"
+    Delivered -> "Shipped"
+
 instance ToJSON OrderStatus
 instance FromJSON OrderStatus
 

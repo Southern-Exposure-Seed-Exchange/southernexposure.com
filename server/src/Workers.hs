@@ -214,6 +214,8 @@ taskQueueConfig threadCount cfg@Config { getPool, getServerLogger, getCaches } =
                 "Customer #" <> showSqlKey cId <> " Email Verification Email"
             Emails.OrderPlaced oId ->
                 "Order #" <> showSqlKey oId <> " Placed Email"
+            Emails.OrderStatusUpdated oId _ ->
+                "Order #" <> showSqlKey oId <> " Status Updated Email"
         CleanDatabase ->
             "Clean Database"
         Avalara (RefundTransaction code type_ amount) ->

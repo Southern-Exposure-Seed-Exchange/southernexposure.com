@@ -53,7 +53,7 @@ import Routes.CommonData
     ( CartItemData(..), CartCharges(..)
     , CartCharge(..), getCartItems, getCharges, AddressData(..), toAddressData
     , fromAddressData, ShippingCharge(..), VariantData(..), getVariantPrice
-    , OrderDetails(..), toCheckoutOrder, getCheckoutProducts, CheckoutProduct
+    , OrderDetails(..), toCheckoutOrder, getCheckoutProducts, CheckoutProduct, toDeliveryData
 
     , BaseProductData(..)
     )
@@ -1075,6 +1075,7 @@ createOrder ce@(Entity customerId customer) cartId shippingEntity
     let order = Order
             { orderCustomerId = customerId
             , orderStatus = OrderReceived
+            , orderStoneEdgeStatus = Nothing
             , orderBillingAddressId = billingId
             , orderShippingAddressId = entityKey shippingEntity
             , orderGuestToken = maybeGuestToken
@@ -1282,12 +1283,14 @@ getOrderDetails externalOrderId customerId = do
         lineItems <-
             selectList [OrderLineItemOrderId ==. orderId] []
         products <- getCheckoutProducts orderId
+        delivery <- selectList [OrderDeliveryOrderId ==. orderId] []
         return OrderDetails
             { odOrder = toCheckoutOrder e
             , odLineItems = lineItems
             , odProducts = products
             , odShippingAddress = toAddressData shipping
             , odBillingAddress = toAddressData <$> billing
+            , odDeliveryData = toDeliveryData <$> delivery
             }
 data AnonymousSuccessParameters = MkAnonymousSuccessParameters
     { aspOrderId :: Int64

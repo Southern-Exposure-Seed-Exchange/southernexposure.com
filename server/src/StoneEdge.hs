@@ -2,6 +2,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE InstanceSigs #-}
 {-| This module contains types and functions required for integrating with
 the StoneEdge Order Manager.
 
@@ -37,6 +38,9 @@ module StoneEdge
     , DownloadOrdersRequest(..)
     , DownloadOrdersResponse(..)
     , renderDownloadOrdersResponse
+    , UpdateStatusRequest(..)
+    , UpdateStatusResponse(..)
+    , renderUpdateStatusResponse
       -- *** Order Download Sub-Types
     , StoneEdgeOrder(..)
     , renderStoneEdgeOrder
@@ -72,8 +76,10 @@ module StoneEdge
     , renderStoneEdgeCoupon
     , StoneEdgeOtherData(..)
     , renderStoneEdgeOtherData
+    , StoneEdgeTrackData(..)
     ) where
 
+import Data.Maybe (fromMaybe)
 import Data.Scientific (Scientific, FPFormat(Fixed), formatScientific, scientific)
 import Data.Text.Encoding (decodeUtf8, encodeUtf8)
 import Data.Time (LocalTime, Day, parseTimeM, defaultTimeLocale, formatTime)
@@ -86,6 +92,7 @@ import Web.FormUrlEncoded (FromForm(..), Form, parseUnique, parseMaybe)
 
 import qualified Data.ByteString as BS
 import qualified Data.Text as T
+import Models.DB (OrderId)
 
 
 -- Errors
@@ -641,6 +648,66 @@ newtype FormatError a = MkFormatError { runFormatError :: Either T.Text a }
 
 instance MonadFail FormatError where
     fail = MkFormatError . Left . T.pack
+
+-- Update Status
+
+data UpdateStatusRequest = UpdateStatusRequest
+    { usrUser :: T.Text
+    , usrPass :: T.Text
+    , usrStoreCode :: T.Text
+    , usrOrderNumber :: OrderId
+    , usrOrderStatus :: T.Text
+    , usrRefNumber :: Maybe T.Text
+    , usrOrderDetail :: Maybe T.Text
+    , usrTrackCount :: Maybe Integer
+    , usrTrackData :: [StoneEdgeTrackData]
+    , usrOMVersion :: T.Text
+    } deriving (Eq, Show, Read)
+
+data StoneEdgeTrackData = StoneEdgeTrackData
+    { setdTrackNum :: T.Text
+    , setdTrackCarrier :: T.Text
+    , setdPickupDate :: T.Text
+    } deriving (Eq, Show, Read)
+
+instance FromForm UpdateStatusRequest where
+    fromForm :: Form -> Either T.Text UpdateStatusRequest
+    fromForm = matchFunction "updatestatus" $ \f -> do
+        usrUser <- parseUnique "setiuser" f
+        usrPass <- parseUnique "password" f
+        usrStoreCode <- parseUnique "code" f
+        usrOrderNumber <- parseUnique "ordernumber" f
+        usrOrderStatus <- parseUnique "orderstatus" f
+        usrRefNumber <- parseMaybe "refnumber" f
+        usrOrderDetail <- parseMaybe "orderdetail" f
+        usrTrackCount <- parseMaybe "trackcount" f
+        usrTrackData <- if usrTrackCount == Just 1
+            then do
+                (:[]) <$> parseTrackData "" f
+            else do
+                sequence $ traverse (parseTrackData . T.pack . show) [1..(fromMaybe 0 usrTrackCount)] f
+        usrOMVersion <- parseUnique "omversion" f
+        return UpdateStatusRequest {..}
+        where
+            parseTrackData prefix f = do
+                tdTrackNum <- parseUnique ("tracknum" <> prefix) f
+                tdTrackCarrier <- parseUnique ("trackcarrier" <> prefix) f
+                tdPickupDate <- parseUnique ("trackpickupdate" <> prefix) f
+                return $ StoneEdgeTrackData tdTrackNum tdTrackCarrier tdPickupDate
+
+instance HasStoneEdgeCredentials UpdateStatusRequest where
+    userParam = usrUser
+    passwordParam = usrPass
+    storeCodeParam = usrStoreCode
+
+data UpdateStatusResponse
+    = UpdateStatusSuccess
+    | UpdateStatusError T.Text
+
+renderUpdateStatusResponse :: UpdateStatusResponse -> T.Text
+renderUpdateStatusResponse = \case
+    UpdateStatusSuccess -> "SETIResponse: update=OK;Notes="
+    UpdateStatusError err -> "SETIResponse: update=False;Notes=" <> err
 
 -- Utils
 

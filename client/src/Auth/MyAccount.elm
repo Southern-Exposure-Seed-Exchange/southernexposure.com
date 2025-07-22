@@ -83,7 +83,7 @@ orderTable zone locations orderSummaries =
                 [ td [ class "text-center" ] [ text <| Format.date zone created ]
                 , td [ class "text-center" ] [ text <| String.fromInt id ]
                 , td [] [ addressInfo shippingAddress ]
-                , td [ class "text-center" ] [ text <| PageData.statusText status ]
+                , td [ class "text-center" ] [ text <| status ]
                 , td [ class "text-right" ] [ text <| Format.cents total ]
                 , td [ class "text-center" ]
                     [ a
@@ -103,7 +103,7 @@ orderTable zone locations orderSummaries =
                 , h5 [ class "mb-1" ] [ text "Ship To:" ]
                 , addressInfo shippingAddress
                 , div [ class "d-flex font-weight-bold mb-1" ]
-                    [ div [] [ text <| PageData.statusText status ]
+                    [ div [] [ text <| status ]
                     , div [ class "ml-auto" ] [ text <| Format.cents total ]
                     ]
                 , a (class "mb-1 btn btn-light btn-block" :: routeLinkAttributes (OrderDetails id Nothing))

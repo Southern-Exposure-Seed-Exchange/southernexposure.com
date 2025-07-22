@@ -49,13 +49,13 @@ import Models
     , Address(..), EntityField(..), CustomerId
     )
 import Models.Fields
-    ( OrderStatus, Region, Cents(..), LineItemType(..), StripeChargeId(..)
+    ( Region, Cents(..), LineItemType(..), StripeChargeId(..)
     , AdminOrderComment(..), AvalaraTransactionCode(..), creditLineItemTypes
     , formatCents, toDollars, timesQuantity, sumPrices
     )
 import Routes.AvalaraUtils (renderAvalaraError)
 import Routes.CommonData
-    ( OrderDetails(..), toCheckoutOrder, getCheckoutProducts, toAddressData
+    ( OrderDetails(..), toCheckoutOrder, getCheckoutProducts, toAddressData, toDeliveryData, toOrderStatus
     )
 import Routes.Utils (extractRowCount, buildWhereQuery, getClientIP)
 import Server (App, AppSQL, runDB, serverError, stripeRequest, avalaraRequest)
@@ -116,7 +116,7 @@ data ListOrder =
         , loCustomerEmail :: T.Text
         , loShippingStreet :: T.Text
         , loShippingRegion :: Maybe Region
-        , loOrderStatus :: OrderStatus
+        , loOrderStatus :: T.Text
         , loOrderTotal :: Integer
         } deriving (Show)
 
@@ -227,7 +227,7 @@ orderListRoute token maybePage maybePerPage maybeQuery = withAdminCookie token $
             , loCustomerEmail = maybe "" customerEmail mCustomer
             , loShippingStreet = maybe "" addressAddressOne mShipping
             , loShippingRegion = addressState <$> mShipping
-            , loOrderStatus = orderStatus order
+            , loOrderStatus = toOrderStatus order
             , loOrderTotal = orderTotal
             }
 
@@ -266,12 +266,14 @@ orderDetailsRoute token orderId = withAdminCookie token $ \_ -> runDB $ do
     products <- getCheckoutProducts orderId
     shipping <- getJustEntity $ orderShippingAddressId order
     maybeBilling <- sequence $ getEntity <$> orderBillingAddressId order
+    delivery <- selectList [OrderDeliveryOrderId ==. orderId] []
     let details = OrderDetails
             { odOrder = toCheckoutOrder $ Entity orderId order
             , odLineItems = lineItems
             , odProducts = products
             , odShippingAddress = toAddressData shipping
             , odBillingAddress = toAddressData <$> join maybeBilling
+            , odDeliveryData = toDeliveryData <$> delivery
             }
     return AdminOrderDetails
         { aodDetails = details

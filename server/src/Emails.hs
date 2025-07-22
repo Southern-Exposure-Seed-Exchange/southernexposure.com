@@ -35,6 +35,7 @@ import qualified Data.Text as T
 import qualified Data.Text.Lazy as L
 import qualified Emails.AccountCreated as AccountCreated
 import qualified Emails.OrderPlaced as OrderPlaced
+import qualified Emails.OrderStatusUpdated as OrderStatusUpdated
 import qualified Emails.PasswordReset as PasswordReset
 import qualified Models.DB as DB
 import qualified Emails.VerifyEmail as EmailVerification
@@ -46,6 +47,7 @@ data EmailType
     | PasswordResetSuccess CustomerId
     | OrderPlaced OrderId
     | EmailVerification CustomerId VerificationId
+    | OrderStatusUpdated OrderId [OrderDeliveryId]
     deriving (Show, Generic, Eq)
 
 instance FromJSON EmailType
@@ -57,6 +59,7 @@ data EmailData
     | PasswordResetSuccessData Customer
     | OrderPlacedData OrderPlaced.Parameters
     | EmailVerificationData Customer T.Text
+    | OrderStatusUpdatedData OrderStatusUpdated.Parameters
 
 getEmailData :: MonadIO m => EmailType -> SqlPersistT m (Either T.Text EmailData)
 getEmailData = runExceptT . \case
@@ -81,6 +84,12 @@ getEmailData = runExceptT . \case
         customer <- tryGet "Could not find customer" cId
         verification <- tryGet "Could not find ongoing verification" vId
         pure (EmailVerificationData customer (verificationCode verification))
+    OrderStatusUpdated oId odIds -> do
+       mParameters <- lift $ OrderStatusUpdated.fetchData oId odIds
+       case mParameters of
+           Nothing -> throwError "Could not find order"
+           Just parameters -> pure $ OrderStatusUpdatedData parameters
+
   where
     tryGet errMsg sqlId =
         ExceptT $ maybe (Left errMsg) Right <$> get sqlId
@@ -142,6 +151,8 @@ send cfg email =
                     OrderPlaced.get domainName parameters
                 EmailVerificationData _ vCode ->
                     EmailVerification.get domainName (L.fromStrict vCode)
+                OrderStatusUpdatedData parameters ->
+                    OrderStatusUpdated.get domainName parameters
 
         (plainMessage, htmlMessage) =
             case email of
@@ -189,6 +200,8 @@ makeRecipient devMail email =
                     OrderPlaced.customer parameters
                 EmailVerificationData customer _ ->
                     customer
+                OrderStatusUpdatedData parameters ->
+                    OrderStatusUpdated.customer parameters
 
         recipientName =
             case email of
