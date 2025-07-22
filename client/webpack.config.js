@@ -17,7 +17,7 @@ var isHelcimProduction = process.env.HELCIM_ENV === 'production';
 
 var helcimUrl = isHelcimProduction ? "https://southern-exposure-seed-exchange.myhelcim.com" : "https://test-southern-exposure-seed-exchange.myhelcim.com";
 
-const GA_MEASUREMENT_ID = 'UA-5070189-1';
+const GA_MEASUREMENT_ID = process.env.GA_MEASUREMENT_ID;
 
 
 module.exports = {
@@ -194,7 +194,7 @@ module.exports = {
       'upgrade-insecure-requests': [],
       'default-src': ["'self'", "data:"],
       'object-src': "'none'",
-      'connect-src': ["'self'", "https://api.helcim.app", ],
+      'connect-src': ["'self'", "https://api.helcim.app", "https://www.google-analytics.com", "https://www.googletagmanager.com" ],
       'frame-src': ["'self'", "https://www.farmraiser.com", "https://secure.helcim.app"],
       'script-src': ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://www.googletagmanager.com", "https://www.google-analytics.com/"],
       'img-src': ["'self'", "data:", "https://www.googletagmanager.com", "https://www.google-analytics.com/", "https://stats.g.doubleclick.net/", "https://www.google.com"],
