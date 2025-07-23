@@ -22,7 +22,7 @@ import Json.Decode as Decode
 import Json.Encode as Encode
 import Locations exposing (AddressLocations)
 import Models.Fields exposing (Cents(..), centsFromString)
-import PageData exposing (CustomerData, statusText)
+import PageData exposing (CustomerData)
 import Paginate exposing (Paginated)
 import RemoteData exposing (WebData)
 import Routing exposing (AdminRoute(..), Route(..))
@@ -308,7 +308,7 @@ edit zone helcimUrl model locations original =
             tr []
                 [ td [] [ text <| String.fromInt order.id ]
                 , td [] [ text <| Format.date zone order.date ]
-                , td [] [ text <| statusText order.status ]
+                , td [] [ text <| order.status ]
                 , td [] [ Address.card order.shipping locations ]
                 , td [] [ text <| Format.cents order.total ]
                 , td [] [ a (routeLinkAttributes <| Admin <| AdminOrderDetails order.id) [ text "View Order" ] ]

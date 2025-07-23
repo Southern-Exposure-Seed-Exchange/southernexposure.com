@@ -22,6 +22,7 @@ view zone orderId locations orderDetails =
         , small [] [ text <| " " ++ Format.date zone orderDetails.order.createdAt ]
         ]
     , hr [] []
+    , h2 [] [text <| "Status: " ++ orderDetails.order.status ]
     , div [ class "row mb-3" ] <|
         case orderDetails.billingAddress of
             Nothing ->
@@ -35,6 +36,14 @@ view zone orderId locations orderDetails =
                 , div [ class "col-sm-6" ]
                     [ addressCard locations "Billing Details" billingAddress ]
                 ]
+    , if orderDetails.deliveryData == [] then
+        text ""
+      else
+        div [ class "row mb-3" ] [
+            div [ class "col-12" ]
+                [ deliveryCard orderDetails.deliveryData 
+                ]
+        ]
     , orderTable orderDetails
     ]
 
@@ -48,6 +57,25 @@ addressCard locations titleText address =
             ]
         ]
 
+deliveryCard : List(PageData.DeliveryData) -> Html msg
+deliveryCard deliveryData =
+    div [ class "card h-100" ]
+        [ div [ class "card-body" ]
+            [ h4 [ class "card-title" ] [ text "Delivery" ]
+            , ul []
+                (List.map (\d ->
+                    (li []
+                        [ text <| "Carrier: " ++ d.trackCarrier
+                        , br [] []
+                        , text <| "Tracking Number: " ++ d.trackNumber
+                        , br [] []
+                        , text <| "Pickup Date: " ++ d.trackPickupDate
+                        ])
+                    )
+                    deliveryData
+                )
+            ]
+        ]
 
 type Tuple8 a b c d e f g h
     = Tuple8 a b c d e f g h

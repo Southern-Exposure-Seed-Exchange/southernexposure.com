@@ -43,8 +43,11 @@ module Routes.CommonData
     , toAddressData
     , addressToAvalara
     , OrderDetails(..)
+    , DeliveryData(..)
+    , toDeliveryData
     , CheckoutOrder(..)
     , toCheckoutOrder
+    , toOrderStatus
     , CheckoutProduct(..)
     , getCheckoutProducts
     ) where
@@ -1086,7 +1089,22 @@ data OrderDetails =
         , odProducts :: [CheckoutProduct]
         , odShippingAddress :: AddressData
         , odBillingAddress :: Maybe AddressData
+        , odDeliveryData :: [DeliveryData]
         } deriving (Show)
+
+data DeliveryData = DeliveryData
+    { ddTrackNumber :: T.Text
+    , ddTrackCarrier :: T.Text
+    , ddTrackPickupDate :: T.Text
+    } deriving (Show)
+
+instance ToJSON DeliveryData where
+    toJSON delivery =
+        object
+            [ "trackNumber" .= ddTrackNumber delivery
+            , "trackCarrier" .= ddTrackCarrier delivery
+            , "trackPickupDate" .= ddTrackPickupDate delivery
+            ]
 
 instance ToJSON OrderDetails where
     toJSON details =
@@ -1096,12 +1114,21 @@ instance ToJSON OrderDetails where
             , "products" .= odProducts details
             , "shippingAddress" .= odShippingAddress details
             , "billingAddress" .= odBillingAddress details
+            , "deliveryData" .= odDeliveryData details
             ]
+
+toDeliveryData :: Entity OrderDelivery -> DeliveryData
+toDeliveryData (Entity _ delivery) =
+    DeliveryData
+        { ddTrackNumber = orderDeliveryTrackNumber delivery
+        , ddTrackCarrier = orderDeliveryTrackCarrier delivery
+        , ddTrackPickupDate = orderDeliveryTrackPickupDate delivery
+        }
 
 data CheckoutOrder =
     CheckoutOrder
         { coId :: OrderId
-        , coStatus :: OrderStatus
+        , coStatus :: T.Text
         , coComment :: T.Text
         , coCreatedAt :: UTCTime
         } deriving (Show)
@@ -1115,11 +1142,14 @@ instance ToJSON CheckoutOrder where
             , "createdAt" .= coCreatedAt order
             ]
 
+toOrderStatus :: Order -> T.Text
+toOrderStatus order = fromMaybe (showOrderStatus $ orderStatus order) $ orderStoneEdgeStatus order
+
 toCheckoutOrder :: Entity Order -> CheckoutOrder
 toCheckoutOrder (Entity orderId order) =
     CheckoutOrder
         { coId = orderId
-        , coStatus = orderStatus order
+        , coStatus = toOrderStatus order
         , coComment = orderCustomerComment order
         , coCreatedAt = orderCreatedAt order
         }

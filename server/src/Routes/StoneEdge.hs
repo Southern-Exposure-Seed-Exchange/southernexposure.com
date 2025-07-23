@@ -5,6 +5,8 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeApplications #-}
 module Routes.StoneEdge
@@ -44,6 +46,7 @@ import Servant ((:>), ReqBody, FormUrlEncoded, Post, PlainText, MimeRender(..))
 import Web.FormUrlEncoded (FromForm(..), Form, parseMaybe)
 
 import Config
+import Emails (EmailType(..))
 import Models
 import Models.Fields
     ( Cents(..), mkCents, Country(..), Region(..), OrderStatus(..), LineItemType(..)
@@ -52,6 +55,7 @@ import Models.Fields
 import Helcim.API.Types.Payment (TransactionId(..))
 import Server
 import StoneEdge
+import Workers (Task(..), enqueueTask)
 
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.Text as T
@@ -87,6 +91,8 @@ stoneEdgeRoutes = \case
         handle simpleError $ checkAuth rq >> OCRs <$> orderCountRoute rq
     DORq rq ->
         handle (xmlError Orders) $ checkAuth rq >> DORs <$> downloadOrdersRoute rq
+    USRq rq ->
+        handle simpleError $ checkAuth rq >> USRs <$> updateStatusRoute rq 
     UnexpectedFunction function _ ->
         return . ErrorResponse $ "Integration has no support for function: " <> function
     InvalidRequest form ->
@@ -107,6 +113,7 @@ data StoneEdgeRequest
     = SVRq SendVersionRequest
     | OCRq OrderCountRequest
     | DORq DownloadOrdersRequest
+    | USRq UpdateStatusRequest
     | UnexpectedFunction Text Form
     | InvalidRequest Form
     deriving (Eq, Show)
@@ -120,6 +127,8 @@ instance FromForm StoneEdgeRequest where
             wrapError $ OCRq <$> fromForm f
         Just "downloadorders" ->
             wrapErrorXml Orders $ DORq <$> fromForm f
+        Just "updatestatus" ->
+            wrapError $ USRq <$> fromForm f
         Just unexpected ->
             return $ UnexpectedFunction unexpected f
         Nothing ->
@@ -135,6 +144,7 @@ data StoneEdgeResponse
     = SVRs SendVersionResponse
     | OCRs OrderCountResponse
     | DORs DownloadOrdersResponse
+    | USRs UpdateStatusResponse
     | ErrorResponse Text
     | XmlErrorResponse TypeOfDownload Text
 
@@ -147,6 +157,8 @@ instance MimeRender PlainText StoneEdgeResponse where
             mimeRender pt $ renderOrderCountResponse resp
         DORs resp ->
             LBS.fromStrict $ renderDownloadOrdersResponse resp
+        USRs resp ->
+            mimeRender pt $ renderUpdateStatusResponse resp
         ErrorResponse errorMessage ->
             mimeRender pt $ renderSimpleSETIError errorMessage
         XmlErrorResponse type_ errorMessage ->
@@ -487,6 +499,39 @@ transformShippingTotal (Entity _ item) =
         { sestTotal = convertCents $ orderLineItemAmount item
         , sestDescription = nothingIfNull $ orderLineItemDescription item
         }
+
+updateStatusRoute :: UpdateStatusRequest -> App UpdateStatusResponse
+updateStatusRoute UpdateStatusRequest {..} = runDB $ do
+    mOrder <- E.get usrOrderNumber
+    case mOrder of
+        Just order -> do
+            let currentStoneEdgeStatus = orderStoneEdgeStatus order
+            currentOrderDeliveryData <- map E.entityVal <$>
+                selectList [ OrderDeliveryOrderId ==. usrOrderNumber ] []
+            let existingTrackNumbers = map orderDeliveryTrackNumber currentOrderDeliveryData
+                newOrderDeliveryData = map (trackDataToOrderDelivery usrOrderNumber) $
+                    filter (\td -> setdTrackNum td `notElem` existingTrackNumbers) usrTrackData
+            orderDeliveryIds <- E.insertMany newOrderDeliveryData
+            E.updateWhere [ OrderId ==. usrOrderNumber ]
+                [ OrderStoneEdgeStatus =. Just usrOrderStatus ]
+            -- If there is somethig to update, enqueue the email task.
+            -- We do not want to send an email if the status is the same or there is no new
+            -- delivery track info.
+            when (currentStoneEdgeStatus /= Just usrOrderStatus || not (null newOrderDeliveryData)) $ do
+                enqueueTask Nothing (SendEmail $ OrderStatusUpdated usrOrderNumber orderDeliveryIds) 
+            return UpdateStatusSuccess
+        Nothing ->
+            -- If the order does not exist, we cannot update its status.
+            return UpdateStatusSuccess
+    where
+        trackDataToOrderDelivery :: OrderId -> StoneEdgeTrackData -> OrderDelivery
+        trackDataToOrderDelivery orderId StoneEdgeTrackData {..} =
+            OrderDelivery
+                { orderDeliveryOrderId = orderId
+                , orderDeliveryTrackNumber = setdTrackNum
+                , orderDeliveryTrackCarrier = setdTrackCarrier
+                , orderDeliveryTrackPickupDate = setdPickupDate
+                }
 
 -- Utils
 

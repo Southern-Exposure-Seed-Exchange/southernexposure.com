@@ -36,6 +36,7 @@ module PageData exposing
     , DashboardCustomer
     , DashboardGraphData
     , DashboardOrder
+    , DeliveryData
     , LineItemType(..)
     , MyAccount
     , OrderData
@@ -92,7 +93,6 @@ module PageData exposing
     , productDetailsDecoder
     , saleTypeEncoder
     , searchConfig
-    , statusText
     )
 
 import Address
@@ -324,7 +324,7 @@ myAccountDecoder =
 type alias OrderSummary =
     { id : Int
     , shippingAddress : Address.Model
-    , status : OrderStatus
+    , status : String
     , total : Cents
     , created : Posix
     }
@@ -335,7 +335,7 @@ orderSummaryDecoder =
     Decode.map5 OrderSummary
         (Decode.field "id" Decode.int)
         (Decode.field "shippingAddress" Address.decoder)
-        (Decode.field "status" orderStatusDecoder)
+        (Decode.field "status" Decode.string)
         (Decode.field "total" centsDecoder)
         (Decode.field "created" Iso8601.decoder)
 
@@ -478,23 +478,38 @@ isFreeCheckout =
 -- Order Details
 
 
+type alias DeliveryData = 
+    { trackNumber : String
+    , trackCarrier : String
+    , trackPickupDate : String 
+    }
+
+deliveryDataDecoder : Decoder DeliveryData
+deliveryDataDecoder =
+    Decode.map3 DeliveryData
+        (Decode.field "trackNumber" Decode.string)
+        (Decode.field "trackCarrier" Decode.string)
+        (Decode.field "trackPickupDate" Decode.string)
+
 type alias OrderDetails =
     { order : Order
     , lineItems : List OrderLineItem
     , products : List OrderProduct
     , shippingAddress : Address.Model
     , billingAddress : Maybe Address.Model
+    , deliveryData : List DeliveryData
     }
 
 
 orderDetailsDecoder : Decoder OrderDetails
 orderDetailsDecoder =
-    Decode.map5 OrderDetails
+    Decode.map6 OrderDetails
         (Decode.field "order" orderDecoder)
         (Decode.field "lineItems" <| Decode.list lineItemDecoder)
         (Decode.field "products" <| Decode.list orderProductDecoder)
         (Decode.field "shippingAddress" Address.decoder)
         (Decode.field "billingAddress" <| Decode.nullable Address.decoder)
+        (Decode.field "deliveryData" <| Decode.list deliveryDataDecoder)
 
 
 orderTotals : OrderDetails -> { subTotal : Cents, total : Cents }
@@ -552,7 +567,7 @@ orderTotals { lineItems, products } =
 
 type alias Order =
     { id : Int
-    , status : OrderStatus
+    , status : String
     , comment : String
     , createdAt : Posix
     }
@@ -562,67 +577,9 @@ orderDecoder : Decoder Order
 orderDecoder =
     Decode.map4 Order
         (Decode.field "id" Decode.int)
-        (Decode.field "status" orderStatusDecoder)
+        (Decode.field "status" Decode.string)
         (Decode.field "comment" Decode.string)
         (Decode.field "createdAt" Iso8601.decoder)
-
-
-type OrderStatus
-    = Processing
-    | OrderReceived
-    | PaymentReceived
-    | PaymentFailed
-    | Refunded
-    | Shipped
-
-
-orderStatusDecoder : Decoder OrderStatus
-orderStatusDecoder =
-    decodeStringWith <|
-        \str ->
-            case str of
-                "Processing" ->
-                    Decode.succeed Processing
-
-                "OrderReceived" ->
-                    Decode.succeed OrderReceived
-
-                "PaymentReceived" ->
-                    Decode.succeed PaymentReceived
-
-                "PaymentFailed" ->
-                    Decode.succeed PaymentFailed
-
-                "Refunded" ->
-                    Decode.succeed Refunded
-
-                "Delivered" ->
-                    Decode.succeed Shipped
-
-                _ ->
-                    Decode.fail <| "Invalid OrderStatus: " ++ str
-
-
-statusText : OrderStatus -> String
-statusText status =
-    case status of
-        Processing ->
-            "Processing"
-
-        OrderReceived ->
-            "Received"
-
-        PaymentReceived ->
-            "Payment Complete"
-
-        PaymentFailed ->
-            "Payment Failed"
-
-        Refunded ->
-            "Refunded"
-
-        Shipped ->
-            "Shipped"
 
 
 type alias OrderLineItem =
@@ -851,7 +808,7 @@ type alias OrderData =
     , email : String
     , street : String
     , state : Region
-    , status : OrderStatus
+    , status : String
     , total : Cents
     }
 
@@ -865,7 +822,7 @@ orderDataDecoder =
         (Decode.field "customerEmail" Decode.string)
         (Decode.field "shippingStreet" Decode.string)
         (Decode.field "shippingRegion" regionDecoder)
-        (Decode.field "orderStatus" orderStatusDecoder)
+        (Decode.field "orderStatus" Decode.string)
         (Decode.field "orderTotal" centsDecoder)
 
 
@@ -970,7 +927,7 @@ adminEditCustomerDataDecoder =
 type alias CustomerOrderData =
     { id : Int
     , date : Posix
-    , status : OrderStatus
+    , status : String
     , shipping : Address.Model
     , total : Cents
     }
@@ -981,7 +938,7 @@ customerOrderDataDecoder =
     Decode.map5 CustomerOrderData
         (Decode.field "id" Decode.int)
         (Decode.field "date" Iso8601.decoder)
-        (Decode.field "status" orderStatusDecoder)
+        (Decode.field "status" Decode.string)
         (Decode.field "shipping" Address.decoder)
         (Decode.field "total" centsDecoder)
 

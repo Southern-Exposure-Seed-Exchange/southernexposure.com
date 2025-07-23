@@ -253,6 +253,10 @@ module.exports = {
         changeOrigin: true,
       }
     },
+    https: {
+      key: '../local.southernexposure.com+2-key.pem',
+      cert: '../local.southernexposure.com+2.pem',
+    }
   },
 
 }
