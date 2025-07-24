@@ -9,12 +9,13 @@ import Data.List (sortOn)
 import Data.Time (formatTime, defaultTimeLocale)
 import Database.Persist
 import Database.Persist.Postgresql
-    ( ConnectionPool, SqlPersistT, createPostgresqlPool, runSqlPool
+    ( ConnectionPool, SqlPersistT, runSqlPool
     )
 import GHC.Generics (Generic)
 
 import Models
 import Models.Fields
+import Utils (makeSqlPool)
 
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.Text as T
@@ -27,7 +28,7 @@ main = do
 
 connectToPostgres :: IO ConnectionPool
 connectToPostgres =
-    runNoLoggingT $ createPostgresqlPool "dbname=sese-website" 1
+    runNoLoggingT $ makeSqlPool 1
 
 getProductData :: SqlPersistT IO [(Entity ProductVariant, Entity Product, Maybe (Entity SeedAttribute), E.Value T.Text)]
 getProductData = E.select $ do 

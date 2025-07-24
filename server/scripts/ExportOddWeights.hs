@@ -12,11 +12,12 @@ import Data.Maybe (catMaybes, mapMaybe)
 import Data.Ratio ((%), Ratio, numerator, denominator)
 import Database.Persist
 import Database.Persist.Postgresql
-    ( ConnectionPool, SqlPersistT, createPostgresqlPool, runSqlPool )
+    ( ConnectionPool, SqlPersistT, runSqlPool )
 import Numeric.Natural (Natural)
 
 import Models
 import Models.Fields
+import Utils (makeSqlPool)
 
 import qualified Data.Text as T
 
@@ -34,7 +35,7 @@ type ProductAndVariants = (Entity Product, [Entity ProductVariant])
 
 connectToPostgres :: IO ConnectionPool
 connectToPostgres =
-    runNoLoggingT $ createPostgresqlPool "dbname=sese-website" 1
+    runNoLoggingT $ makeSqlPool 1
 
 -- | Get Active Products join with any Active Variants.
 getMassVariants :: SqlPersistT IO [ProductAndVariants]

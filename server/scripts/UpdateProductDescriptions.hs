@@ -6,11 +6,12 @@ import Control.Monad.Logger (runNoLoggingT)
 import Data.Csv (FromNamedRecord, decodeByName)
 import Database.Persist
 import Database.Persist.Postgresql
-    ( ConnectionPool, SqlPersistT, createPostgresqlPool, runSqlPool, toSqlKey
+    ( ConnectionPool, SqlPersistT, runSqlPool, toSqlKey
     )
 import GHC.Generics (Generic)
 
 import Models
+import Utils (makeSqlPool)
 
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.Text as T
@@ -24,7 +25,7 @@ main = do
 
 connectToPostgres :: IO ConnectionPool
 connectToPostgres =
-    runNoLoggingT $ createPostgresqlPool "dbname=sese-website" 1
+    runNoLoggingT $ makeSqlPool 1
 
 data ProductData =
     ProductData
