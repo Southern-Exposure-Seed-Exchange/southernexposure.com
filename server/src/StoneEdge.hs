@@ -51,6 +51,10 @@ module StoneEdge
     , GetProductsCountRequest(..)
     , GetProductsCountResponse(..)
     , renderGetProductsCountResponse
+      -- Download Product
+    , DownloadProdsRequest(..)
+    , DownloadProdsResponse(..)
+    , renderDownloadProdsResponse
       -- *** Order Download Sub-Types
     , StoneEdgeOrder(..)
     , renderStoneEdgeOrder
@@ -87,6 +91,8 @@ module StoneEdge
     , StoneEdgeOtherData(..)
     , renderStoneEdgeOtherData
     , StoneEdgeTrackData(..)
+      -- Product Download Sub-Types
+    , StoneEdgeProduct(..)
     ) where
 
 import Data.Bool (bool)
@@ -821,6 +827,69 @@ newtype GetProductsCountResponse = GetProductsCountResponse { gpcrProductCount :
 renderGetProductsCountResponse :: GetProductsCountResponse -> T.Text
 renderGetProductsCountResponse GetProductsCountResponse {..} =
     "SETIResponse: itemcount=" <> T.pack (show gpcrProductCount)
+
+-- Download Products
+
+data DownloadProdsRequest = DownloadProdsRequest
+    { dprUser :: T.Text
+    , dprPass :: T.Text
+    , dprStoreCode :: T.Text
+    , dprStartNumber :: Maybe Integer
+    , dprBatchSize :: Maybe Integer
+    , dprOMVersion :: T.Text
+    } deriving (Eq, Show, Read)
+
+instance FromForm DownloadProdsRequest where
+    fromForm = matchFunction "downloadprods" $ \f -> do
+        dprUser <- parseUnique "setiuser" f
+        dprPass <- parseUnique "password" f
+        dprStoreCode <- parseUnique "code" f
+        dprStartNumber <- parseMaybe "startnum" f
+        dprBatchSize <- parseMaybe "batchsize" f
+        dprOMVersion <- parseUnique "omversion" f
+        return DownloadProdsRequest {..}
+
+instance HasStoneEdgeCredentials DownloadProdsRequest where
+    userParam = dprUser
+    passwordParam = dprPass
+    storeCodeParam = dprStoreCode
+
+newtype DownloadProdsResponse = DownloadProdsResponse { dprProducts :: [StoneEdgeProduct] }
+    deriving (Eq, Show, Read)
+
+renderDownloadProdsResponse :: DownloadProdsResponse -> BS.ByteString
+renderDownloadProdsResponse (DownloadProdsResponse products) =
+    renderXmlSETIResponse Products 1 "Success" . xelems $ map renderStoneEdgeProduct products
+
+data StoneEdgeProduct = StoneEdgeProduct
+    { sepCode :: T.Text
+    , sepName :: T.Text
+    , sepPrice :: Scientific
+    , sepDescription :: Maybe T.Text
+    , sepWeight :: Scientific
+    , sepDiscontinued :: Bool
+    , sepCustomFields :: [(T.Text, T.Text)]
+    -- There are more fields in the specification, but we're using only these
+    -- at the moment
+    } deriving (Eq, Show, Read)
+
+renderStoneEdgeProduct :: StoneEdgeProduct -> Xml Elem
+renderStoneEdgeProduct StoneEdgeProduct {..} =
+    xelem "Product" $ xelems
+        [ xelemWithText "Code" sepCode
+        , xelemWithText "Name" sepName
+        , xelemWithText "Price" $ renderScientific sepPrice
+        , maybeXelemText "Description" sepDescription
+        , xelemWithText "Weight" $ renderScientific sepWeight
+        , xelemWithText "Discontinued" $ renderBoolAsYesNo sepDiscontinued
+        , xelem "CustomFields" $ xelems
+            [ xelem "CustomField" $ xelems
+                [ xelemWithText "FieldName" name
+                , xelemWithText "FieldValue" value
+                ]
+            | (name, value) <- sepCustomFields
+            ]
+        ]
 
 -- Utils
 
