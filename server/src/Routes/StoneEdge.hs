@@ -30,6 +30,7 @@ import Control.Monad.Reader (asks, liftIO)
 import UnliftIO.Exception (Exception, throwIO, handle)
 import Data.Bifunctor (first)
 import Data.Char (isDigit)
+import Data.Map as Map (fromList, lookup)
 import Data.Maybe (fromMaybe, mapMaybe, listToMaybe, maybeToList)
 import Data.List (find)
 import Data.Text (Text)
@@ -60,6 +61,7 @@ import Workers (Task(..), enqueueTask)
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.Text as T
 import qualified Database.Esqueleto.Experimental as E
+import qualified Database.Esqueleto.PostgreSQL as E
 import qualified Web.Stripe.Types as Stripe
 
 
@@ -92,7 +94,9 @@ stoneEdgeRoutes = \case
     DORq rq ->
         handle (xmlError Orders) $ checkAuth rq >> DORs <$> downloadOrdersRoute rq
     USRq rq ->
-        handle simpleError $ checkAuth rq >> USRs <$> updateStatusRoute rq 
+        handle simpleError $ checkAuth rq >> USRs <$> updateStatusRoute rq
+    QOHRq rq ->
+        handle simpleError $ checkAuth rq >> QOHRs <$> qohReplaceRoute rq
     UnexpectedFunction function _ ->
         return . ErrorResponse $ "Integration has no support for function: " <> function
     InvalidRequest form ->
@@ -114,6 +118,7 @@ data StoneEdgeRequest
     | OCRq OrderCountRequest
     | DORq DownloadOrdersRequest
     | USRq UpdateStatusRequest
+    | QOHRq QOHReplaceRequest
     | UnexpectedFunction Text Form
     | InvalidRequest Form
     deriving (Eq, Show)
@@ -129,6 +134,8 @@ instance FromForm StoneEdgeRequest where
             wrapErrorXml Orders $ DORq <$> fromForm f
         Just "updatestatus" ->
             wrapError $ USRq <$> fromForm f
+        Just "qohreplace" ->
+            wrapError $ QOHRq <$> fromForm f
         Just unexpected ->
             return $ UnexpectedFunction unexpected f
         Nothing ->
@@ -145,6 +152,7 @@ data StoneEdgeResponse
     | OCRs OrderCountResponse
     | DORs DownloadOrdersResponse
     | USRs UpdateStatusResponse
+    | QOHRs QOHReplaceResponse
     | ErrorResponse Text
     | XmlErrorResponse TypeOfDownload Text
 
@@ -159,6 +167,8 @@ instance MimeRender PlainText StoneEdgeResponse where
             LBS.fromStrict $ renderDownloadOrdersResponse resp
         USRs resp ->
             mimeRender pt $ renderUpdateStatusResponse resp
+        QOHRs resp ->
+            mimeRender pt $ renderQOHReplaceResponse resp
         ErrorResponse errorMessage ->
             mimeRender pt $ renderSimpleSETIError errorMessage
         XmlErrorResponse type_ errorMessage ->
@@ -532,6 +542,44 @@ updateStatusRoute UpdateStatusRequest {..} = runDB $ do
                 , orderDeliveryTrackCarrier = setdTrackCarrier
                 , orderDeliveryTrackPickupDate = setdPickupDate
                 }
+
+qohReplaceRoute :: QOHReplaceRequest -> App QOHReplaceResponse
+qohReplaceRoute QOHReplaceRequest {..} = runDB $ do
+    -- Collect product variant candidates to update
+    -- We use a distinct query to avoid duplicates.
+    -- We use a join to match the full SKU with the product base SKU and the variant SKU suffix.
+    candidates <- E.select $ E.distinct $ do
+        (p E.:& _ E.:& pv) <- E.from $
+            E.table @Product
+                `E.innerJoin` E.values (fmap (\(sku, _) -> E.val sku) qrrUpdates)
+                `E.on` (\(p E.:& fullSku) -> fullSku `E.like` E.concat_ [p E.^. ProductBaseSku, E.val "%"])
+                `E.innerJoin` E.table @ProductVariant
+                `E.on`
+                    (\(p E.:& fullSku E.:& pv) -> 
+                        (p E.^. ProductId E.==. pv E.^. ProductVariantProductId) E.&&.
+                        (fullSku `E.like` E.concat_ [E.val "%", pv E.^. ProductVariantSkuSuffix])
+                    )
+        return (p E.^. ProductId, pv E.^. ProductVariantId, p E.^. ProductBaseSku, pv E.^. ProductVariantSkuSuffix)
+    -- Build a map of found SKUs from candidates
+    let foundSkus = Map.fromList $ 
+            [ (baseSku <> variantSkuSuffix, productVariantId)
+            | (_, E.Value productVariantId, E.Value baseSku, E.Value variantSkuSuffix) <- candidates
+            ]
+
+    -- Iterate over the list of updates and update the quantities in the DB
+    updates <- forM qrrUpdates $ \(sku, quantity) -> do
+        case Map.lookup sku foundSkus of
+            Just productVariantId -> do
+                -- Update the quantity on hand for the found SKU
+                updateWhere
+                    [ ProductVariantId ==. productVariantId ]
+                    [ ProductVariantQuantity =. fromIntegral quantity ]
+                return (sku, Ok)
+            Nothing ->
+                return (sku, NotFound)
+                -- If the SKU was not found, we can choose to log it or ignore it.
+
+    return $ QOHReplaceResponse updates
 
 -- Utils
 

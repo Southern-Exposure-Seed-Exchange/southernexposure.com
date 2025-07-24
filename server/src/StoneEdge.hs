@@ -38,9 +38,15 @@ module StoneEdge
     , DownloadOrdersRequest(..)
     , DownloadOrdersResponse(..)
     , renderDownloadOrdersResponse
+      -- ** Order Update Status
     , UpdateStatusRequest(..)
     , UpdateStatusResponse(..)
     , renderUpdateStatusResponse
+      -- * QOH Replace
+    , QOHReplaceRequest(..)
+    , QOHReplaceResponse(..)
+    , SKUQOHUpdateStatus(..)
+    , renderQOHReplaceResponse
       -- *** Order Download Sub-Types
     , StoneEdgeOrder(..)
     , renderStoneEdgeOrder
@@ -79,6 +85,8 @@ module StoneEdge
     , StoneEdgeTrackData(..)
     ) where
 
+import Data.Bool (bool)
+import Data.List.NonEmpty (NonEmpty, fromList, toList)
 import Data.Maybe (fromMaybe)
 import Data.Scientific (Scientific, FPFormat(Fixed), formatScientific, scientific)
 import Data.Text.Encoding (decodeUtf8, encodeUtf8)
@@ -708,6 +716,77 @@ renderUpdateStatusResponse :: UpdateStatusResponse -> T.Text
 renderUpdateStatusResponse = \case
     UpdateStatusSuccess -> "SETIResponse: update=OK;Notes="
     UpdateStatusError err -> "SETIResponse: update=False;Notes=" <> err
+
+-- QOH Replace
+
+data QOHReplaceRequest
+    = QOHReplaceRequest
+        { qrrUser :: T.Text
+        , qrrPass :: T.Text
+        , qrrStoreCode :: T.Text
+        , qrrCount :: Integer
+        , qrrUpdates :: NonEmpty (T.Text, Integer) -- (sku, quantity)
+        , qrrOMVersion :: T.Text
+        } deriving (Eq, Show, Read)
+
+instance FromForm QOHReplaceRequest where
+    fromForm = matchFunction "qohreplace" $ \f -> do
+        qrrUser <- parseUnique "setiuser" f
+        qrrPass <- parseUnique "password" f
+        qrrStoreCode <- parseUnique "code" f
+        qrrCount <- parseUnique "count" f
+        updateRaw <- parseUnique @T.Text "update" f
+        qrrUpdates <- case parseUpdates qrrCount updateRaw of
+            Left err -> Left err
+            Right updates -> Right updates
+        qrrOMVersion <- parseUnique "omversion" f
+        return QOHReplaceRequest {..}
+      where
+        parseUpdates :: Integer -> T.Text -> Either T.Text (NonEmpty (T.Text, Integer))
+        parseUpdates count updateRaw =
+            -- the format is 'sku1~quantity1|sku2~quantity2|...|', however the documentation specifies
+            -- 'sku1~quantity1|sku2~quantity2|...' without the trailing '|', so
+            -- we use `init` when the last character is '|'
+            let updates = T.splitOn "|" updateRaw
+                parsedUpdates = map (T.splitOn "~") $ bool updates (init updates) (T.last updateRaw == '|')
+            in if length parsedUpdates /= fromIntegral count then
+                Left $ "Expected " <> T.pack (show count) <> " updates, got " <> T.pack (show $ length parsedUpdates)
+            else
+                fromList <$> sequence
+                    [ case vs of
+                        [k, v] ->
+                            case readMaybe (T.unpack v) of
+                                Just qty -> Right (k, qty)
+                                Nothing -> Left $ "Could not parse quantity for SKU " <> k <> ": " <> v
+                        _ -> Left $ "Malformed update entry: " <> T.intercalate "~" vs
+                    | vs <- parsedUpdates
+                    ]
+
+instance HasStoneEdgeCredentials QOHReplaceRequest where
+    userParam = qrrUser
+    passwordParam = qrrPass
+    storeCodeParam = qrrStoreCode
+
+data SKUQOHUpdateStatus
+    = Ok
+    | NotAvailable
+    | NotFound
+
+renderSKUQOHUpdateStatus :: SKUQOHUpdateStatus -> T.Text
+renderSKUQOHUpdateStatus = \case
+    Ok -> "OK"
+    NotAvailable -> "NA"
+    NotFound -> "NF"
+
+newtype QOHReplaceResponse = QOHReplaceResponse (NonEmpty (T.Text, SKUQOHUpdateStatus))
+    -- ^ List of (SKU, Status) pairs indicating the result of the QOH update.
+
+renderQOHReplaceResponse :: QOHReplaceResponse -> T.Text
+renderQOHReplaceResponse (QOHReplaceResponse updates) =
+    "SETIResponse\n" <> T.intercalate "\n" (map renderUpdate (toList updates)) <> "\nSETIEndOfData"
+    where
+        renderUpdate (sku, status) =
+            sku <> "=" <> renderSKUQOHUpdateStatus status
 
 -- Utils
 

@@ -6,6 +6,7 @@ import Data.Aeson (Result(Success), FromJSON, fromJSON, ToJSON(..), eitherDecode
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LBS
 import Data.Int (Int64)
+import Data.List.NonEmpty (NonEmpty(..))
 import Data.Ratio ((%))
 import Data.Text (Text)
 import Data.Text.Encoding (decodeUtf8)
@@ -316,6 +317,7 @@ stoneEdge = testGroup "StoneEdge Module"
     , sendVersionTests
     , orderCountTests
     , downloadOrdersTests
+    , qohReplaceTests
     ]
   where
     errorTests :: TestTree
@@ -544,6 +546,30 @@ stoneEdge = testGroup "StoneEdge Module"
         "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n" <> expected
             @=?  xrender (doc defaultDocInfo element)
 
+    qohReplaceTests :: TestTree
+    qohReplaceTests = testGroup "Replace QOH"
+        -- SETI Documentation mentions there is no trailing '|' character, but in the real requests coming
+        -- from the Stone Edge instance it is actually present, so we're supporting both cases.
+        [ testCase "Form Parsing" qohReplaceParsing
+        , testCase "Form Parsing - No Trailing |" qohReplaceNoTrailingBar
+        , testCase "Response Rendering" qohReplaceResponse
+        ]
+    qohReplaceParsing :: Assertion
+    qohReplaceParsing =
+        testFormParsing "setifunction=qohreplace&setiuser=auser&password=pwd&code=mystore&count=2&update=sku1~2|sku2~5|&omversion=5.000"
+            $ QOHReplaceRequest "auser" "pwd" "mystore" 2
+                (("sku1", 2) :| [("sku2", 5)]) "5.000"
+
+    qohReplaceNoTrailingBar :: Assertion
+    qohReplaceNoTrailingBar =
+        testFormParsing "setifunction=qohreplace&setiuser=auser&password=pwd&code=mystore&count=3&update=sku1~2|sku2~5|sku3~10&omversion=5.000"
+            $ QOHReplaceRequest "auser" "pwd" "mystore" 3
+                (("sku1", 2) :| [("sku2", 5), ("sku3", 10)]) "5.000"
+
+    qohReplaceResponse :: Assertion
+    qohReplaceResponse =
+        renderQOHReplaceResponse (QOHReplaceResponse $ ("sku1", Ok) :| [("sku2", NotAvailable), ("sku3", NotFound)])
+            @?= "SETIResponse\nsku1=OK\nsku2=NA\nsku3=NF\nSETIEndOfData"
 
 routesStoneEdge :: TestTree
 routesStoneEdge = testGroup "Routes.StoneEdge Module"
