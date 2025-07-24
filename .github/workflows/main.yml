@@ -67,7 +67,10 @@ jobs:
         run: stack build --ghc-options="-Werror -O1" --only-dependencies
       - name: Build Server Project
         working-directory: server
-        run: stack build --ghc-options="-Werror -O1"
+        run: stack build --ghc-options="-Werror -O1" --test --no-run-tests
+      - name: Run Tests
+        working-directory: server
+        run: stack test --ghc-options="-Werror -O1"
 
   build-backend-image:
     name: Build backend Docker image

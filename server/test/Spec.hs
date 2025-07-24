@@ -5,6 +5,8 @@
 import Data.Aeson (Result(Success), FromJSON, fromJSON, ToJSON(..), eitherDecode)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LBS
+import Data.Int (Int64)
+import Data.List.NonEmpty (NonEmpty(..))
 import Data.Ratio ((%))
 import Data.Text (Text)
 import Data.Text.Encoding (decodeUtf8)
@@ -16,7 +18,6 @@ import Database.Persist.Sql (Entity(..), ToBackendKey, SqlBackend, toSqlKey)
 import Hedgehog
 import qualified Hedgehog.Gen as Gen
 import qualified Hedgehog.Range as Range
-import Numeric.Natural (Natural)
 import Test.Tasty
 import Test.Tasty.Hedgehog
 import Test.Tasty.HUnit hiding (assert)
@@ -143,7 +144,7 @@ couponTests = testGroup "Coupon Discount Calculations"
     freeShippingNoMethods :: Property
     freeShippingNoMethods = property $ do
         coupon <- forAll $ couponWithType FreeShipping
-        calculateCouponDiscount coupon [] 0 === 0
+        calculateCouponDiscount coupon [] 0 === mkCents 0
     percentageDiscount :: Property
     percentageDiscount = property $ do
         coupon <- forAll genCoupon
@@ -163,7 +164,7 @@ couponTests = testGroup "Coupon Discount Calculations"
             FlatDiscount amt ->
                 return amt
             _ ->
-                (+ 1) <$> forAll genCents
+                (`plusCents` mkCents 1) <$> forAll genCents
         let coupon_ = coupon { couponDiscount = FlatDiscount amount }
         subTotal <- forAll genCents
         let result = calculateCouponDiscount coupon_ [] (fromCents subTotal)
@@ -205,14 +206,14 @@ priorityFeeTests = testGroup "Priority S&H Calculations"
             === Just (Cents $ round $ percentAmount + toRational flat)
     onlyFlat :: Assertion
     onlyFlat =
-        calculatePriorityFee [makeShippingCharge (PriorityShippingFee 200 0)] 1000
-            @?= Just 200
+        calculatePriorityFee [makeShippingCharge (PriorityShippingFee (mkCents 200) 0)] 1000
+            @?= Just (mkCents 200)
     onlyPercent :: Assertion
     onlyPercent =
-        calculatePriorityFee [makeShippingCharge (PriorityShippingFee 0 10)] 1000
-            @?= Just 100
+        calculatePriorityFee [makeShippingCharge (PriorityShippingFee (mkCents 0) 10)] 1000
+            @?= Just (mkCents 100)
     makeShippingCharge :: PriorityShippingFee -> ShippingCharge
-    makeShippingCharge fee = ShippingCharge (CartCharge "" 900) (Just fee) True
+    makeShippingCharge fee = ShippingCharge (CartCharge "" $ mkCents 900) (Just fee) True
 
 
 -- SALES
@@ -233,7 +234,7 @@ categorySaleTests = testGroup "Category Sale Calculations"
         saleAmount <- forAll $ genCentRange $ Range.linear 1 (fromCents (getVariantPrice variantData) - 1)
         sale <- forAll $ genCategorySale $ FlatSale saleAmount
         categorySalePrice (getVariantPrice variantData) sale
-            === getVariantPrice variantData - saleAmount
+            === getVariantPrice variantData `subtractCents` saleAmount
     testFlatGreaterThanPrice :: Property
     testFlatGreaterThanPrice = property $ do
         variantEntity <- forAll $ genEntity genProductVariant
@@ -241,7 +242,7 @@ categorySaleTests = testGroup "Category Sale Calculations"
             price = fromCents $ getVariantPrice variantData
         saleAmount <- forAll $ genCentRange $ Range.linear price (price * 10)
         sale <- forAll $ genCategorySale $ FlatSale saleAmount
-        categorySalePrice (getVariantPrice variantData) sale === 0
+        categorySalePrice (getVariantPrice variantData) sale === mkCents 0
     testPercentageProperty :: Property
     testPercentageProperty = property $ do
         variantEntity <- forAll $ genEntity genProductVariant
@@ -254,32 +255,32 @@ categorySaleTests = testGroup "Category Sale Calculations"
     testPercentageUnit :: Assertion
     testPercentageUnit = do
         time <- getCurrentTime
-        let variantData = makeVariantData (makeVariant 1000) Nothing
+        let variantData = makeVariantData (makeVariant $ mkCents 1000) Nothing
             sale = CategorySale "" (PercentSale 13) time time []
-        categorySalePrice (getVariantPrice variantData) sale @?= 870
+        categorySalePrice (getVariantPrice variantData) sale @?= mkCents 870
     testOverridesSalePrice :: Property
     testOverridesSalePrice = property $ do
         (variantEntity, price) <- forAll
             $ makeVariantWithPrice $ Range.linear 2000 5000
-        let variantData = makeVariantData variantEntity (Just $ price - 1500)
+        let variantData = makeVariantData variantEntity (Just $ price `subtractCents` mkCents 1500)
         saleAmount <- forAll $ genCentRange $ Range.linear 1501 $ fromCents price
         sale <- forAll $ genCategorySale $ FlatSale saleAmount
-        getVariantPrice (applyCategorySale sale variantData) === price - saleAmount
+        getVariantPrice (applyCategorySale sale variantData) === price `subtractCents` saleAmount
     testNoOverridesSalePrice :: Property
     testNoOverridesSalePrice = property $ do
         (variantEntity, price) <- forAll
             $ makeVariantWithPrice $ Range.linear 2000 5000
-        let variantData = makeVariantData variantEntity (Just 200)
+        let variantData = makeVariantData variantEntity (Just $ mkCents 200)
         sale <- forAll $ do
             let price_ = fromCents price
             amount <- genCentRange $ Range.linear 0 (price_ - 199)
             genCategorySale $ FlatSale amount
-        getVariantPrice (applyCategorySale sale variantData) === 200
+        getVariantPrice (applyCategorySale sale variantData) === mkCents 200
     makeVariant :: Cents -> Entity ProductVariant
     makeVariant price =
         Entity (toSqlKey 1)
             $ ProductVariant (toSqlKey 1) "" price 1 (Just . Mass $ Milligrams 1) True
-    makeVariantWithPrice :: Range Natural -> Gen (Entity ProductVariant, Cents)
+    makeVariantWithPrice :: Range Int64 -> Gen (Entity ProductVariant, Cents)
     makeVariantWithPrice priceRange = do
         entity <- genProductVariant
         key <- genEntityKey
@@ -316,6 +317,7 @@ stoneEdge = testGroup "StoneEdge Module"
     , sendVersionTests
     , orderCountTests
     , downloadOrdersTests
+    , qohReplaceTests
     ]
   where
     errorTests :: TestTree
@@ -544,6 +546,30 @@ stoneEdge = testGroup "StoneEdge Module"
         "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n" <> expected
             @=?  xrender (doc defaultDocInfo element)
 
+    qohReplaceTests :: TestTree
+    qohReplaceTests = testGroup "Replace QOH"
+        -- SETI Documentation mentions there is no trailing '|' character, but in the real requests coming
+        -- from the Stone Edge instance it is actually present, so we're supporting both cases.
+        [ testCase "Form Parsing" qohReplaceParsing
+        , testCase "Form Parsing - No Trailing |" qohReplaceNoTrailingBar
+        , testCase "Response Rendering" qohReplaceResponse
+        ]
+    qohReplaceParsing :: Assertion
+    qohReplaceParsing =
+        testFormParsing "setifunction=qohreplace&setiuser=auser&password=pwd&code=mystore&count=2&update=sku1~2|sku2~5|&omversion=5.000"
+            $ QOHReplaceRequest "auser" "pwd" "mystore" 2
+                (("sku1", 2) :| [("sku2", 5)]) "5.000"
+
+    qohReplaceNoTrailingBar :: Assertion
+    qohReplaceNoTrailingBar =
+        testFormParsing "setifunction=qohreplace&setiuser=auser&password=pwd&code=mystore&count=3&update=sku1~2|sku2~5|sku3~10&omversion=5.000"
+            $ QOHReplaceRequest "auser" "pwd" "mystore" 3
+                (("sku1", 2) :| [("sku2", 5), ("sku3", 10)]) "5.000"
+
+    qohReplaceResponse :: Assertion
+    qohReplaceResponse =
+        renderQOHReplaceResponse (QOHReplaceResponse $ ("sku1", Ok) :| [("sku2", NotAvailable), ("sku3", NotFound)])
+            @?= "SETIResponse\nsku1=OK\nsku2=NA\nsku3=NF\nSETIEndOfData"
 
 routesStoneEdge :: TestTree
 routesStoneEdge = testGroup "Routes.StoneEdge Module"
@@ -583,24 +609,24 @@ routesStoneEdge = testGroup "Routes.StoneEdge Module"
         ]
     couponTransform :: Assertion
     couponTransform =
-        let c = Entity nullSqlKey $ Coupon "CC" "Coup" "" True (FlatDiscount 300) 0 fillerTime 0 0 fillerTime
-            li = Entity nullSqlKey $ OrderLineItem nullSqlKey CouponDiscountLine "Coup Discount" 300
+        let c = Entity nullSqlKey $ Coupon "CC" "Coup" "" True (FlatDiscount $ mkCents 300) (mkCents 0) fillerTime 0 0 fillerTime
+            li = Entity nullSqlKey $ OrderLineItem nullSqlKey CouponDiscountLine "Coup Discount" (mkCents 300)
             sc = StoneEdgeCoupon  "Coup" Nothing (StoneEdgeCents 300) (Just True)
         in Just sc @=? transformCoupon c li
     storeCreditTransform :: Assertion
     storeCreditTransform =
-        let li = Entity nullSqlKey $ OrderLineItem nullSqlKey StoreCreditLine "Store Credit" 500
+        let li = Entity nullSqlKey $ OrderLineItem nullSqlKey StoreCreditLine "Store Credit" (mkCents 500)
             sc = StoneEdgeOrderStoreCredit $ StoneEdgePaymentStoreCredit
                     (StoneEdgeCents 500) (Just "Store Credit")
         in Just sc @=? transformStoreCredit li
     couponTransformNothing :: Assertion
     couponTransformNothing =
-        let c = Entity nullSqlKey $ Coupon "CC" "Coup" "" True (FlatDiscount 300) 0 fillerTime 0 0 fillerTime
-            li = Entity nullSqlKey $ OrderLineItem nullSqlKey PriorityShippingLine "Not a coupon" 900
+        let c = Entity nullSqlKey $ Coupon "CC" "Coup" "" True (FlatDiscount $ mkCents 300) (mkCents 0) fillerTime 0 0 fillerTime
+            li = Entity nullSqlKey $ OrderLineItem nullSqlKey PriorityShippingLine "Not a coupon" (mkCents 900)
         in Nothing @=? transformCoupon c li
     storeCreditTransformNothing :: Assertion
     storeCreditTransformNothing =
-        let li = Entity nullSqlKey $ OrderLineItem nullSqlKey PriorityShippingLine "Not store credit" 900
+        let li = Entity nullSqlKey $ OrderLineItem nullSqlKey PriorityShippingLine "Not store credit" (mkCents 900)
         in Nothing @=? transformStoreCredit li
     taxTransform :: Assertion
     taxTransform =
@@ -869,7 +895,7 @@ genEntityKey =
     toSqlKey <$> Gen.int64 (Range.linear 1 1000)
 
 
-genCentRange :: Range Natural -> Gen Cents
+genCentRange :: Range Int64 -> Gen Cents
 genCentRange r =
     Cents <$> Gen.integral r
 
