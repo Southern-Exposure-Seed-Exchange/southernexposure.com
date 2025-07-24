@@ -7,13 +7,14 @@ import Data.Csv (ToNamedRecord, DefaultOrdered(..), encodeDefaultOrderedByName, 
 import Data.List (sortOn)
 import Database.Persist
 import Database.Persist.Postgresql
-    ( ConnectionPool, SqlPersistT, createPostgresqlPool, runSqlPool
+    ( ConnectionPool, SqlPersistT, runSqlPool
     )
 import GHC.Generics (Generic)
 
 import Cache (syncCategoryPredecessorCache, queryCategoryPredecessorCache)
 import Models
 import Models.Fields
+import Utils (makeSqlPool)
 
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.Text as T
@@ -26,7 +27,7 @@ main = do
 
 connectToPostgres :: IO ConnectionPool
 connectToPostgres =
-    runNoLoggingT $ createPostgresqlPool "dbname=sese-website" 1
+    runNoLoggingT $ makeSqlPool 1
 
 getProductData :: SqlPersistT IO [(Entity Product, Entity ProductVariant, Maybe (Entity SeedAttribute), [Entity Category])]
 getProductData = do

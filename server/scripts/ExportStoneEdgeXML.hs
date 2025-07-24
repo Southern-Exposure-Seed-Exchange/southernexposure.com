@@ -9,7 +9,7 @@ import Data.Maybe (mapMaybe)
 import Data.Time (utcToLocalTime, getTimeZone)
 import Database.Persist
 import Database.Persist.Postgresql
-    ( ConnectionPool, SqlPersistT, createPostgresqlPool, runSqlPool
+    ( ConnectionPool, SqlPersistT, runSqlPool
     )
 import System.Environment (getArgs)
 import System.Exit (exitFailure)
@@ -19,6 +19,7 @@ import Models
 import Models.Fields
 import Routes.StoneEdge
 import StoneEdge
+import Utils (makeSqlPool)
 
 import qualified Data.ByteString as BS
 import qualified Database.Esqueleto.Experimental as E
@@ -44,7 +45,7 @@ main = do
 
 connectToPostgres :: IO ConnectionPool
 connectToPostgres =
-    runNoLoggingT $ createPostgresqlPool "dbname=sese-website" 1
+    runNoLoggingT $ makeSqlPool 1
 
 -- | Ripped from Routes.StoneEdge.downloadOrdersRoute
 fetchOrder :: [OrderId] -> SqlPersistT IO [StoneEdgeOrder]

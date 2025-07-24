@@ -72,10 +72,12 @@ dependencies:
     - iso3166-country-codes
     - markdown
     - mime-mail
+    - monad-logger
     - mtl
     - network
     - pandoc
     - persistent
+    - persistent-postgresql
     - persistent-template
     - pureMD5
     - resource-pool
@@ -99,10 +101,10 @@ dependencies:
     - xmlgen
     - xss-sanitize
     - blaze-builder
-    - cereal-time 
-    - cookie 
-    - exceptions    
-    - memory       
+    - cereal-time
+    - cookie
+    - exceptions
+    - memory
     - servant
     - tagged
     - transformers
@@ -125,6 +127,7 @@ library:
         - Routes.CommonData
         - Routes.StoneEdge
         - StoneEdge
+        - Utils
         - Workers
 
 tests:

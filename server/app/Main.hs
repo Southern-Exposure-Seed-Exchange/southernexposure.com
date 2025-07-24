@@ -11,10 +11,9 @@ import Control.Concurrent.STM (newTVarIO, writeTVar, atomically)
 import Control.Exception (Exception(..), SomeException)
 import Control.Immortal.Queue (processImmortalQueue, closeImmortalQueue)
 import Control.Monad (when, forever, void, forM_)
-import Control.Monad.IO.Class (MonadIO, liftIO)
+import Control.Monad.IO.Class (MonadIO)
 import Control.Monad.Logger (MonadLoggerIO, runNoLoggingT, runStderrLoggingT)
 import Data.Aeson (Result(..), fromJSON)
-import Data.ByteString.Char8 (pack)
 import Data.Maybe (fromMaybe, mapMaybe)
 import Data.Pool (destroyAllResources)
 import Data.Text.Encoding (decodeUtf8)
@@ -42,6 +41,7 @@ import Models
 import Models.PersistJSON (JSONValue(..))
 import Paths_sese_website (version)
 import StoneEdge (StoneEdgeCredentials(..))
+import Utils (lookupSettingWith, makeSqlPool)
 import Workers (Task(CleanDatabase, AddSalesReportDay), taskQueueConfig, enqueueTask)
 
 import qualified Avalara
@@ -135,9 +135,6 @@ main = do
     where
         lookupSetting env def = lookupSettingWith env def read
 
-        lookupSettingWith :: String -> a -> (String -> a) -> IO a
-        lookupSettingWith env def builder = maybe def builder <$> lookupEnv env
-
         requireSetting :: String -> IO String
         requireSetting env =
             lookupEnv env
@@ -154,12 +151,15 @@ main = do
               _ -> pure mDev
 
         makePool :: Environment -> IO ConnectionPool
-        makePool env =
+        makePool env = do
+            let action :: (MonadIO m, MonadLoggerIO m, MonadUnliftIO m) => m ConnectionPool
+                action = do
+                    pool <- makeSqlPool $ poolSize env
+                    runSqlPool (runMigration migrateAll) pool
+                    return pool
             case env of
-                Production ->
-                    runNoLoggingT $ makeSqlPool env
-                Development ->
-                    runStderrLoggingT $ makeSqlPool env
+                Production -> runNoLoggingT action
+                Development -> runStderrLoggingT action
 
         makeSMTPPool (log :: T.Text -> IO ()) env = do
             smtpServer <- fromMaybe "" <$> lookupEnv "SMTP_SERVER"
@@ -178,28 +178,6 @@ main = do
                     Production ->
                         "https://www.southernexposure.com"
             lookupSettingWith "BASE_URL" defUrl T.pack
-
-        makeSqlPool :: (MonadIO m, MonadLoggerIO m, MonadUnliftIO m) => Environment -> m ConnectionPool
-        makeSqlPool env = do
-            mbDbConnectionString <- liftIO $ lookupEnv "DB_CONNECTION_STRING"
-            connStr <- case mbDbConnectionString of
-                Just connStr -> return $ pack connStr
-                Nothing -> do
-                    dbHost <- liftIO $ lookupSettingWith "DB_HOST" "127.0.0.1" pack
-                    dbPort <- liftIO $ lookupSettingWith "DB_PORT" "5432" pack
-                    dbUser <- liftIO $ lookupSettingWith "DB_USER" "sese-website" pack
-                    mbDbPass <- liftIO $ lookupSettingWith "DB_PASS" Nothing (Just . pack)
-                    dbName <- liftIO $ lookupSettingWith "DB_NAME" "sese-website" pack
-                    let connStr = "host=" <> dbHost
-                            <> " port=" <> dbPort
-                            <> " user=" <> dbUser
-                            <> maybe "" (" password=" <>) mbDbPass
-                            <> " dbname=" <> dbName
-                    return connStr
-
-            pool <- createPostgresqlPool connStr $ poolSize env
-            runSqlPool (runMigration migrateAll) pool
-            return pool
 
         poolSize env =
             case env of

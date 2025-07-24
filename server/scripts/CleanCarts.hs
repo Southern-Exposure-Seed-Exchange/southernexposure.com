@@ -6,6 +6,7 @@ import Control.Monad.Logger (runNoLoggingT)
 import Database.Persist.Postgresql
 
 import Models
+import Utils (makeSqlPool)
 
 import qualified Database.Esqueleto.Experimental as E
 
@@ -17,7 +18,7 @@ main = do
 
 connectToPostgres :: IO ConnectionPool
 connectToPostgres =
-    runNoLoggingT $ createPostgresqlPool "dbname=sese-website" 1
+    runNoLoggingT $ makeSqlPool 1
 
 removeInactiveVariants :: SqlPersistT IO ()
 removeInactiveVariants = do
