@@ -320,6 +320,7 @@ stoneEdge = testGroup "StoneEdge Module"
     , qohReplaceTests
     , getProductsCountTests
     , downloadProdsTests
+    , invUpdateTests
     ]
   where
     errorTests :: TestTree
@@ -661,6 +662,35 @@ stoneEdge = testGroup "StoneEdge Module"
                     }
                 ]
         in SEF.downloadProdsXml @=? renderDownloadProdsResponse (DownloadProdsResponse prods)
+
+    invUpdateTests :: TestTree
+    invUpdateTests = testGroup "InvUpdate SETI Function"
+        [ testCase "Form Parsing" invUpdateParsing
+        , testCase "Response Rendering - OK" invUpdateResponseOk
+        , testCase "Response Rendering - NotFound" invUpdateResponseNotFound
+        , testCase "Response Rendering - NotTracking" invUpdateResponseNotTracking
+        ]
+
+    invUpdateParsing :: Assertion
+    invUpdateParsing =
+        testFormParsing "setifunction=invupdate&setiuser=auser&password=pwd&code=mystore&update=sku1~5&omversion=5.000"
+            $ InvUpdateRequest "auser" "pwd" "mystore" ("sku1", 5) "5.000"
+
+    invUpdateResponseOk :: Assertion
+    invUpdateResponseOk =
+        renderInvUpdateResponse (InvUpdateResponse True "sku1" (Left 50) Nothing)
+            @?= "SETIResponse=OK;SKU=sku1;QOH=50;NOTE="
+
+    invUpdateResponseNotFound :: Assertion
+    invUpdateResponseNotFound =
+        renderInvUpdateResponse (InvUpdateResponse False "sku1" (Right NotFound) (Just "NotFound"))
+            @?= "SETIResponse=False;SKU=sku1;QOH=NF;NOTE=NotFound"
+
+    invUpdateResponseNotTracking :: Assertion
+    invUpdateResponseNotTracking =
+        renderInvUpdateResponse (InvUpdateResponse False "sku1" (Right NotAvailable) (Just "NotTracking"))
+            @?= "SETIResponse=False;SKU=sku1;QOH=NA;NOTE=NotTracking"
+
 
 routesStoneEdge :: TestTree
 routesStoneEdge = testGroup "Routes.StoneEdge Module"

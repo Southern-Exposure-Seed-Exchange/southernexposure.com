@@ -55,6 +55,10 @@ module StoneEdge
     , DownloadProdsRequest(..)
     , DownloadProdsResponse(..)
     , renderDownloadProdsResponse
+      -- Inventory Update
+    , InvUpdateRequest(..)
+    , InvUpdateResponse(..)
+    , renderInvUpdateResponse
       -- *** Order Download Sub-Types
     , StoneEdgeOrder(..)
     , renderStoneEdgeOrder
@@ -781,6 +785,7 @@ data SKUQOHUpdateStatus
     = Ok
     | NotAvailable
     | NotFound
+    deriving (Eq, Show, Read)
 
 renderSKUQOHUpdateStatus :: SKUQOHUpdateStatus -> T.Text
 renderSKUQOHUpdateStatus = \case
@@ -790,6 +795,7 @@ renderSKUQOHUpdateStatus = \case
 
 newtype QOHReplaceResponse = QOHReplaceResponse (NonEmpty (T.Text, SKUQOHUpdateStatus))
     -- ^ List of (SKU, Status) pairs indicating the result of the QOH update.
+    deriving (Eq, Show, Read)
 
 renderQOHReplaceResponse :: QOHReplaceResponse -> T.Text
 renderQOHReplaceResponse (QOHReplaceResponse updates) =
@@ -890,6 +896,53 @@ renderStoneEdgeProduct StoneEdgeProduct {..} =
             | (name, value) <- sepCustomFields
             ]
         ]
+
+-- Inventory Update
+
+data InvUpdateRequest = InvUpdateRequest
+    { iurUser :: T.Text
+    , iurPass :: T.Text
+    , iurStoreCode :: T.Text
+    , iurUpdate :: (T.Text, Integer) -- (sku, quantity)
+    , iurOMVersion :: T.Text
+    } deriving (Eq, Show, Read)
+
+instance FromForm InvUpdateRequest where
+    fromForm = matchFunction "invupdate" $ \f -> do
+        iurUser <- parseUnique "setiuser" f
+        iurPass <- parseUnique "password" f
+        iurStoreCode <- parseUnique "code" f
+        updateRaw <- parseUnique @T.Text "update" f
+        iurOMVersion <- parseUnique "omversion" f
+        case T.splitOn "~" updateRaw of
+            [sku, qtyStr] -> do
+                qty <- case readMaybe (T.unpack qtyStr) of
+                    Just q -> Right q
+                    Nothing -> Left $ "Could not parse quantity for SKU " <> sku <> ": " <> qtyStr
+                let iurUpdate = (sku, qty)
+                return InvUpdateRequest {..}
+            _ -> Left $ "Malformed update entry: " <> updateRaw
+
+instance HasStoneEdgeCredentials InvUpdateRequest where
+    userParam = iurUser
+    passwordParam = iurPass
+    storeCodeParam = iurStoreCode
+
+data InvUpdateResponse = InvUpdateResponse
+    { iruSuccess :: Bool
+    , iruSKU :: T.Text
+    , iruQOH :: Either Integer SKUQOHUpdateStatus
+    , iruNote :: Maybe T.Text
+    } deriving (Eq, Show, Read)
+
+renderInvUpdateResponse :: InvUpdateResponse -> T.Text
+renderInvUpdateResponse InvUpdateResponse {..} =
+    "SETIResponse=" <> bool "False" "OK" iruSuccess <>
+    ";SKU=" <> iruSKU <>
+    ";QOH=" <> (case iruQOH of
+        Left qoh -> T.pack (show qoh)
+        Right status -> renderSKUQOHUpdateStatus status
+    ) <> ";NOTE=" <> fromMaybe "" iruNote
 
 -- Utils
 
