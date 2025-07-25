@@ -874,6 +874,7 @@ data StoneEdgeProduct = StoneEdgeProduct
     , sepDescription :: Maybe T.Text
     , sepWeight :: Scientific
     , sepDiscontinued :: Bool
+    , sepQOH :: Integer
     , sepCustomFields :: [(T.Text, T.Text)]
     -- There are more fields in the specification, but we're using only these
     -- at the moment
@@ -888,6 +889,7 @@ renderStoneEdgeProduct StoneEdgeProduct {..} =
         , maybeXelemText "Description" sepDescription
         , xelemWithText "Weight" $ renderScientific sepWeight
         , xelemWithText "Discontinued" $ renderBoolAsYesNo sepDiscontinued
+        , xelemWithText "QOH" $ showText sepQOH
         , xelem "CustomFields" $ xelems
             [ xelem "CustomField" $ xelems
                 [ xelemWithText "FieldName" name

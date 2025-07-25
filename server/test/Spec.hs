@@ -607,6 +607,7 @@ stoneEdge = testGroup "StoneEdge Module"
                     , sepDescription = Just "test description"
                     , sepWeight = 10
                     , sepDiscontinued = False
+                    , sepQOH = 10
                     , sepCustomFields =
                         [ ("Organic", "False")
                         , ("Heirloom", "False")
@@ -619,6 +620,7 @@ stoneEdge = testGroup "StoneEdge Module"
                     , sepDescription = Nothing
                     , sepWeight = 0
                     , sepDiscontinued = False
+                    , sepQOH = 20
                     , sepCustomFields =
                         [ ("Organic", "True")
                         , ("Heirloom", "True")
@@ -631,6 +633,7 @@ stoneEdge = testGroup "StoneEdge Module"
                     , sepDescription = Nothing
                     , sepWeight = 0
                     , sepDiscontinued = False
+                    , sepQOH = 30
                     , sepCustomFields =
                         [ ("Organic", "True")
                         , ("Heirloom", "True")
@@ -643,6 +646,7 @@ stoneEdge = testGroup "StoneEdge Module"
                     , sepDescription = Nothing
                     , sepWeight = 0
                     , sepDiscontinued = True
+                    , sepQOH = 0
                     , sepCustomFields =
                         [ ("Organic", "True")
                         , ("Heirloom", "True")
@@ -655,6 +659,7 @@ stoneEdge = testGroup "StoneEdge Module"
                     , sepDescription = Nothing
                     , sepWeight = 0
                     , sepDiscontinued = False
+                    , sepQOH = 40
                     , sepCustomFields =
                         [ ("Organic", "True")
                         , ("Heirloom", "False")

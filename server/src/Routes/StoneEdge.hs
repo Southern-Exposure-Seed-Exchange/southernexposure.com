@@ -658,6 +658,7 @@ downloadProductsRoute DownloadProdsRequest {..} = runDB $ do
                     , sepPrice = price
                     , sepWeight = weight
                     , sepDiscontinued = not $ productVariantIsActive variant
+                    , sepQOH = fromIntegral $ productVariantQuantity variant
                     , sepCustomFields = customFields
                     }
 
