@@ -64,7 +64,7 @@ jobs:
           key: server-${{ hashFiles('server/package.yaml', 'server/stack.yaml', 'server/stack.yaml.lock') }}
       - name: Install Server Dependencies
         working-directory: server
-        run: stack build --ghc-options="-Werror -O1" --only-dependencies
+        run: stack build --ghc-options="-Werror -O1" --only-dependencies --test --no-run-tests
       - name: Build Server Project
         working-directory: server
         run: stack build --ghc-options="-Werror -O1" --test --no-run-tests
