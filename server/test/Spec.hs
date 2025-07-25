@@ -318,6 +318,8 @@ stoneEdge = testGroup "StoneEdge Module"
     , orderCountTests
     , downloadOrdersTests
     , qohReplaceTests
+    , getProductsCountTests
+    , downloadProdsTests
     ]
   where
     errorTests :: TestTree
@@ -570,6 +572,95 @@ stoneEdge = testGroup "StoneEdge Module"
     qohReplaceResponse =
         renderQOHReplaceResponse (QOHReplaceResponse $ ("sku1", Ok) :| [("sku2", NotAvailable), ("sku3", NotFound)])
             @?= "SETIResponse\nsku1=OK\nsku2=NA\nsku3=NF\nSETIEndOfData"
+
+    getProductsCountTests :: TestTree
+    getProductsCountTests = testGroup "GetProductsCount SETI Function"
+        [ testCase "Form Parsing" getProductsCountParsing
+        , testCase "Response Rendering" getProductsCountResponse
+        ]
+    getProductsCountParsing :: Assertion
+    getProductsCountParsing =
+        testFormParsing "setifunction=getproductscount&setiuser=auser&password=pwd&code=mystore&omversion=5.000"
+            $ GetProductsCountRequest "auser" "pwd" "mystore" "5.000"
+    getProductsCountResponse :: Assertion
+    getProductsCountResponse =
+        renderGetProductsCountResponse (GetProductsCountResponse 123)
+            @?= "SETIResponse: itemcount=123"
+
+    downloadProdsTests :: TestTree
+    downloadProdsTests = testGroup "DownloadProds SETI Function"
+        [ testCase "Form Parsing" downloadProdsParsing
+        , testCase "Response Rendering - With Products" downloadProdsResponse
+        ]
+    downloadProdsParsing :: Assertion
+    downloadProdsParsing =
+        testFormParsing "setifunction=downloadprods&setiuser=auser&password=pwd&code=mystore&startnum=1&batchsize=100&omversion=5.000"
+            $ DownloadProdsRequest "auser" "pwd" "mystore" (Just 1) (Just 100) "5.000"
+    downloadProdsResponse :: Assertion
+    downloadProdsResponse =
+        let prods =
+                [ StoneEdgeProduct
+                    { sepCode = "1"
+                    , sepName = "test"
+                    , sepPrice = 0
+                    , sepDescription = Just "test description"
+                    , sepWeight = 10
+                    , sepDiscontinued = False
+                    , sepCustomFields =
+                        [ ("Organic", "False")
+                        , ("Heirloom", "False")
+                        ]
+                    }
+                , StoneEdgeProduct
+                    { sepCode = "2"
+                    , sepName = "Non-free"
+                    , sepPrice = 5
+                    , sepDescription = Nothing
+                    , sepWeight = 0
+                    , sepDiscontinued = False
+                    , sepCustomFields =
+                        [ ("Organic", "True")
+                        , ("Heirloom", "True")
+                        ]
+                    }
+                , StoneEdgeProduct
+                    { sepCode = "2A"
+                    , sepName = "Non-free"
+                    , sepPrice = 6
+                    , sepDescription = Nothing
+                    , sepWeight = 0
+                    , sepDiscontinued = False
+                    , sepCustomFields =
+                        [ ("Organic", "True")
+                        , ("Heirloom", "True")
+                        ]
+                    }
+                , StoneEdgeProduct
+                    { sepCode = "2B"
+                    , sepName = "Non-free"
+                    , sepPrice = 7
+                    , sepDescription = Nothing
+                    , sepWeight = 0
+                    , sepDiscontinued = True
+                    , sepCustomFields =
+                        [ ("Organic", "True")
+                        , ("Heirloom", "True")
+                        ]
+                    }
+                , StoneEdgeProduct
+                    { sepCode = "3"
+                    , sepName = "Another product"
+                    , sepPrice = 10
+                    , sepDescription = Nothing
+                    , sepWeight = 0
+                    , sepDiscontinued = False
+                    , sepCustomFields =
+                        [ ("Organic", "True")
+                        , ("Heirloom", "False")
+                        ]
+                    }
+                ]
+        in SEF.downloadProdsXml @=? renderDownloadProdsResponse (DownloadProdsResponse prods)
 
 routesStoneEdge :: TestTree
 routesStoneEdge = testGroup "Routes.StoneEdge Module"

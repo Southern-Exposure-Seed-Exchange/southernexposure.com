@@ -169,7 +169,9 @@ renderMilligrams (Milligrams mg) =
         else
             t
 
-
+toGrams :: Milligrams -> Scientific
+toGrams (Milligrams mg) =
+    scientific (fromIntegral mg) (-3)
 
 -- LOT SIZES
 

@@ -50,8 +50,9 @@ import Config
 import Emails (EmailType(..))
 import Models
 import Models.Fields
-    ( Cents(..), mkCents, Country(..), Region(..), OrderStatus(..), LineItemType(..)
+    ( Cents(..), mkCents, Country(..), Region(..), OrderStatus(..), LineItemType(..), LotSize(..)
     , StripeChargeId(..), AdminOrderComment(..), renderLotSize, timesQuantity, sumPrices, plusCents, subtractCents
+    , toDollars, toGrams
     )
 import Helcim.API.Types.Payment (TransactionId(..))
 import Server
@@ -97,6 +98,10 @@ stoneEdgeRoutes = \case
         handle simpleError $ checkAuth rq >> USRs <$> updateStatusRoute rq
     QOHRq rq ->
         handle simpleError $ checkAuth rq >> QOHRs <$> qohReplaceRoute rq
+    GPCRq rq ->
+        handle simpleError $ checkAuth rq >> GPCRs <$> getProductsCountRoute rq
+    DPRq rq ->
+        handle (xmlError Products) $ checkAuth rq >> DPRs <$> downloadProductsRoute rq
     UnexpectedFunction function _ ->
         return . ErrorResponse $ "Integration has no support for function: " <> function
     InvalidRequest form ->
@@ -119,6 +124,8 @@ data StoneEdgeRequest
     | DORq DownloadOrdersRequest
     | USRq UpdateStatusRequest
     | QOHRq QOHReplaceRequest
+    | GPCRq GetProductsCountRequest
+    | DPRq DownloadProdsRequest
     | UnexpectedFunction Text Form
     | InvalidRequest Form
     deriving (Eq, Show)
@@ -136,6 +143,10 @@ instance FromForm StoneEdgeRequest where
             wrapError $ USRq <$> fromForm f
         Just "qohreplace" ->
             wrapError $ QOHRq <$> fromForm f
+        Just "getproductscount" ->
+            wrapError $ GPCRq <$> fromForm f
+        Just "downloadprods" ->
+            wrapError $ DPRq <$> fromForm f
         Just unexpected ->
             return $ UnexpectedFunction unexpected f
         Nothing ->
@@ -153,6 +164,8 @@ data StoneEdgeResponse
     | DORs DownloadOrdersResponse
     | USRs UpdateStatusResponse
     | QOHRs QOHReplaceResponse
+    | GPCRs GetProductsCountResponse
+    | DPRs DownloadProdsResponse
     | ErrorResponse Text
     | XmlErrorResponse TypeOfDownload Text
 
@@ -169,6 +182,10 @@ instance MimeRender PlainText StoneEdgeResponse where
             mimeRender pt $ renderUpdateStatusResponse resp
         QOHRs resp ->
             mimeRender pt $ renderQOHReplaceResponse resp
+        GPCRs resp ->
+            mimeRender pt $ renderGetProductsCountResponse resp
+        DPRs resp ->
+            LBS.fromStrict $ renderDownloadProdsResponse resp
         ErrorResponse errorMessage ->
             mimeRender pt $ renderSimpleSETIError errorMessage
         XmlErrorResponse type_ errorMessage ->
@@ -580,6 +597,61 @@ qohReplaceRoute QOHReplaceRequest {..} = runDB $ do
                 -- If the SKU was not found, we can choose to log it or ignore it.
 
     return $ QOHReplaceResponse updates
+
+-- Product Count
+
+getProductsCountRoute :: GetProductsCountRequest -> App GetProductsCountResponse
+getProductsCountRoute GetProductsCountRequest {} = do
+    -- Count the products in the database.
+    productCount :: [E.Value Int] <- runDB $ E.select $ do
+        _ <- E.from $ E.table @ProductVariant
+        return E.countRows
+    return $ GetProductsCountResponse $ fromIntegral $ E.unValue $ head productCount
+
+-- Download Products
+
+downloadProductsRoute :: DownloadProdsRequest -> App DownloadProdsResponse
+downloadProductsRoute DownloadProdsRequest {..} = runDB $ do
+    products <- E.select $ do
+        (p E.:& v E.:& sa) <- E.from $ E.table @Product
+            `E.innerJoin` E.table @ProductVariant
+                `E.on` (\(p E.:& v) -> v E.^. ProductVariantProductId E.==. p E.^. ProductId)
+            `E.leftJoin` E.table @SeedAttribute
+                `E.on` (\(p E.:& _ E.:& sa) -> sa E.?. SeedAttributeProductId E.==. E.just (p E.^. ProductId))
+        E.orderBy [E.asc $ v E.^. ProductVariantId]
+        E.offset (fromIntegral $ fromMaybe 1 dprStartNumber - 1)
+        E.limit (fromIntegral $ fromMaybe 100 dprBatchSize)
+        return (p, v, sa)
+    let stoneEdgeProducts = flip map products $ \(Entity _ p, Entity _ v, mbSa) ->
+            transformProduct (p, v, fmap E.entityVal mbSa)
+    return $ DownloadProdsResponse stoneEdgeProducts
+    where
+        transformProduct :: (Product, ProductVariant, Maybe SeedAttribute) -> StoneEdgeProduct
+        transformProduct (prod, variant, maybeSeedAttr) =
+            let price = toDollars $ productVariantPrice variant
+                weight = case productVariantLotSize variant of
+                    -- milligrams to grams
+                    Just (Mass mass) -> toGrams mass
+                    _ -> 0
+                customFields = case maybeSeedAttr of
+                    Nothing ->
+                        [ ("Organic", "False")
+                        , ("Heirloom", "False")
+                        ]
+                    Just sa ->
+                        [ ("Organic", T.pack $ show $ seedAttributeIsOrganic sa)
+                        , ("Heirloom", T.pack $ show $ seedAttributeIsHeirloom sa)
+                        ]
+            in
+                StoneEdgeProduct
+                    { sepCode = productBaseSku prod <> productVariantSkuSuffix variant
+                    , sepName = productName prod
+                    , sepDescription = Just $ T.strip $ productLongDescription prod
+                    , sepPrice = price
+                    , sepWeight = weight
+                    , sepDiscontinued = not $ productVariantIsActive variant
+                    , sepCustomFields = customFields
+                    }
 
 -- Utils
 
