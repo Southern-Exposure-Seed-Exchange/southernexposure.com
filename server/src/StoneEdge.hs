@@ -47,6 +47,10 @@ module StoneEdge
     , QOHReplaceResponse(..)
     , SKUQOHUpdateStatus(..)
     , renderQOHReplaceResponse
+      -- Product Count
+    , GetProductsCountRequest(..)
+    , GetProductsCountResponse(..)
+    , renderGetProductsCountResponse
       -- *** Order Download Sub-Types
     , StoneEdgeOrder(..)
     , renderStoneEdgeOrder
@@ -787,6 +791,36 @@ renderQOHReplaceResponse (QOHReplaceResponse updates) =
     where
         renderUpdate (sku, status) =
             sku <> "=" <> renderSKUQOHUpdateStatus status
+
+-- Product Count
+
+data GetProductsCountRequest
+    = GetProductsCountRequest
+        { gpcrUser :: T.Text
+        , gpcrPass :: T.Text
+        , gpcrStoreCode :: T.Text
+        , gpcrOMVersion :: T.Text
+        } deriving (Eq, Show, Read)
+
+instance FromForm GetProductsCountRequest where
+    fromForm = matchFunction "getproductscount" $ \f -> do
+        gpcrUser <- parseUnique "setiuser" f
+        gpcrPass <- parseUnique "password" f
+        gpcrStoreCode <- parseUnique "code" f
+        gpcrOMVersion <- parseUnique "omversion" f
+        return GetProductsCountRequest {..}
+
+instance HasStoneEdgeCredentials GetProductsCountRequest where
+    userParam = gpcrUser
+    passwordParam = gpcrPass
+    storeCodeParam = gpcrStoreCode
+
+newtype GetProductsCountResponse = GetProductsCountResponse { gpcrProductCount :: Integer }
+    deriving (Eq, Show, Read)
+
+renderGetProductsCountResponse :: GetProductsCountResponse -> T.Text
+renderGetProductsCountResponse GetProductsCountResponse {..} =
+    "SETIResponse: itemcount=" <> T.pack (show gpcrProductCount)
 
 -- Utils
 

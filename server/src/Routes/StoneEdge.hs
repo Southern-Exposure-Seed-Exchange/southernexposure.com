@@ -97,6 +97,8 @@ stoneEdgeRoutes = \case
         handle simpleError $ checkAuth rq >> USRs <$> updateStatusRoute rq
     QOHRq rq ->
         handle simpleError $ checkAuth rq >> QOHRs <$> qohReplaceRoute rq
+    GPCRq rq ->
+        handle simpleError $ checkAuth rq >> GPCRs <$> getProductsCountRoute rq
     UnexpectedFunction function _ ->
         return . ErrorResponse $ "Integration has no support for function: " <> function
     InvalidRequest form ->
@@ -119,6 +121,7 @@ data StoneEdgeRequest
     | DORq DownloadOrdersRequest
     | USRq UpdateStatusRequest
     | QOHRq QOHReplaceRequest
+    | GPCRq GetProductsCountRequest
     | UnexpectedFunction Text Form
     | InvalidRequest Form
     deriving (Eq, Show)
@@ -136,6 +139,8 @@ instance FromForm StoneEdgeRequest where
             wrapError $ USRq <$> fromForm f
         Just "qohreplace" ->
             wrapError $ QOHRq <$> fromForm f
+        Just "getproductscount" ->
+            wrapError $ GPCRq <$> fromForm f
         Just unexpected ->
             return $ UnexpectedFunction unexpected f
         Nothing ->
@@ -153,6 +158,7 @@ data StoneEdgeResponse
     | DORs DownloadOrdersResponse
     | USRs UpdateStatusResponse
     | QOHRs QOHReplaceResponse
+    | GPCRs GetProductsCountResponse
     | ErrorResponse Text
     | XmlErrorResponse TypeOfDownload Text
 
@@ -169,6 +175,8 @@ instance MimeRender PlainText StoneEdgeResponse where
             mimeRender pt $ renderUpdateStatusResponse resp
         QOHRs resp ->
             mimeRender pt $ renderQOHReplaceResponse resp
+        GPCRs resp ->
+            mimeRender pt $ renderGetProductsCountResponse resp
         ErrorResponse errorMessage ->
             mimeRender pt $ renderSimpleSETIError errorMessage
         XmlErrorResponse type_ errorMessage ->
@@ -580,6 +588,16 @@ qohReplaceRoute QOHReplaceRequest {..} = runDB $ do
                 -- If the SKU was not found, we can choose to log it or ignore it.
 
     return $ QOHReplaceResponse updates
+
+-- Product Count
+
+getProductsCountRoute :: GetProductsCountRequest -> App GetProductsCountResponse
+getProductsCountRoute GetProductsCountRequest {} = do
+    -- Count the products in the database.
+    productCount :: [E.Value Int] <- runDB $ E.select $ do
+        _ <- E.from $ E.table @ProductVariant
+        return E.countRows
+    return $ GetProductsCountResponse $ fromIntegral $ E.unValue $ head productCount
 
 -- Utils
 

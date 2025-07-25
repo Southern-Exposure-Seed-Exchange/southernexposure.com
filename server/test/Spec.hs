@@ -318,6 +318,7 @@ stoneEdge = testGroup "StoneEdge Module"
     , orderCountTests
     , downloadOrdersTests
     , qohReplaceTests
+    , getProductsCountTests
     ]
   where
     errorTests :: TestTree
@@ -570,6 +571,20 @@ stoneEdge = testGroup "StoneEdge Module"
     qohReplaceResponse =
         renderQOHReplaceResponse (QOHReplaceResponse $ ("sku1", Ok) :| [("sku2", NotAvailable), ("sku3", NotFound)])
             @?= "SETIResponse\nsku1=OK\nsku2=NA\nsku3=NF\nSETIEndOfData"
+
+    getProductsCountTests :: TestTree
+    getProductsCountTests = testGroup "GetProductsCount SETI Function"
+        [ testCase "Form Parsing" getProductsCountParsing
+        , testCase "Response Rendering" getProductsCountResponse
+        ]
+    getProductsCountParsing :: Assertion
+    getProductsCountParsing =
+        testFormParsing "setifunction=getproductscount&setiuser=auser&password=pwd&code=mystore&omversion=5.000"
+            $ GetProductsCountRequest "auser" "pwd" "mystore" "5.000"
+    getProductsCountResponse :: Assertion
+    getProductsCountResponse =
+        renderGetProductsCountResponse (GetProductsCountResponse 123)
+            @?= "SETIResponse: itemcount=123"
 
 routesStoneEdge :: TestTree
 routesStoneEdge = testGroup "Routes.StoneEdge Module"
