@@ -264,6 +264,7 @@ downloadProdsXml =
 <Description>test description</Description>
 <Weight>10.0</Weight>
 <Discontinued>No</Discontinued>
+<QOH>10</QOH>
 <CustomFields>
 <CustomField>
 <FieldName>Organic</FieldName>
@@ -281,6 +282,7 @@ downloadProdsXml =
 <Price>5.0</Price>
 <Weight>0.0</Weight>
 <Discontinued>No</Discontinued>
+<QOH>20</QOH>
 <CustomFields>
 <CustomField>
 <FieldName>Organic</FieldName>
@@ -298,6 +300,7 @@ downloadProdsXml =
 <Price>6.0</Price>
 <Weight>0.0</Weight>
 <Discontinued>No</Discontinued>
+<QOH>30</QOH>
 <CustomFields>
 <CustomField>
 <FieldName>Organic</FieldName>
@@ -315,6 +318,7 @@ downloadProdsXml =
 <Price>7.0</Price>
 <Weight>0.0</Weight>
 <Discontinued>Yes</Discontinued>
+<QOH>0</QOH>
 <CustomFields>
 <CustomField>
 <FieldName>Organic</FieldName>
@@ -332,6 +336,7 @@ downloadProdsXml =
 <Price>10.0</Price>
 <Weight>0.0</Weight>
 <Discontinued>No</Discontinued>
+<QOH>40</QOH>
 <CustomFields>
 <CustomField>
 <FieldName>Organic</FieldName>

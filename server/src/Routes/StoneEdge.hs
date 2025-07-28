@@ -102,6 +102,8 @@ stoneEdgeRoutes = \case
         handle simpleError $ checkAuth rq >> GPCRs <$> getProductsCountRoute rq
     DPRq rq ->
         handle (xmlError Products) $ checkAuth rq >> DPRs <$> downloadProductsRoute rq
+    IURq rq ->
+        handle simpleError $ checkAuth rq >> IURs <$> invUpdateRoute rq
     UnexpectedFunction function _ ->
         return . ErrorResponse $ "Integration has no support for function: " <> function
     InvalidRequest form ->
@@ -126,6 +128,7 @@ data StoneEdgeRequest
     | QOHRq QOHReplaceRequest
     | GPCRq GetProductsCountRequest
     | DPRq DownloadProdsRequest
+    | IURq InvUpdateRequest
     | UnexpectedFunction Text Form
     | InvalidRequest Form
     deriving (Eq, Show)
@@ -147,6 +150,8 @@ instance FromForm StoneEdgeRequest where
             wrapError $ GPCRq <$> fromForm f
         Just "downloadprods" ->
             wrapError $ DPRq <$> fromForm f
+        Just "invupdate" ->
+            wrapError $ IURq <$> fromForm f
         Just unexpected ->
             return $ UnexpectedFunction unexpected f
         Nothing ->
@@ -166,6 +171,7 @@ data StoneEdgeResponse
     | QOHRs QOHReplaceResponse
     | GPCRs GetProductsCountResponse
     | DPRs DownloadProdsResponse
+    | IURs InvUpdateResponse
     | ErrorResponse Text
     | XmlErrorResponse TypeOfDownload Text
 
@@ -186,6 +192,8 @@ instance MimeRender PlainText StoneEdgeResponse where
             mimeRender pt $ renderGetProductsCountResponse resp
         DPRs resp ->
             LBS.fromStrict $ renderDownloadProdsResponse resp
+        IURs resp ->
+            mimeRender pt $ renderInvUpdateResponse resp
         ErrorResponse errorMessage ->
             mimeRender pt $ renderSimpleSETIError errorMessage
         XmlErrorResponse type_ errorMessage ->
@@ -572,13 +580,13 @@ qohReplaceRoute QOHReplaceRequest {..} = runDB $ do
                 `E.on` (\(p E.:& fullSku) -> fullSku `E.like` E.concat_ [p E.^. ProductBaseSku, E.val "%"])
                 `E.innerJoin` E.table @ProductVariant
                 `E.on`
-                    (\(p E.:& fullSku E.:& pv) -> 
+                    (\(p E.:& fullSku E.:& pv) ->
                         (p E.^. ProductId E.==. pv E.^. ProductVariantProductId) E.&&.
                         (fullSku `E.like` E.concat_ [E.val "%", pv E.^. ProductVariantSkuSuffix])
                     )
         return (p E.^. ProductId, pv E.^. ProductVariantId, p E.^. ProductBaseSku, pv E.^. ProductVariantSkuSuffix)
     -- Build a map of found SKUs from candidates
-    let foundSkus = Map.fromList $ 
+    let foundSkus = Map.fromList $
             [ (baseSku <> variantSkuSuffix, productVariantId)
             | (_, E.Value productVariantId, E.Value baseSku, E.Value variantSkuSuffix) <- candidates
             ]
@@ -650,8 +658,41 @@ downloadProductsRoute DownloadProdsRequest {..} = runDB $ do
                     , sepPrice = price
                     , sepWeight = weight
                     , sepDiscontinued = not $ productVariantIsActive variant
+                    , sepQOH = fromIntegral $ productVariantQuantity variant
                     , sepCustomFields = customFields
                     }
+
+-- Inventory Update
+
+invUpdateRoute :: InvUpdateRequest -> App InvUpdateResponse
+invUpdateRoute InvUpdateRequest {..} = runDB $ do
+    let fullSKU = fst iurUpdate
+        qohUpdate = snd iurUpdate
+    productVariant <- fmap listToMaybe . E.select $ do
+        (p E.:& pv) <- E.from $ E.table @Product
+            `E.innerJoin` E.table @ProductVariant
+                `E.on` (\(p E.:& v) -> v E.^. ProductVariantProductId E.==. p E.^. ProductId)
+        E.where_ $ E.concat_ [ p E.^.ProductBaseSku, pv E.^. ProductVariantSkuSuffix ] E.==. E.val fullSKU
+        return pv
+    case productVariant of
+        Nothing ->
+            return InvUpdateResponse
+                { iruSuccess = False
+                , iruSKU = fullSKU
+                , iruQOH = Right NotFound
+                , iruNote = Just "NotFound"
+                }
+        Just (Entity pvId pv) -> do
+            let newQuantity = productVariantQuantity pv + fromIntegral qohUpdate
+            E.updateWhere
+                [ ProductVariantId ==. pvId ]
+                [ ProductVariantQuantity =. newQuantity ]
+            return InvUpdateResponse
+                { iruSuccess = True
+                , iruSKU = fullSKU
+                , iruQOH = Left $ fromIntegral newQuantity
+                , iruNote = Nothing
+                }
 
 -- Utils
 
