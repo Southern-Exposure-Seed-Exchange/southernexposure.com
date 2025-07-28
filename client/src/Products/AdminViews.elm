@@ -24,7 +24,7 @@ import Category exposing (CategoryId(..))
 import Dict
 import File exposing (File)
 import Html exposing (Html, a, br, button, div, fieldset, form, h3, hr, img, input, label, option, select, table, tbody, td, text, th, thead, tr)
-import Html.Attributes as A exposing (checked, class, for, id, name, required, selected, src, step, type_, value)
+import Html.Attributes as A exposing (checked, class, download, for, href, id, name, required, selected, src, step, type_, value)
 import Html.Events exposing (on, onCheck, onClick, onInput, onSubmit, targetValue)
 import Json.Decode as Decode exposing (Decoder)
 import Json.Decode.Pipeline as Decode
@@ -42,7 +42,7 @@ import Validation
 import Views.Admin as Admin
 import Views.HorizontalForm as Form
 import Views.Images exposing (media)
-import Views.Utils exposing (routeLinkAttributes, selectImageFile)
+import Views.Utils exposing (htmlOrBlank, routeLinkAttributes, selectImageFile)
 
 
 
@@ -205,7 +205,7 @@ updateNewForm key msg model =
 
 new : NewForm -> PageData.AdminSharedProductData -> AddressLocations -> List (Html NewMsg)
 new model data locations =
-    [ formView "Add Product" NewSubmit NewFormMsg model data locations
+    [ formView "Add Product" NewSubmit NewFormMsg model data locations Nothing
     ]
 
 
@@ -307,7 +307,7 @@ editForm : EditForm -> PageData.AdminSharedProductData -> AddressLocations -> Li
 editForm model productData locations =
     case model.productData of
         RemoteData.Success productForm ->
-            [ formView "Update Product" EditSubmit EditFormMsg productForm productData locations
+            [ formView "Update Product" EditSubmit EditFormMsg productForm productData locations model.id
             ]
 
         RemoteData.Failure error ->
@@ -758,8 +758,8 @@ validateVariant ({ lotSizeAmount } as variant) =
 
 {-| Render the form for updating/creating Products.
 -}
-formView : String -> msg -> (FormMsg -> msg) -> Form -> PageData.AdminSharedProductData -> AddressLocations -> Html msg
-formView buttonText submitMsg msgWrapper model { categories } locations =
+formView : String -> msg -> (FormMsg -> msg) -> Form -> PageData.AdminSharedProductData -> AddressLocations -> Maybe ProductId -> Html msg
+formView buttonText submitMsg msgWrapper model { categories } locations id =
     let
         inputRow s =
             Form.inputRow model.errors (s model)
@@ -810,6 +810,15 @@ formView buttonText submitMsg msgWrapper model { categories } locations =
                     , onClick AddVariant
                     ]
                     [ text "Add Variant" ]
+                , htmlOrBlank
+                    (\(ProductId i) -> a
+                        [ class "ml-3 btn btn-secondary"
+                        , type_ "button"
+                        , href ("/api/admin/products/export/" ++ String.fromInt i)
+                        , download ("product-" ++ String.fromInt i ++ "-export.csv")
+                        ]
+                        [ text "Export as CSV" ]
+                    ) id
                 ]
             ]
 
