@@ -321,6 +321,7 @@ stoneEdge = testGroup "StoneEdge Module"
     , getProductsCountTests
     , downloadProdsTests
     , invUpdateTests
+    , getCustomersCountTests
     ]
   where
     errorTests :: TestTree
@@ -695,6 +696,22 @@ stoneEdge = testGroup "StoneEdge Module"
     invUpdateResponseNotTracking =
         renderInvUpdateResponse (InvUpdateResponse False "sku1" (Right NotAvailable) (Just "NotTracking"))
             @?= "SETIResponse=False;SKU=sku1;QOH=NA;NOTE=NotTracking"
+
+    getCustomersCountTests :: TestTree
+    getCustomersCountTests = testGroup "GetCustomersCount SETI Function"
+        [ testCase "Form Parsing" getCustomersCountParsing
+        , testCase "Response Rendering" getCustomersCountResponse
+        ]
+
+    getCustomersCountParsing :: Assertion
+    getCustomersCountParsing =
+        testFormParsing "setifunction=getcustomerscount&setiuser=auser&password=pwd&code=mystore&omversion=5.000"
+            $ GetCustomersCountRequest "auser" "pwd" "mystore" "5.000"
+
+    getCustomersCountResponse :: Assertion
+    getCustomersCountResponse =
+        renderGetCustomersCountResponse (GetCustomersCountResponse 123)
+            @?= "SETIResponse: itemcount=123"
 
 
 routesStoneEdge :: TestTree

@@ -104,6 +104,8 @@ stoneEdgeRoutes = \case
         handle (xmlError Products) $ checkAuth rq >> DPRs <$> downloadProductsRoute rq
     IURq rq ->
         handle simpleError $ checkAuth rq >> IURs <$> invUpdateRoute rq
+    GCCRq rq ->
+        handle simpleError $ checkAuth rq >> GCCRs <$> getCustomersCountRoute rq
     UnexpectedFunction function _ ->
         return . ErrorResponse $ "Integration has no support for function: " <> function
     InvalidRequest form ->
@@ -129,6 +131,7 @@ data StoneEdgeRequest
     | GPCRq GetProductsCountRequest
     | DPRq DownloadProdsRequest
     | IURq InvUpdateRequest
+    | GCCRq GetCustomersCountRequest
     | UnexpectedFunction Text Form
     | InvalidRequest Form
     deriving (Eq, Show)
@@ -152,6 +155,8 @@ instance FromForm StoneEdgeRequest where
             wrapError $ DPRq <$> fromForm f
         Just "invupdate" ->
             wrapError $ IURq <$> fromForm f
+        Just "getcustomerscount" ->
+            wrapError $ GCCRq <$> fromForm f
         Just unexpected ->
             return $ UnexpectedFunction unexpected f
         Nothing ->
@@ -172,6 +177,7 @@ data StoneEdgeResponse
     | GPCRs GetProductsCountResponse
     | DPRs DownloadProdsResponse
     | IURs InvUpdateResponse
+    | GCCRs GetCustomersCountResponse
     | ErrorResponse Text
     | XmlErrorResponse TypeOfDownload Text
 
@@ -194,6 +200,8 @@ instance MimeRender PlainText StoneEdgeResponse where
             LBS.fromStrict $ renderDownloadProdsResponse resp
         IURs resp ->
             mimeRender pt $ renderInvUpdateResponse resp
+        GCCRs resp ->
+            mimeRender pt $ renderGetCustomersCountResponse resp
         ErrorResponse errorMessage ->
             mimeRender pt $ renderSimpleSETIError errorMessage
         XmlErrorResponse type_ errorMessage ->
@@ -693,6 +701,18 @@ invUpdateRoute InvUpdateRequest {..} = runDB $ do
                 , iruQOH = Left $ fromIntegral newQuantity
                 , iruNote = Nothing
                 }
+
+-- Customer Count
+
+getCustomersCountRoute :: GetCustomersCountRequest -> App GetCustomersCountResponse
+getCustomersCountRoute GetCustomersCountRequest {} = do
+    -- Count the customers in the database.
+    customerCount :: [E.Value Int] <- runDB $ E.select $ do
+        c <- E.from $ E.table @Customer
+        -- Exclude the "deleted" customer
+        E.where_ $ c E.^. CustomerEmail E.!=. E.val "gardens+deleted@southernexposure.com"
+        return E.countRows
+    return $ GetCustomersCountResponse $ fromIntegral $ E.unValue $ head customerCount
 
 -- Utils
 

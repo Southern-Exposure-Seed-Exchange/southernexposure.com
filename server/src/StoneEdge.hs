@@ -59,6 +59,10 @@ module StoneEdge
     , InvUpdateRequest(..)
     , InvUpdateResponse(..)
     , renderInvUpdateResponse
+      -- Customer Count
+    , GetCustomersCountRequest(..)
+    , GetCustomersCountResponse(..)
+    , renderGetCustomersCountResponse
       -- *** Order Download Sub-Types
     , StoneEdgeOrder(..)
     , renderStoneEdgeOrder
@@ -945,6 +949,36 @@ renderInvUpdateResponse InvUpdateResponse {..} =
         Left qoh -> T.pack (show qoh)
         Right status -> renderSKUQOHUpdateStatus status
     ) <> ";NOTE=" <> fromMaybe "" iruNote
+
+-- Customers Count
+
+data GetCustomersCountRequest
+    = GetCustomersCountRequest
+        { gccrUser :: T.Text
+        , gccrPass :: T.Text
+        , gccrStoreCode :: T.Text
+        , gccrOMVersion :: T.Text
+        } deriving (Eq, Show, Read)
+
+instance FromForm GetCustomersCountRequest where
+    fromForm = matchFunction "getcustomerscount" $ \f -> do
+        gccrUser <- parseUnique "setiuser" f
+        gccrPass <- parseUnique "password" f
+        gccrStoreCode <- parseUnique "code" f
+        gccrOMVersion <- parseUnique "omversion" f
+        return GetCustomersCountRequest {..}
+
+instance HasStoneEdgeCredentials GetCustomersCountRequest where
+    userParam = gccrUser
+    passwordParam = gccrPass
+    storeCodeParam = gccrStoreCode
+
+newtype GetCustomersCountResponse = GetCustomersCountResponse { gccrCustomerCount :: Integer }
+    deriving (Eq, Show, Read)
+
+renderGetCustomersCountResponse :: GetCustomersCountResponse -> T.Text
+renderGetCustomersCountResponse GetCustomersCountResponse {..} =
+    "SETIResponse: itemcount=" <> T.pack (show gccrCustomerCount)
 
 -- Utils
 
