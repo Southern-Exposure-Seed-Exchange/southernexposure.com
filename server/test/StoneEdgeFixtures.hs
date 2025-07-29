@@ -244,8 +244,8 @@ orderOtherDataXml =
 ><Comments
 >Long, Multiline
 Customer Comments</Comments
-><CustomerID
->9001</CustomerID
+><WebCustomerID
+>9001</WebCustomerID
 ></Other
 >|]
 

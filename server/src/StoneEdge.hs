@@ -600,7 +600,7 @@ renderStoneEdgeOtherData StoneEdgeOtherData {..} =
     xelem "Other" $ xelems
         [ maybeXelemText "OrderInstructions" seodOrderInstructions
         , maybeXelemText "Comments" seodComments
-        , maybeXelemTextWith "CustomerID" showText seodCustomerId
+        , maybeXelemTextWith "WebCustomerID" showText seodCustomerId
         ]
 
 
