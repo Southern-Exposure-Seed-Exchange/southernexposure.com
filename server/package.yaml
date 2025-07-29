@@ -53,6 +53,7 @@ dependencies:
     - blaze-markup
     - bytestring
     - ca-province-codes
+    - cassava
     - cereal
     - cereal-text
     - containers

@@ -1,5 +1,6 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TupleSections #-}
@@ -12,6 +13,7 @@ module Routes.Admin.Products
 import Control.Monad (forM_, unless)
 import Control.Monad.Reader (liftIO, lift)
 import Data.Aeson ((.=), (.:), (.:?), ToJSON(..), FromJSON(..), Value(Object), object, withObject)
+import Data.Csv (DefaultOrdered(..), ToNamedRecord(..), encodeDefaultOrderedByName, namedRecord)
 import Data.Maybe (mapMaybe, listToMaybe, fromMaybe)
 import Data.Text.Encoding (encodeUtf8)
 import Data.Time (UTCTime, getCurrentTime)
@@ -19,7 +21,10 @@ import Database.Persist
     ( (==.), (=.), Entity(..), SelectOpt(Asc), selectList, selectFirst
     , insert, insertMany_, insert_, update, get, getBy, deleteWhere, delete
     )
-import Servant ((:<|>)(..), (:>), AuthProtect, ReqBody, Capture, Get, Post, JSON, err404)
+import Network.HTTP.Media ((//), (/:))
+import Servant
+    ( (:<|>)(..), (:>), Accept(..), AuthProtect, ReqBody, Capture, Get , MimeRender(..), Post, JSON, err404
+    )
 
 import Auth (WrappedAuthToken, Cookied, withAdminCookie, validateAdminAndParameters)
 import Models
@@ -27,7 +32,7 @@ import Models
     , SeedAttribute(..), Category(..), CategoryId, Unique(..), slugify
     , ProductToCategory(..)
     )
-import Models.Fields (LotSize, Cents, Region)
+import Models.Fields (LotSize(..), Cents, Milligrams, Region, formatCents, toGrams)
 import Routes.CommonData
     ( AdminCategorySelect, makeAdminCategorySelects, validateCategorySelect
     , getAdditionalCategories
@@ -37,6 +42,8 @@ import Server (App, AppSQL, runDB, serverError)
 import Validation (Validation(validators))
 
 import qualified Data.ByteString as BS
+import qualified Data.ByteString.Lazy as LBS
+import qualified Data.Csv as CSV
 import qualified Data.Text as T
 import qualified Data.List as L
 import qualified Data.Map.Strict as M
@@ -50,6 +57,7 @@ type ProductAPI =
     :<|> "new" :> NewProductRoute
     :<|> "edit" :> EditProductDataRoute
     :<|> "edit" :> EditProductRoute
+    :<|> "export" :> ExportProductRoute
 
 type ProductRoutes =
          (WrappedAuthToken -> App (Cookied ProductListData))
@@ -57,6 +65,7 @@ type ProductRoutes =
     :<|> (WrappedAuthToken -> ProductParameters -> App (Cookied ProductId))
     :<|> (WrappedAuthToken -> ProductId -> App (Cookied EditProductData))
     :<|> (WrappedAuthToken -> EditProductParameters -> App (Cookied ProductId))
+    :<|> (WrappedAuthToken -> ProductId -> App (Cookied LBS.ByteString))
 
 productRoutes :: ProductRoutes
 productRoutes =
@@ -65,6 +74,7 @@ productRoutes =
     :<|> newProductRoute
     :<|> editProductDataRoute
     :<|> editProductRoute
+    :<|> exportProductRoute
 
 
 -- LIST
@@ -496,6 +506,115 @@ editProductRoute = validateAdminAndParameters $ \_ EditProductParameters {..} ->
                         deleteWhere [CartItemProductVariantId ==. variantId]
     return eppId
 
+-- EXPORT
+
+data CSV
+
+instance Accept CSV where
+    contentType _ = "text" // "csv" /: ("charset", "utf-8")
+
+instance MimeRender CSV LBS.ByteString where
+    mimeRender _ = id
+
+data ProductExportData = ProductExportData
+    { pedSku :: T.Text
+    , pedName :: T.Text
+    , pedPrice :: Cents
+    , pedLotSize :: Maybe LotSize
+    , pedDescription :: T.Text
+    , pedDiscontinued :: Bool
+    , pedQOH :: Int
+    , pedCategory :: T.Text
+    , pedOrganic :: Bool
+    , pedHeirloom :: Bool
+    , pedSmallGrower :: Bool
+    , pedRegional :: Bool
+    }
+
+instance ToNamedRecord ProductExportData where
+    toNamedRecord ProductExportData {..} =
+        namedRecord
+            [ "sku" CSV..= pedSku
+            , "name" CSV..= pedName
+            , "price" CSV..= formatCents pedPrice
+            , "weight" CSV..= CSV.toField (toGrams <$> lotSizeToWeight pedLotSize)
+            , "description" CSV..= pedDescription
+            , "discontinued" CSV..= show pedDiscontinued
+            , "qoh" CSV..= pedQOH
+            , "category" CSV..= pedCategory
+            , "organic" CSV..= boolSeedAttributeToField pedOrganic
+            , "heirloom" CSV..= boolSeedAttributeToField pedHeirloom
+            , "small grower" CSV..= boolSeedAttributeToField pedSmallGrower
+            , "regional" CSV..= boolSeedAttributeToField pedRegional
+            ]
+        where
+            boolSeedAttributeToField :: Bool -> String
+            boolSeedAttributeToField = show
+
+            lotSizeToWeight :: Maybe LotSize -> Maybe Milligrams
+            lotSizeToWeight = \case
+                Just (Mass m) -> Just m
+                Just (Bulbs _) -> Nothing
+                Just (Slips _) -> Nothing
+                Just (Plugs _) -> Nothing
+                Just (CustomLotSize _) -> Nothing
+                Nothing -> Nothing
+
+instance DefaultOrdered ProductExportData where
+    headerOrder _ = CSV.header
+        [ "sku"
+        , "name"
+        , "price"
+        , "weight"
+        , "description"
+        , "discontinued"
+        , "qoh"
+        , "category"
+        , "organic"
+        , "heirloom"
+        , "small grower"
+        , "regional"
+        ]
+
+type ExportProductRoute =
+       AuthProtect "cookie-auth"
+    :> Capture "id" ProductId
+    :> Get '[CSV] (Cookied LBS.ByteString)
+
+exportProductRoute :: WrappedAuthToken -> ProductId -> App (Cookied LBS.ByteString)
+exportProductRoute t productId = withAdminCookie t $ \_ -> runDB $ do
+    products <- E.select $ do
+        (p E.:& v E.:& c E.:& sa) <- E.from $ E.table @Product
+            `E.innerJoin` E.table @ProductVariant
+                `E.on` (\(p E.:& v) -> v E.^. ProductVariantProductId E.==. p E.^. ProductId)
+            `E.innerJoin` E.table @Category
+                `E.on` (\(p E.:& _ E.:& c) -> c E.^. CategoryId E.==. p E.^. ProductMainCategory)
+            `E.leftJoin` E.table @ SeedAttribute
+                `E.on` (\(p E.:& _ E.:& _ E.:& sa) ->
+                    sa E.?. SeedAttributeProductId E.==. E.just (p E.^. ProductId))
+        E.where_ $ p E.^. ProductId E.==. E.val productId
+        return (p, v, c, sa)
+    return $ productExportData products
+
+productExportData :: [(Entity Product, Entity ProductVariant, Entity Category, Maybe (Entity SeedAttribute))] -> LBS.ByteString
+productExportData productData =
+    encodeDefaultOrderedByName $ map toProductExportData productData
+    where
+        toProductExportData (Entity _ Product {..}, Entity _ ProductVariant {..}, Entity _ Category {..}, maybeSeedAttr) =
+            ProductExportData
+                { pedSku = productBaseSku <> productVariantSkuSuffix
+                , pedName = productName
+                , pedPrice = productVariantPrice
+                , pedLotSize = productVariantLotSize
+                , pedDescription = productLongDescription
+                , pedDiscontinued = not productVariantIsActive
+                , pedQOH = fromIntegral productVariantQuantity
+                , pedCategory = categoryName
+                , pedOrganic = maybe False (seedAttributeIsOrganic . E.entityVal) maybeSeedAttr
+                , pedHeirloom = maybe False (seedAttributeIsHeirloom . E.entityVal) maybeSeedAttr
+                , pedSmallGrower = maybe False (seedAttributeIsSmallGrower . E.entityVal) maybeSeedAttr
+                , pedRegional = maybe False (seedAttributeIsRegional . E.entityVal) maybeSeedAttr
+                }
 
 -- UTILS
 
