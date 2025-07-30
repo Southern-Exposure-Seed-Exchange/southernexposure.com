@@ -302,3 +302,15 @@ executables:
             - sese-website
             - monad-logger
             - persistent-postgresql
+
+    map-customers:
+        main: MapCustomers.hs
+        <<: *script-defaults
+        other-modules: []
+        dependencies:
+            - cassava
+            - sese-website
+            - monad-logger
+            - persistent-postgresql
+            - vector
+

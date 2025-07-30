@@ -39,5 +39,8 @@ cradle:
     - path: "./scripts/UpdateProductPrices.hs"
       component: "sese-website:exe:update-product-prices"
 
+    - path: "./scripts/MapCustomers.hs"
+      component: "sese-website:exe:map-customers"
+
     - path: "./test"
       component: "sese-website:test:sese-website-test"
