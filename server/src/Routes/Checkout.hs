@@ -780,6 +780,12 @@ anonymousPlaceOrderRoute remoteHost forwardedFor realIP = validate >=> \paramete
                 shippingParam
             maybeBillingAddress = fromAddressData Billing customerId
                 <$> billingParam
+
+        -- When customer with the same email makes multiple "anonymous" orders, we should
+        -- mark all previous addresses (shipping and billing) as non-default.
+        updateWhere [ AddressCustomerId ==. customerId, AddressType ==. Shipping ] [ AddressIsDefault =. False ]
+        when (isJust maybeBillingAddress) $ updateWhere [ AddressCustomerId ==. customerId, AddressType ==. Billing ] [ AddressIsDefault =. False ]
+
         shippingId <- insert shippingAddress
         billingId <- mapM insert maybeBillingAddress
         let shippingEntity = Entity shippingId shippingAddress
