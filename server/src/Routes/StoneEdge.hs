@@ -50,11 +50,12 @@ import Config
 import Emails (EmailType(..))
 import Models
 import Models.Fields
-    ( Cents(..), mkCents, Country(..), Region(..), OrderStatus(..), LineItemType(..), LotSize(..)
-    , StripeChargeId(..), AdminOrderComment(..), renderLotSize, timesQuantity, sumPrices, plusCents, subtractCents
+    ( AddressType(..), Cents(..), mkCents, Country(..), Region(..), OrderStatus(..), LineItemType(..), LotSize(..)
+    , StripeChargeId(..), AdminOrderComment(..), regionCode, renderLotSize, timesQuantity, sumPrices, plusCents, subtractCents
     , toDollars, toGrams
     )
 import Helcim.API.Types.Payment (TransactionId(..))
+import Routes.Utils (deletedEmail)
 import Server
 import StoneEdge
 import Workers (Task(..), enqueueTask)
@@ -106,6 +107,8 @@ stoneEdgeRoutes = \case
         handle simpleError $ checkAuth rq >> IURs <$> invUpdateRoute rq
     GCCRq rq ->
         handle simpleError $ checkAuth rq >> GCCRs <$> getCustomersCountRoute rq
+    DCRq rq ->
+        handle (xmlError Customers) $ checkAuth rq >> DCRs <$> downloadCustomersRoute rq
     UnexpectedFunction function _ ->
         return . ErrorResponse $ "Integration has no support for function: " <> function
     InvalidRequest form ->
@@ -132,6 +135,7 @@ data StoneEdgeRequest
     | DPRq DownloadProdsRequest
     | IURq InvUpdateRequest
     | GCCRq GetCustomersCountRequest
+    | DCRq DownloadCustomersRequest
     | UnexpectedFunction Text Form
     | InvalidRequest Form
     deriving (Eq, Show)
@@ -157,6 +161,8 @@ instance FromForm StoneEdgeRequest where
             wrapError $ IURq <$> fromForm f
         Just "getcustomerscount" ->
             wrapError $ GCCRq <$> fromForm f
+        Just "downloadcustomers" ->
+            wrapError $ DCRq <$> fromForm f
         Just unexpected ->
             return $ UnexpectedFunction unexpected f
         Nothing ->
@@ -178,6 +184,7 @@ data StoneEdgeResponse
     | DPRs DownloadProdsResponse
     | IURs InvUpdateResponse
     | GCCRs GetCustomersCountResponse
+    | DCRs DownloadCustomersResponse
     | ErrorResponse Text
     | XmlErrorResponse TypeOfDownload Text
 
@@ -202,6 +209,8 @@ instance MimeRender PlainText StoneEdgeResponse where
             mimeRender pt $ renderInvUpdateResponse resp
         GCCRs resp ->
             mimeRender pt $ renderGetCustomersCountResponse resp
+        DCRs resp ->
+            LBS.fromStrict $ renderDownloadCustomersResponse resp
         ErrorResponse errorMessage ->
             mimeRender pt $ renderSimpleSETIError errorMessage
         XmlErrorResponse type_ errorMessage ->
@@ -585,12 +594,12 @@ qohReplaceRoute QOHReplaceRequest {..} = runDB $ do
         (p E.:& _ E.:& pv) <- E.from $
             E.table @Product
                 `E.innerJoin` E.values (fmap (\(sku, _) -> E.val sku) qrrUpdates)
-                `E.on` (\(p E.:& fullSku) -> fullSku `E.like` E.concat_ [p E.^. ProductBaseSku, E.val "%"])
+                `E.on` (\(p E.:& fullSku) -> fullSku `E.like` E.concat_ [p E.^. ProductBaseSku, (E.%)])
                 `E.innerJoin` E.table @ProductVariant
                 `E.on`
                     (\(p E.:& fullSku E.:& pv) ->
                         (p E.^. ProductId E.==. pv E.^. ProductVariantProductId) E.&&.
-                        (fullSku `E.like` E.concat_ [E.val "%", pv E.^. ProductVariantSkuSuffix])
+                        (fullSku `E.like` E.concat_ [(E.%), pv E.^. ProductVariantSkuSuffix])
                     )
         return (p E.^. ProductId, pv E.^. ProductVariantId, p E.^. ProductBaseSku, pv E.^. ProductVariantSkuSuffix)
     -- Build a map of found SKUs from candidates
@@ -710,9 +719,108 @@ getCustomersCountRoute GetCustomersCountRequest {} = do
     customerCount :: [E.Value Int] <- runDB $ E.select $ do
         c <- E.from $ E.table @Customer
         -- Exclude the "deleted" customer
-        E.where_ $ c E.^. CustomerEmail E.!=. E.val "gardens+deleted@southernexposure.com"
+        E.where_ $ c E.^. CustomerEmail E.!=. E.val deletedEmail
         return E.countRows
     return $ GetCustomersCountResponse $ fromIntegral $ E.unValue $ head customerCount
+
+-- Download Customers
+
+downloadCustomersRoute :: DownloadCustomersRequest -> App DownloadCustomersResponse
+downloadCustomersRoute DownloadCustomersRequest {..} = runDB $ do
+    customers <- E.select $ do
+        (c E.:& sa E.:& ba) <- E.from $ E.table @Customer
+            `E.innerJoin` E.table @Address
+                `E.on`
+                    (\(c E.:& sa) ->
+                        sa E.^. AddressType E.==. E.val Shipping E.&&.
+                        sa E.^. AddressIsDefault E.==. E.val True E.&&.
+                        -- For some reason a single user may have multiple default shipping addresses.
+                        -- it's not clear why, but we're picking the one with the highest ID since we
+                        -- assume that the highest ID is the most recent.
+                        E.just (E.just (sa E.^. AddressId)) E.==. E.subSelect (do
+                            a <- E.from $ E.table @Address
+                            E.where_ $ a E.^. AddressCustomerId E.==. c E.^. CustomerId
+                            E.where_ $ a E.^. AddressType E.==. E.val Shipping
+                            E.where_ $ a E.^. AddressIsDefault E.==. E.val True
+                            return $ E.max_ (a E.^. AddressId)
+                        )
+                    )
+            `E.leftJoin` E.table @Address
+                `E.on`
+                    (\(c E.:& _ E.:& ba) ->
+                        ba E.?. AddressType E.==. E.val (Just Billing) E.&&.
+                        ba E.?. AddressIsDefault E.==. E.val (Just True) E.&&.
+                        -- For some reason a single user may have multiple default billing addresses.
+                        -- it's not clear why, but we're picking the one with the highest ID since we
+                        -- assume that the highest ID is the most recent.
+                        E.just (ba E.?. AddressId) E.==. E.subSelect (do
+                            a <- E.from $ E.table @Address
+                            E.where_ $ a E.^. AddressCustomerId E.==. c E.^. CustomerId
+                            E.where_ $ a E.^. AddressType E.==. E.val Billing
+                            E.where_ $ a E.^. AddressIsDefault E.==. E.val True
+                            return $ E.max_ (a E.^. AddressId)
+                        )
+                    )
+        E.where_ $ c E.^. CustomerEmail E.!=. E.val deletedEmail
+        E.orderBy [E.asc $ c E.^. CustomerId]
+        E.offset (fromIntegral $ fromMaybe 1 dcrStartNumber - 1)
+        E.limit (fromIntegral $ fromMaybe 100 dcrBatchSize)
+
+        return (c, sa, ba)
+    let stoneEdgeCustomers = map transformCustomer customers
+    return $ DownloadCustomersResponse stoneEdgeCustomers
+    where
+        transformCustomer :: (Entity Customer, Entity Address, Maybe (Entity Address)) -> StoneEdgeCustomer
+        transformCustomer (Entity customerId customer, Entity _ shipping, maybeBilling) =
+            StoneEdgeCustomer
+                { secWebID = Just . fromIntegral . fromSqlKey $ customerId
+                , secUserName = Nothing
+                , secuPassword = Nothing
+                , secAffiliateId = Nothing
+                , secBillAddr = maybe
+                    (toStoneEdgeCustomerBillingAddress customer shipping)
+                    (toStoneEdgeCustomerBillingAddress customer . entityVal)
+                    maybeBilling
+                , secShipAddr = toStoneEdgeCustomerShippingAddress customer shipping
+                , secCustomFields = []
+                }
+        transformAddress :: Address -> StoneEdgeCustomerAddress
+        transformAddress addr =
+            StoneEdgeCustomerAddress
+                { secaAddr1 = addressAddressOne addr
+                , secaAddr2 = nothingIfNull $ addressAddressTwo addr
+                , secaCity = addressCity addr
+                , secaState = regionCode $ addressState addr
+                , secaZip = addressZipCode addr
+                , secaCountry = T.pack . show . fromCountry $ addressCountry addr
+                }
+        toStoneEdgeCustomerBillingAddress :: Customer -> Address -> StoneEdgeCustomerBillingAddress
+        toStoneEdgeCustomerBillingAddress customer addr =
+            StoneEdgeCustomerBillingAddress
+                { secbaNamePrefix = Nothing
+                , secbaFirstName = addressFirstName addr
+                , secbaMiddleName = Nothing
+                , secbaLastName = addressLastName addr
+                , secbaNameSuffix = Nothing
+                , secbaCompany = nothingIfNull $ addressCompanyName addr
+                , secbaPhone = Just $ addressPhoneNumber addr
+                , secbaEmail = Just $ customerEmail customer
+                , secbaTaxId = Nothing
+                , secbaAddress = transformAddress addr
+                }
+        toStoneEdgeCustomerShippingAddress :: Customer -> Address -> StoneEdgeCustomerShippingAddress
+        toStoneEdgeCustomerShippingAddress customer addr =
+            StoneEdgeCustomerShippingAddress
+                { secsaNamePrefix = Nothing
+                , secsaFirstName = addressFirstName addr
+                , secsaMiddleName = Nothing
+                , secsaLastName = addressLastName addr
+                , secsaNameSuffix = Nothing
+                , secsaCompany = nothingIfNull $ addressCompanyName addr
+                , secsaPhone = Just $ addressPhoneNumber addr
+                , secsaEmail = Just $ customerEmail customer
+                , secsaAddress = transformAddress addr
+                }
 
 -- Utils
 

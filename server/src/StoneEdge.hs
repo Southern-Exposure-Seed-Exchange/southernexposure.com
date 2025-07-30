@@ -63,6 +63,10 @@ module StoneEdge
     , GetCustomersCountRequest(..)
     , GetCustomersCountResponse(..)
     , renderGetCustomersCountResponse
+      -- Download Customers
+    , DownloadCustomersRequest(..)
+    , DownloadCustomersResponse(..)
+    , renderDownloadCustomersResponse
       -- *** Order Download Sub-Types
     , StoneEdgeOrder(..)
     , renderStoneEdgeOrder
@@ -101,6 +105,12 @@ module StoneEdge
     , StoneEdgeTrackData(..)
       -- Product Download Sub-Types
     , StoneEdgeProduct(..)
+      -- Customer Download Sub-Types
+    , StoneEdgeCustomer(..)
+    , renderStoneEdgeCustomer
+    , StoneEdgeCustomerBillingAddress(..)
+    , StoneEdgeCustomerShippingAddress(..)
+    , StoneEdgeCustomerAddress(..)
     ) where
 
 import Data.Bool (bool)
@@ -979,6 +989,143 @@ newtype GetCustomersCountResponse = GetCustomersCountResponse { gccrCustomerCoun
 renderGetCustomersCountResponse :: GetCustomersCountResponse -> T.Text
 renderGetCustomersCountResponse GetCustomersCountResponse {..} =
     "SETIResponse: itemcount=" <> T.pack (show gccrCustomerCount)
+
+-- Download Customers
+
+data DownloadCustomersRequest = DownloadCustomersRequest
+    { dcrUser :: T.Text
+    , dcrPass :: T.Text
+    , dcrStoreCode :: T.Text
+    , dcrStartNumber :: Maybe Integer
+    , dcrBatchSize :: Maybe Integer
+    , dcrOMVersion :: T.Text
+    } deriving (Eq, Show, Read)
+
+instance FromForm DownloadCustomersRequest where
+    fromForm = matchFunction "downloadcustomers" $ \f -> do
+        dcrUser <- parseUnique "setiuser" f
+        dcrPass <- parseUnique "password" f
+        dcrStoreCode <- parseUnique "code" f
+        dcrStartNumber <- parseMaybe "startnum" f
+        dcrBatchSize <- parseMaybe "batchsize" f
+        dcrOMVersion <- parseUnique "omversion" f
+        return DownloadCustomersRequest {..}
+
+instance HasStoneEdgeCredentials DownloadCustomersRequest where
+    userParam = dcrUser
+    passwordParam = dcrPass
+    storeCodeParam = dcrStoreCode
+
+newtype DownloadCustomersResponse = DownloadCustomersResponse
+    { dcrCustomers :: [StoneEdgeCustomer]
+    } deriving (Eq, Show, Read)
+
+renderDownloadCustomersResponse :: DownloadCustomersResponse -> BS.ByteString
+renderDownloadCustomersResponse (DownloadCustomersResponse customers) =
+    renderXmlSETIResponse Customers 1 "Success" . xelems $ map renderStoneEdgeCustomer customers
+
+data StoneEdgeCustomer = StoneEdgeCustomer
+    { secWebID :: Maybe Integer
+    , secUserName :: Maybe T.Text
+    , secuPassword :: Maybe T.Text
+    , secAffiliateId :: Maybe T.Text
+    , secBillAddr :: StoneEdgeCustomerBillingAddress
+    , secShipAddr :: StoneEdgeCustomerShippingAddress
+    , secCustomFields :: [(T.Text, T.Text)]
+    } deriving (Eq, Show, Read)
+
+renderStoneEdgeCustomer :: StoneEdgeCustomer -> Xml Elem
+renderStoneEdgeCustomer StoneEdgeCustomer {..} =
+    xelem "Customer" $ xelems
+        [ maybe xempty (xelemWithText "WebID" . showText) secWebID
+        , maybe xempty (xelemWithText "UserName") secUserName
+        , maybe xempty (xelemWithText "Password") secuPassword
+        , maybe xempty (xelemWithText "AffiliateID") secAffiliateId
+        , renderStoneEdgeCustomerBillingAddress secBillAddr
+        , renderStoneEdgeCustomerShippingAddress secShipAddr
+        , xelem "CustomFields" $ xelems
+            [ xelem "CustomField" $ xelems
+                [ xelemWithText "FieldName" name
+                , xelemWithText "FieldValue" value
+                ]
+            | (name, value) <- secCustomFields
+            ]
+        ]
+
+data StoneEdgeCustomerBillingAddress = StoneEdgeCustomerBillingAddress
+    { secbaNamePrefix :: Maybe T.Text
+    , secbaFirstName :: T.Text
+    , secbaMiddleName :: Maybe T.Text
+    , secbaLastName :: T.Text
+    , secbaNameSuffix :: Maybe T.Text
+    , secbaCompany :: Maybe T.Text
+    , secbaPhone :: Maybe T.Text
+    , secbaEmail :: Maybe T.Text
+    , secbaTaxId :: Maybe T.Text
+    , secbaAddress :: StoneEdgeCustomerAddress
+    } deriving (Eq, Show, Read)
+
+renderStoneEdgeCustomerBillingAddress :: StoneEdgeCustomerBillingAddress -> Xml Elem
+renderStoneEdgeCustomerBillingAddress StoneEdgeCustomerBillingAddress {..} =
+    xelem "BillAddr" $ xelems
+        [ maybeXelemText "NamePrefix" secbaNamePrefix
+        , xelemWithText "FirstName" secbaFirstName
+        , maybeXelemText "MiddleName" secbaMiddleName
+        , xelemWithText "LastName" secbaLastName
+        , maybeXelemText "NameSuffix" secbaNameSuffix
+        , maybeXelemText "Company" secbaCompany
+        , maybeXelemText "Phone" secbaPhone
+        , maybeXelemText "Email" secbaEmail
+        , maybeXelemText "TaxID" secbaTaxId
+        , renderStoneEdgeCustomerAddress secbaAddress
+        ]
+
+data StoneEdgeCustomerShippingAddress = StoneEdgeCustomerShippingAddress
+    { secsaNamePrefix :: Maybe T.Text
+    , secsaFirstName :: T.Text
+    , secsaMiddleName :: Maybe T.Text
+    , secsaLastName :: T.Text
+    , secsaNameSuffix :: Maybe T.Text
+    , secsaCompany :: Maybe T.Text
+    , secsaPhone :: Maybe T.Text
+    , secsaEmail :: Maybe T.Text
+    , secsaAddress :: StoneEdgeCustomerAddress
+    } deriving (Eq, Show, Read)
+
+renderStoneEdgeCustomerShippingAddress :: StoneEdgeCustomerShippingAddress -> Xml Elem
+renderStoneEdgeCustomerShippingAddress StoneEdgeCustomerShippingAddress {..} =
+    xelem "ShipAddr" $ xelems
+        [ maybeXelemText "NamePrefix" secsaNamePrefix
+        , xelemWithText "FirstName" secsaFirstName
+        , maybeXelemText "MiddleName" secsaMiddleName
+        , xelemWithText "LastName" secsaLastName
+        , maybeXelemText "NameSuffix" secsaNameSuffix
+        , maybeXelemText "Company" secsaCompany
+        , maybeXelemText "Phone" secsaPhone
+        , maybeXelemText "Email" secsaEmail
+        , renderStoneEdgeCustomerAddress secsaAddress
+        ]
+
+data StoneEdgeCustomerAddress = StoneEdgeCustomerAddress
+    { secaAddr1 :: T.Text
+    , secaAddr2 :: Maybe T.Text
+    , secaCity :: T.Text
+    , secaState :: T.Text
+    -- ^ 2 Characters
+    , secaZip :: T.Text
+    , secaCountry :: T.Text
+    } deriving (Eq, Show, Read)
+
+renderStoneEdgeCustomerAddress :: StoneEdgeCustomerAddress -> Xml Elem
+renderStoneEdgeCustomerAddress StoneEdgeCustomerAddress {..} =
+    xelem "Address" $ xelems
+        [ xelemWithText "Addr1" secaAddr1
+        , maybe xempty (xelemWithText "Addr2") secaAddr2
+        , xelemWithText "City" secaCity
+        , xelemWithText "State" secaState
+        , xelemWithText "Zip" secaZip
+        , xelemWithText "Country" secaCountry
+        ]
 
 -- Utils
 

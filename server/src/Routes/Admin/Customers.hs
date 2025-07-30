@@ -33,7 +33,7 @@ import Models
     )
 import Models.Fields (Cents, StripeCustomerId, OrderStatus, AvalaraCustomerCode, mkCents)
 import Routes.CommonData (AddressData, toAddressData)
-import Routes.Utils (extractRowCount, buildWhereQuery, hashPassword, generateUniqueToken, mapUpdate)
+import Routes.Utils (deletedEmail, extractRowCount, buildWhereQuery, hashPassword, generateUniqueToken, mapUpdate)
 import Server (App, AppSQL, runDB, serverError)
 import Validation (Validation(..))
 
@@ -382,12 +382,12 @@ type CustomerDeleteRoute =
 -- models.
 customerDeleteRoute :: WrappedAuthToken -> CustomerId -> App (Cookied ())
 customerDeleteRoute t customerId = withAdminCookie t $ \_ -> runDB $ do
-    newCustomerId <- getBy (UniqueEmail "gardens+deleted@southernexposure.com") >>= \case
+    newCustomerId <- getBy (UniqueEmail deletedEmail) >>= \case
         Nothing -> do
             hashedPassword <- generateRandomPassword
             token <- generateUniqueToken UniqueToken
             insert Customer
-                { customerEmail = "gardens+deleted@southernexposure.com"
+                { customerEmail = deletedEmail
                 , customerStoreCredit = mkCents 0
                 , customerMemberNumber = ""
                 , customerEncryptedPassword = Just hashedPassword

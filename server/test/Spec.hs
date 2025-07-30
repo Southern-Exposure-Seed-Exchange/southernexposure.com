@@ -322,6 +322,7 @@ stoneEdge = testGroup "StoneEdge Module"
     , downloadProdsTests
     , invUpdateTests
     , getCustomersCountTests
+    , downloadCustomersTests
     ]
   where
     errorTests :: TestTree
@@ -713,6 +714,60 @@ stoneEdge = testGroup "StoneEdge Module"
         renderGetCustomersCountResponse (GetCustomersCountResponse 123)
             @?= "SETIResponse: itemcount=123"
 
+    downloadCustomersTests :: TestTree
+    downloadCustomersTests = testGroup "DownloadCustomers SETI Function"
+        [ testCase "Form Parsing" downloadCustomersParsing
+        , testCase "Response Rendering - With Customers" downloadCustomersResponse
+        ]
+
+    downloadCustomersParsing :: Assertion
+    downloadCustomersParsing =
+        testFormParsing "setifunction=downloadcustomers&setiuser=auser&password=pwd&code=mystore&startnum=1&batchsize=100&omversion=5.000"
+            $ DownloadCustomersRequest "auser" "pwd" "mystore" (Just 1) (Just 100) "5.000"
+
+    downloadCustomersResponse :: Assertion
+    downloadCustomersResponse =
+        let addr = StoneEdgeCustomerAddress
+                { secaAddr1 = "One Valley Square"
+                , secaAddr2 = Just "Suite 130"
+                , secaCity = "Blue Bell"
+                , secaState = "PA"
+                , secaZip = "19422"
+                , secaCountry = "US"
+                }
+            customers =
+                [ StoneEdgeCustomer
+                    { secWebID = Just 12548
+                    , secUserName = Just "kevin"
+                    , secuPassword = Just "xyz123"
+                    , secAffiliateId = Nothing
+                    , secBillAddr = StoneEdgeCustomerBillingAddress
+                        { secbaNamePrefix = Just "Mr."
+                        , secbaFirstName = "John"
+                        , secbaMiddleName = Nothing
+                        , secbaLastName = "Doe"
+                        , secbaNameSuffix = Nothing
+                        , secbaCompany = Just "Stone Edge"
+                        , secbaPhone = Just "215-641-1837"
+                        , secbaEmail = Just "john@stoneedge.com"
+                        , secbaTaxId = Just "123456789"
+                        , secbaAddress = addr
+                        }
+                    , secShipAddr = StoneEdgeCustomerShippingAddress
+                        { secsaNamePrefix = Just "Mr."
+                        , secsaFirstName = "John"
+                        , secsaMiddleName = Nothing
+                        , secsaLastName = "Doe"
+                        , secsaNameSuffix = Nothing
+                        , secsaCompany = Just "Stone Edge"
+                        , secsaPhone = Just "215-641-1837"
+                        , secsaEmail = Just "jdoe@stoneedge.com"
+                        , secsaAddress = addr
+                        }
+                    , secCustomFields = [("Nickname", "jdoe")]
+                    }
+                ]
+        in SEF.downloadCustomersXml @=? renderDownloadCustomersResponse (DownloadCustomersResponse customers)
 
 routesStoneEdge :: TestTree
 routesStoneEdge = testGroup "Routes.StoneEdge Module"
