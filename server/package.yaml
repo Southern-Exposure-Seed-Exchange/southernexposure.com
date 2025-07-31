@@ -78,6 +78,7 @@ dependencies:
     - network
     - pandoc
     - persistent
+    - persistent-migration
     - persistent-postgresql
     - persistent-template
     - pureMD5
@@ -146,6 +147,7 @@ tests:
             - tasty
             - tasty-hedgehog
             - tasty-hunit
+            - testcontainers
             - hedgehog
             - HUnit
             - raw-strings-qq

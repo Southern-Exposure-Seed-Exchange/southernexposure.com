@@ -11,7 +11,7 @@ import Control.Concurrent.STM (newTVarIO, writeTVar, atomically)
 import Control.Exception (Exception(..), SomeException)
 import Control.Immortal.Queue (processImmortalQueue, closeImmortalQueue)
 import Control.Monad (when, forever, void, forM_)
-import Control.Monad.IO.Class (MonadIO)
+import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.Logger (MonadLoggerIO, runNoLoggingT, runStderrLoggingT)
 import Data.Aeson (Result(..), fromJSON)
 import Data.Maybe (fromMaybe, mapMaybe)
@@ -155,7 +155,7 @@ main = do
             let action :: (MonadIO m, MonadLoggerIO m, MonadUnliftIO m) => m ConnectionPool
                 action = do
                     pool <- makeSqlPool $ poolSize env
-                    runSqlPool (runMigration migrateAll) pool
+                    liftIO $ runSqlPool runMigrations pool
                     return pool
             case env of
                 Production -> runNoLoggingT action

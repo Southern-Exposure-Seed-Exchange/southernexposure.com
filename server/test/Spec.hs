@@ -1,26 +1,35 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE TypeFamilies #-}
 -- TODO: Split into ModuleNameSpec.hs files & Gen.hs file.
+import Control.Monad.Logger (runNoLoggingT)
 import Data.Aeson (Result(Success), FromJSON, fromJSON, ToJSON(..), eitherDecode)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LBS
 import Data.Int (Int64)
 import Data.List.NonEmpty (NonEmpty(..))
 import Data.Ratio ((%))
-import Data.Text (Text)
-import Data.Text.Encoding (decodeUtf8)
+import Data.Text (Text, pack)
+import Data.Text.Lazy (isInfixOf)
+import Data.Text.Encoding (decodeUtf8, encodeUtf8)
 import Data.Time
     ( UTCTime(..), LocalTime(..), TimeOfDay(..), Day(..), DiffTime
     , secondsToDiffTime, getCurrentTime, fromGregorian
     )
-import Database.Persist.Sql (Entity(..), ToBackendKey, SqlBackend, toSqlKey)
+import Database.Persist.Postgresql (createPostgresqlPool)
+import Database.Persist.Sql (Entity(..), ToBackendKey, SqlBackend, runSqlPool, toSqlKey)
 import Hedgehog
 import qualified Hedgehog.Gen as Gen
 import qualified Hedgehog.Range as Range
 import Test.Tasty
 import Test.Tasty.Hedgehog
 import Test.Tasty.HUnit hiding (assert)
+import TestContainers.Tasty
+    ( MonadDocker, Pipe(Stderr), containerAddress, containerRequest, fromTag, run, setEnv, setExpose
+    , setSuffixedName, setWaitingFor, waitForLogLine, withContainers, (&),
+    )
+
 import Text.XML.Generator (Xml, Elem, doc, defaultDocInfo, xrender)
 import Web.FormUrlEncoded (FromForm(..), urlDecodeForm, fromEntriesByKey)
 
@@ -49,6 +58,7 @@ tests =
          , routesStoneEdge
          , avalara
          , routesAdminShipping
+         , databaseMigrations
          ]
 
 
@@ -982,7 +992,19 @@ routesAdminShipping = testGroup "Routes.Admin.ShippingMethods Module"
             <*> Gen.integral (Range.linear 1 1000)
             <*> Gen.bool
 
+-- Database migrations
 
+databaseMigrations :: TestTree
+databaseMigrations = withContainers setupPostgresContainer $ \connString ->
+    testGroup "Database Migrations"
+        [ testCase "Migration over empty DB is successful" (migrationOverEmptyDB connString)
+        ]
+    where
+        migrationOverEmptyDB :: IO BS.ByteString -> Assertion
+        migrationOverEmptyDB connString = do
+            connStr <- connString
+            conn <- runNoLoggingT $ createPostgresqlPool connStr 1
+            runSqlPool runMigrations conn
 
 -- UTILITIES
 
@@ -1142,3 +1164,27 @@ genSaleType =
         [ FlatSale <$> genCents
         , PercentSale <$> genWholePercentage
         ]
+
+setupPostgresContainer :: MonadDocker m => m BS.ByteString
+setupPostgresContainer = do
+    let
+        pgImage = fromTag "postgres:16"
+        pgUser = "postgres"
+        pgPassword = "postgres"
+        pgDbName = "postgres"
+        container = containerRequest pgImage
+            & setSuffixedName "postgres-test"
+            & setEnv [("POSTGRES_USER", pgUser), ("POSTGRES_PASSWORD", pgPassword), ("POSTGRES_DB", pgDbName)]
+            & setExpose [5432]
+            & setWaitingFor (waitForLogLine Stderr ("database system is ready to accept connections" `isInfixOf`))
+    postgresContainer <- run container
+    let (ip, port) = containerAddress postgresContainer 5432
+        connString :: BS.ByteString
+        connString = encodeUtf8 $
+            "host=" <> ip <>
+            " port=" <> pack (show port) <>
+            " user=" <> pgUser <>
+            " password=" <> pgPassword <>
+            " dbname=" <> pgDbName
+
+    return connString
