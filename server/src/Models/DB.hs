@@ -8,6 +8,7 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE DataKinds #-}
 
@@ -15,10 +16,16 @@
 
 module Models.DB where
 
-import Control.Monad.IO.Class (MonadIO)
+import Control.Monad.IO.Class (MonadIO(..))
 import Data.Int (Int64)
 import Data.Time.Clock (UTCTime)
-import Database.Persist.Sql (SqlPersistT, Entity(..), selectList, insertEntity, delete, replace)
+import Database.Persist.Migration
+    ( Column(..), ColumnProp(..), MigrateSql(..), Migration, MigrationPath(..), Operation(..), SqlType(..), TableConstraint(..)
+    , checkMigration, (~>)
+    )
+import qualified Database.Persist.Migration as Migration (defaultSettings)
+import Database.Persist.Migration.Postgres (runMigration)
+import Database.Persist.Sql (PersistField(..), SqlPersistT, Entity(..), selectList, insertEntity, delete, replace)
 import Database.Persist.TH
 
 import Models.Fields
@@ -162,7 +169,7 @@ ShippingMethod
     excludedPriorityCategoryIds [CategoryId]
     isActive Bool
     priority Int64
-    isPriorityEnabled Bool default=True
+    isPriorityEnabled Bool default=true
 
 
 Coupon
@@ -304,3 +311,408 @@ updateSettings newValue =
             mapM_ (delete . entityKey) rest
                 >> replace settingsId newValue
                 >> return (Entity settingsId newValue)
+
+-- Migrations
+
+runMigrations :: SqlPersistT IO ()
+runMigrations = do
+    runMigration Migration.defaultSettings migrations
+    checkMigration migrateAll
+
+migrations :: Migration
+migrations =
+    [ 0 ~> 1 :=
+        -- Initial migration to create the DB schema as of '38f3ccffba4dafab9b6028db878305c9f27a402c' revision.
+        [ CreateTable
+            { name = "category"
+            , schema =
+                [ Column "id" SqlInt64 [NotNull, AutoIncrement]
+                , Column "name" SqlString [NotNull]
+                , Column "slug" SqlString [NotNull]
+                , Column "parent_id" SqlInt64 [References ("category", "id")]
+                , Column "description" SqlString [NotNull]
+                , Column "image_url" SqlString [NotNull]
+                , Column "order" SqlInt64 [NotNull]
+                , Column "updated_at" SqlDayTime [NotNull]
+                ]
+            , constraints =
+                [ PrimaryKey ["id"]
+                , Unique "unique_category_slug" ["slug"]
+                ]
+            }
+        , CreateTable
+            { name = "product"
+            , schema =
+                [ Column "id" SqlInt64 [NotNull, AutoIncrement]
+                , Column "name" SqlString [NotNull]
+                , Column "slug" SqlString [NotNull]
+                , Column "main_category" SqlInt64 [References ("category", "id"), NotNull]
+                , Column "base_sku" SqlString [NotNull]
+                , Column "short_description" SqlString [NotNull]
+                , Column "long_description" SqlString [NotNull]
+                , Column "image_url" SqlString [NotNull]
+                , Column "created_at" SqlDayTime [NotNull]
+                , Column "updated_at" SqlDayTime [NotNull]
+                , Column "keywords" SqlString [NotNull, Default $ toPersistValue ("" :: T.Text)]
+                , Column "shipping_restrictions" SqlString [NotNull, Default $ toPersistValue ("[]" :: T.Text)]
+                ]
+            , constraints =
+                [ PrimaryKey ["id"]
+                , Unique "unique_product_slug" ["slug"]
+                , Unique "unique_base_sku" ["base_sku"]
+                ]
+            }
+        , CreateTable
+            { name = "product_variant"
+            , schema =
+                [ Column "id" SqlInt64 [NotNull, AutoIncrement]
+                , Column "product_id" SqlInt64 [References ("product", "id"), NotNull]
+                , Column "sku_suffix" SqlString [NotNull]
+                , Column "price" SqlInt64 [NotNull]
+                , Column "quantity" SqlInt64 [NotNull]
+                , Column "lot_size" SqlString []
+                , Column "is_active" SqlBool [NotNull]
+                ]
+            , constraints =
+                [ PrimaryKey ["id"]
+                , Unique "unique_sku" ["product_id", "sku_suffix"]
+                ]
+            }
+        , CreateTable
+            { name = "seed_attribute"
+            , schema =
+                [ Column "id" SqlInt64 [NotNull, AutoIncrement]
+                , Column "product_id" SqlInt64 [References ("product", "id"), NotNull]
+                , Column "is_organic" SqlBool [NotNull]
+                , Column "is_heirloom" SqlBool [NotNull]
+                , Column "is_small_grower" SqlBool [NotNull]
+                , Column "is_regional" SqlBool [NotNull]
+                ]
+            , constraints =
+                [ PrimaryKey ["id"]
+                , Unique "unique_attribute" ["product_id"]
+                ]
+            }
+        , CreateTable
+            { name = "product_to_category"
+            , schema =
+                [ Column "id" SqlInt64 [NotNull, AutoIncrement]
+                , Column "product_id" SqlInt64 [References ("product", "id"), NotNull]
+                , Column "category_id" SqlInt64 [References ("category", "id"), NotNull]
+                ]
+            , constraints =
+                [ PrimaryKey ["id"]
+                , Unique "unique_product_category" ["product_id", "category_id"]
+                ]
+            }
+        , CreateTable
+            { name = "page"
+            , schema =
+                [ Column "id" SqlInt64 [NotNull, AutoIncrement]
+                , Column "name" SqlString [NotNull]
+                , Column "slug" SqlString [NotNull]
+                , Column "content" SqlString [NotNull]
+                , Column "updated_at" SqlDayTime [NotNull]
+                ]
+            , constraints =
+                [ PrimaryKey ["id"]
+                , Unique "unique_page_slug" ["slug"]
+                ]
+            }
+        , CreateTable
+            { name = "customer"
+            , schema =
+                [ Column "id" SqlInt64 [NotNull, AutoIncrement]
+                , Column "email" SqlString [NotNull]
+                , Column "store_credit" SqlInt64 [NotNull]
+                , Column "member_number" SqlString [NotNull]
+                , Column "encrypted_password" SqlString []
+                , Column "auth_token" SqlString [NotNull]
+                , Column "stripe_id" SqlString []
+                , Column "helcim_customer_id" SqlInt64 []
+                , Column "avalara_code" SqlString []
+                , Column "is_admin" SqlBool [NotNull, Default $ toPersistValue False]
+                , Column "verified" SqlBool [NotNull, Default $ toPersistValue True]
+                ]
+            , constraints =
+                [ PrimaryKey ["id"]
+                , Unique "unique_token" ["auth_token"]
+                , Unique "unique_avalara_customer" ["avalara_code"]
+                , Unique "unique_email" ["email"]
+                ]
+            }
+        , CreateTable
+            { name = "verification"
+            , schema =
+                [ Column "id" SqlInt64 [NotNull, AutoIncrement]
+                , Column "code" SqlString [NotNull]
+                , Column "customer_id" SqlInt64 [References ("customer", "id"), NotNull]
+                , Column "created_at" SqlDayTime [NotNull]
+                ]
+            , constraints =
+                [ PrimaryKey ["id"]
+                , Unique "unique_verification_code" ["code"]
+                , Unique "unique_customer_to_verify" ["customer_id"]
+                ]
+            }
+        -- persistent-migration doesn't support non-default 'ON DELETE *' 'ON UPDATE *' for foreign keys,
+        -- so we need to manually set it
+        , RawOperation "" $ return
+            [MigrateSql "ALTER TABLE \"verification\" DROP CONSTRAINT \"verification_customer_id_fkey\"" []]
+        , RawOperation "" $ return
+            [MigrateSql "ALTER TABLE \"verification\" ADD CONSTRAINT \"verification_customer_id_fkey\" FOREIGN KEY(\"customer_id\") REFERENCES \"customer\"(\"id\") ON DELETE CASCADE  ON UPDATE RESTRICT" []]
+        , CreateTable
+            { name = "password_reset"
+            , schema =
+                [ Column "id" SqlInt64 [NotNull, AutoIncrement]
+                , Column "customer_id" SqlInt64 [References ("customer", "id"), NotNull]
+                , Column "expiration_time" SqlDayTime [NotNull]
+                , Column "code" SqlString [NotNull]
+                ]
+            , constraints =
+                [ PrimaryKey ["id"]
+                , Unique "unique_password_reset" ["customer_id"]
+                , Unique "unique_reset_code" ["code"]
+                ]
+            }
+        , CreateTable
+            { name = "review"
+            , schema =
+                [ Column "id" SqlInt64 [NotNull, AutoIncrement]
+                , Column "customer_id" SqlInt64 [References ("customer", "id"), NotNull]
+                , Column "variant_id" SqlInt64 [References ("product_variant", "id"), NotNull]
+                , Column "customer_name" SqlString [NotNull]
+                , Column "rating" SqlInt64 [NotNull]
+                , Column "content" SqlString [NotNull]
+                , Column "is_approved" SqlBool [NotNull]
+                , Column "created_at" SqlDayTime [NotNull]
+                ]
+            , constraints =
+                [ PrimaryKey ["id"]
+                ]
+            }
+        , CreateTable
+            { name = "cart"
+            , schema =
+                [ Column "id" SqlInt64 [NotNull, AutoIncrement]
+                , Column "customer_id" SqlInt64 [References ("customer", "id")]
+                , Column "session_token" SqlString []
+                , Column "expiration_time" SqlDayTime []
+                ]
+            , constraints =
+                [ PrimaryKey ["id"]
+                , Unique "unique_customer_cart" ["customer_id"]
+                , Unique "unique_anonymous_cart" ["session_token"]
+                ]
+            }
+        , CreateTable
+            { name = "cart_item"
+            , schema =
+                [ Column "id" SqlInt64 [NotNull, AutoIncrement]
+                , Column "cart_id" SqlInt64 [References ("cart", "id"), NotNull]
+                , Column "product_variant_id" SqlInt64 [References ("product_variant", "id"), NotNull]
+                , Column "quantity" SqlInt64 [NotNull]
+                ]
+            , constraints =
+                [ PrimaryKey ["id"]
+                , Unique "unique_cart_item" ["cart_id", "product_variant_id"]
+                ]
+            }
+        , CreateTable
+            { name = "surcharge"
+            , schema =
+                [ Column "id" SqlInt64 [NotNull, AutoIncrement]
+                , Column "description" SqlString [NotNull]
+                , Column "single_fee" SqlInt64 [NotNull]
+                , Column "multiple_fee" SqlInt64 [NotNull]
+                , Column "category_ids" SqlString [NotNull]
+                , Column "is_active" SqlBool [NotNull]
+                ]
+            , constraints =
+                [ PrimaryKey ["id"]
+                , Unique "unique_surcharge" ["description"]
+                ]
+            }
+        , CreateTable
+            { name = "shipping_method"
+            , schema =
+                [ Column "id" SqlInt64 [NotNull, AutoIncrement]
+                , Column "description" SqlString [NotNull]
+                , Column "countries" SqlString [NotNull]
+                , Column "rates" SqlString [NotNull]
+                , Column "priority_rate" SqlString [NotNull]
+                , Column "category_ids" SqlString [NotNull]
+                , Column "excluded_priority_category_ids" SqlString [NotNull]
+                , Column "is_active" SqlBool [NotNull]
+                , Column "priority" SqlInt64 [NotNull]
+                , Column "is_priority_enabled" SqlBool [NotNull, Default $ toPersistValue True]
+                ]
+            , constraints =
+                [ PrimaryKey ["id"]
+                ]
+            }
+        , CreateTable
+            { name = "coupon"
+            , schema =
+                [ Column "id" SqlInt64 [NotNull, AutoIncrement]
+                , Column "code" SqlString [NotNull]
+                , Column "name" SqlString [NotNull]
+                , Column "description" SqlString [NotNull]
+                , Column "is_active" SqlBool [NotNull]
+                , Column "discount" SqlString [NotNull]
+                , Column "minimum_order" SqlInt64 [NotNull]
+                , Column "expiration_date" SqlDayTime [NotNull]
+                , Column "total_uses" SqlInt64 [NotNull]
+                , Column "uses_per_customer" SqlInt64 [NotNull]
+                , Column "created_at" SqlDayTime [NotNull]
+                ]
+            , constraints =
+                [ PrimaryKey ["id"]
+                , Unique "unique_coupon" ["code"]
+                ]
+            }
+        , CreateTable
+            { name = "address"
+            , schema =
+                [ Column "id" SqlInt64 [NotNull, AutoIncrement]
+                , Column "first_name" SqlString [NotNull]
+                , Column "last_name" SqlString [NotNull]
+                , Column "company_name" SqlString [NotNull]
+                , Column "address_one" SqlString [NotNull]
+                , Column "address_two" SqlString [NotNull]
+                , Column "city" SqlString [NotNull]
+                , Column "state" SqlString [NotNull]
+                , Column "zip_code" SqlString [NotNull]
+                , Column "country" SqlString [NotNull]
+                , Column "phone_number" SqlString [NotNull]
+                , Column "type" SqlString [NotNull]
+                , Column "customer_id" SqlInt64 [References ("customer", "id"), NotNull]
+                , Column "is_active" SqlBool [NotNull]
+                , Column "is_default" SqlBool [NotNull]
+                ]
+            , constraints =
+                [ PrimaryKey ["id"]
+                ]
+            }
+        , CreateTable
+            { name = "order"
+            , schema =
+                [ Column "id" SqlInt64 [NotNull, AutoIncrement]
+                , Column "customer_id" SqlInt64 [References ("customer", "id"), NotNull]
+                , Column "guest_token" SqlString []
+                , Column "status" SqlString [NotNull]
+                , Column "stone_edge_status" SqlString []
+                , Column "billing_address_id" SqlInt64 [References ("address", "id")]
+                , Column "shipping_address_id" SqlInt64 [References ("address", "id"), NotNull]
+                , Column "customer_comment" SqlString [NotNull]
+                , Column "admin_comments" SqlString [NotNull]
+                , Column "coupon_id" SqlInt64 [References ("coupon", "id")]
+                , Column "stripe_charge_id" SqlString []
+                , Column "stripe_last_four" SqlString []
+                , Column "stripe_issuer" SqlString []
+                , Column "helcim_transaction_id" SqlInt64 []
+                , Column "helcim_card_number" SqlString []
+                , Column "helcim_card_type" SqlString []
+                , Column "avalara_transaction_code" SqlString []
+                , Column "created_at" SqlDayTime [NotNull]
+                ]
+            , constraints =
+                [ PrimaryKey ["id"]
+                , Unique "unique_guest_token" ["guest_token"] -- NB: two NULL values are not considered equal
+                ]
+            }
+        , CreateTable
+            { name = "order_line_item"
+            , schema =
+                [ Column "id" SqlInt64 [NotNull, AutoIncrement]
+                , Column "order_id" SqlInt64 [References ("order", "id"), NotNull]
+                , Column "type" SqlString [NotNull]
+                , Column "description" SqlString [NotNull]
+                , Column "amount" SqlInt64 [NotNull]
+                ]
+            , constraints =
+                [ PrimaryKey ["id"]
+                ]
+            }
+        , CreateTable
+            { name = "order_product"
+            , schema =
+                [ Column "id" SqlInt64 [NotNull, AutoIncrement]
+                , Column "order_id" SqlInt64 [References ("order", "id"), NotNull]
+                , Column "product_variant_id" SqlInt64 [References ("product_variant", "id"), NotNull]
+                , Column "quantity" SqlInt64 [NotNull]
+                , Column "price" SqlInt64 [NotNull]
+                ]
+            , constraints =
+                [ PrimaryKey ["id"]
+                , Unique "unique_order_product" ["order_id", "product_variant_id"]
+                ]
+            }
+        , CreateTable
+            { name = "order_delivery"
+            , schema =
+                [ Column "id" SqlInt64 [NotNull, AutoIncrement]
+                , Column "order_id" SqlInt64 [References ("order", "id"), NotNull]
+                , Column "track_number" SqlString [NotNull]
+                , Column "track_carrier" SqlString [NotNull]
+                , Column "track_pickup_date" SqlString [NotNull]
+                ]
+            , constraints =
+                [ PrimaryKey ["id"]
+                , Unique "unique_order_delivery" ["order_id", "track_number", "track_carrier"]
+                ]
+            }
+        , CreateTable
+            { name = "product_sale"
+            , schema =
+                [ Column "id" SqlInt64 [NotNull, AutoIncrement]
+                , Column "price" SqlInt64 [NotNull]
+                , Column "product_variant_id" SqlInt64 [References ("product_variant", "id"), NotNull]
+                , Column "start_date" SqlDayTime [NotNull]
+                , Column "end_date" SqlDayTime [NotNull]
+                ]
+            , constraints =
+                [ PrimaryKey ["id"]
+                ]
+            }
+        , CreateTable
+            { name = "category_sale"
+            , schema =
+                [ Column "id" SqlInt64 [NotNull, AutoIncrement]
+                , Column "name" SqlString [NotNull]
+                , Column "type" SqlString [NotNull]
+                , Column "start_date" SqlDayTime [NotNull]
+                , Column "end_date" SqlDayTime [NotNull]
+                , Column "category_ids" SqlString [NotNull]
+                ]
+            , constraints =
+                [ PrimaryKey ["id"]
+                ]
+            }
+        , CreateTable
+            { name = "job"
+            , schema =
+                [ Column "id" SqlInt64 [NotNull, AutoIncrement]
+                , Column "action" (SqlOther "JSONB") [NotNull]
+                , Column "queued_at" SqlDayTime [NotNull]
+                , Column "run_at" SqlDayTime []
+                , Column "retries" SqlInt64 [NotNull]
+                ]
+            , constraints =
+                [ PrimaryKey ["id"]
+                ]
+            }
+        , CreateTable
+            { name = "settings"
+            , schema =
+                [ Column "id" SqlInt64 [NotNull, AutoIncrement]
+                , Column "disable_checkout" SqlBool [NotNull]
+                , Column "disabled_checkout_message" SqlString [NotNull]
+                , Column "order_placed_email_message" SqlString [NotNull, Default $ toPersistValue ("" :: T.Text)]
+                ]
+            , constraints =
+                [ PrimaryKey ["id"]
+                ]
+            }
+        ]
+    ]

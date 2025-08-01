@@ -18,6 +18,20 @@ packages:
       size: 635
   original:
     hackage: cereal-time-0.1.0.0@sha256:2ad5cb0e7bdd0fa8b6cbdfcfe6b9259efb2a188e33c3ce039155d63edda51ffc,1604
+- completed:
+    hackage: persistent-migration-0.3.0@sha256:1b28e22c2eeff694eed6835299b3a80104772d5d2262e6dbfa5c47d9e7594f59,3433
+    pantry-tree:
+      sha256: dca2b30b726ac3ee8e5a556fe78f50c1714d3d8bf9c02b66f645de60b221f3b9
+      size: 1619
+  original:
+    hackage: persistent-migration-0.3.0@sha256:1b28e22c2eeff694eed6835299b3a80104772d5d2262e6dbfa5c47d9e7594f59,3433
+- completed:
+    hackage: testcontainers-0.5.1.0@sha256:8cbda2cc2c395df7725eb1a85b0a99eaa749a5e7c53e26059c12290a9ec6f7c4,2612
+    pantry-tree:
+      sha256: 24147f604397f87aed63562f9bfb8007524aa9347d71d5062bc75c2fd58d1ac8
+      size: 1331
+  original:
+    hackage: testcontainers-0.5.1.0@sha256:8cbda2cc2c395df7725eb1a85b0a99eaa749a5e7c53e26059c12290a9ec6f7c4,2612
 snapshots:
 - completed:
     sha256: 428ec8d5ce932190d3cbe266b9eb3c175cd81e984babf876b64019e2cbe4ea68

@@ -8,10 +8,11 @@ packages:
 extra-deps:
     - state-codes-0.1.3@sha256:61981a09694973bf03b87309610b744ea4c8570fed3d20f1876933f572bbdf2b,1611
     - cereal-time-0.1.0.0@sha256:2ad5cb0e7bdd0fa8b6cbdfcfe6b9259efb2a188e33c3ce039155d63edda51ffc,1604
+    - persistent-migration-0.3.0@sha256:1b28e22c2eeff694eed6835299b3a80104772d5d2262e6dbfa5c47d9e7594f59,3433
+    - testcontainers-0.5.1.0@sha256:8cbda2cc2c395df7725eb1a85b0a99eaa749a5e7c53e26059c12290a9ec6f7c4,2612
 
 allow-newer: true
 
 flags: {}
 
 extra-package-dbs: []
-
