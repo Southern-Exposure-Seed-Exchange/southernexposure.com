@@ -6,6 +6,7 @@
 import Control.Monad.Logger (runNoLoggingT)
 import Data.Csv (ToNamedRecord, DefaultOrdered(..), encodeDefaultOrderedByName)
 import Data.List (sortOn)
+import Data.Maybe (fromMaybe, listToMaybe)
 import Data.Time (formatTime, defaultTimeLocale)
 import Database.Persist
 import Database.Persist.Postgresql
@@ -77,7 +78,7 @@ makeExportData (Entity _ ProductVariant {..}, Entity _ Product {..}, maybeAttrib
         , price = formatCents productVariantPrice
         , lotSize = maybe "" renderLotSize productVariantLotSize
         , description = productLongDescription
-        , imageUrl = "https://southernexposure.com/media/products/originals/" <> productImageUrl
+        , imageUrl = "https://southernexposure.com/media/products/originals/" <> fromMaybe "" (listToMaybe productImageUrls)
         , isOrganic = getStatus seedAttributeIsOrganic maybeAttribute
         , isHeirloom = getStatus seedAttributeIsHeirloom maybeAttribute
         , isSmallGrower = getStatus seedAttributeIsSmallGrower maybeAttribute

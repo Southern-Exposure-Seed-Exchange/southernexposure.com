@@ -7,6 +7,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE UndecidableInstances #-}
@@ -20,12 +21,13 @@ import Control.Monad.IO.Class (MonadIO(..))
 import Data.Int (Int64)
 import Data.Time.Clock (UTCTime)
 import Database.Persist.Migration
-    ( Column(..), ColumnProp(..), MigrateSql(..), Migration, MigrationPath(..), Operation(..), SqlType(..), TableConstraint(..)
+    ( Column(..), ColumnProp(..), Migration, MigrationPath(..), MigrateSql(..), Operation(..), SqlType(..), TableConstraint(..)
     , checkMigration, (~>)
     )
 import qualified Database.Persist.Migration as Migration (defaultSettings)
-import Database.Persist.Migration.Postgres (runMigration)
-import Database.Persist.Sql (PersistField(..), SqlPersistT, Entity(..), selectList, insertEntity, delete, replace)
+import Database.Persist.Migration.Postgres (runMigration,)
+import Database.Persist.Sql
+    (Entity(..), PersistField(..), SqlPersistT, selectList, insertEntity, delete, replace)
 import Database.Persist.TH
 
 import Models.Fields
@@ -55,7 +57,7 @@ Product
     baseSku T.Text
     shortDescription T.Text
     longDescription T.Text
-    imageUrl T.Text
+    imageUrls [T.Text]
     createdAt UTCTime
     updatedAt UTCTime
     keywords T.Text default=''
@@ -714,5 +716,19 @@ migrations =
                 [ PrimaryKey ["id"]
                 ]
             }
+        ]
+    , 1 ~> 2 :=
+        -- Add 'imageUrls' to 'Product' and move items from 'imageUrl' to 'imageUrls'
+        [ AddColumn "product" (Column "image_urls" SqlString [NotNull]) (Just $ toPersistValue ([] :: [T.Text]))
+        , RawOperation "Move urls from imageUrl to imageUrls" $
+            -- "<url>" -> "[s<url>]"
+            -- '''''' is an escaped "''" string which is used to represent an empty 'Text' value in the database
+            -- since image_url is not nullable, the default value is an empty string.
+            -- We migrate only if image_url is not an empty string.
+            --
+            -- [Text] will be stored as a JSON array in the database. Each string value has to start with 's' according
+            -- to ToJSON instance for PersistentValue
+            return [MigrateSql "UPDATE product SET image_urls = CONCAT('[\"s', image_url, '\"]') WHERE image_url != ''''''" []]
+        , DropColumn ("product", "image_url")
         ]
     ]

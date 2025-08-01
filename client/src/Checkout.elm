@@ -26,7 +26,7 @@ import Models.Fields exposing (Cents(..), centsFromString, centsMap, centsMap2, 
 import OrderDetails
 import PageData exposing (LineItemType(..))
 import Ports
-import Product exposing (variantPrice)
+import Product exposing (productMainImage, variantPrice)
 import RemoteData exposing (WebData)
 import Routing exposing (Route(..), reverse)
 import Time
@@ -1639,11 +1639,13 @@ summaryTable ({ items, charges } as checkoutDetails) creditString couponCode cou
                 ]
 
         productRow { product, variant, quantity } =
+            let productImage = productMainImage product
+            in
             tr []
                 [ td [ class "align-middle text-center" ]
                     [ img
-                        [ src <| imgSrcFallback product.image
-                        , imageToSrcSet product.image
+                        [ src <| imgSrcFallback productImage
+                        , imageToSrcSet productImage
                         , imageSizes
                         , alt <| "Product Image for " ++ product.name
                         ]
@@ -1661,11 +1663,13 @@ summaryTable ({ items, charges } as checkoutDetails) creditString couponCode cou
                 ]
 
         mobileRow { product, variant, quantity } =
+            let productImage = productMainImage product
+            in
             div [ class "row" ]
                 [ div [ class "col-auto pr-0" ]
                     [ img
-                        [ src <| imgSrcFallback product.image
-                        , imageToSrcSet product.image
+                        [ src <| imgSrcFallback productImage
+                        , imageToSrcSet productImage
                         , imageSizes
                         ]
                         []

@@ -166,14 +166,24 @@ data ProductParameters =
         , ppCategories :: [CategoryId]
         , ppBaseSku :: T.Text
         , ppLongDescription :: T.Text
-        , ppImageData :: BS.ByteString
-        -- ^ Base64 Encoded
-        , ppImageName :: T.Text
+        , ppImagesData :: [ProductImageData]
+        -- ^ Base64 Encoded image file and the image name
         , ppKeywords :: T.Text
         , ppShippingRestrictions :: [Region]
         , ppVariantData :: [VariantData]
         , ppSeedAttribute :: Maybe SeedData
         } deriving (Show)
+
+data ProductImageData = ProductImageData
+    { pidFileName :: T.Text
+    , pidBase64Data :: BS.ByteString
+    } deriving (Show)
+
+instance FromJSON ProductImageData where
+    parseJSON = withObject "ProductImageData" $ \v -> do
+        pidFileName <- v .: "fileName"
+        pidBase64Data <- encodeUtf8 <$> v .: "base64Image"
+        return ProductImageData {..}
 
 instance FromJSON ProductParameters where
     parseJSON = withObject "ProductParameters" $ \v -> do
@@ -182,8 +192,7 @@ instance FromJSON ProductParameters where
         ppCategories <- v .: "categories"
         ppBaseSku <- v .: "baseSku"
         ppLongDescription <- v .: "longDescription"
-        ppImageData <- encodeUtf8 <$> v .: "imageData"
-        ppImageName <- v .: "imageName"
+        ppImagesData <- v .: "imagesData"
         ppKeywords <- fromMaybe "" <$> (v .:? "keywords")
         ppShippingRestrictions <- v .: "shippingRestrictions"
         ppVariantData <- v .: "variants"
@@ -289,17 +298,19 @@ type NewProductRoute =
 newProductRoute :: WrappedAuthToken -> ProductParameters -> App (Cookied ProductId)
 newProductRoute = validateAdminAndParameters $ \_ p@ProductParameters {..} -> do
     time <- liftIO getCurrentTime
-    imageFileName <- makeImageFromBase64 "products" ppImageName ppImageData
+    imageFileNames <- mapM
+        (\(ProductImageData fileName encodedImage) -> makeImageFromBase64 "products" fileName encodedImage)
+        ppImagesData
     runDB $ do
-        (prod, extraCategories) <- makeProduct p imageFileName time
+        (prod, extraCategories) <- makeProduct p imageFileNames time
         productId <- insert prod
         insertMany_ $ map (ProductToCategory productId) extraCategories
         insertMany_ $ map (makeVariant productId) ppVariantData
         maybe (return ()) (insert_ . makeAttributes productId) ppSeedAttribute
         return productId
   where
-    makeProduct :: ProductParameters -> T.Text -> UTCTime -> AppSQL (Product, [CategoryId])
-    makeProduct ProductParameters {..} imageUrl time =
+    makeProduct :: ProductParameters -> [T.Text] -> UTCTime -> AppSQL (Product, [CategoryId])
+    makeProduct ProductParameters {..} imageUrls time =
         case ppCategories of
             main : rest -> return
                 ( Product
@@ -309,7 +320,7 @@ newProductRoute = validateAdminAndParameters $ \_ p@ProductParameters {..} -> do
                     , productBaseSku = ppBaseSku
                     , productShortDescription = ""
                     , productLongDescription = sanitize ppLongDescription
-                    , productImageUrl = imageUrl
+                    , productImageUrls = imageUrls
                     , productKeywords = ppKeywords
                     , productShippingRestrictions = L.nub ppShippingRestrictions
                     , productCreatedAt = time
@@ -337,7 +348,7 @@ data EditProductData =
         , epdCategories :: [CategoryId]
         , epdBaseSku :: T.Text
         , epdLongDescription :: T.Text
-        , epdImageUrl :: T.Text
+        , epdImageUrls :: [T.Text]
         , epdKeywords :: T.Text
         , epdShippingRestrictions :: [Region]
         , epdVariantData :: [VariantData]
@@ -353,7 +364,7 @@ instance ToJSON EditProductData where
             , "categories" .= epdCategories
             , "baseSku" .= epdBaseSku
             , "longDescription" .= epdLongDescription
-            , "imageUrl" .= epdImageUrl
+            , "imageUrls" .= epdImageUrls
             , "keywords" .= epdKeywords
             , "shippingRestrictions" .= epdShippingRestrictions
             , "variants" .= epdVariantData
@@ -380,7 +391,7 @@ editProductDataRoute t productId = withAdminCookie t $ \_ ->
                     : map (productToCategoryCategoryId . entityVal) categories
                 , epdBaseSku = productBaseSku
                 , epdLongDescription = productLongDescription
-                , epdImageUrl = productImageUrl
+                , epdImageUrls = productImageUrls
                 , epdKeywords = productKeywords
                 , epdShippingRestrictions = productShippingRestrictions
                 , epdVariantData = variants
@@ -449,9 +460,11 @@ editProductRoute :: WrappedAuthToken -> EditProductParameters -> App (Cookied Pr
 editProductRoute = validateAdminAndParameters $ \_ EditProductParameters {..} -> do
     let ProductParameters {..} = eppProduct
     imageUpdate <-
-        if not (BS.null ppImageData) && not (T.null ppImageName) then do
-            imageFileName <- makeImageFromBase64 "products" ppImageName ppImageData
-            return [ ProductImageUrl =. imageFileName ]
+        if not (null ppImagesData) then do
+            imageFileNames <- mapM
+                (\(ProductImageData fileName encodedImage) -> do makeImageFromBase64 "products" fileName encodedImage)
+                ppImagesData
+            return [ ProductImageUrls =. imageFileNames ]
         else
             return []
     time <- liftIO getCurrentTime

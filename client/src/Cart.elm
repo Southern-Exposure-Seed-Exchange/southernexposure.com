@@ -17,7 +17,7 @@ import Html.Keyed as Keyed
 import Json.Encode as Encode
 import Models.Fields exposing (Cents(..), centsMap, imageToSrcSet, imgSrcFallback, lotSizeToString)
 import PageData exposing (CartDetails, CartItemId(..))
-import Product exposing (variantPrice)
+import Product exposing (productMainImage, variantPrice)
 import RemoteData
 import Routing exposing (Route(..), reverse)
 import User exposing (AuthStatus, unauthorized)
@@ -234,8 +234,8 @@ view authStatus ({ quantities } as form_) ({ items, charges } as cartDetails) =
                             :: routeLinkAttributes (ProductDetails product.slug <| Just variant.id)
                         )
                         [ img
-                            [ src <| imgSrcFallback product.image
-                            , imageToSrcSet product.image
+                            [ src <| imgSrcFallback (productMainImage product)
+                            , imageToSrcSet (productMainImage product)
                             , productImageSizes
                             , class "cart-product-image"
                             , alt <| "Product Image for " ++ product.name
@@ -333,13 +333,15 @@ mobileCartTable : Form -> CartDetails -> { subTotal : Cents, total : Cents } -> 
 mobileCartTable { quantities } { items, charges } totals =
     let
         cartRow { id, product, variant } =
+            let productImage = productMainImage product
+            in
             div [ class "cart-mobile-product row py-4" ]
                 [ div [ class "col-4 mb-3" ]
                     [ a (routeLinkAttributes <| ProductDetails product.slug <| Just variant.id)
                         [ img
                             [ class "img-fluid"
-                            , src <| imgSrcFallback product.image
-                            , imageToSrcSet product.image
+                            , src <| imgSrcFallback productImage
+                            , imageToSrcSet productImage
                             , productImageSizes
                             ]
                             []
