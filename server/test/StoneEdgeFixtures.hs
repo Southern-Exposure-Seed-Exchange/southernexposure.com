@@ -349,3 +349,57 @@ downloadProdsXml =
 </CustomFields>
 </Product>
 </SETIProducts>|]
+
+downloadCustomersXml :: BS.ByteString
+downloadCustomersXml =
+    sNL [r|<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<SETICustomers>
+<Response>
+<ResponseCode>1</ResponseCode>
+<ResponseDescription>Success</ResponseDescription>
+</Response>
+<Customer>
+<WebID>12548</WebID>
+<UserName>kevin</UserName>
+<Password>xyz123</Password>
+<BillAddr>
+<NamePrefix>Mr.</NamePrefix>
+<FirstName>John</FirstName>
+<LastName>Doe</LastName>
+<Company>Stone Edge</Company>
+<Phone>215-641-1837</Phone>
+<Email>john@stoneedge.com</Email>
+<TaxID>123456789</TaxID>
+<Address>
+<Addr1>One Valley Square</Addr1>
+<Addr2>Suite 130</Addr2>
+<City>Blue Bell</City>
+<State>PA</State>
+<Zip>19422</Zip>
+<Country>US</Country>
+</Address>
+</BillAddr>
+<ShipAddr>
+<NamePrefix>Mr.</NamePrefix>
+<FirstName>John</FirstName>
+<LastName>Doe</LastName>
+<Company>Stone Edge</Company>
+<Phone>215-641-1837</Phone>
+<Email>jdoe@stoneedge.com</Email>
+<Address>
+<Addr1>One Valley Square</Addr1>
+<Addr2>Suite 130</Addr2>
+<City>Blue Bell</City>
+<State>PA</State>
+<Zip>19422</Zip>
+<Country>US</Country>
+</Address>
+</ShipAddr>
+<CustomFields>
+<CustomField>
+<FieldName>Nickname</FieldName>
+<FieldValue>jdoe</FieldValue>
+</CustomField>
+</CustomFields>
+</Customer>
+</SETICustomers>|]

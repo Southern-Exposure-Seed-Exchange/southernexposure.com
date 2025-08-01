@@ -7,6 +7,7 @@ module Routes.Utils
       paginatedSelect
     , activeVariantExists
       -- * Customers
+    , deletedEmail
     , generateUniqueToken
     , hashPassword
       -- * Checkout
@@ -184,6 +185,8 @@ hashPassword password = do
         Just pass ->
             return $ decodeUtf8 pass
 
+deletedEmail :: T.Text
+deletedEmail = "gardens+deleted@southernexposure.com"
 
 -- CHECKOUT
 
