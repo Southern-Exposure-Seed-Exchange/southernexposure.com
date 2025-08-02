@@ -1,9 +1,10 @@
 module SiteUI.Footer exposing (view)
 
-import Html exposing (Html, a, abbr, address, br, div, h4, li, node, span, strong, text, ul)
-import Html.Attributes exposing (class, href, id, target, title)
+import Html exposing (..)
+import Html.Attributes exposing (..)
 import Messages exposing (Msg)
 import Routing exposing (Route(..))
+import Views.Images as Images
 import Views.Microdata as Microdata
 import Views.Utils exposing (routeLinkAttributes)
 
@@ -15,20 +16,18 @@ view =
             br [] []
 
         staticPageLink slug title =
-            li []
+            div []
                 [ a (routeLinkAttributes <| PageDetails slug Nothing) [ text title ]
                 ]
 
         informationLinks =
-            ul [ class "list-unstyled" ]
+            div [ class "tw:flex tw:flex-col tw:gap-[16px]" ]
                 [ staticPageLink "shipping-info" "Shipping & Returns"
-                , staticPageLink "privacy" "Privacy Notice"
-                , staticPageLink "conditions" "Conditions of Use"
                 , staticPageLink "contact-us" "Contact Us"
                 ]
 
         importantLinks =
-            ul [ class "list-unstyled" ]
+            div [ class "tw:flex tw:flex-col tw:gap-[16px]" ]
                 [ staticPageLink "our-seed-growers" "Our Seed Growers"
                 , staticPageLink "our-nongmo-policy" "Our Non-GMO Policy"
                 , staticPageLink "quality-promise" "Quality Promise"
@@ -38,17 +37,21 @@ view =
 
         contactAddress =
             address []
-                [ strong [ Microdata.name ] [ text "Southern Exposure Seed Exchange" ]
-                , break
-                , span (Microdata.address :: Microdata.postalAddress)
-                    [ span [ Microdata.streetAddress ] [ text "P.O. Box 460" ]
+                [ span (Microdata.address :: Microdata.postalAddress)
+                    [ break
+                    , strong [] [ text "Address:" ]
                     , break
+                    , span [ Microdata.streetAddress ] [ text "P.O. Box 460" ]
+                    , text ", "
                     , span [ Microdata.addressLocality ] [ text "Mineral" ]
                     , text ", "
                     , span [ Microdata.addressRegion ] [ text "Virginia" ]
                     , text " "
                     , span [ Microdata.postalCode ] [ text "23117" ]
                     ]
+                , break
+                , break
+                , strong [] [ text "Contact:" ]
                 , break
                 , a
                     [ Microdata.email
@@ -79,19 +82,47 @@ view =
 
         footerBlock title class_ content =
             div [ class class_ ]
-                [ h4 [ class "mt-3" ] [ text title ]
+                [ p [ class "tw:font-semibold tw:pt-[8px] tw:pb-[16px]" ] [ text title ]
                 , content
                 ]
+
+        contactUsBlock =
+            div [ class "tw:grow" ]
+                [ -- Logo
+                  div [ class "tw:flex tw:items-start tw:gap-[12px]" ]
+                    [ img
+                        [ id "site-logo"
+                        , class "tw:w-[48px] tw:shrink-0"
+                        , src <| Images.static "logos/sese.png"
+                        , alt "SESE's Logo - Two Hands Supporting a Growing Flower"
+                        ]
+                        []
+                    , p [ Microdata.name, class "poor-richard text-[20px] leading-[24px] tw:w-[140px]" ]
+                        [ text "Southern Exposure Seed Exchange"
+                        ]
+                    ]
+                , contactBlock
+                ]
     in
-    div [ id "footer", class "container" ]
+    div [ id "footer", class "tw:mt-[136px] tw:px-[124px] tw:pt-[60px] tw:pb-[40px] tw:bg-[rgba(30,12,3,0.03)]" ]
         [ node "footer"
-            []
-            [ div [ class "row justify-content-around" ]
-                [ footerBlock "Information" "col-10 col-sm-auto d-print-none" informationLinks
-                , footerBlock "Important Links" "col-10 col-sm-auto d-print-none" importantLinks
-                , footerBlock "Contact Us" "col-10 col-md-5 col-lg-auto" contactBlock
-                , div [ class "col-12 text-center" ]
-                    [ text "Copyright © 2020 Southern Exposure Seed Exchange" ]
+            [ class "" ]
+            [ div [ class "tw:flex tw:flex-col" ]
+                [ div [ class "tw:flex" ]
+                    [ contactUsBlock
+                    , footerBlock "Important Links" "tw:pr-[32px]" importantLinks
+                    , footerBlock "Information" "" informationLinks
+                    ]
+                , div [ class "tw:pt-[40px]" ]
+                    [ hr [] []
+                    , div [ class "tw:pt-[32px] tw:flex" ]
+                        [ div [ class "tw:grow"] [ text "Copyright © 2020 Southern Exposure Seed Exchange" ]
+                        , div [ class "tw:flex tw:gap-[24px]" ]
+                            [ staticPageLink "privacy" "Privacy Notice"
+                            , staticPageLink "conditions" "Conditions of Use"
+                            ]
+                        ]
+                    ]
                 ]
             ]
         ]

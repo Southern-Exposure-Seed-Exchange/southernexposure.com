@@ -20,6 +20,7 @@ import Html.Attributes exposing (class, href, id, target)
 import Html.Events exposing (onClick)
 import Http
 import Messages exposing (Msg(..))
+import Mock.Home
 import Model exposing (CartForms, Model)
 import OrderDetails
 import PageData
@@ -38,7 +39,7 @@ import SiteUI.Header as SiteHeader
 import SiteUI.Navigation as SiteNavigation
 import SiteUI.Sidebar as SiteSidebar
 import StaticPage exposing (StaticPage)
-import User
+import User exposing (unauthorized)
 import Views.AdminDashboard as AdminDashboard
 import Views.Aria as Aria
 import Views.CategorySalesAdmin as CategorySalesAdmin
@@ -51,7 +52,6 @@ import Views.ShippingAdmin as ShippingAdmin
 import Views.StaticPageAdmin as StaticPageAdmin
 import Views.SurchargesAdmin as SurchargesAdmin
 import Views.Utils exposing (pageOverlay, rawHtml)
-import User exposing (unauthorized)
 
 view : Model -> Document Msg
 view ({ route, pageData, navigationData, zone, helcimUrl } as model) =
@@ -83,9 +83,9 @@ view ({ route, pageData, navigationData, zone, helcimUrl } as model) =
 
         withSidebar content =
             div [ class "container", Aria.live "polite" ]
-                [ div [ class "row" ]
-                    [ div [ class "col order-md-2", id "main" ] content
-                    , SiteSidebar.view route
+                [ div [ class "tw:flex tw:flex-col-reverse tw:lg:flex-row tw:gap-[40px]" ]
+                    [ SiteSidebar.view route
+                    , div [ class "w-full grow", id "main" ] content
                     ]
                 ]
 
@@ -788,9 +788,14 @@ staticPageView { name, slug, content } =
 
             else
                 h1 [] [ text name ]
+
+        html = rawHtml content
+        -- Used when working on homepage:
+        -- html = Mock.Home.view
+
     in
     [ header
-    , rawHtml content
+    , div [class "static-page"] [html]
     ]
 
 

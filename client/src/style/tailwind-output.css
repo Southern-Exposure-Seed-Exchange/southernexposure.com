@@ -8,7 +8,6 @@
     --tw-font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
       "Courier New", monospace;
     --tw-color-white: #fff;
-    --tw-spacing: 0.25rem;
     --tw-font-weight-semibold: 600;
     --tw-default-transition-duration: 150ms;
     --tw-default-transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
@@ -168,35 +167,11 @@
   .tw\:relative {
     position: relative;
   }
-  .tw\:top-0 {
-    top: calc(var(--tw-spacing) * 0);
-  }
   .tw\:top-\[-6px\] {
     top: -6px;
   }
-  .tw\:top-\[-8px\] {
-    top: -8px;
-  }
-  .tw\:top-\[-12px\] {
-    top: -12px;
-  }
-  .tw\:top-\[-20px\] {
-    top: -20px;
-  }
-  .tw\:right-0 {
-    right: calc(var(--tw-spacing) * 0);
-  }
   .tw\:right-\[-6px\] {
     right: -6px;
-  }
-  .tw\:right-\[-8px\] {
-    right: -8px;
-  }
-  .tw\:right-\[-12px\] {
-    right: -12px;
-  }
-  .tw\:right-\[-20px\] {
-    right: -20px;
   }
   .tw\:mt-\[136px\] {
     margin-top: 136px;
@@ -332,12 +307,6 @@
   .tw\:fill-\[\#1E0C03\]\! {
     fill: #1E0C03 !important;
   }
-  .tw\:fill-\[\#34C3AB\]\! {
-    fill: #34C3AB !important;
-  }
-  .tw\:p-\[6px\] {
-    padding: 6px;
-  }
   .tw\:p-\[6px\]\! {
     padding: 6px !important;
   }
@@ -370,9 +339,6 @@
   }
   .tw\:pt-\[1px\] {
     padding-top: 1px;
-  }
-  .tw\:pt-\[2px\] {
-    padding-top: 2px;
   }
   .tw\:pt-\[8px\] {
     padding-top: 8px;
@@ -412,14 +378,6 @@
   }
   .tw\:text-\[29px\] {
     font-size: 29px;
-  }
-  .tw\:leading-\[10px\] {
-    --tw-leading: 10px;
-    line-height: 10px;
-  }
-  .tw\:leading-\[12px\] {
-    --tw-leading: 12px;
-    line-height: 12px;
   }
   .tw\:leading-\[20px\] {
     --tw-leading: 20px;
@@ -536,6 +494,17 @@ input:focus, textarea:focus {
   &:hover {
     @media (hover: hover) {
       text-decoration-line: underline;
+    }
+  }
+}
+.clickable-image {
+  transition-property: all;
+  transition-timing-function: var(--tw-ease, var(--tw-default-transition-timing-function));
+  transition-duration: var(--tw-duration, var(--tw-default-transition-duration));
+  &:hover {
+    @media (hover: hover) {
+      --tw-brightness: brightness(80%);
+      filter: var(--tw-blur,) var(--tw-brightness,) var(--tw-contrast,) var(--tw-grayscale,) var(--tw-hue-rotate,) var(--tw-invert,) var(--tw-saturate,) var(--tw-sepia,) var(--tw-drop-shadow,);
     }
   }
 }

@@ -15,8 +15,9 @@ clear; npm run tailwind
 # Working with static page
 
 - Write the static page view in `Mock` module, and use it for local development
-- Convert elm view code to html (using chatgpt or other), then test the final result with the admin panel
-- Remove the mock code, use the generated html to update in the prod server
+- Update `staticPageView` to use one of the Mock view function, to test it
+- When everything is ready, copy the html content from the browser and input it into the admin panel
+- A list of generated html can be found in `client/src/Mock` which contain `home.html`. More will be added when other static pages are ready.
 
 
 ## Note:

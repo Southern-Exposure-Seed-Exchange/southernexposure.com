@@ -9,3 +9,7 @@ textarea:focus {
 .static-page a {
     @apply tw:text-[rgba(52,195,171,1)] tw:hover:text-[rgba(52,195,171,1)] tw:hover:underline;
 }
+
+.clickable-image {
+    @apply tw:hover:brightness-80 tw:transition-all;
+}
