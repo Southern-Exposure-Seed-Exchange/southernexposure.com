@@ -1,0 +1,11 @@
+/* @import "tailwindcss" source("../../src*.{elm,js}"); */
+@import "tailwindcss" source("../../src") prefix(tw);
+
+input:focus,
+textarea:focus {
+  outline: 0;
+}
+
+.static-page a {
+    @apply tw:text-[rgba(52,195,171,1)] tw:hover:text-[rgba(52,195,171,1)] tw:hover:underline;
+}
