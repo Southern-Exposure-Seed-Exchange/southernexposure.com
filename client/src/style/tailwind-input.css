@@ -2,7 +2,8 @@
 @import "tailwindcss" source("../../src") prefix(tw);
 
 input:focus,
-textarea:focus {
+textarea:focus,
+select:focus {
   outline: 0;
 }
 

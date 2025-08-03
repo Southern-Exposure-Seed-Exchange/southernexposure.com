@@ -49,7 +49,7 @@ type Endpoint
     | ProductDetails String
     | ProductSearch Pagination.Data
     | PageDetails String
-    | AdvancedSearchData
+    | CategorySearchData
     | CustomerLogin Bool
     | CustomerRegister
     | CustomerVerifyEmail String
@@ -145,7 +145,7 @@ toUrl endpoint =
                 PageDetails slug ->
                     joinPath [ "pages", "details", slug ]
 
-                AdvancedSearchData ->
+                CategorySearchData ->
                     joinPath [ "categories", "search" ]
 
                 CustomerLogin clearCart ->

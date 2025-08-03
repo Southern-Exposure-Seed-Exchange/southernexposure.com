@@ -24,7 +24,7 @@ import QuickOrder
 import RemoteData exposing (WebData)
 import Routing exposing (Route)
 import Search
-import SiteUI exposing (NavigationData)
+import SiteUI exposing (NavigationData, CategoryListData)
 import Time
 import User exposing (AuthStatus)
 import Views.AdminDashboard as AdminDashboard
@@ -37,10 +37,12 @@ import Views.SettingsAdmin as SettingsAdmin
 import Views.ShippingAdmin as ShippingAdmin
 import Views.StaticPageAdmin as StaticPageAdmin
 import Views.SurchargesAdmin as SurchargesAdmin
+import Api exposing (Endpoint(..))
 
 
 type alias Model =
     { navigationData : WebData NavigationData
+    , categoryListData : WebData CategoryListData
     , route : Route
     , pageData : PageData
     , searchData : Search.Data
@@ -99,6 +101,7 @@ type alias CartForms =
 initial : Routing.Key -> Route -> String -> Model
 initial key route helcimUrl =
     { navigationData = RemoteData.Loading
+    , categoryListData = RemoteData.Loading
     , route = route
     , pageData = PageData.initial
     , searchData = Search.initial

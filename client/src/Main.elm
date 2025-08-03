@@ -138,6 +138,7 @@ init flags url key =
     , Cmd.batch
         [ cmd
         , getNavigationData
+        , getCategoryListData
         , authorizationCmd
         , Task.perform NewZone Time.here
         , metadataCmd
@@ -182,9 +183,7 @@ fetchDataForRoute ({ route, pageData, key } as model) =
                         |> Tuple.mapSecond (Cmd.map CategoryPaginationMsg)
 
                 AdvancedSearch ->
-                    ( { pageData | advancedSearch = RemoteData.Loading }
-                    , getAdvancedSearchData
-                    )
+                    doNothing
 
                 SearchResults searchData pagination ->
                     pageData.searchResults
@@ -514,11 +513,11 @@ getNavigationData =
         |> Api.sendRequest GetNavigationData
 
 
-getAdvancedSearchData : Cmd Msg
-getAdvancedSearchData =
-    Api.get Api.AdvancedSearchData
-        |> Api.withJsonResponse PageData.advancedSearchDecoder
-        |> Api.sendRequest GetAdvancedSearchData
+getCategoryListData : Cmd Msg
+getCategoryListData =
+    Api.get Api.CategorySearchData
+        |> Api.withJsonResponse SiteUI.categoryListDecoder
+        |> Api.sendRequest GetCategoryListData
 
 
 getPageDetails : String -> Cmd Msg
@@ -1391,12 +1390,8 @@ update msg ({ pageData, key } as model) =
         GetNavigationData response ->
             ( { model | navigationData = response }, Cmd.none )
 
-        GetAdvancedSearchData response ->
-            let
-                updatedPageData =
-                    { pageData | advancedSearch = response }
-            in
-            ( { model | pageData = updatedPageData }, Cmd.none )
+        GetCategoryListData response ->
+            ( { model | categoryListData = response }, Cmd.none )
 
         GetPageDetailsData response ->
             let
@@ -1799,7 +1794,7 @@ getStatusCode =
 {-| Run some generic transforming function on the current route's page data.
 -}
 runOnCurrentWebData : (Maybe (WebData ()) -> b) -> Model -> b
-runOnCurrentWebData runner { pageData, route } =
+runOnCurrentWebData runner { pageData, route, categoryListData } =
     let
         paginateRunner =
             Paginate.getRemoteData >> RemoteData.map (always ()) >> Just >> runner
@@ -1818,7 +1813,7 @@ runOnCurrentWebData runner { pageData, route } =
             paginateRunner pageData.categoryDetails
 
         AdvancedSearch ->
-            justRunner pageData.advancedSearch
+            justRunner categoryListData
 
         SearchResults _ _ ->
             paginateRunner pageData.searchResults

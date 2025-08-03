@@ -17,13 +17,9 @@ view : Route -> PageData -> Html Msg
 view route pageData =
     let
         items =
-            if List.isEmpty childItems then
-                [ activeItem "Home" 1 ]
-
-            else
-                List.indexedMap (\i f -> f <| i + 1) <|
-                    inactiveItem "Home" Routing.homePage
-                        :: childItems
+            List.indexedMap (\i f -> f <| i + 1) <|
+                inactiveItem "Home" Routing.homePage
+                    :: childItems
 
         activeItem content position =
             li (class "breadcrumb-item active" :: Microdata.itemListElement)
@@ -252,6 +248,10 @@ view route pageData =
         maybeToList f =
             Maybe.map f >> Maybe.withDefault []
     in
-    node "nav"
-        [ id "breadcrumbs", class "container d-print-none", Aria.label "breadcrumb" ]
-        [ ol (class "breadcrumb mb-0" :: Microdata.breadcrumbList) items ]
+    if List.isEmpty childItems then
+        node "nav" [ class "tw:pb-[28px]" ] []
+
+    else
+        node "nav"
+            [ id "breadcrumbs", class "container d-print-none", Aria.label "breadcrumb" ]
+            [ ol (class "breadcrumb mb-0" :: Microdata.breadcrumbList) items ]

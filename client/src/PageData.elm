@@ -25,7 +25,6 @@ module PageData exposing
     , AdminProductSaleListData
     , AdminProductSaleNewData
     , AdminSharedProductData
-    , AdvancedSearch
     , CartDetails
     , CartItem
     , CartItemId(..)
@@ -72,7 +71,6 @@ module PageData exposing
     , adminProductListDataDecoder
     , adminProductSaleListDataDecoder
     , adminProductSaleNewDataDecoder
-    , advancedSearchDecoder
     , blankCartDetails
     , cartDetailsDecoder
     , cartTotals
@@ -122,7 +120,6 @@ import Time exposing (Posix)
 type alias PageData =
     { categoryDetails : Paginated ProductData { slug : String, sorting : Sorting.Option } CategoryDetails
     , productDetails : WebData ProductDetails
-    , advancedSearch : WebData AdvancedSearch
     , searchResults : Paginated ProductData { data : Search.Data, sorting : Sorting.Option } String
     , pageDetails : WebData StaticPage
     , locations : WebData AddressLocations
@@ -181,7 +178,6 @@ initial =
     in
     { categoryDetails = categoryPaginate
     , productDetails = RemoteData.NotAsked
-    , advancedSearch = RemoteData.NotAsked
     , searchResults = searchPaginate
     , pageDetails = RemoteData.NotAsked
     , locations = RemoteData.NotAsked
@@ -1424,24 +1420,6 @@ variantDictDecoder =
                 Dict.empty
             )
 
-
-type alias AdvancedSearch =
-    List AdvancedSearchCategory
-
-
-type alias AdvancedSearchCategory =
-    { id : CategoryId
-    , name : String
-    }
-
-
-advancedSearchDecoder : Decoder AdvancedSearch
-advancedSearchDecoder =
-    Decode.field "categories" <|
-        Decode.list <|
-            Decode.map2 AdvancedSearchCategory
-                (Decode.field "id" <| Decode.map CategoryId Decode.int)
-                (Decode.field "name" Decode.string)
 
 
 type CartItemId

@@ -173,6 +173,9 @@
   .tw\:right-\[-6px\] {
     right: -6px;
   }
+  .tw\:mt-\[0px\]\! {
+    margin-top: 0px !important;
+  }
   .tw\:mt-\[136px\] {
     margin-top: 136px;
   }
@@ -182,6 +185,9 @@
   .tw\:flex {
     display: flex;
   }
+  .tw\:flex\! {
+    display: flex !important;
+  }
   .tw\:grid {
     display: grid;
   }
@@ -190,6 +196,9 @@
   }
   .tw\:h-\[24px\] {
     height: 24px;
+  }
+  .tw\:w-\[20px\] {
+    width: 20px;
   }
   .tw\:w-\[24px\] {
     width: 24px;
@@ -224,6 +233,9 @@
   .tw\:cursor-pointer {
     cursor: pointer;
   }
+  .tw\:cursor-pointer\! {
+    cursor: pointer !important;
+  }
   .tw\:grid-cols-3 {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
@@ -238,6 +250,9 @@
   }
   .tw\:items-start {
     align-items: flex-start;
+  }
+  .tw\:justify-between {
+    justify-content: space-between;
   }
   .tw\:justify-center {
     justify-content: center;
@@ -256,6 +271,9 @@
   }
   .tw\:gap-\[40px\] {
     gap: 40px;
+  }
+  .tw\:gap-\[42px\] {
+    gap: 42px;
   }
   .tw\:gap-\[80px\] {
     gap: 80px;
@@ -319,6 +337,9 @@
   .tw\:px-\[16px\] {
     padding-inline: 16px;
   }
+  .tw\:px-\[18px\] {
+    padding-inline: 18px;
+  }
   .tw\:px-\[32px\] {
     padding-inline: 32px;
   }
@@ -330,6 +351,9 @@
   }
   .tw\:py-\[12px\] {
     padding-block: 12px;
+  }
+  .tw\:py-\[16px\] {
+    padding-block: 16px;
   }
   .tw\:py-\[20px\] {
     padding-block: 20px;
@@ -352,6 +376,9 @@
   .tw\:pt-\[60px\] {
     padding-top: 60px;
   }
+  .tw\:pr-\[16px\] {
+    padding-right: 16px;
+  }
   .tw\:pr-\[32px\] {
     padding-right: 32px;
   }
@@ -361,11 +388,20 @@
   .tw\:pb-\[20px\] {
     padding-bottom: 20px;
   }
+  .tw\:pb-\[28px\] {
+    padding-bottom: 28px;
+  }
   .tw\:pb-\[32px\] {
     padding-bottom: 32px;
   }
+  .tw\:pb-\[36px\] {
+    padding-bottom: 36px;
+  }
   .tw\:pb-\[40px\] {
     padding-bottom: 40px;
+  }
+  .tw\:pl-\[40px\] {
+    padding-left: 40px;
   }
   .tw\:text-\[12px\] {
     font-size: 12px;
@@ -405,6 +441,9 @@
   }
   .tw\:no-underline\! {
     text-decoration-line: none !important;
+  }
+  .tw\:opacity-60 {
+    opacity: 60%;
   }
   .tw\:transition-all {
     transition-property: all;
@@ -481,7 +520,7 @@
     }
   }
 }
-input:focus, textarea:focus {
+input:focus, textarea:focus, select:focus {
   outline: 0;
 }
 .static-page a {

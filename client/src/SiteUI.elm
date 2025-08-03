@@ -1,6 +1,9 @@
 module SiteUI exposing
     ( NavigationData
     , navigationDecoder
+    , CategoryListData
+    , CategoryData
+    , categoryListDecoder
     )
 
 import Category exposing (Category, CategoryId(..))
@@ -37,3 +40,21 @@ stringToIntKeys =
                     Dict.insert newKey value newDict
         )
         Dict.empty
+
+type alias CategoryListData =
+    List CategoryData
+
+
+type alias CategoryData =
+    { id : CategoryId
+    , name : String
+    }
+
+
+categoryListDecoder : Decoder CategoryListData
+categoryListDecoder =
+    Decode.field "categories" <|
+        Decode.list <|
+            Decode.map2 CategoryData
+                (Decode.field "id" <| Decode.map CategoryId Decode.int)
+                (Decode.field "name" Decode.string)

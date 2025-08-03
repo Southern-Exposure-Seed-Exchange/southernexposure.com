@@ -1,15 +1,17 @@
 module AdvancedSearch exposing (Msg(..), update, view)
 
 import Category exposing (CategoryId(..))
+import Components.Svg exposing (heirLoomSvg, organicSvg, searchSvg, smallFarmSvg, sunSvg)
 import Html exposing (..)
-import Html.Attributes exposing (alt, checked, class, for, id, selected, src, type_, value)
+import Html.Attributes exposing (checked, class, id, name, placeholder, selected, src, type_, value)
 import Html.Events exposing (on, onCheck, onClick, onInput, onSubmit, targetValue)
 import Json.Decode as Decode
-import PageData
 import Products.Pagination as Pagination
+import RemoteData exposing (RemoteData(..), WebData)
 import Routing exposing (Route(..))
 import Search
 import SeedAttribute
+import SiteUI exposing (CategoryListData)
 import Views.Aria as Aria
 
 
@@ -52,9 +54,17 @@ update msg data =
             { data | category = value }
 
 
-view : (Route -> msg) -> (Msg -> msg) -> Search.Data -> PageData.AdvancedSearch -> List (Html msg)
-view routingMsg formMsg data categories =
+mainView : Route -> (Route -> msg) -> (Msg -> msg) -> Search.Data -> CategoryListData -> List (Html msg)
+mainView route routingMsg formMsg data categories =
     let
+        showDetail =
+            case route of
+                AdvancedSearch ->
+                    True
+
+                _ ->
+                    False
+
         radioInput msg selector value content =
             div [ class "form-check form-check-inline d-block d-sm-inline-flex" ]
                 [ label [ class "form-check-label" ]
@@ -69,11 +79,11 @@ view routingMsg formMsg data categories =
                     ]
                 ]
 
-        filterInput { msg, attribute, selector, content } =
-            div [ class "form-check form-check-inline d-block d-sm-inline-flex" ]
-                [ label [ class "form-check-label" ]
+        filterInput { msg, attribute, selector, content, svgIcon } =
+            div [ class "form-check d-block tw:py-[8px]" ]
+                [ label [ class "form-check-label tw:flex! tw:items-center tw:gap-[8px] tw:cursor-pointer" ]
                     [ input
-                        [ class "form-check-input"
+                        [ class "form-check-input tw:mt-[0px]!"
                         , type_ "checkbox"
                         , onCheck <|
                             formMsg
@@ -81,12 +91,10 @@ view routingMsg formMsg data categories =
                         , checked <| selector data
                         ]
                         []
-                    , img
-                        [ src <| SeedAttribute.iconUrl attribute
-                        , alt <| SeedAttribute.toDescription attribute
+                    , span [] [ text content ]
+                    , div [ class "tw:w-[20px]" ]
+                        [ svgIcon
                         ]
-                        []
-                    , text content
                     ]
                 ]
 
@@ -96,29 +104,33 @@ view routingMsg formMsg data categories =
                   , attribute = SeedAttribute.Organic
                   , selector = .isOrganic
                   , content = "Organic"
+                  , svgIcon = organicSvg
                   }
                 , { msg = IsHeirloom
                   , attribute = SeedAttribute.Heirloom
                   , selector = .isHeirloom
                   , content = "Heirloom"
+                  , svgIcon = heirLoomSvg
                   }
                 , { msg = IsRegional
                   , attribute = SeedAttribute.Regional
                   , selector = .isRegional
-                  , content = "South-East"
+                  , content = "Especially well-suited to the South-East"
+                  , svgIcon = sunSvg
                   }
                 , { msg = IsSmallGrower
                   , attribute = SeedAttribute.SmallGrower
                   , selector = .isSmallGrower
                   , content = "From Small Farms"
+                  , svgIcon = smallFarmSvg
                   }
                 ]
 
         categorySelect =
             select
-                [ class "form-control"
-                , onCategorySelect <| formMsg << CategorySelect
+                [ onCategorySelect <| formMsg << CategorySelect
                 , Aria.label "Filter by Category"
+                , class "tw:cursor-pointer tw:opacity-60"
                 ]
             <|
                 option [ value "", selected (data.category == Nothing) ] [ text "All Categories" ]
@@ -136,35 +148,62 @@ view routingMsg formMsg data categories =
             targetValue
                 |> Decode.map (String.toInt >> Maybe.map CategoryId >> msg)
                 |> on "change"
-    in
-    [ h1 [] [ text "Advanced Search" ]
-    , hr [] []
-    , form [ onSubmit << routingMsg <| SearchResults data Pagination.default, class "advanced-search" ]
-        [ div [ class "form-group" ]
-            [ legend [ class "font-weight-bold", for "keywords" ] [ text "Keywords: " ]
-            , input
-                [ id "keywords"
-                , class "form-control"
-                , type_ "search"
-                , value data.query
-                , onInput <| formMsg << KeywordInput
-                , Aria.label "Search Terms"
+
+        submitButton =
+            button [ class "shrink-0", type_ "submit" ] [ searchSvg ]
+
+        searchBar : Html msg
+        searchBar =
+            div [ class "tw:w-full tw:py-[16px] tw:px-[18px] bg-white tw:rounded-[16px] tw:border tw:border-[rgba(232,231,230,1)] tw:flex tw:gap-[8px] tw:items-center " ]
+                [ submitButton
+                , input
+                    [ id "keywords"
+                    , class "tw:block tw:w-full tw:placeholder:text-[rgba(187,182,179,1)]"
+                    , type_ "search"
+                    , value data.query
+                    , onInput <| formMsg << KeywordInput
+                    , Aria.label "Search Terms"
+                    , placeholder "Search"
+                    ]
+                    []
+                , categorySelect
                 ]
+
+        searchIn =
+            if showDetail then
+                [ div []
+                    [ label [ class "mr-4 font-weight-bold" ] [ text "Search In: " ]
+                    , radioInput SearchTitles .searchIn Search.Titles "Titles"
+                    , radioInput SearchTitlesAndDescriptions
+                        .searchIn
+                        Search.TitlesAndDescriptions
+                        "Titles & Descriptions"
+                    ]
+                ]
+
+            else
                 []
-            ]
-        , div []
-            [ label [ class "mr-4 font-weight-bold" ] [ text "Search In: " ]
-            , radioInput SearchTitles .searchIn Search.Titles "Titles"
-            , radioInput SearchTitlesAndDescriptions
-                .searchIn
-                Search.TitlesAndDescriptions
-                "Titles & Descriptions"
-            ]
-        , legend [ class "font-weight-bold" ] [ text "Filters:" ]
-        , div [ class "row align-items-center" ]
-            [ div [ class "col filters mb-3" ] filterCheckboxes
-            , div [ class "col-auto mb-3" ] [ categorySelect ]
-            ]
-        , button [ class "mb-3 btn btn-primary", type_ "submit" ] [ text "Submit" ]
+    in
+    (if showDetail then
+        [ h1 [] [ text "Advanced Search" ]
+        , hr [ class "tw:pb-[36px]" ] []
         ]
-    ]
+
+     else
+        []
+    )
+        ++ form [ class "tw:pb-[28px] tw:flex tw:flex-col tw:gap-[16px]", onSubmit << routingMsg <| SearchResults data Pagination.default, class "advanced-search" ]
+            [ searchBar
+            , div [ class "tw:w-full tw:flex tw:justify-between tw:px-[16px]" ] filterCheckboxes
+            ]
+        :: searchIn
+
+
+view : Route -> (Route -> msg) -> (Msg -> msg) -> Search.Data -> WebData CategoryListData -> List (Html msg)
+view route routingMsg formMsg data categoriesRd =
+    case categoriesRd of
+        Success categories ->
+            mainView route routingMsg formMsg data categories
+
+        _ ->
+            []

@@ -38,6 +38,7 @@ import Views.SettingsAdmin as SettingsAdmin
 import Views.ShippingAdmin as ShippingAdmin
 import Views.StaticPageAdmin as StaticPageAdmin
 import Views.SurchargesAdmin as SurchargesAdmin
+import SiteUI exposing (CategoryListData)
 
 
 type Msg
@@ -102,7 +103,7 @@ type Msg
     | LogOutResponse (WebData ())
     | GetProductDetailsData (Maybe ProductVariantId) (WebData PageData.ProductDetails)
     | GetNavigationData (WebData NavigationData)
-    | GetAdvancedSearchData (WebData PageData.AdvancedSearch)
+    | GetCategoryListData (WebData CategoryListData)
     | GetPageDetailsData (WebData StaticPage)
     | GetAddressLocations (WebData AddressLocations)
     | GetMyAccountDetails (WebData PageData.MyAccount)
