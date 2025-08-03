@@ -113,7 +113,7 @@ view ({ route, pageData, navigationData, zone, helcimUrl } as model) =
         pageContent =
             case route of
                 ProductDetails _ _ ->
-                    withIntermediateText (ProductViews.details model.addToCartForms)
+                    withIntermediateText (ProductViews.detailView model.addToCartForms)
                         pageData.productDetails
 
                 CategoryDetails _ pagination ->
@@ -841,7 +841,7 @@ searchResultsView ({ query } as data) pagination addToCartForms products =
 
         searchDescription =
             if uniqueSearch == Nothing then
-                p []
+                p [ class "tw:px-[16px] tw:pt-[14px]" ]
                     [ queryDescription
                     , filterDescriptions
                     ]
@@ -908,8 +908,8 @@ searchResultsView ({ query } as data) pagination addToCartForms products =
                 |> List.map (\( _, name ) -> b [] [ text name ])
                 |> List.intersperse (text ", ")
     in
-    [ h1 [] [ text header ]
-    , hr [] []
+    [ h1 [ class "font-semibold! tw:text-[40px]! tw:px-[16px]!" ] [ text header ]
     , searchDescription
+    , div [ class "tw:pb-[40px]" ] []
     ]
-        ++ ProductViews.list (SearchResults data) pagination addToCartForms products
+        ++ ProductViews.listView (SearchResults data) pagination addToCartForms products

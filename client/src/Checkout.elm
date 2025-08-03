@@ -1360,7 +1360,7 @@ view model authStatus locations checkoutDetails =
     [ h1 [] [ text "Checkout" ]
     , hr [] []
     , if checkoutDetails.isDisabled then
-        div [ class "alert alert-danger" ]
+        div [ class "alert alert-danger static-page" ]
             [ rawHtml checkoutDetails.disabledMessage ]
 
       else

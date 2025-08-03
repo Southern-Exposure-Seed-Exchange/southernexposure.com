@@ -310,7 +310,7 @@ view authStatus ({ quantities } as form_) ({ items, charges } as cartDetails) =
         [ h1 [] [ text "Shopping Cart" ]
         , hr [] []
         , viewIf cartDetails.isDisabled <|
-            div [ class "alert alert-danger" ]
+            div [ class "alert alert-danger static-page" ]
                 [ rawHtml cartDetails.disabledMessage ]
         , p [ class "text-center font-weight-bold" ]
             [ text <| "Total Items: " ++ String.fromInt itemCount ++ " Amount: " ++ Format.cents totals.total
@@ -349,7 +349,7 @@ mobileCartTable { quantities } { items, charges } totals =
                     ]
                 , div [ class "col-8 pl-0 mb-2" ]
                     [ a (routeLinkAttributes <| ProductDetails product.slug <| Just variant.id)
-                        [ h5 [ class "text-body mb-0 product-name-lotsize" ]
+                        [ h5 [ class "text-body mb-0 product-name-lotsize static-page" ]
                             [ rawHtml product.name ]
                         ]
                     , div [ class "small text-muted" ]

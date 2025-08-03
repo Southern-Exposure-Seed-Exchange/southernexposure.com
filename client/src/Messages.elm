@@ -58,6 +58,8 @@ type Msg
     | ProductDetailsLightbox (Gallery.Msg ImageData)
     | ChangeCartFormVariantId ProductId ProductVariantId
     | ChangeCartFormQuantity ProductId Int
+    | IncreaseCartFormQuantity ProductId
+    | DecreaseCartFormQuantity ProductId
     | SubmitAddToCart ProductId ProductVariantId
     | SubmitAddToCartResponse ProductId Int (WebData String)
     | ResetCartFormStatus ProductId
