@@ -1,6 +1,7 @@
 module SiteUI.Navigation exposing (adminView, view)
 
 import Category exposing (CategoryId(..))
+import Components.Navbar as Navbar
 import Dict
 import Html exposing (Html, a, button, div, form, li, node, span, text, ul)
 import Html.Attributes exposing (attribute, class, href, id, target, type_)
@@ -140,7 +141,7 @@ view route authStatus navigationData activeCategoryIds searchData =
     in
     div [ id "navigation", class "container" ]
         [ node "nav"
-            [ class "navbar navbar-expand-md navbar-light bg-success" ]
+            [ class "navbar navbar-expand-md navbar-light bg-success tw:rounded-[16px]!" ]
             [ a
                 (Aria.label "View Your Shopping Cart"
                     :: class "ml-auto navbar-toggler"
@@ -176,11 +177,7 @@ view route authStatus navigationData activeCategoryIds searchData =
                         ]
                     ]
                 ]
-            , div [ id "category-navbar", class "collapse navbar-collapse" ]
-                [ ul [ class "navbar-nav mx-auto d-flex text-left" ] <|
-                    categoryNavigation
-                        ++ mobileOnlyItems
-                ]
+            , Navbar.view navigationData rootCategory mobileOnlyItems
             ]
         ]
 
@@ -386,7 +383,7 @@ adminView route =
     in
     div [ id "navigation", class "admin container-fluid" ]
         [ node "nav"
-            [ class "navbar navbar-expand-md navbar-light bg-success" ]
+            [ class "navbar navbar-expand-md navbar-light bg-success tw:rounded-[16px]!" ]
             [ button
                 [ class "navbar-toggler ml-2"
                 , type_ "button"

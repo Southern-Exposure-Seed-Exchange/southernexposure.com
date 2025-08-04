@@ -26,7 +26,6 @@ module.exports = {
     styles: [
       './src/styles.sass',
       'bootstrap',
-      'font-awesome-sass-loader',
     ],
     app: [
       './src/index.js',

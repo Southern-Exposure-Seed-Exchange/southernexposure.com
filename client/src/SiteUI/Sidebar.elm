@@ -1,5 +1,7 @@
 module SiteUI.Sidebar exposing (view)
 
+import Components.Button as Button exposing (defaultButton)
+import Components.Form as Form
 import Html exposing (..)
 import Html.Attributes as A exposing (alt, class, href, id, name, src, target, type_, value)
 import Messages exposing (Msg)
@@ -24,9 +26,9 @@ view route =
                     else
                         ""
             in
-            li [ class "nav-item" ]
+            div [ class "tw:py-[12px] tw:px-[32px]" ]
                 [ a
-                    (class ("py-1 d-block border-0 nav-link" ++ activeClass)
+                    (class (" " ++ activeClass)
                         :: routeLinkAttributes linkRoute
                     )
                     [ text title ]
@@ -41,7 +43,7 @@ view route =
 
         pageLinks =
             div [ Aria.role "navigation" ]
-                [ ul [ class "nav nav-pills nav-fill flex-column text-center mb-2" ]
+                [ div [ class "tw:text-[16px] tw:leading-[20px] tw:py-[20px] tw:rounded-[16px] tw:bg-[rgba(254,245,233,0.6)]" ]
                     [ pageLink QuickOrder "Quick Order"
                     , staticPageLink "about-us" "About Us"
                     , staticPageLink "growing-guides" "Growing Guides"
@@ -49,8 +51,8 @@ view route =
                     , staticPageLink "events" "Events"
                     , staticPageLink "faq" "FAQ"
                     , staticPageLink "links" "Links"
-                    , li [ class "nav-item" ]
-                        [ a [ href "/blog/", target "_blank", class "py-1 d-block nav-link" ]
+                    , div [ class "tw:py-[12px] tw:px-[32px]" ]
+                        [ a [ href "/blog/", target "_blank", class "" ]
                             [ text "Blog" ]
                         ]
                     , staticPageLink "contact-us" "Contact Us"
@@ -96,73 +98,59 @@ view route =
                 ]
 
         newsletterCard =
-            div [ class "newsletter card mb-2" ]
-                [ h5 [ class "card-header text-center" ] [ b [] [ text "Newsletter" ] ]
-                , div [ class "card-body" ]
-                    [ p [] [ text "Subscribe to receive our latest Garden Guides and event updates." ]
-                    , form
-                        [ A.action "https://sendy.southernexposure.com/subscribe"
-                        , A.method "POST"
-                        , A.acceptCharset "utf-8"
-                        , target "_blank"
+            div [ class "tw:p-[20px] tw:rounded-[16px] tw:bg-[rgba(254,245,233,0.6)] tw:flex tw:flex-col tw:gap-[16px]" ]
+                [ div [ class "tw:flex tw:flex-col tw:gap-[12px]" ]
+                    [ div [ class "tw:text-[18px] tw:leading-[24px] tw:font-semibold" ] [ text "Newsletter" ]
+                    , div [] [ text "Subscribe to receive our latest Garden Guides \u{2028}and event updates." ]
+                    ]
+                , form
+                    [ A.action "https://sendy.southernexposure.com/subscribe"
+                    , A.method "POST"
+                    , A.acceptCharset "utf-8"
+                    , target "_blank"
+                    , class "tw:flex tw:flex-col tw:gap-[16px]"
+                    ]
+                    [ input [ type_ "hidden", name "list", value "EXGP5iaxXvU4tH7fWWopIQ" ] []
+                    , Form.textView "email" "email" "Enter your email" "Email"
+                    , Button.view { defaultButton | label = "Subscribe", type_ = Button.FormSubmit, icon = "envelope", padding = Button.Expand }
+                    ]
+                ]
+
+        facebookCard =
+            div [ class "tw:p-[20px] tw:rounded-[16px] tw:bg-[rgba(254,245,233,0.6)] tw:flex tw:flex-col tw:gap-[12px]" ]
+                [ div [ class "tw:text-[18px] tw:leading-[24px] tw:font-semibold" ] [ text "Follow us" ]
+                , a
+                    [ target "_blank"
+                    , href "http://www.facebook.com/pages/Southern-Exposure-Seed-Exchange/353814746253?ref=ts"
+                    , Aria.label "Visit Our Facebook Page"
+                    , noOpener
+                    ]
+                    [ img
+                        [ class "tw:w-[140px]"
+                        , src <| Images.static "logos/facebook-big-icon-2.svg"
+                        , alt "Facebook Logo"
                         ]
-                        [ input [ type_ "hidden", name "list", value "EXGP5iaxXvU4tH7fWWopIQ" ] []
-                        , div [ class "form-group" ]
-                            [ input
-                                [ class "form-control form-control-sm"
-                                , type_ "email"
-                                , name "email"
-                                , A.placeholder "Enter your email"
-                                , Aria.label "Email"
-                                ]
-                                []
-                            ]
-                        , div [ class "form-group" ]
-                            [ button
-                                [ class "form-control btn btn-primary"
-                                , type_ "submit"
-                                , name "submit"
-                                ]
-                                [ icon "envelope"
-                                , text " Subscribe"
-                                ]
-                            ]
-                        ]
+                        []
                     ]
                 ]
 
         logoCard =
-            div [ class "card mb-3" ]
-                [ div [ class "card-body text-center" ]
+            div [ class "tw:p-[20px] tw:rounded-[16px] tw:bg-[rgba(254,245,233,0.6)] tw:flex tw:flex-col tw:gap-[12px]" ]
+                [ div [ class "tw:text-[18px] tw:leading-[24px] tw:font-semibold" ] [ text "Our Partners" ]
+                , div [ class "tw:flex tw:flex-col tw:gap-[8px]" ]
                     [ a
-                        [ target "_blank"
-                        , href "http://www.facebook.com/pages/Southern-Exposure-Seed-Exchange/353814746253?ref=ts"
-                        , Aria.label "Visit Our Facebook Page"
-                        , noOpener
-                        ]
-                        [ img
-                            [ class "img-fluid"
-                            , src <| Images.static "logos/facebook-big-icon.png"
-                            , alt "Facebook Logo"
-                            ]
-                            []
-                        ]
-                    , hr [] []
-                    , div [ class "text-center font-weight-bold" ] [ text "Our Partners" ]
-                    , a
                         [ target "_blank"
                         , href "http://www.smartgardener.com/"
                         , Aria.label "Visit Smart Gardener"
                         , noOpener
                         ]
                         [ img
-                            [ class "mb-3 img-fluid"
-                            , src <| Images.static "logos/smart-gardener.jpg"
+                            [ class "tw:w-[169px]"
+                            , src <| Images.static "logos/smart-gardener-2.png"
                             , alt "Smart Gardener - Simply Grow Great Food"
                             ]
                             []
                         ]
-                    , br [] []
                     , a
                         [ target "_blank"
                         , href "http://www.localharvest.org/"
@@ -170,8 +158,8 @@ view route =
                         , noOpener
                         ]
                         [ img
-                            [ class "img-fluid"
-                            , src <| Images.static "logos/local-harvest.jpg"
+                            [ class "tw:w-[169px]"
+                            , src <| Images.static "logos/local-harvest-2.png"
                             , alt "Local Harvest - Real Food, Real Farmers, Real Community"
                             ]
                             []
@@ -182,9 +170,12 @@ view route =
         noOpener =
             A.attribute "rel" "noopener"
     in
-    div [ id "sidebar", class "col-12 col-md-3 col-lg-3 col-xl-2 order-md-1 d-print-none" ]
+    div [ id "sidebar", class "tw:lg:w-[220px] tw:shrink-0 tw:flex tw:flex-col tw:gap-[16px]" ]
         [ pageLinks
+
+        -- TODO: update this
         , attributesCard
         , newsletterCard
+        , facebookCard
         , logoCard
         ]
