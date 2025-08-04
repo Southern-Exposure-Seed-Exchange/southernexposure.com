@@ -38,6 +38,15 @@ jobs:
       - name: Install Client Dependencies
         working-directory: client
         run: npm ci
+
+      # Check if generated Tailwind CSS is up to date
+      # If not, it will fail the build and prompt the user to run `npm run tailwind`
+      - name: Check Tailwind
+        working-directory: client
+        run: |
+          npx @tailwindcss/cli -i ./src/style/tailwind-input.css -o ./src/style/tailwind-output.css
+          git diff --exit-code || echo "Tailwind CSS needs to be built. Please run 'npm run tailwind' before committing."
+
       - name: Build Client Project
         working-directory: client
         run: npm run build
