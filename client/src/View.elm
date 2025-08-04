@@ -2,13 +2,13 @@ module View exposing (pageDescription, pageImage, pageTitle, view)
 
 import AdvancedSearch
 import Auth.CreateAccount as CreateAccount
-import Auth.VerifyEmail as VerifyEmail
-import Auth.VerificationRequired as VerificationRequired
 import Auth.EditAddress as EditAddress
 import Auth.EditLogin as EditLogin
 import Auth.Login as Login
 import Auth.MyAccount as MyAccount
 import Auth.ResetPassword as ResetPassword
+import Auth.VerificationRequired as VerificationRequired
+import Auth.VerifyEmail as VerifyEmail
 import BootstrapGallery as Gallery
 import Browser exposing (Document)
 import Cart
@@ -53,6 +53,7 @@ import Views.StaticPageAdmin as StaticPageAdmin
 import Views.SurchargesAdmin as SurchargesAdmin
 import Views.Utils exposing (pageOverlay, rawHtml)
 
+
 view : Model -> Document Msg
 view ({ route, pageData, navigationData, zone, helcimUrl } as model) =
     let
@@ -61,7 +62,7 @@ view ({ route, pageData, navigationData, zone, helcimUrl } as model) =
                 Checkout ->
                     div [ class "container", Aria.live "polite", id "main" ]
                         [ div [ class "row justify-content-center" ]
-                            [ div [ class "col-md-10" ] pageContent
+                            [ div [ class "col-md-10" ] pageContentIncludingSearch
                             ]
                         ]
 
@@ -79,13 +80,13 @@ view ({ route, pageData, navigationData, zone, helcimUrl } as model) =
                             ]
 
                 _ ->
-                    withSidebar pageContent
+                    withSidebar pageContentIncludingSearch
 
         withSidebar content =
             div [ class "container", Aria.live "polite" ]
                 [ div [ class "tw:flex tw:flex-col-reverse tw:lg:flex-row tw:gap-[40px]" ]
                     [ SiteSidebar.view route
-                    , div [ class "w-full grow", id "main" ] content
+                    , div [ class "tw:w-full tw:grow", id "main" ] content
                     ]
                 ]
 
@@ -96,6 +97,17 @@ view ({ route, pageData, navigationData, zone, helcimUrl } as model) =
 
                 _ ->
                     h2 [] [ text <| adminTitle model adminRoute ]
+
+        advanceSearchView showDetail =
+            AdvancedSearch.view
+                showDetail
+                NavigateTo
+                AdvancedSearchMsg
+                model.advancedSearchData
+                model.categoryListData
+
+        pageContentIncludingSearch =
+            div [] (advanceSearchView route) :: pageContent
 
         pageContent =
             case route of
@@ -117,9 +129,7 @@ view ({ route, pageData, navigationData, zone, helcimUrl } as model) =
                                 pageData.categoryDetails
 
                 AdvancedSearch ->
-                    withIntermediateText
-                        (AdvancedSearch.view NavigateTo AdvancedSearchMsg model.advancedSearchData)
-                        pageData.advancedSearch
+                    []
 
                 SearchResults data pagination ->
                     if Paginate.isLoading pageData.searchResults then
@@ -789,13 +799,14 @@ staticPageView { name, slug, content } =
             else
                 h1 [] [ text name ]
 
-        html = rawHtml content
+        html =
+            rawHtml content
+
         -- Used when working on homepage:
         -- html = Mock.Home.view
-
     in
     [ header
-    , div [class "static-page"] [html]
+    , div [ class "static-page" ] [ html ]
     ]
 
 
