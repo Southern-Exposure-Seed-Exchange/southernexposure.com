@@ -25,6 +25,7 @@ import Model exposing (CartForms, Model)
 import OrderDetails
 import PageData
 import Paginate
+import Product exposing (productMainImage)
 import Products.AdminViews as ProductAdmin
 import Products.Pagination as Pagination
 import Products.Views as ProductViews
@@ -574,7 +575,7 @@ pageImage { route, pageData } =
     case route of
         ProductDetails _ _ ->
             RemoteData.toMaybe pageData.productDetails
-                |> Maybe.map (.product >> .image >> .original)
+                |> Maybe.map (.product >> productMainImage >> .original)
 
         CategoryDetails _ _ ->
             Paginate.getResponseData pageData.categoryDetails

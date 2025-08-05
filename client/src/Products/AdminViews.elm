@@ -344,8 +344,8 @@ type alias Form =
     , errors : Api.FormErrors
     , isSaving : Bool
 
-    -- ImageUrl is used for the Edit Form
-    , imageUrl : String
+    -- ImageUrls is used for the Edit Form
+    , imageUrls : Array String
     }
 
 
@@ -367,7 +367,7 @@ initialForm =
     , shippingRestrictions = Array.empty
     , errors = Api.initialErrors
     , isSaving = False
-    , imageUrl = ""
+    , imageUrls = Array.empty
     }
 
 
@@ -395,8 +395,14 @@ encodeForm model validVariants maybeProductId =
         , ( "categories", Encode.array Category.idEncoder model.categories )
         , ( "baseSku", Encode.string model.baseSku )
         , ( "longDescription", Encode.string model.description )
-        , ( "imageName", Encode.string model.imageName )
-        , ( "imageData", Encode.string model.imageData )
+        , ( "imagesData", Encode.array
+                (\(fileName, base64Image) ->
+                    Encode.object
+                        [ ( "fileName", Encode.string fileName )
+                        , ( "base64Image", Encode.string base64Image )
+                    ]
+                ) (Array.fromList [ (model.imageName, model.imageData) ])
+          )
         , ( "keywords", Encode.string model.keywords )
         , ( "shippingRestrictions", Encode.array regionEncoder model.shippingRestrictions )
         , ( "seedAttributes", encodedSeedAttribues )
@@ -431,7 +437,7 @@ formDecoder =
         |> Decode.required "shippingRestrictions" (Decode.array regionDecoder)
         |> Decode.hardcoded Api.initialErrors
         |> Decode.hardcoded False
-        |> Decode.required "imageUrl" Decode.string
+        |> Decode.required "imageUrls" (Decode.array Decode.string)
 
 
 type alias Variant =
@@ -763,14 +769,15 @@ formView buttonText submitMsg msgWrapper model { categories } locations id =
     let
         inputRow s =
             Form.inputRow model.errors (s model)
+        imageUrl = List.head (Array.toList model.imageUrls) |> Maybe.withDefault ""
 
         existingImage =
-            if not <| String.isEmpty model.imageUrl then
+            if not <| String.isEmpty imageUrl then
                 Form.withLabel "Current Image" True <|
                     [ div [ class "image-preview mb-3" ]
                         [ img
                             [ class "img-fluid"
-                            , src <| media <| "products/originals/" ++ model.imageUrl
+                            , src <| media <| "products/originals/" ++ imageUrl
                             ]
                             []
                         ]

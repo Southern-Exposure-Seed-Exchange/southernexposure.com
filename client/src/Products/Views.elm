@@ -10,7 +10,7 @@ import Html.Keyed as Keyed
 import Json.Decode as Decode
 import Messages exposing (Msg(..))
 import Model exposing (CartForms)
-import Models.Fields exposing (Cents(..), centsToString, imageToSrcSet, imgSrcFallback, lotSizeToString)
+import Models.Fields exposing (Cents(..), blankImage, centsToString, imageToSrcSet, imgSrcFallback, lotSizeToString)
 import PageData exposing (ProductData)
 import Paginate exposing (Paginated)
 import Product exposing (Product, ProductId(..), ProductVariant, ProductVariantId(..), variantPrice)
@@ -24,6 +24,7 @@ import Views.Format as Format
 import Views.Microdata as Microdata
 import Views.Pager as Pager
 import Views.Utils exposing (htmlOrBlank, icon, numericInput, onIntInput, rawHtml, routeLinkAttributes)
+import Product exposing (productMainImage)
 
 
 details : CartForms -> PageData.ProductDetails -> List (Html Msg)
@@ -41,6 +42,7 @@ details addToCartForms { product, variants, maybeSeedAttribute, categories } =
                             , rawHtml category.description
                             ]
                     )
+        productImage = productMainImage product
     in
     List.singleton <|
         div Microdata.product
@@ -59,14 +61,14 @@ details addToCartForms { product, variants, maybeSeedAttribute, categories } =
                             [ class "card" ]
                             [ div [ class "card-body text-center p-1" ]
                                 [ a
-                                    [ href <| product.image.original
+                                    [ href <| productImage.original
                                     , A.target "_self"
-                                    , Gallery.openOnClick ProductDetailsLightbox product.image
+                                    , Gallery.openOnClick ProductDetailsLightbox productImage
                                     , Aria.label <| "View Product Image for " ++ product.name
                                     ]
                                     [ img
-                                        [ src <| imgSrcFallback product.image
-                                        , imageToSrcSet product.image
+                                        [ src <| imgSrcFallback productImage
+                                        , imageToSrcSet productImage
                                         , class "img-fluid mb-2"
                                         , alt <| "Product Image for " ++ product.name
                                         , Microdata.image
@@ -177,6 +179,8 @@ list routeConstructor pagination addToCartForms products =
                 |> List.foldr (\( r, b ) ( rs, bs ) -> ( r :: rs, b :: bs )) ( [], [] )
 
         renderProduct cartData ( product, variants, maybeSeedAttribute ) =
+            let productImage = productMainImage product
+            in
             tr Microdata.product
                 [ td [ class "row-product-image text-center align-middle" ]
                     [ Keyed.node "a"
@@ -185,8 +189,8 @@ list routeConstructor pagination addToCartForms products =
                         )
                         [ ( "product-img-" ++ (String.fromInt <| (\(ProductId i) -> i) product.id)
                           , img
-                                [ src <| imgSrcFallback product.image
-                                , imageToSrcSet product.image
+                                [ src <| imgSrcFallback productImage
+                                , imageToSrcSet productImage
                                 , listImageSizes
                                 , Microdata.image
                                 , alt <| "Product Image for " ++ product.name
@@ -270,6 +274,7 @@ renderMobileProductBlock { maybeSelectedVariantId, maybeSelectedVariant, variant
 
             else
                 text ""
+        productImage = productMainImage product
     in
     form formAttributes <|
         [ div [ class "col-12 col-sm-4 pr-sm-0 mb-sm-2" ]
@@ -279,8 +284,8 @@ renderMobileProductBlock { maybeSelectedVariantId, maybeSelectedVariant, variant
                 )
                 [ ( "product-img-" ++ (String.fromInt <| (\(ProductId i) -> i) product.id)
                   , img
-                        [ src <| imgSrcFallback product.image
-                        , imageToSrcSet product.image
+                        [ src <| imgSrcFallback productImage
+                        , imageToSrcSet productImage
                         , class "img-fluid"
                         , listImageSizes
                         , alt <| "Product Image for " ++ product.name

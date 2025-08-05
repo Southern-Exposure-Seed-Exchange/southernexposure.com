@@ -9,6 +9,7 @@ module Product exposing
     , isLimitedAvailablity
     , isOutOfStock
     , nameWithLotSize
+    , productMainImage
     , singleVariantName
     , variantDecoder
     , variantPrice
@@ -20,7 +21,7 @@ import Html.Attributes exposing (class)
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode exposing (Value)
 import Markdown exposing (defaultOptions)
-import Models.Fields exposing (Cents(..), ImageData, LotSize, imageDecoder, lotSizeDecoder, lotSizeToString)
+import Models.Fields exposing (Cents(..), ImageData, LotSize, blankImage, imageDecoder, lotSizeDecoder, lotSizeToString)
 import Views.Microdata as Microdata
 
 
@@ -44,7 +45,7 @@ type alias Product =
     , slug : String
     , baseSKU : String
     , longDescription : String
-    , image : ImageData
+    , images : List ImageData
     }
 
 
@@ -80,6 +81,9 @@ singleVariantName product variants =
                 { lotSize = Nothing }
 
 
+productMainImage : Product -> ImageData
+productMainImage product = List.head product.images |> Maybe.withDefault blankImage
+
 decoder : Decoder Product
 decoder =
     Decode.map6 Product
@@ -88,7 +92,7 @@ decoder =
         (Decode.field "slug" Decode.string)
         (Decode.field "baseSku" Decode.string)
         (Decode.field "longDescription" Decode.string)
-        (Decode.field "image" imageDecoder)
+        (Decode.field "images" (Decode.list imageDecoder))
 
 
 type ProductVariantId

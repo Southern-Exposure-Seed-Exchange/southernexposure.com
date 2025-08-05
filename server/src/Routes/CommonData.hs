@@ -118,7 +118,7 @@ data BaseProductData =
         , bpdSlug :: T.Text
         , bpdBaseSku :: T.Text
         , bpdLongDescription :: T.Text
-        , bpdImage :: ImageSourceSet
+        , bpdImages :: [ImageSourceSet]
         , bpdCategories :: [CategoryId]
         , bpdShippingRestrictions :: [Region]
         } deriving (Show)
@@ -131,20 +131,20 @@ instance ToJSON BaseProductData where
             , "slug" .= bpdSlug
             , "baseSku" .= bpdBaseSku
             , "longDescription" .= bpdLongDescription
-            , "image" .= bpdImage
+            , "images" .= bpdImages
             , "shippingRestrictions" .= bpdShippingRestrictions
             ]
 
 makeBaseProductData :: (MonadReader Config m, MonadIO m) => Entity Product -> [Entity ProductToCategory] -> m BaseProductData
 makeBaseProductData (Entity pId Product {..}) categories = do
-    image <- makeSourceSet "products" $ T.unpack productImageUrl
+    images <- mapM (makeSourceSet "products" . T.unpack) productImageUrls
     return BaseProductData
         { bpdId = pId
         , bpdName = productName
         , bpdSlug = productSlug
         , bpdBaseSku = productBaseSku
         , bpdLongDescription = productLongDescription
-        , bpdImage = image
+        , bpdImages = images
         , bpdCategories =
             productMainCategory
                 : map (productToCategoryCategoryId . entityVal) categories

@@ -31,7 +31,7 @@ import PageData exposing (CartItemId(..), PageData)
 import Paginate exposing (Paginated)
 import Ports
 import Process
-import Product exposing (ProductId(..), ProductVariantId(..))
+import Product exposing (ProductId(..), ProductVariantId(..), productMainImage)
 import Products.AdminViews as ProductAdmin
 import QuickOrder
 import RemoteData exposing (WebData)
@@ -892,7 +892,7 @@ update msg ({ pageData, key } as model) =
         ProductDetailsLightbox subMsg ->
             let
                 updateLightbox { product } =
-                    Gallery.update imageDataLightboxConfig subMsg model.productDetailsLightbox [ product.image ]
+                    Gallery.update imageDataLightboxConfig subMsg model.productDetailsLightbox [ productMainImage product ]
             in
             pageData.productDetails
                 |> RemoteData.toMaybe

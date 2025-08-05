@@ -11,7 +11,7 @@ module Routes.Feeds
 import Control.Concurrent.STM (readTVarIO)
 import Control.Monad (forM)
 import Control.Monad.Reader (asks, liftIO)
-import Data.Maybe (listToMaybe)
+import Data.Maybe (fromMaybe, listToMaybe)
 import Data.Scientific (Scientific, scientific)
 import Data.Time (UTCTime, getCurrentTime)
 import Database.Persist ((==.), (>=.), (<=.), Entity(..), selectList)
@@ -218,7 +218,7 @@ convertProduct baseUrl checkoutDisabled predCache categoryMap prodSales catSales
         , pTitle = productName prod <> lotSize
         , pDescription = productLongDescription prod
         , pLink = productUrl <> productSlug prod <> "/" <> "?variant=" <> T.pack (show $ E.fromSqlKey variantId)
-        , pImageLink = imageUrl <> productImageUrl prod
+        , pImageLink = imageUrl <> fromMaybe "" (listToMaybe $ productImageUrls prod)
         , pProductType = categoryHierarchy
         , pGoogleProductType = Just googleCategory
         , pPriceData =
