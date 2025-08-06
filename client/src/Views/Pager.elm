@@ -9,6 +9,7 @@ text, etc.
 
 -}
 
+import Components.Svg exposing (chevronLeftSvg, chevronRightSvg)
 import Html exposing (Html, a, b, div, li, node, span, text, ul)
 import Html.Attributes exposing (class, tabindex)
 import Paginate exposing (Paginated)
@@ -51,6 +52,33 @@ type alias Elements msg =
     , viewTop : () -> Html msg
     , viewBottom : () -> Html msg
     }
+
+
+customBootstrapPager : (Int -> List (Html.Attribute msg)) -> Int -> Int -> Paginated a b c -> List (Html msg)
+customBootstrapPager linkAttributes endPagesToShow middlePagesToShow pagination =
+    let
+        class_ =
+            "tw:block tw:flex tw:items-center tw:justify-center tw:w-[36px] tw:h-[36px] tw:rounded-[8px] tw:hover:no-underline! tw:hover:bg-[#4DAA9A]! tw:hover:text-white!"
+
+        itemClass isCurrent =
+            if isCurrent then
+                class_ ++ " tw:bg-[#4DAA9A]! tw:text-white! "
+
+            else
+                class_
+
+        renderItem page isCurrent =
+            a (class (itemClass isCurrent) :: linkAttributes page)
+                [ span [] [ text <| String.fromInt page ] ]
+
+        dots =
+            div [ class "page-item disabled tw:border-none!" ]
+                [ span [ class "page-link tw:border-none!" ] [ text "..." ] ]
+    in
+    Paginate.getPagerSections endPagesToShow middlePagesToShow pagination
+        |> List.map (List.map <| \( a, b ) -> renderItem a b)
+        |> List.intersperse [ dots ]
+        |> List.concat
 
 
 elements : Config -> Paginated a b c -> Elements msg
@@ -104,7 +132,7 @@ elements cfg items =
                 |> List.map
                     (\c ->
                         if c == perPage then
-                            span [ class "font-weight-bold" ]
+                            span [ class "tw:font-semibold" ]
                                 [ text <| String.fromInt c ]
 
                         else
@@ -113,9 +141,9 @@ elements cfg items =
                     )
                 |> List.intersperse (text " | ")
                 |> (\ps ->
-                        span [ class "font-weight-bold" ] [ text <| cfg.itemDescription ++ " per page: " ]
+                        span [ class "tw:font-semibold" ] [ text <| cfg.itemDescription ++ " per page: " ]
                             :: ps
-                            |> span [ class "d-none d-md-block" ]
+                            |> span [ class "d-none d-md-block tw:text-[14px]" ]
                    )
 
         previousLink _ =
@@ -126,7 +154,7 @@ elements cfg items =
                 previousRoute =
                     cfg.routeConstructor { page = previousPage, perPage = perPage }
             in
-            prevNextLink items (not << Paginate.hasPrevious) previousRoute "« Prev"
+            prevNextLink items (not << Paginate.hasPrevious) previousRoute chevronLeftSvg
 
         nextLink _ =
             let
@@ -136,10 +164,10 @@ elements cfg items =
                 nextRoute =
                     cfg.routeConstructor { page = nextPage, perPage = perPage }
             in
-            prevNextLink items (not << Paginate.hasNext) nextRoute "Next »"
+            prevNextLink items (not << Paginate.hasNext) nextRoute chevronRightSvg
 
         renderSections _ =
-            Paginate.bootstrapPager
+            customBootstrapPager
                 (\p -> routeLinkAttributes <| cfg.routeConstructor { page = p, perPage = perPage })
                 2
                 2
@@ -152,20 +180,21 @@ elements cfg items =
             else
                 node "nav"
                     [ Aria.label cfg.pagerAriaLabel, class cfg.pagerCssClass ]
-                    [ ul [ class "pagination pagination-sm mb-0" ] <|
+                    [ div [ class "tw:flex tw:gap-[16px] tw:items-center" ] <|
                         previousLink ()
                             :: renderSections ()
                             ++ [ nextLink () ]
                     ]
 
-        paginationHtml content =
-            div [ class "d-flex mb-2 justify-content-between align-items-center" ] content
-
         viewTop _ =
-            paginationHtml [ pagingText (), div [ class "d-none d-md-block" ] [ view () ] ]
+            div [ class "tw:flex tw:justify-between" ] [ pagingText (), div [ class "d-none d-md-block" ] [ view () ] ]
 
         viewBottom _ =
-            paginationHtml [ div [ class "d-none d-md-block" ] [ pagingText () ], view () ]
+            div [ class "tw:flex tw:justify-center tw:w-full tw:pt-[40px]" ]
+                [ --     div [ class "d-none d-md-block" ] [ pagingText () ]
+                  -- ,
+                  view ()
+                ]
     in
     { pagingText = pagingText
     , perPageLinks = perPageLinks
@@ -178,7 +207,7 @@ elements cfg items =
 {-| Helper to make the Previous/Next links for the pager, with the ability to
 disable them for the first/last pages.
 -}
-prevNextLink : Paginated a b c -> (Paginated a b c -> Bool) -> Route -> String -> Html msg
+prevNextLink : Paginated a b c -> (Paginated a b c -> Bool) -> Route -> Html msg -> Html msg
 prevNextLink items isDisabled route content =
     let
         ( itemClass, linkAttrs ) =
@@ -188,7 +217,7 @@ prevNextLink items isDisabled route content =
             else
                 ( "", [] )
     in
-    li [ class <| "page-item" ++ itemClass ]
-        [ a (class "page-link" :: linkAttrs ++ routeLinkAttributes route)
-            [ text content ]
+    div [ class <| "" ++ itemClass ]
+        [ a (class "tw:block tw:p-[4px]" :: linkAttrs ++ routeLinkAttributes route)
+            [ content ]
         ]

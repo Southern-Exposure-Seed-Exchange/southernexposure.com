@@ -4,13 +4,13 @@ import Address
 import AdvancedSearch
 import Api
 import Auth.CreateAccount as CreateAccount
-import Auth.VerifyEmail as VerifyEmail
-import Auth.VerificationRequired as VerificationRequired
 import Auth.EditAddress as EditAddress
 import Auth.EditLogin as EditLogin
 import Auth.Login as Login
 import Auth.MyAccount as MyAccount
 import Auth.ResetPassword as ResetPassword
+import Auth.VerificationRequired as VerificationRequired
+import Auth.VerifyEmail as VerifyEmail
 import BootstrapGallery as Gallery
 import Browser
 import Browser.Dom as Dom
@@ -244,12 +244,13 @@ fetchDataForRoute ({ route, pageData, key } as model) =
 
                         User.Anonymous ->
                             case token of
-                                Nothing -> doNothing
+                                Nothing ->
+                                    doNothing
+
                                 Just tok ->
                                     { pageData | orderDetails = RemoteData.Loading }
                                         |> fetchLocationsOnce
                                         |> batchCommand (getGuestCheckoutSuccessDetails orderId tok)
-
 
                 Cart ->
                     pageData
@@ -304,7 +305,9 @@ fetchDataForRoute ({ route, pageData, key } as model) =
                                     { pageData | orderDetails = RemoteData.Loading }
                                         |> fetchLocationsOnce
                                         |> batchCommand (getGuestCheckoutSuccessDetails orderId tok)
-                                Nothing -> ( pageData, redirectIfAuthRequired key model.route )
+
+                                Nothing ->
+                                    ( pageData, redirectIfAuthRequired key model.route )
 
                 Admin Dashboard ->
                     { pageData | adminDashboard = RemoteData.Loading }
@@ -655,17 +658,19 @@ getCustomerCartItemsCount =
 getCheckoutSuccessDetails : Int -> Cmd Msg
 getCheckoutSuccessDetails orderId =
     checkoutSuccessDetailsBuilder Api.CheckoutSuccess <|
-            Encode.object
-                [ ( "orderId", Encode.int orderId )
-                ]
+        Encode.object
+            [ ( "orderId", Encode.int orderId )
+            ]
+
 
 getGuestCheckoutSuccessDetails : Int -> String -> Cmd Msg
 getGuestCheckoutSuccessDetails orderId token =
     checkoutSuccessDetailsBuilder Api.GuestCheckoutSuccess <|
-            Encode.object
-                [ ( "orderId", Encode.int orderId )
-                , ( "token", Encode.string token )
-                ]
+        Encode.object
+            [ ( "orderId", Encode.int orderId )
+            , ( "token", Encode.string token )
+            ]
+
 
 checkoutSuccessDetailsBuilder : Api.Endpoint -> Encode.Value -> Cmd Msg
 checkoutSuccessDetailsBuilder endpoint body =
@@ -673,6 +678,7 @@ checkoutSuccessDetailsBuilder endpoint body =
         |> Api.withJsonBody body
         |> Api.withJsonResponse PageData.orderDetailsDecoder
         |> Api.sendRequest GetCheckoutSuccessDetails
+
 
 logOut : Cmd Msg
 logOut =
@@ -908,7 +914,17 @@ update msg ({ pageData, key } as model) =
 
         ChangeCartFormQuantity productId quantity ->
             model
-                |> updateCartQuantity productId quantity
+                |> updateCartFormQuantity productId (Exact quantity)
+                |> noCommand
+
+        IncreaseCartFormQuantity productId ->
+            model
+                |> updateCartFormQuantity productId Increase
+                |> noCommand
+
+        DecreaseCartFormQuantity productId ->
+            model
+                |> updateCartFormQuantity productId Decrease
                 |> noCommand
 
         SubmitAddToCart ((ProductId productId) as pId) defaultVariant ->
@@ -994,6 +1010,7 @@ update msg ({ pageData, key } as model) =
               }
             , Cmd.map CreateAccountMsg cmd
             )
+
         VerifyEmailMsg subMsg ->
             let
                 ( updatedForm, maybeAuthStatus, cmd ) =
@@ -1028,11 +1045,12 @@ update msg ({ pageData, key } as model) =
 
         VerificationRequiredMsg subMsg ->
             let
-                (updatedForm, cmd) = VerificationRequired.update subMsg model.verificationRequiredForm
+                ( updatedForm, cmd ) =
+                    VerificationRequired.update subMsg model.verificationRequiredForm
             in
-                ( {model | verificationRequiredForm = updatedForm}
-                , Cmd.map VerificationRequiredMsg cmd
-                )
+            ( { model | verificationRequiredForm = updatedForm }
+            , Cmd.map VerificationRequiredMsg cmd
+            )
 
         ResetPasswordMsg subMsg ->
             let
@@ -1112,7 +1130,7 @@ update msg ({ pageData, key } as model) =
 
         CheckoutMsg subMsg ->
             let
-                handleOutMsg : Maybe Checkout.OutMsg -> (Model, Cmd msg) -> (Model, Cmd msg)
+                handleOutMsg : Maybe Checkout.OutMsg -> ( Model, Cmd msg ) -> ( Model, Cmd msg )
                 handleOutMsg maybeMsg ( model_, cmd ) =
                     case maybeMsg of
                         Just (Checkout.CustomerOrderCompleted orderId) ->
@@ -2167,9 +2185,18 @@ resetForm oldRoute model =
             model
 
 
-updateCartQuantity : ProductId -> Int -> Model -> Model
-updateCartQuantity (ProductId productId) quantity model =
+type UpdateCartFormParam
+    = Exact Int
+    | Increase
+    | Decrease
+
+-- | Update the number value in form input of a product.
+updateCartFormQuantity : ProductId -> UpdateCartFormParam -> Model -> Model
+updateCartFormQuantity (ProductId productId) param model =
     let
+        defaultQuantity =
+            1
+
         addToCartForms =
             Dict.update productId updateForm model.addToCartForms
 
@@ -2178,12 +2205,37 @@ updateCartQuantity (ProductId productId) quantity model =
                 Nothing ->
                     Just
                         { variant = Nothing
-                        , quantity = quantity
+                        , quantity =
+                            case param of
+                                Exact quantity ->
+                                    quantity
+
+                                Increase ->
+                                    defaultQuantity + 1
+
+                                Decrease ->
+                                    defaultQuantity
                         , requestStatus = RemoteData.NotAsked
                         }
 
                 Just v ->
-                    Just { v | quantity = quantity }
+                    Just
+                        { v
+                            | quantity =
+                                case param of
+                                    Exact quantity ->
+                                        quantity
+
+                                    Increase ->
+                                        v.quantity + 1
+
+                                    Decrease ->
+                                        if v.quantity == defaultQuantity then
+                                            v.quantity
+
+                                        else
+                                            v.quantity - 1
+                        }
     in
     { model | addToCartForms = addToCartForms }
 

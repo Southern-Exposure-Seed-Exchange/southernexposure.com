@@ -361,7 +361,7 @@ edit model originalPage =
 
 contentPreview : String -> Html msg
 contentPreview content =
-    div [ class "container" ]
+    div [ class "container static-page" ]
         [ h1 [ class "text-center" ] [ text "Content Preview" ]
         , rawHtml content
         ]

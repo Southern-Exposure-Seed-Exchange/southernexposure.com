@@ -91,7 +91,7 @@ mainView route routingMsg formMsg data categories =
                         , checked <| selector data
                         ]
                         []
-                    , span [] [ text content ]
+                    , span [ class "tw:line-clamp-1" ] [ text content ]
                     , div [ class "tw:w-[20px]" ]
                         [ svgIcon
                         ]
@@ -194,7 +194,7 @@ mainView route routingMsg formMsg data categories =
     )
         ++ form [ class "tw:pb-[28px] tw:flex tw:flex-col tw:gap-[16px]", onSubmit << routingMsg <| SearchResults data Pagination.default, class "advanced-search" ]
             [ searchBar
-            , div [ class "tw:w-full tw:flex tw:justify-between tw:px-[16px]" ] filterCheckboxes
+            , div [ class "tw:w-full tw:flex tw:justify-between tw:px-[16px] tw:gap-[24px]" ] filterCheckboxes
             ]
         :: searchIn
 

@@ -112,7 +112,7 @@ view route =
                     ]
                     [ input [ type_ "hidden", name "list", value "EXGP5iaxXvU4tH7fWWopIQ" ] []
                     , Form.textView "email" "email" "Enter your email" "Email"
-                    , Button.view { defaultButton | label = "Subscribe", type_ = Button.FormSubmit, icon = "envelope", padding = Button.Expand }
+                    , Button.view { defaultButton | label = "Subscribe", type_ = Button.FormSubmit, icon = Just (icon "envelope"), padding = Button.Expand }
                     ]
                 ]
 

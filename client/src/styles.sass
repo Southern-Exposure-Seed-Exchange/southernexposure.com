@@ -456,15 +456,15 @@ h1.product-details-title
   +media-breakpoint-down(sm)
     width: 100%
 
-nav.products-pagination
-  /* Center pagination links on mobile */
-  margin-left: auto
-  margin-right: auto
-  /* Add spacing & increase size on mobile */
-  +media-breakpoint-down(sm)
-    margin-bottom: 1rem
-    a.page-link
-      font-size: 1.1rem
+// nav.products-pagination
+//   /* Center pagination links on mobile */
+//   margin-left: auto
+//   margin-right: auto
+//   /* Add spacing & increase size on mobile */
+//   +media-breakpoint-down(sm)
+//     margin-bottom: 1rem
+//     a.page-link
+//       font-size: 1.1rem
 
 /** Advanced Search **/
 
@@ -643,6 +643,16 @@ a.unlink
 
 a.unlink:hover
   color: inherit
+
+/* Chrome, Safari, Edge, Opera */
+input.no-arrow::-webkit-outer-spin-button,
+input.no-arrow::-webkit-inner-spin-button
+  -webkit-appearance: none
+  margin: 0
+
+/* Firefox */
+input.no-arrow[type=number]
+  -moz-appearance: textfield
 
 @import "./style/tailwind-output.css"
 @import "./style/fontawesome/css/all.css"

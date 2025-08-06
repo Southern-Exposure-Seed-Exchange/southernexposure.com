@@ -9,11 +9,14 @@ module SeedAttribute exposing
     , toDescription
     )
 
+import Components.Svg exposing (heirLoomSvg, organicSvg, smallFarmSvg, sunSvg)
 import Html exposing (Html, div, h4, img, li, span, text, ul)
 import Html.Attributes exposing (alt, class, src, title)
 import Json.Decode as Decode exposing (Decoder)
 import Product exposing (ProductId(..))
 import Views.Images as Images
+import Html exposing (h6)
+import Html exposing (h5)
 
 
 type SeedAttributeId
@@ -110,27 +113,54 @@ legend =
     all
         |> List.map
             (\attribute ->
-                li [ class "media mb-2 text-left" ]
-                    [ img
-                        [ class "mr-3"
-                        , src <| iconUrl attribute
-                        , title <| toDescription attribute
-                        , alt <| toString attribute
-                        ]
-                        []
+                li [ class "media tw:flex tw:gap-[16px] tw:text-left" ]
+                    [ attributeToSvg attribute
                     , div [ class "media-body" ] [ text <| toDescription attribute ]
                     ]
             )
         |> (\items ->
-                div [ class "text-center mt-4 mb-2" ]
-                    [ h4 [] [ text "Icon Legend" ]
+                div [ class "text-center mt-4 mb-2 tw:pt-[200px]" ]
+                    [ h5 [ class "tw:pb-[16px]"] [ text "Icon Legend" ]
                     , ul [ class "list-unstyled d-inline-block mb-0" ] items
                     ]
            )
 
 
+attributeToSvg : Attribute -> Html msg
+attributeToSvg attribute =
+    case attribute of
+        Organic ->
+            organicSvg
+
+        Heirloom ->
+            heirLoomSvg
+
+        Regional ->
+            sunSvg
+
+        SmallGrower ->
+            smallFarmSvg
+
+
 icons : SeedAttribute -> Html msg
 icons { isOrganic, isHeirloom, isRegional, isSmallGrower } =
+    [ ( isOrganic, Organic )
+    , ( isHeirloom, Heirloom )
+    , ( isRegional, Regional )
+    , ( isSmallGrower, SmallGrower )
+    ]
+        |> List.filter Tuple.first
+        |> List.map
+            (Tuple.second
+                >> (\attribute ->
+                        attributeToSvg attribute
+                   )
+            )
+        |> div [ class "tw:flex tw:gap-[10px]" ]
+
+
+icons2 : SeedAttribute -> Html msg
+icons2 { isOrganic, isHeirloom, isRegional, isSmallGrower } =
     [ ( isOrganic, Organic )
     , ( isHeirloom, Heirloom )
     , ( isRegional, Regional )
