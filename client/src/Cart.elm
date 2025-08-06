@@ -17,7 +17,7 @@ import Html.Keyed as Keyed
 import Json.Encode as Encode
 import Models.Fields exposing (Cents(..), centsMap, imageToSrcSet, imgSrcFallback, lotSizeToString)
 import PageData exposing (CartDetails, CartItemId(..))
-import Product exposing (productMainImage, variantPrice)
+import Product exposing (variantLimitedStockDisclaimer, productMainImage, variantPrice)
 import RemoteData
 import Routing exposing (Route(..), reverse)
 import User exposing (AuthStatus, unauthorized)
@@ -248,6 +248,7 @@ view authStatus ({ quantities } as form_) ({ items, charges } as cartDetails) =
                         [ a (routeLinkAttributes <| ProductDetails product.slug <| Just variant.id)
                             [ Product.nameWithLotSize product variant ]
                         ]
+                    , variantLimitedStockDisclaimer variant
                     , small
                         [ class "text-muted" ]
                         [ text <| "Item #" ++ product.baseSKU ++ variant.skuSuffix ]

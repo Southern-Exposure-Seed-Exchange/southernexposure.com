@@ -73,6 +73,7 @@ ProductVariant json
     quantity Int64
     lotSize LotSize Maybe
     isActive Bool
+    displayStockWarning Bool default=true
     UniqueSku productId skuSuffix
     deriving Show
 
@@ -730,5 +731,9 @@ migrations =
             -- to ToJSON instance for PersistentValue
             return [MigrateSql "UPDATE product SET image_urls = CONCAT('[\"s', image_url, '\"]') WHERE image_url != ''''''" []]
         , DropColumn ("product", "image_url")
+        ]
+    , 2 ~> 3 :=
+        -- Add 'displayStockWarning' to 'ProductVariant'
+        [ AddColumn "product_variant" (Column "display_stock_warning" SqlBool [NotNull, Default $ toPersistValue True]) (Just $ toPersistValue True)
         ]
     ]

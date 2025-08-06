@@ -8,6 +8,7 @@ module Product exposing
     , idEncoder
     , isLimitedAvailablity
     , isOutOfStock
+    , variantLimitedStockDisclaimer
     , nameWithLotSize
     , productMainImage
     , singleVariantName
@@ -16,7 +17,7 @@ module Product exposing
     )
 
 import Dict exposing (Dict)
-import Html exposing (Html, span)
+import Html exposing (Html, div, span, text)
 import Html.Attributes exposing (class)
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode exposing (Value)
@@ -110,6 +111,7 @@ type alias ProductVariant =
     , quantity : Int
     , lotSize : Maybe LotSize
     , isActive : Bool
+    , displayStockWarning : Bool
     }
 
 
@@ -129,6 +131,10 @@ variantDecoder =
         (Decode.field "quantity" Decode.int)
         (Decode.field "lotSize" <| Decode.nullable lotSizeDecoder)
         (Decode.field "isActive" Decode.bool)
+        |> Decode.andThen (\partialData ->
+            Decode.map (\displayStockWarning -> partialData displayStockWarning)
+                (Decode.field "displayStockWarning" Decode.bool)
+        )
 
 
 isOutOfStock : List ProductVariant -> Bool
@@ -139,3 +145,12 @@ isOutOfStock =
 isLimitedAvailablity : List ProductVariant -> Bool
 isLimitedAvailablity =
     List.any (\v -> v.quantity <= 0)
+
+variantLimitedStockDisclaimer : ProductVariant -> Html msg
+variantLimitedStockDisclaimer variant =
+    if variant.quantity <= 0 && variant.displayStockWarning then
+        div
+            [ class "alert alert-warning" ]
+            [ text "This item has limited stock availability. Due to high demand and low inventory levels, delivery may take longer than usual" ]
+    else
+        text ""

@@ -162,6 +162,7 @@ data VariantData =
         , vdQuantity :: Int64
         , vdLotSize :: Maybe LotSize
         , vdIsActive :: Bool
+        , vdDisplayStockWarning :: Bool
         } deriving (Show)
 
 instance ToJSON VariantData where
@@ -175,6 +176,7 @@ instance ToJSON VariantData where
             , "quantity" .= vdQuantity
             , "lotSize" .= vdLotSize
             , "isActive" .= vdIsActive
+            , "displayStockWarning" .= vdDisplayStockWarning
             ]
 
 getVariantPrice :: VariantData -> Cents
@@ -230,6 +232,7 @@ makeVariantData (Entity variantId ProductVariant {..}) maybeSalePrice =
         , vdQuantity = productVariantQuantity
         , vdLotSize = productVariantLotSize
         , vdIsActive = productVariantIsActive
+        , vdDisplayStockWarning = productVariantDisplayStockWarning
         }
 
 -- | Get the CategorySales for the Product's Categories, than apply any

@@ -231,13 +231,8 @@ validateVariant variantId =
                         , not (productVariantIsActive variant)
                         )
                     ]
-                soldOutError =
-                    [ ( "This Product Variant is Sold Out."
-                        , productVariantQuantity variant <= 0
-                        )
-                    ]
             in
-            return $ inactiveError ++ soldOutError
+            return $ inactiveError
 
 
 -- DETAILS

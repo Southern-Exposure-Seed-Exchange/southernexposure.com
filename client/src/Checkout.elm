@@ -26,7 +26,7 @@ import Models.Fields exposing (Cents(..), centsFromString, centsMap, centsMap2, 
 import OrderDetails
 import PageData exposing (LineItemType(..))
 import Ports
-import Product exposing (productMainImage, variantPrice)
+import Product exposing (variantLimitedStockDisclaimer, productMainImage, variantPrice)
 import RemoteData exposing (WebData)
 import Routing exposing (Route(..), reverse)
 import Time
@@ -1653,6 +1653,7 @@ summaryTable ({ items, charges } as checkoutDetails) creditString couponCode cou
                     ]
                 , td []
                     [ div [ class "font-weight-bold" ] [ Product.nameWithLotSize product variant ]
+                    , variantLimitedStockDisclaimer variant
                     , small [ class "text-muted" ]
                         [ text <| "Item #" ++ product.baseSKU ++ variant.skuSuffix ]
                     ]

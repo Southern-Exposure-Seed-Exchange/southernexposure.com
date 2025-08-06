@@ -13,7 +13,7 @@ import Model exposing (CartForms)
 import Models.Fields exposing (Cents(..), blankImage, centsToString, imageToSrcSet, imgSrcFallback, lotSizeToString)
 import PageData exposing (ProductData)
 import Paginate exposing (Paginated)
-import Product exposing (Product, ProductId(..), ProductVariant, ProductVariantId(..), variantPrice)
+import Product exposing (Product, ProductId(..), ProductVariant, ProductVariantId(..), variantLimitedStockDisclaimer, variantPrice)
 import Products.Pagination as Pagination
 import Products.Sorting as Sorting
 import RemoteData
@@ -232,7 +232,7 @@ list routeConstructor pagination addToCartForms products =
 
 
 renderMobileProductBlock : CartFormData -> ( Product, Dict Int ProductVariant, Maybe SeedAttribute ) -> Html Msg
-renderMobileProductBlock { maybeSelectedVariantId, maybeSelectedVariant, variantSelect, selectedItemNumber, quantity, isOutOfStock, requestFeedback } ( product, variants, maybeSeedAttribute ) =
+renderMobileProductBlock { maybeSelectedVariantId, maybeSelectedVariant, variantSelect, selectedItemNumber, quantity, requestFeedback } ( product, variants, maybeSeedAttribute ) =
     let
         formAttributes =
             (::) (class "row product-block") <|
@@ -244,10 +244,6 @@ renderMobileProductBlock { maybeSelectedVariantId, maybeSelectedVariant, variant
                         []
 
         inputAndButtonColumns =
-            if isOutOfStock then
-                []
-
-            else
                 [ div [ class "col-4 pr-0" ]
                     [ input
                         [ type_ "number"
@@ -268,12 +264,11 @@ renderMobileProductBlock { maybeSelectedVariantId, maybeSelectedVariant, variant
                 , div [ class "col-12 mt-3 text-center" ] [ Html.map never requestFeedback ]
                 ]
 
-        availabilityBadge =
-            if isOutOfStock then
-                outOfStockBadge
-
-            else
-                text ""
+        limitedStockWarning =
+            case maybeSelectedVariant of
+                Just v -> variantLimitedStockDisclaimer v
+                Nothing ->
+                    text ""
         productImage = productMainImage product
     in
     form formAttributes <|
@@ -308,7 +303,7 @@ renderMobileProductBlock { maybeSelectedVariantId, maybeSelectedVariant, variant
             , div [ class "d-none d-sm-block" ] [ variantSelect ]
             ]
         , div [ class "col-12 d-sm-none" ] [ variantSelect ]
-        , div [ class "col-12 text-center" ] [ availabilityBadge ]
+        , limitedStockWarning
         ]
             ++ inputAndButtonColumns
 
@@ -349,9 +344,8 @@ limitedAvailabilityBadge : Html msg
 limitedAvailabilityBadge =
     span [ class "badge badge-warning" ] [ text "Limited Availability" ]
 
-
 cartForm : CartFormData -> Product -> Html Msg
-cartForm { maybeSelectedVariant, maybeSelectedVariantId, quantity, isOutOfStock, variantSelect, selectedItemNumber, offersMeta, requestFeedback } product =
+cartForm { maybeSelectedVariant, maybeSelectedVariantId, quantity, variantSelect, selectedItemNumber, offersMeta, requestFeedback } product =
     let
         formAttributes =
             (::) (class "add-to-cart-form") <|
@@ -366,7 +360,13 @@ cartForm { maybeSelectedVariant, maybeSelectedVariantId, quantity, isOutOfStock,
             maybeSelectedVariant
                 |> htmlOrBlank (\v -> h4 [] [ renderPrice v ])
 
-        addToCartInput _ =
+        limitedStockWarning =
+            case maybeSelectedVariant of
+                Just v -> variantLimitedStockDisclaimer v
+                Nothing ->
+                    text ""
+
+        addToCartInput =
             div [ class "input-group mx-auto justify-content-center add-to-cart-group mb-2" ]
                 [ input
                     [ type_ "number"
@@ -387,19 +387,14 @@ cartForm { maybeSelectedVariant, maybeSelectedVariantId, quantity, isOutOfStock,
                     ]
                 ]
 
-        availabilityBadge =
-            if isOutOfStock then
-                outOfStockBadge
-
-            else
-                text ""
     in
     form formAttributes
         [ selectedPrice
         , variantSelect
-        , viewIfLazy (not isOutOfStock) addToCartInput
+        , limitedStockWarning
+        , addToCartInput
         , Html.map never requestFeedback
-        , availabilityBadge
+        -- , availabilityBadge
         , small [ class "text-muted d-block" ]
             [ text <| "Item #" ++ selectedItemNumber ]
         , Html.map never offersMeta
@@ -410,8 +405,6 @@ type alias CartFormData =
     { maybeSelectedVariant : Maybe ProductVariant
     , maybeSelectedVariantId : Maybe ProductVariantId
     , quantity : Int
-    , isOutOfStock : Bool
-    , isLimitedAvailablity : Bool
     , variantSelect : Html Msg
     , selectedItemNumber : String
     , offersMeta : Html Never
@@ -433,20 +426,9 @@ cartFormData addToCartForms ( product, variants ) =
 
         maybeFirstVariantId =
             variantList
-                |> List.filter
-                    (\v ->
-                        if isOutOfStock then
-                            True
-
-                        else
-                            v.quantity > 0
-                    )
                 |> List.sortBy .skuSuffix
                 |> List.head
                 |> Maybe.map .id
-
-        isOutOfStock =
-            Product.isOutOfStock variantList
 
         selectedItemNumber =
             case maybeSelectedVariant of
@@ -491,26 +473,17 @@ cartFormData addToCartForms ( product, variants ) =
                     else
                         [ s, Format.cents <| variantPrice variant ]
 
-                appendOoS l =
-                    if variant.quantity <= 0 then
-                        l ++ [ "OoS" ]
+                appendLimitedAvailability l =
+                    if variant.quantity <= 0 && variant.displayStockWarning && not isSelected then
+                        l ++ [ "Limited Availability" ]
 
                     else
                         l
-
-                -- Disable the option unless the entire product is
-                -- out-of-stock.
-                disabledAttr =
-                    if isOutOfStock then
-                        []
-
-                    else
-                        [ A.disabled <| variant.quantity <= 0 ]
             in
             Maybe.map lotSizeToString variant.lotSize
                 |> Maybe.withDefault (product.baseSKU ++ variant.skuSuffix)
                 |> appendPrice
-                |> appendOoS
+                |> appendLimitedAvailability
                 |> String.join " - "
                 |> text
                 |> List.singleton
@@ -519,7 +492,6 @@ cartFormData addToCartForms ( product, variants ) =
                      , selected (Just variant == maybeSelectedVariant)
                      , A.classList [ ( "out-of-stock", variant.quantity <= 0 ) ]
                      ]
-                        ++ disabledAttr
                     )
 
         variantList =
@@ -546,16 +518,8 @@ cartFormData addToCartForms ( product, variants ) =
                     variantList
 
         renderOfferMeta variant =
-            let
-                availability =
-                    if variant.quantity > 0 then
-                        Microdata.InStock
-
-                    else
-                        Microdata.OutOfStock
-            in
             div (Microdata.offers :: Microdata.offer)
-                [ Microdata.availabilityMeta availability
+                [ Microdata.availabilityMeta Microdata.InStock
                 , Microdata.conditionMeta Microdata.NewCondition
                 , Microdata.mpnMeta (product.baseSKU ++ variant.skuSuffix)
                 , Microdata.skuMeta (product.baseSKU ++ variant.skuSuffix)
@@ -595,8 +559,6 @@ cartFormData addToCartForms ( product, variants ) =
     { maybeSelectedVariant = maybeSelectedVariant
     , maybeSelectedVariantId = maybeSelectedVariantId
     , quantity = quantity
-    , isOutOfStock = Product.isOutOfStock variantList
-    , isLimitedAvailablity = Product.isLimitedAvailablity variantList
     , variantSelect = viewIfLazy showVariantSelect variantSelect
     , selectedItemNumber = selectedItemNumber
     , offersMeta = offers

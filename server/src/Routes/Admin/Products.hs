@@ -236,6 +236,7 @@ data VariantData =
         , vdQuantity :: Int
         , vdLotSize :: Maybe LotSize
         , vdIsActive :: Bool
+        , vdDisplayStockWarning :: Bool
         , vdId :: Maybe ProductVariantId
         -- ^ Only used in the EditProductRoute
         } deriving (Show)
@@ -248,6 +249,7 @@ instance FromJSON VariantData where
         vdLotSize <- v .: "lotSize"
         vdIsActive <- v .: "isActive"
         vdId <- v .: "id"
+        vdDisplayStockWarning <- v .: "displayStockWarning"
         return VariantData {..}
 
 instance ToJSON VariantData where
@@ -259,6 +261,7 @@ instance ToJSON VariantData where
             , "quantity" .= vdQuantity
             , "lotSize" .= vdLotSize
             , "isActive" .= vdIsActive
+            , "displayStockWarning" .= vdDisplayStockWarning
             ]
 
 data SeedData =
@@ -407,6 +410,7 @@ editProductDataRoute t productId = withAdminCookie t $ \_ ->
             , vdQuantity = fromIntegral productVariantQuantity
             , vdLotSize = productVariantLotSize
             , vdIsActive = productVariantIsActive
+            , vdDisplayStockWarning = productVariantDisplayStockWarning
             }
     makeAttributeData :: Entity SeedAttribute -> SeedData
     makeAttributeData (Entity _ SeedAttribute {..}) =
@@ -514,6 +518,7 @@ editProductRoute = validateAdminAndParameters $ \_ EditProductParameters {..} ->
                         , ProductVariantQuantity =. fromIntegral vdQuantity
                         , ProductVariantLotSize =. vdLotSize
                         , ProductVariantIsActive =. vdIsActive
+                        , ProductVariantDisplayStockWarning =. vdDisplayStockWarning
                         ]
                     unless vdIsActive $
                         deleteWhere [CartItemProductVariantId ==. variantId]
@@ -641,6 +646,7 @@ makeVariant pId VariantData {..} =
         , productVariantQuantity = fromIntegral vdQuantity
         , productVariantLotSize = vdLotSize
         , productVariantIsActive = vdIsActive
+        , productVariantDisplayStockWarning = vdDisplayStockWarning
         }
 
 makeAttributes :: ProductId -> SeedData -> SeedAttribute

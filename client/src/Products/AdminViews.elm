@@ -447,6 +447,7 @@ type alias Variant =
     , lotSizeAmount : String
     , lotSizeSelector : LotSizeSelector
     , isActive : Bool
+    , displayStockWarning : Bool
     , id : Maybe Int
     }
 
@@ -459,6 +460,7 @@ initialVariant =
     , lotSizeAmount = ""
     , lotSizeSelector = LSMass
     , isActive = True
+    , displayStockWarning = True
     , id = Nothing
     }
 
@@ -506,13 +508,14 @@ variantDecoder =
                 Just (Plugs _) ->
                     LSPlugs
     in
-    Decode.map7 Variant
+    Decode.map8 Variant
         (Decode.field "skuSuffix" Decode.string)
         (Decode.field "price" <| Decode.map centsToString centsDecoder)
         (Decode.field "quantity" <| Decode.map String.fromInt Decode.int)
         (Decode.field "lotSize" <| Decode.map sizeToAmount <| Decode.nullable lotSizeDecoder)
         (Decode.field "lotSize" <| Decode.map sizeToSelector <| Decode.nullable lotSizeDecoder)
         (Decode.field "isActive" Decode.bool)
+        (Decode.field "displayStockWarning" Decode.bool)
         (Decode.field "id" <| Decode.nullable Decode.int)
 
 
@@ -655,6 +658,7 @@ type VariantMsg
     | InputLotSizeAmount String
     | SelectLotSizeSelector LotSizeSelector
     | ToggleVariantIsActive Bool
+    | ToggleVariantDisplayStockWarning Bool
 
 
 updateVariant : VariantMsg -> Variant -> Variant
@@ -678,6 +682,9 @@ updateVariant msg model =
         ToggleVariantIsActive val ->
             { model | isActive = val }
 
+        ToggleVariantDisplayStockWarning val ->
+            { model | displayStockWarning = val }
+
 
 {-| A validated variant has it's String inputs turned into the types expected
 by the API.
@@ -688,6 +695,7 @@ type alias ValidVariant =
     , quantity : Int
     , lotSize : Maybe LotSize
     , isActive : Bool
+    , displayStockWarning : Bool
     , id : Maybe Int
     }
 
@@ -703,6 +711,7 @@ variantEncoder variant =
                 |> Maybe.withDefault Encode.null
           )
         , ( "isActive", Encode.bool variant.isActive )
+        , ( "displayStockWarning", Encode.bool variant.displayStockWarning )
         , ( "id"
           , Maybe.map Encode.int variant.id
                 |> Maybe.withDefault Encode.null
@@ -755,6 +764,7 @@ validateVariant ({ lotSizeAmount } as variant) =
             , price = price
             , quantity = quantity
             , lotSize = lotSize
+            , displayStockWarning = variant.displayStockWarning
             }
         )
         |> Validation.apply "price" (Validation.cents variant.price)
@@ -923,6 +933,10 @@ variantForm errors index variant =
             (UpdateVariant index << ToggleVariantIsActive)
             "Is Enabled"
             (fieldName "isEnabled")
+        , Form.checkboxRow variant.displayStockWarning
+            (UpdateVariant index << ToggleVariantDisplayStockWarning)
+            "Display Stock Warning. When quantity is 0 or less, a warning will be shown for this product variant."
+            (fieldName "displayStockWarning")
         , removeButton
         ]
 
