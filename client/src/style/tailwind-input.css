@@ -8,9 +8,52 @@ select:focus {
 }
 
 .static-page a {
-    @apply tw:text-[rgba(52,195,171,1)] tw:hover:text-[rgba(52,195,171,1)] tw:hover:underline;
+  @apply tw:text-[rgba(52,195,171,1)] tw:hover:text-[rgba(52,195,171,1)] tw:hover:underline;
+}
+
+.static-page h1 {
+  @apply tw:mb-[32px];
+}
+
+.static-page h2 {
+  @apply tw:mb-[8px];
+}
+
+.static-page h3 {
+  @apply tw:mb-[8px];
+}
+
+.static-page h4 {
+  @apply tw:mb-[8px];
+}
+
+.static-page h5 {
+  @apply tw:mb-[8px];
+}
+
+.static-page p {
+  @apply tw:mb-[16px];
+}
+
+.static-page hr {
+  @apply tw:mb-[16px] tw:mt-[16px];
+}
+
+.static-page ul {
+  display: block;
+  list-style-type: disc; /* default bullet */
+  padding-left: 40px;
+  margin: 1em 0;
+}
+
+.static-page li {
+  display: list-item;
+}
+
+.static-page img {
+  @apply tw:m-[20px] tw:rounded-[16px]!;
 }
 
 .clickable-image {
-    @apply tw:hover:brightness-80 tw:transition-all;
+  @apply tw:hover:brightness-80 tw:transition-all;
 }

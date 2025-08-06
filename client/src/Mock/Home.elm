@@ -13,7 +13,7 @@ import Views.Images as Images
 imageLinkView hrefLink imageLink altText =
     a [ href hrefLink ]
         [ img
-            [ class "tw:hover:brightness-80 tw:transition-all"
+            [ class "clickable-image tw:m-0!"
             , src <| Images.static imageLink
             , alt altText
             ]
@@ -23,7 +23,7 @@ imageLinkView hrefLink imageLink altText =
 
 section1 =
     div []
-        [ h1 [ class "tw:pb-[32px] tw:whitespace-pre-line" ] [ text "New & Returning Varieties\nfor 2025" ]
+        [ h1 [ class "tw:whitespace-pre-line" ] [ text "New & Returning Varieties\nfor 2025" ]
         , div [ class "tw:grid tw:grid-cols-3 tw:gap-[12px] tw:w-fit tw:pb-[20px]" ]
             [ imageLinkView "/products/granny-hobbs-collards/" "homepage/1-1.png" "granny hobbs collard"
             , imageLinkView "/products/purple-lovegrass/" "homepage/1-2.png" "purple lovegrass"
@@ -72,7 +72,7 @@ section1 =
 
 section2 =
     div []
-        [ h1 [ class "tw:pb-[32px]" ] [ text "Featured Customer Favorites" ]
+        [ h1 [ ] [ text "Featured Customer Favorites" ]
         , div [ class "tw:grid tw:grid-cols-3 tw:gap-[12px] tw:w-fit tw:pb-[20px]" ]
             [ imageLinkView "/products/alabama-blue-collards/" "homepage/2-1.png" "alabama blue collards"
             , imageLinkView "/products/cossack-pineapple-ground-cherry/" "homepage/2-2.png" "cossack pineapple ground cherry"
@@ -124,7 +124,7 @@ section2 =
 
 section3 =
     div []
-        [ h1 [ class "tw:pb-[32px]" ] [ text "Featured Customer Favorites" ]
+        [ h1 [ ] [ text "Featured Customer Favorites" ]
         , div [ class "tw:grid tw:grid-cols-3 tw:gap-[12px] tw:w-fit" ]
             [ imageLinkView "/vegetable-gardening-in-the-southeast-the-timber-press-guide-to-p-1722.html" "homepage/3-1.png" "Vegetable Gardening in the SE"
             , imageLinkView "/products/grow-great-vegetables-in-virginia/" "homepage/3-2.png" "Grow Great Virginia Vegetables"
@@ -190,7 +190,7 @@ view =
         [ div [ class "" ]
             [ a [ href "/growing-guides/" ]
                 [ img
-                    [ class "clickable-image"
+                    [ class "clickable-image tw:m-0!"
                     , src <| Images.static "homepage/banner.png"
                     ]
                     []
@@ -198,7 +198,7 @@ view =
             ]
         , div [ class "tw:flex tw:w-full tw:gap-[40px]" ]
             [ -- Section list
-              div [ class "tw:grow tw:flex tw:flex-col tw:gap-[80px]" ]
+              div [ class "tw:grow tw:flex tw:flex-col tw:gap-[64px]" ]
                 [ section1
                 , section2
                 , section3

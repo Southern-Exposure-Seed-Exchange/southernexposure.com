@@ -9,7 +9,7 @@ clear; npm run -- watch --host 127.0.0.1 --server-type http
 
 - Run tailwind command in another terminal
 ```
-clear; npm run tailwind
+clear; npm run tailwind-watch
 ```
 
 # Working with static page

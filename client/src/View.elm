@@ -798,7 +798,7 @@ staticPageView { name, slug, content } =
                 text ""
 
             else
-                h1 [] [ text name ]
+                h1 [class "tw:pb-[32px]"] [ text name ]
 
         html =
             rawHtml content
