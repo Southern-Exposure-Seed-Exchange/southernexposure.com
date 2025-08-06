@@ -289,7 +289,7 @@ categorySaleTests = testGroup "Category Sale Calculations"
     makeVariant :: Cents -> Entity ProductVariant
     makeVariant price =
         Entity (toSqlKey 1)
-            $ ProductVariant (toSqlKey 1) "" price 1 (Just . Mass $ Milligrams 1) True
+            $ ProductVariant (toSqlKey 1) "" price 1 (Just . Mass $ Milligrams 1) True True
     makeVariantWithPrice :: Range Int64 -> Gen (Entity ProductVariant, Cents)
     makeVariantWithPrice priceRange = do
         entity <- genProductVariant
@@ -1073,6 +1073,7 @@ genProductVariant =
         <*> genCentRange (Range.linear 1 999999)
         <*> Gen.integral (Range.linear 1 1000)
         <*> Gen.maybe genLotSize
+        <*> Gen.bool
         <*> Gen.bool
 
 genCategorySale :: SaleType -> Gen CategorySale

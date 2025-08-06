@@ -10,7 +10,9 @@
   },
 
   // Features to add to the dev container
-  "features": {},
+  "features": {
+    "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {}
+  },
 
   // Configure tool-specific properties
   "customizations": {
@@ -53,7 +55,7 @@
 
   // Configure container startup
   "runArgs": [
-    // Example: Add extra capabilities
+    "--network=host"
     // "--cap-add=SYS_PTRACE"
   ],
 
