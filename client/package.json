@@ -9,7 +9,8 @@
         "build": "NODE_ENV=production webpack",
         "elm": "elm",
         "webpack": "webpack",
-        "tailwind": "npx @tailwindcss/cli -i ./src/style/tailwind-input.css -o ./src/style/tailwind-output.css --watch"
+        "tailwind": "npx @tailwindcss/cli -i ./src/style/tailwind-input.css -o ./src/style/tailwind-output.css --minify",
+        "tailwind-watch": "npx @tailwindcss/cli -i ./src/style/tailwind-input.css -o ./src/style/tailwind-output.css --minify --watch"
     },
     "repository": {
         "type": "git",
