@@ -44,7 +44,7 @@ jobs:
       - name: Check Tailwind
         working-directory: client
         run: |
-          npx @tailwindcss/cli -i ./src/style/tailwind-input.css -o ./src/style/tailwind-output.css
+          npm run tailwind
           git diff --exit-code || echo "Tailwind CSS needs to be built. Please run 'npm run tailwind' before committing."
 
       - name: Build Client Project

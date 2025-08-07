@@ -40,7 +40,7 @@ module.exports = {
 
   optimization: {
     runtimeChunk: 'single',
-    minimizer: [new TerserJSPlugin({}), new OptimizeCSSAssetsPlugin({}),],
+    minimizer: [new TerserJSPlugin({})],
     minimize: isProduction,
     splitChunks: {
       chunks: 'all',
