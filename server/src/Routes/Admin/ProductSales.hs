@@ -101,9 +101,10 @@ instance ToJSON SaleVariantData where
 
 getProductsAndVariants :: AppSQL [(Entity ProductVariant, Entity Product)]
 getProductsAndVariants =
-    E.select $ do 
-        (v E.:& p) <- E.from $ E.table `E.innerJoin` E.table 
+    E.select $ do
+        (v E.:& p) <- E.from $ E.table `E.innerJoin` E.table
             `E.on` \(v E.:& p) -> v E.^. ProductVariantProductId E.==. p E.^. ProductId
+        E.where_ (p E.^. ProductDeleted E.==. E.val False)
         return (v, p)
 
 toVariantData :: Entity ProductVariant -> Entity Product -> SaleVariantData

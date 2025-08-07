@@ -26,6 +26,7 @@ import File exposing (File)
 import Html exposing (Html, a, br, button, div, fieldset, form, h3, hr, img, input, label, option, select, table, tbody, td, text, th, thead, tr)
 import Html.Attributes as A exposing (checked, class, download, for, href, id, name, required, selected, src, step, type_, value)
 import Html.Events exposing (on, onCheck, onClick, onInput, onSubmit, targetValue)
+import Html.Extra exposing (viewIf)
 import Json.Decode as Decode exposing (Decoder)
 import Json.Decode.Pipeline as Decode
 import Json.Encode as Encode exposing (Value)
@@ -164,7 +165,7 @@ updateNewForm : Routing.Key -> NewMsg -> NewForm -> ( NewForm, Cmd NewMsg )
 updateNewForm key msg model =
     case msg of
         NewFormMsg subMsg ->
-            updateForm subMsg model
+            updateForm key subMsg model
                 |> Tuple.mapSecond (Cmd.map NewFormMsg)
 
         NewSubmit ->
@@ -239,7 +240,7 @@ updateEditForm : Routing.Key -> EditMsg -> EditForm -> ( EditForm, Cmd EditMsg )
 updateEditForm key msg model =
     case ( msg, model.productData ) of
         ( EditFormMsg subMsg, RemoteData.Success formData ) ->
-            updateForm subMsg formData
+            updateForm key subMsg formData
                 |> Tuple.mapFirst (\f -> { model | productData = RemoteData.Success f })
                 |> Tuple.mapSecond (Cmd.map EditFormMsg)
 
@@ -343,6 +344,7 @@ type alias Form =
     , shippingRestrictions : Array Region
     , errors : Api.FormErrors
     , isSaving : Bool
+    , showDeleteConfirm : Bool
 
     -- ImageUrls is used for the Edit Form
     , imageUrls : Array String
@@ -367,6 +369,7 @@ initialForm =
     , shippingRestrictions = Array.empty
     , errors = Api.initialErrors
     , isSaving = False
+    , showDeleteConfirm = False
     , imageUrls = Array.empty
     }
 
@@ -436,6 +439,7 @@ formDecoder =
         |> Decode.required "keywords" Decode.string
         |> Decode.required "shippingRestrictions" (Decode.array regionDecoder)
         |> Decode.hardcoded Api.initialErrors
+        |> Decode.hardcoded False
         |> Decode.hardcoded False
         |> Decode.required "imageUrls" (Decode.array Decode.string)
 
@@ -550,10 +554,13 @@ type FormMsg
     | UpdateVariant Int VariantMsg
     | AddVariant
     | RemoveVariant Int
+    | Delete ProductId
+    | DeleteConfirmed ProductId
+    | DeleteResponse (WebData ())
 
 
-updateForm : FormMsg -> Form -> ( Form, Cmd FormMsg )
-updateForm msg model =
+updateForm : Routing.Key -> FormMsg -> Form -> ( Form, Cmd FormMsg )
+updateForm key msg model =
     case msg of
         InputName val ->
             noCommand <|
@@ -646,6 +653,32 @@ updateForm msg model =
                     | variants =
                         removeIndex index model.variants
                 }
+
+        Delete _ ->
+            noCommand { model | showDeleteConfirm = True }
+
+        DeleteConfirmed productId ->
+            ( model
+            , Api.delete (Api.AdminDeleteProduct productId)
+                |> Api.withJsonResponse (Decode.succeed ())
+                |> Api.sendRequest DeleteResponse
+            )
+
+        DeleteResponse response ->
+            case response of
+                RemoteData.Success () ->
+                    ( initialForm
+                    , Routing.newUrl key <| Admin <| ProductList
+                    )
+
+                RemoteData.Failure error ->
+                    ( { model | errors = Api.apiFailureToError error }
+                    , Cmd.none
+                    )
+
+                _ ->
+                    noCommand model
+
 
 
 type VariantMsg
@@ -785,6 +818,17 @@ formView buttonText submitMsg msgWrapper model { categories } locations id =
 
             else
                 text ""
+        deleteAction i =
+            if model.showDeleteConfirm then
+                DeleteConfirmed i
+            else
+                Delete i
+        deleteWarningText = viewIf model.showDeleteConfirm <|
+            div [ class "text-danger" ]
+                    [ text "Are you sure? This will completely delete the current product and all its variants."
+                    , br [] []
+                    , text "Click 'Delete Product' again to confirm."
+                    ]
     in
     form [ class <| Admin.formSavingClass model, onSubmit submitMsg ] <|
         List.map (Html.map msgWrapper)
@@ -809,6 +853,7 @@ formView buttonText submitMsg msgWrapper model { categories } locations id =
                 List.intersperse (hr [] []) <|
                     Array.toList <|
                         Array.indexedMap (variantForm model.errors) model.variants
+            , deleteWarningText
             , div [ class "form-group mb-4" ]
                 [ Admin.submitOrSavingButton model buttonText
                 , button
@@ -825,6 +870,14 @@ formView buttonText submitMsg msgWrapper model { categories } locations id =
                         , download ("product-" ++ String.fromInt i ++ "-export.csv")
                         ]
                         [ text "Export as CSV" ]
+                    ) id
+                , htmlOrBlank
+                    (\i -> button
+                        [ class "ml-3 btn btn-danger"
+                        , type_ "button"
+                        , onClick <| deleteAction i
+                        ]
+                        [ text "Delete Product" ]
                     ) id
                 ]
             ]

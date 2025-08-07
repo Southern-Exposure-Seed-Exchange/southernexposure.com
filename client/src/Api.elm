@@ -102,6 +102,7 @@ type Endpoint
     | AdminNewProduct
     | AdminEditProductData ProductId
     | AdminEditProduct
+    | AdminDeleteProduct ProductId
     | AdminCouponList
     | AdminNewCoupon
     | AdminEditCouponData Int
@@ -320,6 +321,9 @@ toUrl endpoint =
 
                 AdminEditProduct ->
                     joinPath [ "admin", "products", "edit" ]
+
+                AdminDeleteProduct (ProductId pId) ->
+                    joinPath [ "admin", "products", "delete", String.fromInt pId ]
 
                 AdminCouponList ->
                     joinPath [ "admin", "coupons", "list" ]
