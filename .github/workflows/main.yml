@@ -45,7 +45,7 @@ jobs:
         working-directory: client
         run: |
           npm run tailwind
-          git diff --exit-code || echo "Tailwind CSS needs to be built. Please run 'npm run tailwind' before committing."
+          git diff --exit-code || (echo "Tailwind CSS needs to be built. Please run 'npm run tailwind' before committing."; exit 1)
 
       - name: Build Client Project
         working-directory: client
