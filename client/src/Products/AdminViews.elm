@@ -26,6 +26,7 @@ import File exposing (File)
 import Html exposing (Html, a, br, button, div, fieldset, form, h3, hr, img, input, label, option, select, table, tbody, td, text, th, thead, tr)
 import Html.Attributes as A exposing (checked, class, download, for, href, id, name, required, selected, src, step, type_, value)
 import Html.Events exposing (on, onCheck, onClick, onInput, onSubmit, targetValue)
+import Html.Extra exposing (viewIf)
 import Json.Decode as Decode exposing (Decoder)
 import Json.Decode.Pipeline as Decode
 import Json.Encode as Encode exposing (Value)
@@ -52,6 +53,7 @@ import Views.Utils exposing (htmlOrBlank, routeLinkAttributes, selectImageFile)
 type alias ListForm =
     { query : String
     , onlyActive : Bool
+    , showDeleted : Bool
     }
 
 
@@ -59,28 +61,43 @@ initialListForm : ListForm
 initialListForm =
     { query = ""
     , onlyActive = True
+    , showDeleted = False
     }
 
 
 type ListMsg
     = InputQuery String
     | InputOnlyActive Bool
+    | InputShowDeleted Bool
+    | RestoreProduct ProductId
+    | RestoreResponse (WebData ())
 
 
-updateListForm : ListMsg -> ListForm -> ListForm
-updateListForm msg model =
+updateListForm : Routing.Key -> ListMsg -> ListForm -> (ListForm, Cmd ListMsg)
+updateListForm key msg model =
     case msg of
         InputQuery val ->
-            { model | query = val }
+            noCommand { model | query = val }
 
         InputOnlyActive val ->
-            { model | onlyActive = val }
+            noCommand { model | onlyActive = val }
 
+        InputShowDeleted val ->
+            noCommand { model | showDeleted = val }
+
+        RestoreProduct productId ->
+            (model, Api.post (Api.AdminRestoreDeletedProduct productId)
+                |> Api.withJsonResponse (Decode.succeed ())
+                |> Api.sendRequest RestoreResponse
+            )
+
+        RestoreResponse _ ->
+            ( model, Routing.newUrl key <| Admin ProductList )
 
 list : ListForm -> PageData.AdminProductListData -> List (Html ListMsg)
 list listForm { products } =
     let
-        renderProduct { id, name, baseSku, categories, isActive } =
+        renderProduct { id, name, baseSku, categories, isActive, isDeleted } =
             tr []
                 [ td [] [ text <| (\(ProductId i) -> String.fromInt i) id ]
                 , td [] [ text baseSku ]
@@ -88,8 +105,12 @@ list listForm { products } =
                 , td [] [ text <| String.join ", " categories ]
                 , td [ class "text-center" ] [ Admin.activeIcon isActive ]
                 , td []
-                    [ a (routeLinkAttributes <| Admin <| ProductEdit id)
-                        [ text "Edit" ]
+                    [
+                        if not isDeleted then
+                            a (routeLinkAttributes <| Admin <| ProductEdit id)
+                                [ text "Edit" ]
+                        else
+                            button [ onClick (RestoreProduct id) ] [ text "Restore" ]
                     ]
                 ]
 
@@ -107,6 +128,20 @@ list listForm { products } =
                     [ text "Only Active Products" ]
                 ]
 
+        showDeletedInput =
+            div [ class "flex-shrink-0 form-check form-check-inline" ]
+                [ input
+                    [ class "form-check-input"
+                    , type_ "checkbox"
+                    , id "showDeleted"
+                    , checked listForm.showDeleted
+                    , onCheck InputShowDeleted
+                    ]
+                    []
+                , label [ class "form-check-label", for "showDeleted" ]
+                    [ text "Show Deleted Products" ]
+                ]
+
         ( searchInput, filterProducts ) =
             Admin.searchInput InputQuery matchProduct listForm
 
@@ -117,6 +152,7 @@ list listForm { products } =
                 || List.any (iContains t) p.categories
             )
                 && (p.isActive || not listForm.onlyActive)
+                && (not p.isDeleted || listForm.showDeleted)
 
         iContains s1 s2 =
             String.contains s1 (String.toLower s2)
@@ -124,7 +160,7 @@ list listForm { products } =
     [ a (class "mb-2 btn btn-primary" :: (routeLinkAttributes <| Admin ProductNew))
         [ text "New Product" ]
     , div [ class "d-flex align-items-center justify-content-between mb-2" ]
-        [ searchInput, onlyActiveInput ]
+        [ searchInput, onlyActiveInput, showDeletedInput ]
     , table [ class "table table-striped table-sm" ]
         [ thead []
             [ tr [ class "text-center" ]
@@ -164,7 +200,7 @@ updateNewForm : Routing.Key -> NewMsg -> NewForm -> ( NewForm, Cmd NewMsg )
 updateNewForm key msg model =
     case msg of
         NewFormMsg subMsg ->
-            updateForm subMsg model
+            updateForm key subMsg model
                 |> Tuple.mapSecond (Cmd.map NewFormMsg)
 
         NewSubmit ->
@@ -239,7 +275,7 @@ updateEditForm : Routing.Key -> EditMsg -> EditForm -> ( EditForm, Cmd EditMsg )
 updateEditForm key msg model =
     case ( msg, model.productData ) of
         ( EditFormMsg subMsg, RemoteData.Success formData ) ->
-            updateForm subMsg formData
+            updateForm key subMsg formData
                 |> Tuple.mapFirst (\f -> { model | productData = RemoteData.Success f })
                 |> Tuple.mapSecond (Cmd.map EditFormMsg)
 
@@ -343,6 +379,7 @@ type alias Form =
     , shippingRestrictions : Array Region
     , errors : Api.FormErrors
     , isSaving : Bool
+    , showDeleteConfirm : Bool
 
     -- ImageUrls is used for the Edit Form
     , imageUrls : Array String
@@ -367,6 +404,7 @@ initialForm =
     , shippingRestrictions = Array.empty
     , errors = Api.initialErrors
     , isSaving = False
+    , showDeleteConfirm = False
     , imageUrls = Array.empty
     }
 
@@ -436,6 +474,7 @@ formDecoder =
         |> Decode.required "keywords" Decode.string
         |> Decode.required "shippingRestrictions" (Decode.array regionDecoder)
         |> Decode.hardcoded Api.initialErrors
+        |> Decode.hardcoded False
         |> Decode.hardcoded False
         |> Decode.required "imageUrls" (Decode.array Decode.string)
 
@@ -550,10 +589,13 @@ type FormMsg
     | UpdateVariant Int VariantMsg
     | AddVariant
     | RemoveVariant Int
+    | Delete ProductId
+    | DeleteConfirmed ProductId
+    | DeleteResponse (WebData ())
 
 
-updateForm : FormMsg -> Form -> ( Form, Cmd FormMsg )
-updateForm msg model =
+updateForm : Routing.Key -> FormMsg -> Form -> ( Form, Cmd FormMsg )
+updateForm key msg model =
     case msg of
         InputName val ->
             noCommand <|
@@ -646,6 +688,32 @@ updateForm msg model =
                     | variants =
                         removeIndex index model.variants
                 }
+
+        Delete _ ->
+            noCommand { model | showDeleteConfirm = True }
+
+        DeleteConfirmed productId ->
+            ( model
+            , Api.delete (Api.AdminDeleteProduct productId)
+                |> Api.withJsonResponse (Decode.succeed ())
+                |> Api.sendRequest DeleteResponse
+            )
+
+        DeleteResponse response ->
+            case response of
+                RemoteData.Success () ->
+                    ( initialForm
+                    , Routing.newUrl key <| Admin <| ProductList
+                    )
+
+                RemoteData.Failure error ->
+                    ( { model | errors = Api.apiFailureToError error }
+                    , Cmd.none
+                    )
+
+                _ ->
+                    noCommand model
+
 
 
 type VariantMsg
@@ -785,6 +853,17 @@ formView buttonText submitMsg msgWrapper model { categories } locations id =
 
             else
                 text ""
+        deleteAction i =
+            if model.showDeleteConfirm then
+                DeleteConfirmed i
+            else
+                Delete i
+        deleteWarningText = viewIf model.showDeleteConfirm <|
+            div [ class "text-danger" ]
+                    [ text "Are you sure? This will completely delete the current product and all its variants."
+                    , br [] []
+                    , text "Click 'Delete Product' again to confirm."
+                    ]
     in
     form [ class <| Admin.formSavingClass model, onSubmit submitMsg ] <|
         List.map (Html.map msgWrapper)
@@ -809,6 +888,7 @@ formView buttonText submitMsg msgWrapper model { categories } locations id =
                 List.intersperse (hr [] []) <|
                     Array.toList <|
                         Array.indexedMap (variantForm model.errors) model.variants
+            , deleteWarningText
             , div [ class "form-group mb-4" ]
                 [ Admin.submitOrSavingButton model buttonText
                 , button
@@ -825,6 +905,14 @@ formView buttonText submitMsg msgWrapper model { categories } locations id =
                         , download ("product-" ++ String.fromInt i ++ "-export.csv")
                         ]
                         [ text "Export as CSV" ]
+                    ) id
+                , htmlOrBlank
+                    (\i -> button
+                        [ class "ml-3 btn btn-danger"
+                        , type_ "button"
+                        , onClick <| deleteAction i
+                        ]
+                        [ text "Delete Product" ]
                     ) id
                 ]
             ]

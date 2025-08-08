@@ -601,6 +601,7 @@ qohReplaceRoute QOHReplaceRequest {..} = runDB $ do
                         (p E.^. ProductId E.==. pv E.^. ProductVariantProductId) E.&&.
                         (fullSku `E.like` E.concat_ [(E.%), pv E.^. ProductVariantSkuSuffix])
                     )
+        E.where_ $ p E.^. ProductDeleted E.==. E.val False
         return (p E.^. ProductId, pv E.^. ProductVariantId, p E.^. ProductBaseSku, pv E.^. ProductVariantSkuSuffix)
     -- Build a map of found SKUs from candidates
     let foundSkus = Map.fromList $
@@ -629,7 +630,10 @@ getProductsCountRoute :: GetProductsCountRequest -> App GetProductsCountResponse
 getProductsCountRoute GetProductsCountRequest {} = do
     -- Count the products in the database.
     productCount :: [E.Value Int] <- runDB $ E.select $ do
-        _ <- E.from $ E.table @ProductVariant
+        (p E.:& _) <- E.from $ E.table @Product
+            `E.innerJoin` E.table @ProductVariant
+                `E.on` (\(p E.:& v) -> v E.^. ProductVariantProductId E.==. p E.^. ProductId)
+        E.where_ $ p E.^. ProductDeleted E.==. E.val False
         return E.countRows
     return $ GetProductsCountResponse $ fromIntegral $ E.unValue $ head productCount
 
@@ -643,6 +647,7 @@ downloadProductsRoute DownloadProdsRequest {..} = runDB $ do
                 `E.on` (\(p E.:& v) -> v E.^. ProductVariantProductId E.==. p E.^. ProductId)
             `E.leftJoin` E.table @SeedAttribute
                 `E.on` (\(p E.:& _ E.:& sa) -> sa E.?. SeedAttributeProductId E.==. E.just (p E.^. ProductId))
+        E.where_ $ p E.^. ProductDeleted E.==. E.val False
         E.orderBy [E.asc $ v E.^. ProductVariantId]
         E.offset (fromIntegral $ fromMaybe 1 dprStartNumber - 1)
         E.limit (fromIntegral $ fromMaybe 100 dprBatchSize)

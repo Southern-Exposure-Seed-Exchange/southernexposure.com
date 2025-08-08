@@ -69,6 +69,7 @@ productDetailsRoute slug = do
             Nothing ->
                 throwError err404
             Just e@(Entity productId prod) -> runDB $ do
+                when (productDeleted prod) $ throwError err404
                 extraCategories <- getAdditionalCategories productId
                 baseData <- lift $ makeBaseProductData e extraCategories
                 (variants, maybeAttribute, category) <-
@@ -162,7 +163,8 @@ productsSearchRoute maybeSort maybePage maybePerPage parameters = runDB $ do
             return (\p -> p E.^. ProductMainCategory `E.in_` E.valList categories, name)
     (products, productsCount) <- paginatedSelect
         maybeSort maybePage maybePerPage
-        (\p sa _ -> queryFilters p E.&&. organicFilter sa E.&&. heirloomFilter sa E.&&.
+        (\p sa _ -> queryFilters p E.&&. p E.^. ProductDeleted E.==. E.val False E.&&.
+                    organicFilter sa E.&&. heirloomFilter sa E.&&.
                     regionalFilter sa E.&&. growerFilter sa E.&&.
                     categoryFilter p)
     searchData <- mapM (getProductData . truncateDescription) products

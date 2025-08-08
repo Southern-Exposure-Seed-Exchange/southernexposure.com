@@ -62,6 +62,9 @@ Product
     updatedAt UTCTime
     keywords T.Text default=''
     shippingRestrictions [Region] default='[]'
+    deleted Bool default=false
+    -- deletion is soft, so we can ensure SKU uniqueness, as well as keep the product in the database
+    -- and restore it later if needed
     UniqueProductSlug slug
     UniqueBaseSku baseSku
     deriving Show
@@ -730,5 +733,9 @@ migrations =
             -- to ToJSON instance for PersistentValue
             return [MigrateSql "UPDATE product SET image_urls = CONCAT('[\"s', image_url, '\"]') WHERE image_url != ''''''" []]
         , DropColumn ("product", "image_url")
+        ]
+    , 2 ~> 3 :=
+        -- Add 'deleted' to 'Product'
+        [ AddColumn "product" (Column "deleted" SqlBool [NotNull, Default $ toPersistValue False]) (Just $ toPersistValue False)
         ]
     ]

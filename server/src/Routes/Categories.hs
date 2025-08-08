@@ -125,9 +125,12 @@ categoryDetailsRoute slug maybeSort maybePage maybePerPage = do
             (products, productsCount) <- paginatedSelect
                 maybeSort maybePage maybePerPage
                     (\p _ pToC ->
-                        p E.^. ProductMainCategory `E.in_` E.valList descendants E.||.
-                        (E.just (p E.^. ProductId) E.==. pToC E.?. ProductToCategoryProductId E.&&.
-                         pToC E.?. ProductToCategoryCategoryId `E.in_` E.justList (E.valList descendants)
+                        p E.^. ProductDeleted E.==. E.val False E.&&.
+                        (
+                            p E.^. ProductMainCategory `E.in_` E.valList descendants E.||.
+                            (E.just (p E.^. ProductId) E.==. pToC E.?. ProductToCategoryProductId E.&&.
+                            pToC E.?. ProductToCategoryCategoryId `E.in_` E.justList (E.valList descendants)
+                            )
                         )
                     )
             productData <- mapM (getProductData . truncateDescription) products
