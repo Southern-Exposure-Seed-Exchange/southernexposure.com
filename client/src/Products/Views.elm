@@ -256,11 +256,20 @@ productAttrView selectedItemNumber maybeSeedAttribute =
         ]
 
 
-variantSelectView paddingClass variantSelect isOutOfStock =
-    if isOutOfStock then
-        div [ class <| "tw:flex " ++ paddingClass ] [ outOfStockBadge ]
+outOfStockView paddingClass maybeSelectedVariant =
+    maybeSelectedVariant
+        |> htmlOrBlank
+            (\v ->
+                if v.quantity <= 0 then
+                    div [ class <| "tw:flex " ++ paddingClass ] [ outOfStockBadge ]
 
-    else if List.isEmpty variantSelect then
+                else
+                    div [] []
+            )
+
+
+variantSelectView paddingClass variantSelect =
+    if List.isEmpty variantSelect then
         div [] []
 
     else
@@ -322,10 +331,11 @@ detailFormView { maybeSelectedVariant, maybeSelectedVariantId, quantity, isOutOf
             [ productAttrView selectedItemNumber maybeSeedAttribute
             ]
         , div [ class "tw:pt-[12px] tw:pb-[24px]" ] [ priceView Detail maybeSelectedVariant ]
-        , variantSelectView "tw:pb-[24px]" variantSelect isOutOfStock
+        , outOfStockView "tw:pb-[24px]" maybeSelectedVariant
+        , variantSelectView "tw:pb-[24px]" variantSelect
         , Html.map never requestFeedback
         , div [ class "tw:pb-[28px] tw:w-full tw:flex tw:flex-col" ]
-            [ viewIfLazy (not isOutOfStock) (addToCartInput Detail quantity product)
+            [ viewIfLazy (not isOutOfStock) (addToCartInput Detail quantity product maybeSelectedVariant)
             , availabilityBadge
             ]
         , Html.map never offersMeta
@@ -402,7 +412,8 @@ cardFormView { maybeSelectedVariant, maybeSelectedVariantId, quantity, isOutOfSt
     in
     form formAttributes
         [ div [ class "tw:pt-[12px] " ] [ productAttrView selectedItemNumber maybeSeedAttribute ]
-        , variantSelectView "tw:pt-[12px]" variantSelect isOutOfStock
+        , outOfStockView "tw:pt-[12px]" maybeSelectedVariant
+        , variantSelectView "tw:pt-[12px]" variantSelect
         , div [ Microdata.description, class "tw:pt-[16px] tw:line-clamp-4 tw:text-[14px] static-page" ] [ rawHtml product.longDescription ]
         , Microdata.mpnMeta product.baseSKU
         , Microdata.skuMeta product.baseSKU
@@ -414,7 +425,7 @@ cardFormView { maybeSelectedVariant, maybeSelectedVariantId, quantity, isOutOfSt
             , div [ class "tw:flex tw:items-center" ]
                 [ priceView Card maybeSelectedVariant
                 , div [ class "tw:grow" ] []
-                , viewIfLazy (not isOutOfStock) (addToCartInput Card quantity product)
+                , viewIfLazy (not isOutOfStock) (addToCartInput Card quantity product maybeSelectedVariant)
                 , availabilityBadge
                 , Html.map never offersMeta
                 ]
@@ -577,7 +588,13 @@ outOfStockBadge =
 
 addToCartInputDisabled : Html msg
 addToCartInputDisabled =
-    Button.view { defaultButton | label = "Add to cart", type_ = Button.Disabled, icon = Just <| shoppingCartSvgSmall }
+    Button.view
+        { defaultButton
+            | label = "Add to cart"
+            , type_ = Button.Disabled
+            , icon = Just <| shoppingCartSvgSmall
+            , size = Button.Large
+        }
 
 
 limitedAvailabilityBadge : Html msg
@@ -585,8 +602,8 @@ limitedAvailabilityBadge =
     span [ class "badge badge-warning" ] [ text "Limited Availability" ]
 
 
-addToCartInput : ProductFormStyle -> Int -> Product -> () -> Html Msg
-addToCartInput style quantity product _ =
+addToCartInput : ProductFormStyle -> Int -> Product -> Maybe ProductVariant -> () -> Html Msg
+addToCartInput style quantity product maybeSelectedVariant _ =
     let
         ( class_, buttonView ) =
             case style of
@@ -610,15 +627,27 @@ addToCartInput style quantity product _ =
                             }
                         ]
                     )
+
+        view =
+            div [ class <| "tw:flex " ++ class_ ]
+                [ customNumberView style
+                    quantity
+                    (ChangeCartFormQuantity product.id)
+                    (IncreaseCartFormQuantity product.id)
+                    (DecreaseCartFormQuantity product.id)
+                , buttonView
+                ]
     in
-    div [ class <| "tw:flex " ++ class_ ]
-        [ customNumberView style
-            quantity
-            (ChangeCartFormQuantity product.id)
-            (IncreaseCartFormQuantity product.id)
-            (DecreaseCartFormQuantity product.id)
-        , buttonView
-        ]
+    case maybeSelectedVariant of
+        Just selectedVariant ->
+            if selectedVariant.quantity <= 0 then
+                addToCartInputDisabled
+
+            else
+                view
+
+        Nothing ->
+            view
 
 
 customNumberView : ProductFormStyle -> Int -> (Int -> msg) -> msg -> msg -> Html msg
