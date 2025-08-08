@@ -959,17 +959,19 @@ type alias AdminListProduct =
     , baseSku : String
     , categories : List String
     , isActive : Bool
+    , isDeleted : Bool
     }
 
 
 adminListProductDecoder : Decoder AdminListProduct
 adminListProductDecoder =
-    Decode.map5 AdminListProduct
+    Decode.map6 AdminListProduct
         (Decode.field "id" Product.idDecoder)
         (Decode.field "name" Decode.string)
         (Decode.field "baseSKU" Decode.string)
         (Decode.field "categories" <| Decode.list Decode.string)
         (Decode.field "isActive" Decode.bool)
+        (Decode.field "isDeleted" Decode.bool)
 
 
 type alias AdminSharedProductData =

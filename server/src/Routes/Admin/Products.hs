@@ -59,6 +59,7 @@ type ProductAPI =
     :<|> "edit" :> EditProductRoute
     :<|> "export" :> ExportProductRoute
     :<|> "delete" :> DeleteProductRoute
+    :<|> "restore" :> RestoreDeletedProductRoute
 
 type ProductRoutes =
          (WrappedAuthToken -> App (Cookied ProductListData))
@@ -67,6 +68,7 @@ type ProductRoutes =
     :<|> (WrappedAuthToken -> ProductId -> App (Cookied EditProductData))
     :<|> (WrappedAuthToken -> EditProductParameters -> App (Cookied ProductId))
     :<|> (WrappedAuthToken -> ProductId -> App (Cookied LBS.ByteString))
+    :<|> (WrappedAuthToken -> ProductId -> App (Cookied ()))
     :<|> (WrappedAuthToken -> ProductId -> App (Cookied ()))
 
 productRoutes :: ProductRoutes
@@ -78,6 +80,7 @@ productRoutes =
     :<|> editProductRoute
     :<|> exportProductRoute
     :<|> deleteProductRoute
+    :<|> restoreDeletedProductRoute
 
 
 -- LIST
@@ -105,6 +108,7 @@ data ListProduct =
         , lpBaseSku :: T.Text
         , lpCategories :: [T.Text]
         , lpIsActive :: Bool
+        , lpIsDeleted :: Bool
         } deriving (Show)
 
 instance ToJSON ListProduct where
@@ -115,6 +119,7 @@ instance ToJSON ListProduct where
             , "baseSKU" .= lpBaseSku
             , "categories" .= lpCategories
             , "isActive" .= lpIsActive
+            , "isDeleted" .= lpIsDeleted
             ]
 
 productListRoute :: WrappedAuthToken -> App (Cookied ProductListData)
@@ -128,7 +133,6 @@ productListRoute t = withAdminCookie t $ \_ -> runDB $ do
     getProducts :: AppSQL [(Entity Product, E.Value Bool)]
     getProducts =
         E.select $ E.from E.table >>= \p -> do
-            E.where_ $ p E.^. ProductDeleted E.==. E.val False
             E.orderBy [E.asc $ p E.^. ProductBaseSku]
             return (p, activeVariantExists p )
     makeProduct :: M.Map CategoryId T.Text -> (Entity Product, E.Value Bool) -> ListProduct
@@ -139,6 +143,7 @@ productListRoute t = withAdminCookie t $ \_ -> runDB $ do
             , lpBaseSku = productBaseSku prod
             , lpCategories = (: []) . fromMaybe "" $ productMainCategory prod `M.lookup` nameMap
             , lpIsActive = E.unValue isActive
+            , lpIsDeleted = productDeleted prod
             }
 
 
@@ -651,6 +656,21 @@ deleteProductRoute t productId = withAdminCookie t $ \_ -> runDB $ do
             deleteWhere [CartItemProductVariantId <-. productVariants]
             -- Delete all sales with product variants
             deleteWhere [ProductSaleProductVariantId <-. productVariants]
+            return ()
+
+type RestoreDeletedProductRoute =
+    AuthProtect "cookie-auth"
+    :> Capture "id" ProductId
+    :> Post '[JSON] (Cookied ())
+
+restoreDeletedProductRoute :: WrappedAuthToken -> ProductId -> App (Cookied ())
+restoreDeletedProductRoute t productId = withAdminCookie t $ \_ -> runDB $
+    get productId >>= \case
+        Nothing -> lift $ serverError err404
+        Just Product {..} -> do
+            unless productDeleted $ lift $ serverError err404
+            -- Restore the product by setting deleted to False
+            update productId [ProductDeleted =. False]
             return ()
 
 -- UTILS

@@ -53,6 +53,7 @@ import Views.Utils exposing (htmlOrBlank, routeLinkAttributes, selectImageFile)
 type alias ListForm =
     { query : String
     , onlyActive : Bool
+    , showDeleted : Bool
     }
 
 
@@ -60,28 +61,43 @@ initialListForm : ListForm
 initialListForm =
     { query = ""
     , onlyActive = True
+    , showDeleted = False
     }
 
 
 type ListMsg
     = InputQuery String
     | InputOnlyActive Bool
+    | InputShowDeleted Bool
+    | RestoreProduct ProductId
+    | RestoreResponse (WebData ())
 
 
-updateListForm : ListMsg -> ListForm -> ListForm
-updateListForm msg model =
+updateListForm : Routing.Key -> ListMsg -> ListForm -> (ListForm, Cmd ListMsg)
+updateListForm key msg model =
     case msg of
         InputQuery val ->
-            { model | query = val }
+            noCommand { model | query = val }
 
         InputOnlyActive val ->
-            { model | onlyActive = val }
+            noCommand { model | onlyActive = val }
 
+        InputShowDeleted val ->
+            noCommand { model | showDeleted = val }
+
+        RestoreProduct productId ->
+            (model, Api.post (Api.AdminRestoreDeletedProduct productId)
+                |> Api.withJsonResponse (Decode.succeed ())
+                |> Api.sendRequest RestoreResponse
+            )
+
+        RestoreResponse _ ->
+            ( model, Routing.newUrl key <| Admin ProductList )
 
 list : ListForm -> PageData.AdminProductListData -> List (Html ListMsg)
 list listForm { products } =
     let
-        renderProduct { id, name, baseSku, categories, isActive } =
+        renderProduct { id, name, baseSku, categories, isActive, isDeleted } =
             tr []
                 [ td [] [ text <| (\(ProductId i) -> String.fromInt i) id ]
                 , td [] [ text baseSku ]
@@ -89,8 +105,12 @@ list listForm { products } =
                 , td [] [ text <| String.join ", " categories ]
                 , td [ class "text-center" ] [ Admin.activeIcon isActive ]
                 , td []
-                    [ a (routeLinkAttributes <| Admin <| ProductEdit id)
-                        [ text "Edit" ]
+                    [
+                        if not isDeleted then
+                            a (routeLinkAttributes <| Admin <| ProductEdit id)
+                                [ text "Edit" ]
+                        else
+                            button [ onClick (RestoreProduct id) ] [ text "Restore" ]
                     ]
                 ]
 
@@ -108,6 +128,20 @@ list listForm { products } =
                     [ text "Only Active Products" ]
                 ]
 
+        showDeletedInput =
+            div [ class "flex-shrink-0 form-check form-check-inline" ]
+                [ input
+                    [ class "form-check-input"
+                    , type_ "checkbox"
+                    , id "showDeleted"
+                    , checked listForm.showDeleted
+                    , onCheck InputShowDeleted
+                    ]
+                    []
+                , label [ class "form-check-label", for "showDeleted" ]
+                    [ text "Show Deleted Products" ]
+                ]
+
         ( searchInput, filterProducts ) =
             Admin.searchInput InputQuery matchProduct listForm
 
@@ -118,6 +152,7 @@ list listForm { products } =
                 || List.any (iContains t) p.categories
             )
                 && (p.isActive || not listForm.onlyActive)
+                && (not p.isDeleted || listForm.showDeleted)
 
         iContains s1 s2 =
             String.contains s1 (String.toLower s2)
@@ -125,7 +160,7 @@ list listForm { products } =
     [ a (class "mb-2 btn btn-primary" :: (routeLinkAttributes <| Admin ProductNew))
         [ text "New Product" ]
     , div [ class "d-flex align-items-center justify-content-between mb-2" ]
-        [ searchInput, onlyActiveInput ]
+        [ searchInput, onlyActiveInput, showDeletedInput ]
     , table [ class "table table-striped table-sm" ]
         [ thead []
             [ tr [ class "text-center" ]

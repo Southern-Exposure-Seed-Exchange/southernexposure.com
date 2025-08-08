@@ -1239,9 +1239,9 @@ update msg ({ pageData, key } as model) =
                 |> Tuple.mapSecond (Cmd.map EditCustomerMsg)
 
         ProductListMsg subMsg ->
-            ProductAdmin.updateListForm subMsg model.productListForm
-                |> (\form -> { model | productListForm = form })
-                |> noCommand
+            ProductAdmin.updateListForm key subMsg model.productListForm
+                |> Tuple.mapFirst (\form -> { model | productListForm = form })
+                |> Tuple.mapSecond (Cmd.map ProductListMsg)
 
         NewProductMsg subMsg ->
             ProductAdmin.updateNewForm key subMsg model.newProductForm
