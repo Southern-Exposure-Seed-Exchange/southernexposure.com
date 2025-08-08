@@ -33,6 +33,7 @@ import Ports
 import Process
 import Product exposing (ProductId(..), ProductVariantId(..), productMainImage)
 import Products.AdminViews as ProductAdmin
+import Products.Pagination as Pagination
 import QuickOrder
 import RemoteData exposing (WebData)
 import Routing exposing (AdminRoute(..), Route(..), parseRoute)
@@ -995,8 +996,17 @@ update msg ({ pageData, key } as model) =
             ( { model | searchData = searchData }, cmd )
 
         AdvancedSearchMsg subMsg ->
-            ( { model | advancedSearchData = AdvancedSearch.update subMsg model.advancedSearchData }
-            , Cmd.none
+            let
+                ( advancedSearchData, formActionType ) =
+                    AdvancedSearch.update subMsg model.advancedSearchData
+            in
+            ( { model | advancedSearchData = advancedSearchData }
+            , case formActionType of
+                Search.SubmitForm ->
+                    Routing.newUrl key <| SearchResults advancedSearchData Pagination.default
+
+                Search.NoSubmitForm ->
+                    Cmd.none
             )
 
         CreateAccountMsg subMsg ->
@@ -2190,7 +2200,11 @@ type UpdateCartFormParam
     | Increase
     | Decrease
 
+
+
 -- | Update the number value in form input of a product.
+
+
 updateCartFormQuantity : ProductId -> UpdateCartFormParam -> Model -> Model
 updateCartFormQuantity (ProductId productId) param model =
     let

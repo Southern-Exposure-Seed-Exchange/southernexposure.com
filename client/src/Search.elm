@@ -1,5 +1,6 @@
 module Search exposing
     ( Data
+    , FormActionType(..)
     , SearchScope(..)
     , UniqueSearch(..)
     , encode
@@ -31,6 +32,10 @@ type alias Data =
 type SearchScope
     = Titles
     | TitlesAndDescriptions
+
+type FormActionType
+    = SubmitForm
+    | NoSubmitForm
 
 
 initial : Data
