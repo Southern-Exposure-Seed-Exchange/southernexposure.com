@@ -26,32 +26,32 @@ type Msg
     | CategorySelect (Maybe CategoryId)
 
 
-update : Msg -> Search.Data -> Search.Data
+update : Msg -> Search.Data -> ( Search.Data, Search.FormActionType )
 update msg data =
     case msg of
         KeywordInput str ->
-            { data | query = str }
+            ( { data | query = str }, Search.NoSubmitForm )
 
         SearchTitles ->
-            { data | searchIn = Search.Titles }
+            ( { data | searchIn = Search.Titles }, Search.NoSubmitForm )
 
         SearchTitlesAndDescriptions ->
-            { data | searchIn = Search.TitlesAndDescriptions }
+            ( { data | searchIn = Search.TitlesAndDescriptions }, Search.NoSubmitForm )
 
         IsOrganic value ->
-            { data | isOrganic = value }
+            ( { data | isOrganic = value }, Search.SubmitForm )
 
         IsHeirloom value ->
-            { data | isHeirloom = value }
+            ( { data | isHeirloom = value }, Search.SubmitForm )
 
         IsRegional value ->
-            { data | isRegional = value }
+            ( { data | isRegional = value }, Search.SubmitForm )
 
         IsSmallGrower value ->
-            { data | isSmallGrower = value }
+            ( { data | isSmallGrower = value }, Search.SubmitForm )
 
         CategorySelect value ->
-            { data | category = value }
+            ( { data | category = value }, Search.SubmitForm )
 
 
 mainView : Route -> (Route -> msg) -> (Msg -> msg) -> Search.Data -> CategoryListData -> List (Html msg)

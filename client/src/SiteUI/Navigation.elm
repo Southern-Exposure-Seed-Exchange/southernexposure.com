@@ -141,7 +141,7 @@ view route authStatus navigationData activeCategoryIds searchData =
     in
     div [ id "navigation", class "container" ]
         [ node "nav"
-            [ class "navbar navbar-expand-md navbar-light bg-success tw:rounded-[16px]!" ]
+            [ class "navbar navbar-expand-md navbar-light tw:bg-[#f6eee4] tw:rounded-[16px]!" ]
             [ a
                 (Aria.label "View Your Shopping Cart"
                     :: class "ml-auto navbar-toggler"
@@ -383,7 +383,7 @@ adminView route =
     in
     div [ id "navigation", class "admin container-fluid" ]
         [ node "nav"
-            [ class "navbar navbar-expand-md navbar-light bg-success tw:rounded-[16px]!" ]
+            [ class "navbar navbar-expand-md navbar-light tw:bg-[#f6eee4] tw:rounded-[16px]!" ]
             [ button
                 [ class "navbar-toggler ml-2"
                 , type_ "button"

@@ -54,6 +54,10 @@ select:focus {
   @apply tw:m-[20px] tw:rounded-[16px]!;
 }
 
+.se-link {
+  @apply tw:text-[rgba(52,195,171,1)] tw:hover:text-[rgba(52,195,171,1)] tw:hover:underline;
+}
+
 .clickable-image {
   @apply tw:hover:brightness-80 tw:transition-all;
 }

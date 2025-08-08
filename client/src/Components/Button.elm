@@ -1,6 +1,6 @@
 module Components.Button exposing (..)
 
-import Html exposing (Html, a, button, text)
+import Html exposing (Html, a, b, button, text)
 import Html.Attributes exposing (class, disabled, href, name, type_)
 
 
@@ -20,12 +20,18 @@ type ButtonType
     | Disabled
 
 
+type ButtonSize
+    = Small
+    | Large
+
+
 type alias Config msg =
     { label : String
     , style : Style
     , type_ : ButtonType
     , icon : Maybe (Html msg)
     , padding : Padding
+    , size : ButtonSize
     }
 
 
@@ -36,6 +42,7 @@ defaultButton =
     , type_ = Link ""
     , icon = Nothing
     , padding = Default
+    , size = Small
     }
 
 
@@ -66,10 +73,18 @@ view config =
         paddingClass =
             case config.padding of
                 Default ->
-                    "tw:py-[8px] tw:px-[16px]"
+                    "tw:px-[16px]"
 
                 Expand ->
-                    "tw:py-[8px] tw:w-full"
+                    "tw:w-full"
+
+        sizeClass =
+            case config.size of
+                Small ->
+                    "tw:py-[8px] "
+
+                Large ->
+                    "tw:py-[12px]"
 
         allClass =
             "tw:block tw:text-[16px] tw:leading-[24px] tw:rounded-[8px]! tw:no-underline! tw:flex tw:gap-[8px] tw:items-center tw:justify-center"
@@ -79,6 +94,8 @@ view config =
                 ++ paddingClass
                 ++ " "
                 ++ cursorClass
+                ++ " "
+                ++ sizeClass
 
         iconContent =
             case config.icon of

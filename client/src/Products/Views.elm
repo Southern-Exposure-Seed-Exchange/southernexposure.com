@@ -1,6 +1,7 @@
 module Products.Views exposing (detailView, listView)
 
 import BootstrapGallery as Gallery
+import Category exposing (Category)
 import Components.Button as Button exposing (ButtonType(..), defaultButton)
 import Components.Form as Form
 import Components.Svg exposing (minusSvg, plusSvg, shoppingCartSvgSmall)
@@ -33,6 +34,11 @@ import Views.Utils exposing (htmlOrBlank, icon, numericInput, onIntInput, rawHtm
 --------------------------------------------------------------
 -- Type
 --------------------------------------------------------------
+
+
+type ProductFormStyle
+    = Card
+    | Detail
 
 
 type alias CartFormData =
@@ -201,19 +207,19 @@ cartFormData addToCartForms ( product, variants ) =
                     text ""
 
                 RemoteData.Loading ->
-                    div [ class "text-warning font-weight-bold small" ]
+                    div [ class "tw:py-[8px] text-warning font-weight-bold small" ]
                         [ icon "spinner fa-spin mr-1"
                         , text "Adding to Cart"
                         ]
 
                 RemoteData.Success _ ->
-                    div [ class "tw:text-green-400 font-weight-bold small" ]
+                    div [ class "tw:py-[8px] tw:text-[rgb(77,170,154)] font-weight-bold small" ]
                         [ icon "check-circle mr-1"
                         , text "Added to Cart!"
                         ]
 
                 RemoteData.Failure _ ->
-                    div [ class "text-danger font-weight-bold small" ]
+                    div [ class "tw:py-[8px] text-danger font-weight-bold small" ]
                         [ icon "times mr-1"
                         , text "Error Adding To Cart!"
                         ]
@@ -242,78 +248,137 @@ cartFormData addToCartForms ( product, variants ) =
 --------------------------------------------------------------
 
 
+productAttrView selectedItemNumber maybeSeedAttribute =
+    div [ class "tw:flex tw:items-center" ]
+        [ small [ class "text-muted d-block tw:grow" ]
+            [ text <| "Item #" ++ selectedItemNumber ]
+        , htmlOrBlank SeedAttribute.icons maybeSeedAttribute
+        ]
+
+
+variantSelectView paddingClass variantSelect isOutOfStock =
+    if isOutOfStock then
+        div [ class <| "tw:flex " ++ paddingClass ] [ outOfStockBadge ]
+
+    else if List.isEmpty variantSelect then
+        div [] []
+
+    else
+        div [ class paddingClass ]
+            variantSelect
+
+
+priceView : ProductFormStyle -> Maybe ProductVariant -> Html Msg
+priceView style maybeSelectedVariant =
+    let
+        class_ =
+            case style of
+                Card ->
+                    "tw:text-[28px] tw:font-bold"
+
+                Detail ->
+                    "tw:text-[40px] tw:leading-[44px] tw:font-bold "
+    in
+    maybeSelectedVariant
+        |> htmlOrBlank (\v -> p [ class class_ ] [ renderPrice v ])
+
+
+detailFormView : CartFormData -> Product -> Maybe SeedAttribute -> List Category -> Html Msg
+detailFormView { maybeSelectedVariant, maybeSelectedVariantId, quantity, isOutOfStock, variantSelect, selectedItemNumber, offersMeta, requestFeedback } product maybeSeedAttribute categories =
+    let
+        formAttributes =
+            (::) (class "add-to-cart-form tw:flex tw:flex-col tw:grow") <|
+                case maybeSelectedVariantId of
+                    Just variantId ->
+                        [ onSubmit <| SubmitAddToCart product.id variantId ]
+
+                    Nothing ->
+                        []
+
+        availabilityBadge =
+            if isOutOfStock then
+                addToCartInputDisabled
+
+            else
+                text ""
+
+        categoryBlocks =
+            List.filter (not << String.isEmpty << .description) categories
+                |> List.map
+                    (\category ->
+                        div [ class "" ]
+                            [ h3 [ class "tw:text-[16px]! tw:pb-[8px]" ]
+                                [ a ((routeLinkAttributes <| CategoryDetails category.slug Pagination.default) ++ [ class "se-link" ])
+                                    [ span [ Microdata.category ] [ text category.name ] ]
+                                ]
+                            , div [ class "static-page" ]
+                                [ rawHtml category.description
+                                ]
+                            ]
+                    )
+    in
+    form formAttributes
+        [ div [ class "tw:pb-[16px]" ]
+            [ productAttrView selectedItemNumber maybeSeedAttribute
+            ]
+        , div [ class "tw:pt-[12px] tw:pb-[24px]" ] [ priceView Detail maybeSelectedVariant ]
+        , variantSelectView "tw:pb-[24px]" variantSelect isOutOfStock
+        , Html.map never requestFeedback
+        , div [ class "tw:pb-[28px] tw:w-full tw:flex tw:flex-col" ]
+            [ viewIfLazy (not isOutOfStock) (addToCartInput Detail quantity product)
+            , availabilityBadge
+            ]
+        , Html.map never offersMeta
+        , div [ Microdata.description, class "tw:text-[16px] static-page" ] [ rawHtml product.longDescription ]
+        , div [] categoryBlocks
+        , Microdata.mpnMeta product.baseSKU
+        , Microdata.skuMeta product.baseSKU
+        , Microdata.brandMeta "Southern Exposure Seed Exchange"
+        , Microdata.urlMeta <|
+            Routing.reverse <|
+                ProductDetails product.slug Nothing
+        ]
+
+
 detailView : CartForms -> PageData.ProductDetails -> List (Html Msg)
 detailView addToCartForms { product, variants, maybeSeedAttribute, categories } =
     let
         productImage =
             productMainImage product
 
-        categoryBlocks =
-            List.filter (not << String.isEmpty << .description) categories
-                |> List.map
-                    (\category ->
-                        div [ class "product-category static-page" ]
-                            [ h3 [ class "mt-3" ]
-                                [ a (routeLinkAttributes <| CategoryDetails category.slug Pagination.default)
-                                    [ span [ Microdata.category ] [ text category.name ] ]
-                                ]
-                            , rawHtml category.description
-                            ]
-                    )
-    in
-    List.singleton <|
-        div Microdata.product
-            [ h1 [ class "product-details-title d-flex justify-content-between" ]
-                [ Product.singleVariantName product variants
-                , div [ class "d-none d-md-inline-flex" ]
-                    [ htmlOrBlank SeedAttribute.icons maybeSeedAttribute ]
+        cartData =
+            cartFormData addToCartForms ( product, variants )
+
+        imageView =
+            a
+                [ href <| productImage.original
+                , A.target "_self"
+                , Gallery.openOnClick ProductDetailsLightbox productImage
+                , Aria.label <| "View Product Image for " ++ product.name
                 ]
-            , div [ class "d-md-none" ]
-                [ htmlOrBlank SeedAttribute.icons maybeSeedAttribute ]
-            , hr [] []
-            , div [ class "product-details" ]
-                [ div [ class "clearfix" ]
-                    [ div [ class "product-image mr-md-3 mb-2" ]
-                        [ div
-                            [ class "card" ]
-                            [ div [ class "card-body text-center p-1" ]
-                                [ a
-                                    [ href <| productImage.original
-                                    , A.target "_self"
-                                    , Gallery.openOnClick ProductDetailsLightbox productImage
-                                    , Aria.label <| "View Product Image for " ++ product.name
-                                    ]
-                                    [ img
-                                        [ src <| imgSrcFallback productImage
-                                        , imageToSrcSet productImage
-                                        , class "img-fluid mb-2"
-                                        , alt <| "Product Image for " ++ product.name
-                                        , Microdata.image
-                                        , attribute "sizes" <|
-                                            String.join ", "
-                                                [ "(max-width: 767px) 100vw"
-                                                , "(max-width: 991px) 125px"
-                                                , "(max-width: 1199px) 230px"
-                                                , "315px"
-                                                ]
-                                        ]
-                                        []
-                                    ]
-                                , cardFormView (cartFormData addToCartForms ( product, variants )) product maybeSeedAttribute
-                                ]
-                            ]
-                        ]
-                    , Microdata.mpnMeta product.baseSKU
-                    , Microdata.skuMeta product.baseSKU
-                    , Microdata.brandMeta "Southern Exposure Seed Exchange"
-                    , Microdata.urlMeta <|
-                        Routing.reverse <|
-                            ProductDetails product.slug Nothing
-                    , div [ Microdata.description, class "static-page" ] [ rawHtml product.longDescription ]
-                    , div [] categoryBlocks
+                [ img
+                    [ src <| imgSrcFallback productImage
+                    , imageToSrcSet productImage
+                    , Microdata.image
+                    , alt <| "Product Image for " ++ product.name
+                    , class "tw:w-[360px] tw:h-[360px] tw:object-cover tw:rounded-[16px] clickable-image"
                     ]
+                    []
                 ]
+    in
+    [ div (Microdata.product ++ [ class "tw:flex tw:gap-[40px]" ])
+        [ div [ class "tw:shrink-0" ]
+            [ imageView
             ]
+        , div []
+            [ h6 [ class "tw:text-[32px]! tw:pb-[16px]" ]
+                [ a (Microdata.url :: routeLinkAttributes (ProductDetails product.slug Nothing) ++ [ class "" ])
+                    [ Product.singleVariantName product variants ]
+                ]
+            , detailFormView cartData product maybeSeedAttribute categories
+            ]
+        ]
+    ]
 
 
 cardFormView : CartFormData -> Product -> Maybe SeedAttribute -> Html Msg
@@ -328,10 +393,6 @@ cardFormView { maybeSelectedVariant, maybeSelectedVariantId, quantity, isOutOfSt
                     Nothing ->
                         []
 
-        selectedPrice =
-            maybeSelectedVariant
-                |> htmlOrBlank (\v -> p [ class "tw:text-[28px] tw:font-bold" ] [ renderPrice v ])
-
         availabilityBadge =
             if isOutOfStock then
                 addToCartInputDisabled
@@ -340,21 +401,8 @@ cardFormView { maybeSelectedVariant, maybeSelectedVariantId, quantity, isOutOfSt
                 text ""
     in
     form formAttributes
-        [ div [ class "tw:flex tw:pt-[12px] tw:items-center" ]
-            [ small [ class "text-muted d-block tw:grow" ]
-                [ text <| "Item #" ++ selectedItemNumber ]
-            , htmlOrBlank SeedAttribute.icons maybeSeedAttribute
-            ]
-        , if List.isEmpty variantSelect then
-            if isOutOfStock then
-                div [ class "tw:flex tw:pt-[12px]" ] [ outOfStockBadge ]
-
-            else
-                div [] []
-
-          else
-            div [ class "tw:pt-[12px]" ]
-                variantSelect
+        [ div [ class "tw:pt-[12px] " ] [ productAttrView selectedItemNumber maybeSeedAttribute ]
+        , variantSelectView "tw:pt-[12px]" variantSelect isOutOfStock
         , div [ Microdata.description, class "tw:pt-[16px] tw:line-clamp-4 tw:text-[14px] static-page" ] [ rawHtml product.longDescription ]
         , Microdata.mpnMeta product.baseSKU
         , Microdata.skuMeta product.baseSKU
@@ -364,9 +412,9 @@ cardFormView { maybeSelectedVariant, maybeSelectedVariantId, quantity, isOutOfSt
         , div [ class "tw:pt-[24px]" ]
             [ Html.map never requestFeedback
             , div [ class "tw:flex tw:items-center" ]
-                [ selectedPrice
+                [ priceView Card maybeSelectedVariant
                 , div [ class "tw:grow" ] []
-                , viewIfLazy (not isOutOfStock) (addToCartInput quantity product)
+                , viewIfLazy (not isOutOfStock) (addToCartInput Card quantity product)
                 , availabilityBadge
                 , Html.map never offersMeta
                 ]
@@ -537,37 +585,81 @@ limitedAvailabilityBadge =
     span [ class "badge badge-warning" ] [ text "Limited Availability" ]
 
 
-addToCartInput quantity product _ =
-    div [ class "tw:flex" ]
-        [ customNumberView quantity
+addToCartInput : ProductFormStyle -> Int -> Product -> () -> Html Msg
+addToCartInput style quantity product _ =
+    let
+        ( class_, buttonView ) =
+            case style of
+                Card ->
+                    ( "tw:gap-[4px]"
+                    , div [ class "tw:flex" ]
+                        [ Button.view { defaultButton | type_ = Button.FormSubmit, icon = Just <| shoppingCartSvgSmall }
+                        ]
+                    )
+
+                Detail ->
+                    ( "tw:gap-[20px]"
+                    , div [ class "tw:w-full" ]
+                        [ Button.view
+                            { defaultButton
+                                | label = "Add to cart"
+                                , type_ = Button.FormSubmit
+                                , icon = Just <| shoppingCartSvgSmall
+                                , padding = Button.Expand
+                                , size = Button.Large
+                            }
+                        ]
+                    )
+    in
+    div [ class <| "tw:flex " ++ class_ ]
+        [ customNumberView style
+            quantity
             (ChangeCartFormQuantity product.id)
             (IncreaseCartFormQuantity product.id)
             (DecreaseCartFormQuantity product.id)
-        , div [ class "tw:pl-[2px] tw:flex" ]
-            [ Button.view { defaultButton | type_ = Button.FormSubmit, icon = Just <| shoppingCartSvgSmall }
-            ]
+        , buttonView
         ]
 
 
-customNumberView : Int -> (Int -> msg) -> msg -> msg -> Html msg
-customNumberView currentVal onChangeHandler increaseHandler decreaseHandler =
-    div [ class "tw:flex tw:shrink-0 tw:text-white tw:rounded-[8px] tw:bg-[rgba(29,127,110,1)] tw:overflow-hidden" ]
+customNumberView : ProductFormStyle -> Int -> (Int -> msg) -> msg -> msg -> Html msg
+customNumberView style currentVal onChangeHandler increaseHandler decreaseHandler =
+    let
+        { class_, fillClass, buttonSizeClass, formClass } =
+            case style of
+                Card ->
+                    { class_ = "tw:bg-[rgba(29,127,110,1)] tw:text-white"
+                    , fillClass = "tw:fill-white"
+                    , buttonSizeClass = "tw:h-[40px] tw:w-[30px] tw:hover:bg-[rgb(17,75,65)]"
+                    , formClass = "tw:w-[30px] text-center tw:border-white"
+                    }
+
+                Detail ->
+                    { class_ = "tw:bg-white tw:border tw:border-[rgba(29,127,110,1)]"
+                    , fillClass = "tw:fill-black"
+                    , buttonSizeClass = "tw:w-[48px] tw:h-[48px] tw:hover:bg-[rgb(219,219,219)]"
+                    , formClass = "tw:w-[46px] tw:text-center tw:border-[rgba(29,127,110,1)]"
+                    }
+    in
+    div [ class <| class_ ++ " tw:flex tw:shrink-0 tw:rounded-[8px] tw:overflow-hidden" ]
         [ button
             [ type_ "button"
-            , class "tw:cursor-pointer tw:h-[40px] tw:w-[30px] tw:flex tw:items-center tw:justify-center tw:hover:bg-[rgb(17,75,65)]"
+            , class <| buttonSizeClass ++ " tw:cursor-pointer tw:flex tw:items-center tw:justify-center"
             , onClick decreaseHandler
             ]
-            [ minusSvg
+            [ minusSvg fillClass
             ]
         , div [ class "tw:flex tw:items-center tw:justify-center tw:px-[4px]" ]
-            [ Form.numberView "tw:block tw:w-[30px] no-arrow tw:py-[2px] tw:pl-[6px] tw:hover:border tw:focus:border tw:rounded-[4px]" currentVal onChangeHandler
+            [ Form.numberView
+                (formClass ++ " tw:block no-arrow tw:py-[2px] tw:pl-[6px] tw:hover:border tw:focus:border tw:rounded-[4px]")
+                currentVal
+                onChangeHandler
             ]
         , button
             [ type_ "button"
-            , class "tw:cursor-pointer tw:h-[40px] tw:w-[30px] tw:flex tw:items-center tw:justify-center tw:hover:bg-[rgb(17,75,65)]"
+            , class <| buttonSizeClass ++ " tw:cursor-pointer tw:flex tw:items-center tw:justify-center"
             , onClick increaseHandler
             ]
-            [ plusSvg
+            [ plusSvg fillClass
             ]
         ]
 
