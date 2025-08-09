@@ -2,28 +2,28 @@ module Messages exposing (Msg(..))
 
 import AdvancedSearch
 import Api
-import Auth.CreateAccount as CreateAccount
-import Auth.VerifyEmail as VerifyEmail
-import Auth.VerificationRequired as VerificationRequired
-import Auth.EditAddress as EditAddress
-import Auth.EditLogin as EditLogin
-import Auth.Login as Login
-import Auth.ResetPassword as ResetPassword
 import BootstrapGallery as Gallery
 import Browser exposing (UrlRequest)
-import Cart
 import Categories.AdminViews as CategoryAdmin
-import Checkout
 import Locations exposing (AddressLocations)
 import Models.Fields exposing (ImageData)
 import PageData exposing (CustomerData, OrderData, ProductData)
+import Pages.Cart as Cart
+import Pages.Checkout as Checkout
+import Pages.CreateAccount as CreateAccount
+import Pages.EditAddress as EditAddress
+import Pages.EditLogin as EditLogin
+import Pages.Login as Login
+import Pages.QuickOrder as QuickOrder
+import Pages.ResetPassword as ResetPassword
+import Pages.VerificationRequired as VerificationRequired
+import Pages.VerifyEmail as VerifyEmail
 import Paginate
 import Product exposing (ProductId, ProductVariantId)
 import Products.AdminViews as ProductAdmin
-import QuickOrder
 import RemoteData exposing (WebData)
 import Routing exposing (Route)
-import SiteUI exposing (NavigationData)
+import SiteUI exposing (CategoryListData, NavigationData)
 import SiteUI.Search as SiteSearch
 import StaticPage exposing (StaticPage)
 import Time
@@ -38,7 +38,6 @@ import Views.SettingsAdmin as SettingsAdmin
 import Views.ShippingAdmin as ShippingAdmin
 import Views.StaticPageAdmin as StaticPageAdmin
 import Views.SurchargesAdmin as SurchargesAdmin
-import SiteUI exposing (CategoryListData)
 
 
 type Msg

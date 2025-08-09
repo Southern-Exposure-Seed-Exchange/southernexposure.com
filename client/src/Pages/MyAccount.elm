@@ -1,4 +1,4 @@
-module Auth.MyAccount exposing (getDetails, view)
+module Pages.MyAccount exposing (getDetails, view)
 
 import Api
 import Html exposing (..)

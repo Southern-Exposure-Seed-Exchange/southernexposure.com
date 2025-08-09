@@ -1,4 +1,4 @@
-module Auth.CreateAccount exposing
+module Pages.CreateAccount exposing
     ( Form
     , Msg
     , initial

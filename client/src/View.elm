@@ -1,20 +1,10 @@
 module View exposing (pageDescription, pageImage, pageTitle, view)
 
 import AdvancedSearch
-import Auth.CreateAccount as CreateAccount
-import Auth.EditAddress as EditAddress
-import Auth.EditLogin as EditLogin
-import Auth.Login as Login
-import Auth.MyAccount as MyAccount
-import Auth.ResetPassword as ResetPassword
-import Auth.VerificationRequired as VerificationRequired
-import Auth.VerifyEmail as VerifyEmail
 import BootstrapGallery as Gallery
 import Browser exposing (Document)
-import Cart
 import Categories.AdminViews as CategoryAdminViews
 import Categories.Views as CategoryViews
-import Checkout
 import Html exposing (..)
 import Html.Attributes exposing (class, href, id, target)
 import Html.Events exposing (onClick)
@@ -24,12 +14,22 @@ import Mock.Home
 import Model exposing (CartForms, Model)
 import OrderDetails
 import PageData
+import Pages.Cart as Cart
+import Pages.Checkout as Checkout
+import Pages.CreateAccount as CreateAccount
+import Pages.EditAddress as EditAddress
+import Pages.EditLogin as EditLogin
+import Pages.Login as Login
+import Pages.MyAccount as MyAccount
+import Pages.QuickOrder as QuickOrder
+import Pages.ResetPassword as ResetPassword
+import Pages.VerificationRequired as VerificationRequired
+import Pages.VerifyEmail as VerifyEmail
 import Paginate
 import Product exposing (productMainImage)
 import Products.AdminViews as ProductAdmin
 import Products.Pagination as Pagination
 import Products.Views as ProductViews
-import QuickOrder
 import RemoteData exposing (WebData)
 import Routing exposing (AdminRoute(..), Route(..), isAdminRoute)
 import Search exposing (UniqueSearch(..))
@@ -798,7 +798,7 @@ staticPageView { name, slug, content } =
                 text ""
 
             else
-                h1 [class "tw:pb-[32px]"] [ text name ]
+                h1 [ class "tw:pb-[32px]" ] [ text name ]
 
         html =
             rawHtml content

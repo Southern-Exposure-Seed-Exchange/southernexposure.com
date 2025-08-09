@@ -1,4 +1,4 @@
-module Auth.ResetPassword exposing
+module Pages.ResetPassword exposing
     ( Form
     , Msg
     , initial

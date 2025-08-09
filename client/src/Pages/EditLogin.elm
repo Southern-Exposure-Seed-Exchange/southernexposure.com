@@ -1,4 +1,4 @@
-module Auth.EditLogin exposing
+module Pages.EditLogin exposing
     ( Form
     , Msg
     , initial
