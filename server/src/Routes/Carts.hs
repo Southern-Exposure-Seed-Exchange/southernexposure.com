@@ -7,6 +7,7 @@
 {-# LANGUAGE TypeFamilies #-}
 module Routes.Carts
     ( CartAPI
+    , ValidateCartParameters(..)
     , cartRoutes
     ) where
 

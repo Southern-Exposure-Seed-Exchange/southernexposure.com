@@ -1493,6 +1493,9 @@ update msg ({ pageData, key } as model) =
 
                         _ ->
                             pageData
+                validateCart m = Cmd.map
+                    CheckoutMsg
+                    (Checkout.validateCart m.currentUser m.maybeSessionToken m.pageData.checkoutDetails)
 
                 cmd =
                     case response of
@@ -1506,8 +1509,7 @@ update msg ({ pageData, key } as model) =
                         _ ->
                             Cmd.none
             in
-            extraCommand (redirect403IfAnonymous key response) <|
-                (\a -> Tuple.pair a cmd) <|
+                ((\a -> Tuple.pair a cmd) <|
                     case ( pageData.checkoutDetails, response ) of
                         ( RemoteData.Success _, RemoteData.Success (Ok _) ) ->
                             { model | pageData = updatedPageData }
@@ -1524,6 +1526,9 @@ update msg ({ pageData, key } as model) =
 
                         _ ->
                             { model | pageData = updatedPageData }
+                )
+                |> extraCommand (redirect403IfAnonymous key response)
+                |> extraCommand validateCart
 
         GetCheckoutSuccessDetails response ->
             let

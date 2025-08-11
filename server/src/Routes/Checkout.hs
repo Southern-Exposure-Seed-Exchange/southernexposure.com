@@ -59,11 +59,13 @@ import Routes.CommonData
     )
 import Routes.AvalaraUtils (createAvalaraTransaction, createAvalaraCustomer)
 import Routes.Utils (getDisabledCheckoutDetails, getClientIP, generateUniqueToken)
+import Routes.Carts (ValidateCartParameters(..))
 import Routes.Customers (RegistrationParametersWith(..), registerNewCustomer)
 import Validation (Validation(..))
 import Workers (Task(..), AvalaraTask(..), enqueueTask)
 
 import qualified Avalara
+import qualified Data.Map.Strict as M
 import qualified Data.Text as T
 import qualified Database.Esqueleto.Experimental as E
 import qualified Emails
@@ -1097,34 +1099,37 @@ createOrder ce@(Entity customerId customer) cartId shippingEntity
             , orderCouponId = Nothing
             , orderCreatedAt = currentTime
             }
-    orderId <- insert order
-    (lineTotal, maybeCouponId) <- createLineItems currentTime ce
-        shippingEntity items orderId priorityShipping maybeCouponCode
-    when (isJust maybeCouponId) $
-        update orderId [OrderCouponId =. maybeCouponId]
-    productTotals <- createProducts items orderId
-    let totalCharges = lineTotal + fromIntegral (fromCents $ sumPrices productTotals)
-        orderEntity = Entity orderId order
-    if totalCharges < 0 then
-        -- TODO: Throw an error? This means credits > charges which shouldn't happen...
-        return (orderEntity, mkCents 0, mkCents 0)
-    else
-        let totalInCents = Cents $ fromIntegral totalCharges in
-        case maybeStoreCredit of
-            Nothing ->
-                return (orderEntity, totalInCents, mkCents 0)
-            Just c ->
-                if c > mkCents 0 && totalInCents > mkCents 0 then do
-                    let storeCredit = min (customerStoreCredit customer) $ min totalInCents c
-                    insert_ OrderLineItem
-                        { orderLineItemOrderId = orderId
-                        , orderLineItemType = StoreCreditLine
-                        , orderLineItemDescription = "Store Credit"
-                        , orderLineItemAmount = storeCredit
-                        }
-                    return (orderEntity, totalInCents `subtractCents` storeCredit, storeCredit)
-                else
+    let validateCartParameters = ValidateCartParameters cartId $
+            M.fromList $ map (\CartItemData{..} -> (E.fromSqlKey cidItemId, fromIntegral cidQuantity)) items
+    lift (validate validateCartParameters) >> do
+        orderId <- insert order
+        (lineTotal, maybeCouponId) <- createLineItems currentTime ce
+            shippingEntity items orderId priorityShipping maybeCouponCode
+        when (isJust maybeCouponId) $
+            update orderId [OrderCouponId =. maybeCouponId]
+        productTotals <- createProducts items orderId
+        let totalCharges = lineTotal + fromIntegral (fromCents $ sumPrices productTotals)
+            orderEntity = Entity orderId order
+        if totalCharges < 0 then
+            -- TODO: Throw an error? This means credits > charges which shouldn't happen...
+            return (orderEntity, mkCents 0, mkCents 0)
+        else
+            let totalInCents = Cents $ fromIntegral totalCharges in
+            case maybeStoreCredit of
+                Nothing ->
                     return (orderEntity, totalInCents, mkCents 0)
+                Just c ->
+                    if c > mkCents 0 && totalInCents > mkCents 0 then do
+                        let storeCredit = min (customerStoreCredit customer) $ min totalInCents c
+                        insert_ OrderLineItem
+                            { orderLineItemOrderId = orderId
+                            , orderLineItemType = StoreCreditLine
+                            , orderLineItemDescription = "Store Credit"
+                            , orderLineItemAmount = storeCredit
+                            }
+                        return (orderEntity, totalInCents `subtractCents` storeCredit, storeCredit)
+                    else
+                        return (orderEntity, totalInCents, mkCents 0)
 
 
 -- | Delete a Cart & all it's Items.
