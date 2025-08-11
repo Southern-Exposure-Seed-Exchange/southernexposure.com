@@ -2,6 +2,7 @@ module SiteUI.Header exposing (adminView, view)
 
 import Components.Button as Button exposing (defaultButton)
 import Components.IconButton as IconButton
+import Components.ProfileNavbar as ProfileNavbar
 import Components.Svg exposing (shoppingCartSvg)
 import Html exposing (Html, a, br, div, h1, img, li, small, span, text, ul)
 import Html.Attributes exposing (alt, class, href, id, src, target)
@@ -12,15 +13,16 @@ import SiteUI.Search as SiteSearch
 import User exposing (AuthStatus(..))
 import Views.Images as Images
 import Views.Utils exposing (routeLinkAttributes)
+import Model exposing (Model)
 
 
-view : (SiteSearch.Msg -> Msg) -> SiteSearch.Data -> AuthStatus -> Int -> Html Msg
-view searchTagger searchData authStatus cartItemCount =
+view : Model -> (SiteSearch.Msg -> Msg) -> SiteSearch.Data -> AuthStatus -> Int -> Html Msg
+view model searchTagger searchData authStatus cartItemCount =
     div [ class "container" ]
         [ div [ id "site-header", class "tw:py-[30px] tw:flex tw:items-center tw:w-full" ]
             [ logoAndName Routing.homePage
             , div [ class "tw:grow" ] []
-            , linksAndSearch searchTagger searchData authStatus cartItemCount
+            , linksAndSearch model searchTagger searchData authStatus cartItemCount
             ]
         ]
 
@@ -77,8 +79,8 @@ cartIcon cartItemCount =
 -- TODO: update this to support when the user is logged in after the design is ready
 
 
-linksAndSearch : (SiteSearch.Msg -> Msg) -> SiteSearch.Data -> AuthStatus -> Int -> Html Msg
-linksAndSearch searchTagger searchData authStatus cartItemCount =
+linksAndSearch : Model -> (SiteSearch.Msg -> Msg) -> SiteSearch.Data -> AuthStatus -> Int -> Html Msg
+linksAndSearch model searchTagger searchData authStatus cartItemCount =
     let
         routeLink content route =
             linkItem (routeLinkAttributes route) content
@@ -97,9 +99,7 @@ linksAndSearch searchTagger searchData authStatus cartItemCount =
                         ]
 
                     Authorized _ ->
-                        [ routeLink "My Account" MyAccount
-                        , linkItem [ href "/account/logout/", onClickPreventDefault LogOut, target "" ]
-                            "Log Out"
+                        [ Html.map ProfileNavbarMsg <| ProfileNavbar.view model.profileNavbar
                         ]
                )
 

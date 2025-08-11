@@ -4,9 +4,9 @@ import Category
 import Html exposing (Html, a, div, h1, hr, img, text)
 import Html.Attributes exposing (alt, attribute, class, src)
 import Messages exposing (Msg)
-import Model exposing (CartForms)
 import Models.Fields exposing (imageToSrcSet, imgSrcFallback)
 import PageData exposing (ProductData)
+import Pages.Cart.Type exposing (CartForms)
 import Paginate exposing (Paginated)
 import Products.Pagination as Pagination
 import Products.Sorting as Sorting
@@ -55,7 +55,7 @@ details pagination addToCartForms products =
                     ]
                 ]
     in
-    [ div [ class "tw:px-[16px]"]
+    [ div [ class "tw:px-[16px]" ]
         [ div [ class "tw:flex tw:gap-[12px] tw:pb-[20px]" ]
             [ div [ class "tw:rounded-[8px] tw:overflow-hidden tw:border tw:border-[rgba(30,12,3,0.08)]" ]
                 [ img

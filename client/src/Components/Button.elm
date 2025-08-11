@@ -1,7 +1,7 @@
 module Components.Button exposing (..)
 
-import Html exposing (Html, a, b, button, text)
-import Html.Attributes exposing (class, disabled, href, name, type_)
+import Html exposing (..)
+import Html.Attributes exposing (..)
 
 
 type Style
@@ -30,6 +30,7 @@ type alias Config msg =
     , style : Style
     , type_ : ButtonType
     , icon : Maybe (Html msg)
+    , iconEnd : Maybe (Html msg)
     , padding : Padding
     , size : ButtonSize
     }
@@ -41,6 +42,7 @@ defaultButton =
     , style = Solid
     , type_ = Link ""
     , icon = Nothing
+    , iconEnd = Nothing
     , padding = Default
     , size = Small
     }
@@ -60,7 +62,12 @@ view config =
         styleClass =
             case config.style of
                 Outline ->
-                    "tw:border! tw:bg-white! tw:border-[#4DAA9A]! tw:text-[#1E0C03]! tw:hover:border-[#34C3AB]! tw:active:border-[#1D7F6E]!"
+                    case config.type_ of
+                        Disabled ->
+                            "tw:border! tw:border-[#BFBFBF]! tw:text-[#BFBFBF]! tw:bg-[#f5f5f5]!"
+
+                        _ ->
+                            "tw:border! tw:bg-white! tw:border-[#4DAA9A]! tw:text-[#1E0C03]! tw:hover:border-[#34C3AB]! tw:active:border-[#1D7F6E]!"
 
                 Solid ->
                     case config.type_ of
@@ -105,10 +112,19 @@ view config =
                 Nothing ->
                     []
 
+        iconEndContent =
+            case config.iconEnd of
+                Just iconView ->
+                    [ span [ class "tw:grow" ] [], iconView ]
+
+                Nothing ->
+                    []
+
         buttonContent =
             iconContent
                 ++ [ text config.label
                    ]
+                ++ iconEndContent
     in
     case config.type_ of
         Link hrefLink ->

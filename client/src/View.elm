@@ -11,10 +11,11 @@ import Html.Events exposing (onClick)
 import Http
 import Messages exposing (Msg(..))
 import Mock.Home
-import Model exposing (CartForms, Model)
+import Model exposing (Model)
 import OrderDetails
 import PageData
-import Pages.Cart as Cart
+import Pages.Cart.Cart as Cart
+import Pages.Cart.Type as Cart
 import Pages.Checkout as Checkout
 import Pages.CreateAccount as CreateAccount
 import Pages.EditAddress as EditAddress
@@ -352,7 +353,7 @@ view ({ route, pageData, navigationData, zone, helcimUrl } as model) =
 
         else
             [ skipLink
-            , SiteHeader.view SearchMsg model.searchData model.currentUser model.cartItemCount
+            , SiteHeader.view model SearchMsg model.searchData model.currentUser model.cartItemCount
             , SiteNavigation.view route model.currentUser navigationData activeCategoryIds model.searchData
             , SiteBreadcrumbs.view route pageData
             , middleContent
@@ -811,7 +812,7 @@ staticPageView { name, slug, content } =
     ]
 
 
-searchResultsView : Search.Data -> Pagination.Data -> CartForms -> PageData.SearchResults -> List (Html Msg)
+searchResultsView : Search.Data -> Pagination.Data -> Cart.CartForms -> PageData.SearchResults -> List (Html Msg)
 searchResultsView ({ query } as data) pagination addToCartForms products =
     let
         uniqueSearch =
