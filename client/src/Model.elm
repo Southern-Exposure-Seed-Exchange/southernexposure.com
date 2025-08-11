@@ -1,16 +1,17 @@
 module Model exposing
-    ( CartForms
-    , Model
+    ( Model
     , initial
     )
 
 import Api exposing (Endpoint(..))
 import BootstrapGallery as Gallery
 import Categories.AdminViews as CategoryAdmin
+import Components.ProfileNavbar as ProfileNavbar
 import Dict exposing (Dict)
 import Models.Fields exposing (ImageData)
 import PageData exposing (PageData)
 import Pages.Cart.Cart as Cart
+import Pages.Cart.Type as Cart
 import Pages.Checkout as Checkout
 import Pages.CreateAccount as CreateAccount
 import Pages.EditAddress as EditAddress
@@ -54,7 +55,7 @@ type alias Model =
     , editLoginForm : EditLogin.Form
     , editAddressForm : EditAddress.Form
     , resetPasswordForm : ResetPassword.Form
-    , addToCartForms : CartForms
+    , addToCartForms : Cart.CartForms
     , productDetailsLightbox : Gallery.Model ImageData
     , editCartForm : Cart.Form
     , quickOrderForms : QuickOrder.Forms
@@ -87,16 +88,10 @@ type alias Model =
     , zone : Time.Zone
     , key : Routing.Key
     , helcimUrl : String
+
+    -- sub-component
+    , profileNavbar : ProfileNavbar.Model
     }
-
-
-type alias CartForms =
-    Dict
-        Int
-        { variant : Maybe ProductVariantId
-        , quantity : Int
-        , requestStatus : WebData ()
-        }
 
 
 initial : Routing.Key -> Route -> String -> Model
@@ -147,4 +142,5 @@ initial key route helcimUrl =
     , zone = Time.utc
     , key = key
     , helcimUrl = helcimUrl
+    , profileNavbar = ProfileNavbar.init
     }

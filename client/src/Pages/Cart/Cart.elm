@@ -270,7 +270,7 @@ view authStatus ({ quantities } as form_) ({ items, charges } as cartDetails) =
                     ]
                 , div [ class "tw:w-[155px] tw:shrink-0" ]
                     [ div [ class "tw:flex" ]
-                        [ p [ class "tw:text-[20px] tw:leading-[28px] tw:font-semibold tw:grow" ]
+                        [ p [ class "tw:text-center tw:pt-[3px] tw:text-[20px] tw:leading-[28px] tw:font-semibold tw:grow" ]
                             [ text <| Format.cents <| centsMap ((*) quantity) <| variantPrice variant
                             ]
                         , button

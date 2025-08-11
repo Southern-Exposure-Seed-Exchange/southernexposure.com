@@ -9,16 +9,18 @@ import Browser.Dom as Dom
 import Browser.Navigation
 import Categories.AdminViews as CategoryAdmin
 import Category exposing (CategoryId)
+import Components.ProfileNavbar as ProfileNavbar
 import Dict
 import Http
 import Json.Decode as Decode
 import Json.Encode as Encode
 import Locations
 import Messages exposing (Msg(..))
-import Model exposing (CartForms, Model)
+import Model exposing (Model)
 import Models.Fields exposing (imageDataLightboxConfig)
 import PageData exposing (CartItemId(..), PageData)
 import Pages.Cart.Cart as Cart
+import Pages.Cart.Type as Cart
 import Pages.Checkout as Checkout
 import Pages.CreateAccount as CreateAccount
 import Pages.EditAddress as EditAddress
@@ -592,7 +594,7 @@ reAuthorize userId =
         |> Api.sendRequest ReAuthorize
 
 
-addToCustomerCart : CartForms -> ProductId -> Int -> ProductVariantId -> ( CartForms, Cmd Msg )
+addToCustomerCart : Cart.CartForms -> ProductId -> Int -> ProductVariantId -> ( Cart.CartForms, Cmd Msg )
 addToCustomerCart forms pId quantity ((ProductVariantId variantId) as vId) =
     let
         body =
@@ -608,7 +610,7 @@ addToCustomerCart forms pId quantity ((ProductVariantId variantId) as vId) =
         |> setCartFormToLoading forms quantity pId vId
 
 
-addToAnonymousCart : Maybe String -> CartForms -> ProductId -> Int -> ProductVariantId -> ( CartForms, Cmd Msg )
+addToAnonymousCart : Maybe String -> Cart.CartForms -> ProductId -> Int -> ProductVariantId -> ( Cart.CartForms, Cmd Msg )
 addToAnonymousCart maybeSessionToken forms pId quantity ((ProductVariantId variantId) as vId) =
     let
         body =
@@ -628,7 +630,7 @@ addToAnonymousCart maybeSessionToken forms pId quantity ((ProductVariantId varia
         |> setCartFormToLoading forms quantity pId vId
 
 
-setCartFormToLoading : CartForms -> Int -> ProductId -> ProductVariantId -> Cmd Msg -> ( CartForms, Cmd Msg )
+setCartFormToLoading : Cart.CartForms -> Int -> ProductId -> ProductVariantId -> Cmd Msg -> ( Cart.CartForms, Cmd Msg )
 setCartFormToLoading forms quantity (ProductId pId) (ProductVariantId vId) cmd =
     let
         newForms =
@@ -1710,6 +1712,23 @@ update msg ({ pageData, key } as model) =
                     { pageData | adminDashboard = response }
             in
             ( { model | pageData = updatedPageData }, Cmd.none )
+
+        ProfileNavbarMsg subMsg ->
+            let
+                ( profileNavbar, profileNavbarMsgToParent, cmd ) =
+                    ProfileNavbar.update subMsg model.profileNavbar
+            in
+            ( { model | profileNavbar = profileNavbar }
+            , Cmd.batch
+                [ Cmd.map ProfileNavbarMsg cmd
+                , case profileNavbarMsgToParent of
+                    Just ProfileNavbar.LogOut ->
+                        logOut
+
+                    _ ->
+                        Cmd.none
+                ]
+            )
 
 
 {-| Wrap the normal update function, checking to see if the page has finished

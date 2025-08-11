@@ -61,42 +61,6 @@ view route =
                     ]
                 ]
 
-        specialSearch modifier =
-            routeLinkAttributes (SearchResults (modifier Search.initial) Pagination.default)
-
-        attributeLink attribute title modifier =
-            li [ class "media" ]
-                [ a (class "px-2 w-100" :: specialSearch modifier)
-                    [ div [ class "mr-auto d-flex align-items-center" ]
-                        [ img
-                            [ class "pl-1 my-2"
-                            , src <| SeedAttribute.iconUrl attribute
-                            , alt <| SeedAttribute.toDescription attribute
-                            ]
-                            []
-                        , h6 [ class "pl-2 py-2 mb-0 font-weight-normal" ] [ text title ]
-                        ]
-                    ]
-                ]
-
-        attributesCard =
-            div [ class "card mb-2 icon-legend" ]
-                [ ul [ class "list-unstyled mb-0" ]
-                    [ attributeLink SeedAttribute.Organic
-                        "Certified Organic"
-                        (\s -> { s | isOrganic = True })
-                    , attributeLink SeedAttribute.Heirloom
-                        "Heirloom"
-                        (\s -> { s | isHeirloom = True })
-                    , attributeLink SeedAttribute.Regional
-                        "Especially well-suited to the South-East"
-                        (\s -> { s | isRegional = True })
-                    , attributeLink SeedAttribute.SmallGrower
-                        "From Small Farms"
-                        (\s -> { s | isSmallGrower = True })
-                    ]
-                ]
-
         newsletterCard =
             div [ class "tw:p-[20px] tw:rounded-[16px] tw:bg-[rgba(254,245,233,0.6)] tw:flex tw:flex-col tw:gap-[16px]" ]
                 [ div [ class "tw:flex tw:flex-col tw:gap-[12px]" ]
@@ -174,7 +138,6 @@ view route =
         [ pageLinks
 
         -- TODO: update this
-        , attributesCard
         , newsletterCard
         , facebookCard
         , logoCard

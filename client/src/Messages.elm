@@ -5,10 +5,11 @@ import Api
 import BootstrapGallery as Gallery
 import Browser exposing (UrlRequest)
 import Categories.AdminViews as CategoryAdmin
+import Components.ProfileNavbar as ProfileNavbar
 import Locations exposing (AddressLocations)
 import Models.Fields exposing (ImageData)
 import PageData exposing (CustomerData, OrderData, ProductData)
-import Pages.Cart.Cart as Cart
+import Pages.Cart.Type as Cart
 import Pages.Checkout as Checkout
 import Pages.CreateAccount as CreateAccount
 import Pages.EditAddress as EditAddress
@@ -64,6 +65,8 @@ type Msg
     | ResetCartFormStatus ProductId
       -- My Account Page
     | ShowAllOrders
+      -- Sub-Components
+    | ProfileNavbarMsg ProfileNavbar.Msg
       -- Sub-Messages
     | SearchMsg SiteSearch.Msg
     | AdvancedSearchMsg AdvancedSearch.Msg
