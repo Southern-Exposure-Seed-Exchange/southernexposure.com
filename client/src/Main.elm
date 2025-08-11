@@ -3,22 +3,12 @@ module Main exposing (main)
 import Address
 import AdvancedSearch
 import Api
-import Auth.CreateAccount as CreateAccount
-import Auth.EditAddress as EditAddress
-import Auth.EditLogin as EditLogin
-import Auth.Login as Login
-import Auth.MyAccount as MyAccount
-import Auth.ResetPassword as ResetPassword
-import Auth.VerificationRequired as VerificationRequired
-import Auth.VerifyEmail as VerifyEmail
 import BootstrapGallery as Gallery
 import Browser
 import Browser.Dom as Dom
 import Browser.Navigation
-import Cart
 import Categories.AdminViews as CategoryAdmin
 import Category exposing (CategoryId)
-import Checkout
 import Dict
 import Http
 import Json.Decode as Decode
@@ -28,13 +18,23 @@ import Messages exposing (Msg(..))
 import Model exposing (CartForms, Model)
 import Models.Fields exposing (imageDataLightboxConfig)
 import PageData exposing (CartItemId(..), PageData)
+import Pages.Cart as Cart
+import Pages.Checkout as Checkout
+import Pages.CreateAccount as CreateAccount
+import Pages.EditAddress as EditAddress
+import Pages.EditLogin as EditLogin
+import Pages.Login as Login
+import Pages.MyAccount as MyAccount
+import Pages.QuickOrder as QuickOrder
+import Pages.ResetPassword as ResetPassword
+import Pages.VerificationRequired as VerificationRequired
+import Pages.VerifyEmail as VerifyEmail
 import Paginate exposing (Paginated)
 import Ports
 import Process
 import Product exposing (ProductId(..), ProductVariantId(..), productMainImage)
 import Products.AdminViews as ProductAdmin
 import Products.Pagination as Pagination
-import QuickOrder
 import RemoteData exposing (WebData)
 import Routing exposing (AdminRoute(..), Route(..), parseRoute)
 import Search exposing (UniqueSearch(..))

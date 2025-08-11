@@ -1,4 +1,4 @@
-module Auth.EditAddress exposing
+module Pages.EditAddress exposing
     ( Form
     , Msg
     , initial

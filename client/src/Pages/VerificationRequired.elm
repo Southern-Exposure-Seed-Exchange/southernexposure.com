@@ -1,4 +1,4 @@
-module Auth.VerificationRequired exposing
+module Pages.VerificationRequired exposing
   ( Msg,
     Form,
     initial,

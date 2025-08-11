@@ -1,4 +1,4 @@
-module Auth.VerifyEmail exposing
+module Pages.VerifyEmail exposing
   ( Form,
     Msg,
     verifyEmail,

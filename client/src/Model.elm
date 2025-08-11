@@ -4,27 +4,28 @@ module Model exposing
     , initial
     )
 
-import Auth.CreateAccount as CreateAccount
-import Auth.VerifyEmail as VerifyEmail
-import Auth.VerificationRequired as VerificationRequired
-import Auth.EditAddress as EditAddress
-import Auth.EditLogin as EditLogin
-import Auth.Login as Login
-import Auth.ResetPassword as ResetPassword
+import Api exposing (Endpoint(..))
 import BootstrapGallery as Gallery
-import Cart
 import Categories.AdminViews as CategoryAdmin
-import Checkout
 import Dict exposing (Dict)
 import Models.Fields exposing (ImageData)
 import PageData exposing (PageData)
+import Pages.Cart as Cart
+import Pages.Checkout as Checkout
+import Pages.CreateAccount as CreateAccount
+import Pages.EditAddress as EditAddress
+import Pages.EditLogin as EditLogin
+import Pages.Login as Login
+import Pages.QuickOrder as QuickOrder
+import Pages.ResetPassword as ResetPassword
+import Pages.VerificationRequired as VerificationRequired
+import Pages.VerifyEmail as VerifyEmail
 import Product exposing (ProductVariantId)
 import Products.AdminViews as ProductAdmin
-import QuickOrder
 import RemoteData exposing (WebData)
 import Routing exposing (Route)
 import Search
-import SiteUI exposing (NavigationData, CategoryListData)
+import SiteUI exposing (CategoryListData, NavigationData)
 import Time
 import User exposing (AuthStatus)
 import Views.AdminDashboard as AdminDashboard
@@ -37,7 +38,6 @@ import Views.SettingsAdmin as SettingsAdmin
 import Views.ShippingAdmin as ShippingAdmin
 import Views.StaticPageAdmin as StaticPageAdmin
 import Views.SurchargesAdmin as SurchargesAdmin
-import Api exposing (Endpoint(..))
 
 
 type alias Model =
@@ -91,7 +91,8 @@ type alias Model =
 
 
 type alias CartForms =
-    Dict Int
+    Dict
+        Int
         { variant : Maybe ProductVariantId
         , quantity : Int
         , requestStatus : WebData ()

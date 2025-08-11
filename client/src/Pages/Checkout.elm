@@ -1,4 +1,4 @@
-module Checkout exposing
+module Pages.Checkout exposing
     ( Form
     , Msg
     , OutMsg(..)

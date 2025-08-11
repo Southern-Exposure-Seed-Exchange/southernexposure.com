@@ -1,4 +1,4 @@
-module QuickOrder exposing
+module Pages.QuickOrder exposing
     ( Forms
     , Msg
     , initial
