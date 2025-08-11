@@ -14,7 +14,7 @@ import Mock.Home
 import Model exposing (CartForms, Model)
 import OrderDetails
 import PageData
-import Pages.Cart as Cart
+import Pages.Cart.Cart as Cart
 import Pages.Checkout as Checkout
 import Pages.CreateAccount as CreateAccount
 import Pages.EditAddress as EditAddress

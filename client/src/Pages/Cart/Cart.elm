@@ -1,4 +1,4 @@
-module Pages.Cart exposing
+module Pages.Cart.Cart exposing
     ( Form
     , Msg
     , fromCartDetails

@@ -10,7 +10,7 @@ import Categories.AdminViews as CategoryAdmin
 import Dict exposing (Dict)
 import Models.Fields exposing (ImageData)
 import PageData exposing (PageData)
-import Pages.Cart as Cart
+import Pages.Cart.Cart as Cart
 import Pages.Checkout as Checkout
 import Pages.CreateAccount as CreateAccount
 import Pages.EditAddress as EditAddress

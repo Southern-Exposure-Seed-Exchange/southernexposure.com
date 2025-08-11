@@ -18,7 +18,7 @@ import Messages exposing (Msg(..))
 import Model exposing (CartForms, Model)
 import Models.Fields exposing (imageDataLightboxConfig)
 import PageData exposing (CartItemId(..), PageData)
-import Pages.Cart as Cart
+import Pages.Cart.Cart as Cart
 import Pages.Checkout as Checkout
 import Pages.CreateAccount as CreateAccount
 import Pages.EditAddress as EditAddress
