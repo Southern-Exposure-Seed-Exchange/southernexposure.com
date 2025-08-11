@@ -61,7 +61,7 @@ type Msg
     | IncreaseCartFormQuantity ProductId
     | DecreaseCartFormQuantity ProductId
     | SubmitAddToCart ProductId ProductVariantId
-    | SubmitAddToCartResponse ProductId Int (WebData String)
+    | SubmitAddToCartResponse ProductId Int (WebData (Result Api.FormErrors String))
     | ResetCartFormStatus ProductId
       -- My Account Page
     | ShowAllOrders

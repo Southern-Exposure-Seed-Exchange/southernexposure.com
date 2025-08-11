@@ -1,5 +1,6 @@
 module Pages.Cart.Type exposing (..)
 
+import Api exposing (FormErrors)
 import Dict exposing (Dict)
 import Html exposing (..)
 import RemoteData
@@ -12,16 +13,17 @@ type alias CartForms =
     Dict Int
         { variant : Maybe ProductVariantId
         , quantity : Int
-        , requestStatus : WebData ()
+        , requestStatus : WebData (Result Api.FormErrors ())
         }
 
 type alias Form =
     { quantities : Dict Int Int
+    , errors : FormErrors
     }
 
 initial : Form
 initial =
-    Form Dict.empty
+    Form Dict.empty Dict.empty
 
 -- UPDATE
 
@@ -32,5 +34,5 @@ type Msg
     | DecreaseFormQuantity PageData.CartItemId
     | Remove PageData.CartItemId
     | Submit
-    | UpdateResponse (RemoteData.WebData PageData.CartDetails)
+    | UpdateResponse (RemoteData.WebData (Result FormErrors PageData.CartDetails))
 

@@ -93,7 +93,6 @@ type alias Model =
     , profileNavbar : ProfileNavbar.Model
     }
 
-
 initial : Routing.Key -> Route -> String -> Model
 initial key route helcimUrl =
     { navigationData = RemoteData.Loading

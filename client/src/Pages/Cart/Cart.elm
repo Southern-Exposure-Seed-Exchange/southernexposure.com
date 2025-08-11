@@ -1,13 +1,14 @@
 module Pages.Cart.Cart exposing
     ( fromCartDetails
     , update
+    , updateCart
     , view
     )
 
 import Api
 import Components.Button as Button exposing (defaultButton)
 import Components.Svg exposing (..)
-import Dict exposing (Dict)
+import Dict exposing (Dict, get, size)
 import Html exposing (..)
 import Html.Attributes exposing (class)
 import Html.Events exposing (onClick, onSubmit)
@@ -36,7 +37,7 @@ fromCartDetails { items } =
         (\item acc -> Dict.insert ((\(CartItemId i) -> i) item.id) item.quantity acc)
         Dict.empty
         items
-        |> Form
+        |> \i -> Form i Dict.empty
 
 
 update :
@@ -54,6 +55,8 @@ update msg authStatus maybeCartToken model details =
                     Dict.update (fromCartItemId itemId)
                         (always <| Just quantity)
                         model.quantities
+                 , errors =
+                    Dict.remove (String.fromInt <| fromCartItemId itemId) model.errors
               }
             , Nothing
             , Cmd.none
@@ -76,6 +79,8 @@ update msg authStatus maybeCartToken model details =
                                     Just (a + 1)
                         )
                         model.quantities
+                , errors =
+                    Dict.remove (String.fromInt <| fromCartItemId itemId) model.errors
               }
             , Nothing
             , Cmd.none
@@ -102,31 +107,42 @@ update msg authStatus maybeCartToken model details =
                                         Just <| a - 1
                         )
                         model.quantities
+                , errors =
+                    Dict.remove (String.fromInt <| fromCartItemId itemId) model.errors
               }
             , Nothing
             , Cmd.none
             )
 
         Remove itemId ->
-            ( model, Nothing, removeItem authStatus maybeCartToken itemId )
+            ( { model | errors = Dict.remove (String.fromInt <| fromCartItemId itemId) model.errors }, Nothing, removeItem authStatus maybeCartToken itemId )
 
         Submit ->
-            ( model, Nothing, updateCart authStatus maybeCartToken model details )
+            ( model, Nothing, updateCart authStatus maybeCartToken model (Just details) )
 
         UpdateResponse response ->
             case response of
-                RemoteData.Success cartDetails ->
+                RemoteData.Success (Ok cartDetails) ->
                     ( initial, Just cartDetails, Cmd.none )
+
+                RemoteData.Success (Err errors) ->
+                    ( { model | errors = errors }, Nothing, Cmd.none )
 
                 _ ->
                     ( model, Nothing, Cmd.none )
 
 
-updateCart : AuthStatus -> Maybe String -> Form -> CartDetails -> Cmd Msg
-updateCart authStatus maybeCartToken { quantities } { items } =
+updateCart : AuthStatus -> Maybe String -> Form -> Maybe CartDetails -> Cmd Msg
+updateCart authStatus maybeCartToken { quantities } mbCartDetails =
     let
         changed =
-            changedQuantities quantities items
+            case mbCartDetails of
+                Nothing ->
+                    List.map (\(id, quantity) -> (String.fromInt id, Encode.int quantity)) (Dict.toList quantities)
+
+                Just { items } ->
+                    -- Get the changed quantities from the form and the current cart items
+                    changedQuantities quantities items
 
         encodedQuantities =
             Encode.object <|
@@ -168,7 +184,7 @@ anonymousUpdateRequest : Encode.Value -> Cmd Msg
 anonymousUpdateRequest body =
     Api.post Api.CartUpdateAnonymous
         |> Api.withJsonBody body
-        |> Api.withJsonResponse PageData.cartDetailsDecoder
+        |> Api.withErrorHandler PageData.cartDetailsDecoder
         |> Api.sendRequest UpdateResponse
 
 
@@ -176,7 +192,7 @@ customerUpdateRequest : Encode.Value -> Cmd Msg
 customerUpdateRequest body =
     Api.post Api.CartUpdateCustomer
         |> Api.withJsonBody body
-        |> Api.withJsonResponse PageData.cartDetailsDecoder
+        |> Api.withErrorHandler PageData.cartDetailsDecoder
         |> Api.sendRequest UpdateResponse
 
 
@@ -185,7 +201,7 @@ customerUpdateRequest body =
 
 
 view : AuthStatus -> Form -> CartDetails -> List (Html Msg)
-view authStatus ({ quantities } as form_) ({ items, charges } as cartDetails) =
+view authStatus ({ quantities, errors } as form_) ({ items, charges } as cartDetails) =
     let
         itemCount =
             List.foldl (.quantity >> (+)) 0 items
@@ -231,7 +247,10 @@ view authStatus ({ quantities } as form_) ({ items, charges } as cartDetails) =
 
                                 else
                                     " Checkout"
-                            , type_ = Button.Link <| reverse Checkout
+                            , type_ =
+                                if size errors > 0 then
+                                    Button.Disabled
+                                else Button.Link <| reverse Checkout
                             , iconEnd = Just arrowRightSvg
                         }
                     ]
@@ -250,8 +269,8 @@ view authStatus ({ quantities } as form_) ({ items, charges } as cartDetails) =
                         ]
                 ]
 
-        productRow { id, product, variant, quantity } =
-            div [ class "tw:flex tw:py-[20px]" ]
+        productRow { id, product, variant, quantity } = div []
+            [ div [ class "tw:flex tw:py-[20px]" ]
                 [ div [ class "tw:shrink-0" ]
                     [ ProductView.productImageLinkView "tw:w-[169px] tw:h-[130px]" product (Just variant.id)
                     ]
@@ -282,6 +301,13 @@ view authStatus ({ quantities } as form_) ({ items, charges } as cartDetails) =
                         ]
                     ]
                 ]
+            , case (get (String.fromInt (fromCartItemId id)) errors) of
+                Just errs -> div [ class "tw:py-[8px] text-danger font-weight-bold small" ]
+                    [ text (String.join ", " errs) ]
+
+                Nothing ->
+                    text ""
+            ]
 
         tableFooter =
             div [ class "tw:flex tw:flex-col tw:gap-[12px]" ] <|

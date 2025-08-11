@@ -605,7 +605,7 @@ addToCustomerCart forms pId quantity ((ProductVariantId variantId) as vId) =
     in
     Api.post Api.CartAddCustomer
         |> Api.withJsonBody body
-        |> Api.withJsonResponse (Decode.succeed "")
+        |> Api.withErrorHandler (Decode.succeed "")
         |> Api.sendRequest (SubmitAddToCartResponse pId quantity)
         |> setCartFormToLoading forms quantity pId vId
 
@@ -625,7 +625,7 @@ addToAnonymousCart maybeSessionToken forms pId quantity ((ProductVariantId varia
     in
     Api.post Api.CartAddAnonymous
         |> Api.withJsonBody body
-        |> Api.withStringResponse
+        |> Api.withStringErrorHandler
         |> Api.sendRequest (SubmitAddToCartResponse pId quantity)
         |> setCartFormToLoading forms quantity pId vId
 
@@ -953,7 +953,7 @@ update msg ({ pageData, key } as model) =
 
         SubmitAddToCartResponse productId quantity response ->
             case response of
-                RemoteData.Success sessionToken ->
+                RemoteData.Success (Ok sessionToken) ->
                     updateSessionTokenAndCartItemCount model quantity sessionToken
                         |> updateCartFormRequestStatus productId response
 
@@ -1467,11 +1467,18 @@ update msg ({ pageData, key } as model) =
             let
                 updatedPageData =
                     { pageData | cartDetails = response }
+
+                updateCart m = case m.pageData.cartDetails of
+                    RemoteData.Success _ -> Cmd.map
+                        EditCartMsg
+                        (Cart.updateCart m.currentUser m.maybeSessionToken m.editCartForm Nothing)
+                    _ -> Cmd.none
             in
             { model | pageData = updatedPageData }
                 |> resetEditCartForm response
                 |> updateCartItemCountFromDetails (RemoteData.toMaybe response)
                 |> extraCommand (redirect403IfAnonymous key response)
+                |> extraCommand updateCart
 
         GetCartItemCount response ->
             { model | cartItemCount = response |> RemoteData.toMaybe |> Maybe.withDefault 0 }
@@ -2294,11 +2301,10 @@ updateCartVariant (ProductId productId) variantId model =
     { model | addToCartForms = addToCartForms }
 
 
-updateCartFormRequestStatus : ProductId -> WebData a -> ( Model, Cmd Msg ) -> ( Model, Cmd Msg )
+updateCartFormRequestStatus : ProductId -> WebData (Result Api.FormErrors a) -> ( Model, Cmd Msg ) -> ( Model, Cmd Msg )
 updateCartFormRequestStatus (ProductId productId) response ( { addToCartForms } as model, cmd ) =
     let
-        unitResponse =
-            RemoteData.map (always ()) response
+        unitResponse = RemoteData.map (Result.map (always ())) response
 
         updatedForms =
             Dict.update productId updateForm addToCartForms
