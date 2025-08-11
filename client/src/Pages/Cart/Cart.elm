@@ -1,43 +1,33 @@
 module Pages.Cart.Cart exposing
-    ( Form
-    , Msg
-    , fromCartDetails
-    , initial
+    ( fromCartDetails
     , update
     , view
     )
 
 import Api
+import Components.Button as Button exposing (defaultButton)
+import Components.Svg exposing (..)
 import Dict exposing (Dict)
 import Html exposing (..)
-import Html.Attributes as A exposing (alt, class, colspan, disabled, src, type_, value)
+import Html.Attributes exposing (class)
 import Html.Events exposing (onClick, onSubmit)
 import Html.Extra exposing (viewIf)
-import Html.Keyed as Keyed
 import Json.Encode as Encode
-import Models.Fields exposing (Cents(..), centsMap, imageToSrcSet, imgSrcFallback, lotSizeToString)
+import Models.Fields exposing (Cents(..), centsMap)
 import PageData exposing (CartDetails, CartItemId(..))
-import Product exposing (productMainImage, variantPrice)
+import Pages.Cart.Type exposing (..)
+import Product exposing (variantPrice)
+import Products.Views as ProductView
 import RemoteData
 import Routing exposing (Route(..), reverse)
 import User exposing (AuthStatus, unauthorized)
 import Views.Aria as Aria
 import Views.Format as Format
-import Views.Utils exposing (htmlOrBlank, icon, numericInput, onIntInput, rawHtml, routeLinkAttributes)
+import Views.Utils exposing (htmlOrBlank, icon, rawHtml, routeLinkAttributes)
 
 
 
 -- MODEL
-
-
-type alias Form =
-    { quantities : Dict Int Int
-    }
-
-
-initial : Form
-initial =
-    Form Dict.empty
 
 
 fromCartDetails : CartDetails -> Form
@@ -49,17 +39,6 @@ fromCartDetails { items } =
         |> Form
 
 
-
--- UPDATE
-
-
-type Msg
-    = Quantity PageData.CartItemId Int
-    | Remove PageData.CartItemId
-    | Submit
-    | UpdateResponse (RemoteData.WebData PageData.CartDetails)
-
-
 update :
     Msg
     -> AuthStatus
@@ -69,11 +48,59 @@ update :
     -> ( Form, Maybe CartDetails, Cmd Msg )
 update msg authStatus maybeCartToken model details =
     case msg of
-        Quantity itemId quantity ->
+        SetFormQuantity itemId quantity ->
             ( { model
                 | quantities =
                     Dict.update (fromCartItemId itemId)
                         (always <| Just quantity)
+                        model.quantities
+              }
+            , Nothing
+            , Cmd.none
+            )
+
+        IncreaseFormQuantity itemId ->
+            let
+                minQuantity =
+                    1
+            in
+            ( { model
+                | quantities =
+                    Dict.update (fromCartItemId itemId)
+                        (\current ->
+                            case current of
+                                Nothing ->
+                                    Just (minQuantity + 1)
+
+                                Just a ->
+                                    Just (a + 1)
+                        )
+                        model.quantities
+              }
+            , Nothing
+            , Cmd.none
+            )
+
+        DecreaseFormQuantity itemId ->
+            let
+                minQuantity =
+                    1
+            in
+            ( { model
+                | quantities =
+                    Dict.update (fromCartItemId itemId)
+                        (\current ->
+                            case current of
+                                Nothing ->
+                                    Just minQuantity
+
+                                Just a ->
+                                    if a - 1 == 0 then
+                                        Just minQuantity
+
+                                    else
+                                        Just <| a - 1
+                        )
                         model.quantities
               }
             , Nothing
@@ -103,7 +130,7 @@ updateCart authStatus maybeCartToken { quantities } { items } =
 
         encodedQuantities =
             Encode.object <|
-                 ( "quantities", Encode.object changed )
+                ( "quantities", Encode.object changed )
                     :: encodedCartToken maybeCartToken
     in
     if List.isEmpty changed then
@@ -123,11 +150,10 @@ removeItem authStatus maybeCartToken itemId =
     let
         encodedDelete =
             Encode.object <|
-                 ( "quantities"
-                  , Encode.object
-                        [ ( String.fromInt <| fromCartItemId itemId, Encode.int 0 ) ]
-                  )
-
+                ( "quantities"
+                , Encode.object
+                    [ ( String.fromInt <| fromCartItemId itemId, Encode.int 0 ) ]
+                )
                     :: encodedCartToken maybeCartToken
     in
     case authStatus of
@@ -166,109 +192,100 @@ view authStatus ({ quantities } as form_) ({ items, charges } as cartDetails) =
 
         -- TODO: Add commas to format
         cartTable =
-            table [ class "d-none d-md-table table table-striped table-sm cart-table" ]
-                [ tableHeader
-                , Keyed.node "tbody" [] <|
+            div [ class "tw:grow" ]
+                [ div [] <|
                     List.map
                         (\i ->
-                            ( String.fromInt <| fromCartItemId i.id
-                            , productRow i
-                            )
+                            productRow i
                         )
                         items
+                ]
+
+        totalView =
+            div [ class "tw:bg-[rgba(167,215,197,0.3)] tw:p-[20px] tw:rounded-[16px] tw:flex tw:flex-col tw:gap-[12px]" ]
+                [ p [ class "tw:text-[18px] tw:leading-[24px] tw:font-semibold" ] [ text "Your cart" ]
+                , div [ class "tw:flex" ]
+                    [ span [ class "tw:grow" ] [ text "Items:" ]
+                    , span [] [ text <| String.fromInt itemCount ]
+                    ]
                 , tableFooter
+                , div
+                    [ class "tw:pt-[12px] tw:flex tw:flex-col tw:gap-[12px]" ]
+                    [ Button.view
+                        { defaultButton
+                            | label = "Update"
+                            , style = Button.Outline
+                            , type_ =
+                                if formIsUnchanged then
+                                    Button.Disabled
+
+                                else
+                                    Button.FormSubmit
+                            , iconEnd = Just (icon "refresh")
+                        }
+                    , Button.view
+                        { defaultButton
+                            | label =
+                                if authStatus == unauthorized then
+                                    " Checkout as a guest"
+
+                                else
+                                    " Checkout"
+                            , type_ = Button.Link <| reverse Checkout
+                            , iconEnd = Just arrowRightSvg
+                        }
+                    ]
                 ]
 
         buttons =
-            div [class "form-group"]
-            [
-                div [ class "form-group text-right cart-buttons" ]
-                    [ button
-                        [ class "btn btn-success d-none d-sm-inline-block"
-                        , type_ "submit"
-                        , disabled formIsUnchanged
+            div [ class "tw:w-[283px] tw:shrink-0" ]
+                [ totalView
+                , viewIf (authStatus == unauthorized) <|
+                    div [ class "tw:py-[10px]" ]
+                        [ a
+                            (class "btn-link btn tw:font-semibold! p-0 text-right col ml"
+                                :: routeLinkAttributes (Login (Just <| reverse <| Checkout) True)
+                            )
+                            [ text "Already have an Account?" ]
                         ]
-                        [ icon "refresh", text " Update" ]
-                    , a (class "btn btn-primary ml-md-2" :: routeLinkAttributes Checkout)
-                        [ icon "shopping-cart", text <|
-                            if authStatus == unauthorized
-                                then " Checkout as a guest"
-                                else " Checkout" ]
-                    ]
-                , viewIf (authStatus == unauthorized) <| a
-                    (class "btn-link btn font-weight-bold p-0 text-right col ml" ::
-                        routeLinkAttributes (Login (Just <| reverse <| Checkout) True))
-                    [ text "Already have an Account?" ]
-            ]
-
-        tableHeader =
-            thead []
-                [ tr []
-                    [ th [ class "text-center" ] [ text "Quantity" ]
-                    , th [] [ text "" ]
-                    , th [] [ text "Name" ]
-                    , th [ class "text-right" ] [ text "Item Price" ]
-                    , th [ class "text-right" ] [ text "Item Total" ]
-                    , th [ class "text-center" ] [ text "Remove" ]
-                    ]
                 ]
 
         productRow { id, product, variant, quantity } =
-            tr []
-                [ td [ class "text-center align-middle" ]
-                    [ input
-                        [ class "cart-quantity form-control mx-auto"
-                        , type_ "number"
-                        , value <| String.fromInt <| Maybe.withDefault 1 <| Dict.get (fromCartItemId id) quantities
-                        , onIntInput <| Quantity id
-                        , A.min "1"
-                        , A.step "1"
-                        , numericInput
-                        , Aria.label "quantity"
-                        ]
-                        []
+            div [ class "tw:flex tw:py-[20px]" ]
+                [ div [ class "tw:shrink-0" ]
+                    [ ProductView.productImageLinkView "tw:w-[169px] tw:h-[130px]" product (Just variant.id)
                     ]
-                , td [ class "align-middle" ]
-                    [ a
-                        (Aria.label ("View Product Details for " ++ product.name)
-                            :: routeLinkAttributes (ProductDetails product.slug <| Just variant.id)
-                        )
-                        [ img
-                            [ src <| imgSrcFallback (productMainImage product)
-                            , imageToSrcSet (productMainImage product)
-                            , productImageSizes
-                            , class "cart-product-image"
-                            , alt <| "Product Image for " ++ product.name
+                , div [ class "tw:pl-[28px] tw:pr-[10px] tw:grow tw:flex tw:flex-col" ]
+                    [ a ([ class "tw:font-semibold" ] ++ (routeLinkAttributes <| ProductDetails product.slug <| Just variant.id))
+                        [ Product.nameWithLotSize product variant ]
+                    , ProductView.renderItemNumber (ProductView.getItemNumber product (Just variant))
+                    , div [ class "tw:grow" ] []
+                    , div [ class "tw:flex tw:flex-col tw:items-start" ]
+                        [ ProductView.customNumberView ProductView.Checkout
+                            (Maybe.withDefault 1 <| Dict.get (fromCartItemId id) quantities)
+                            (SetFormQuantity id)
+                            (IncreaseFormQuantity id)
+                            (DecreaseFormQuantity id)
+                        ]
+                    ]
+                , div [ class "tw:w-[155px] tw:shrink-0" ]
+                    [ div [ class "tw:flex" ]
+                        [ p [ class "tw:text-[20px] tw:leading-[28px] tw:font-semibold tw:grow" ]
+                            [ text <| Format.cents <| centsMap ((*) quantity) <| variantPrice variant
                             ]
-                            []
+                        , button
+                            [ class "tw:p-[6px] tw:cursor-pointer tw:group"
+                            , onClick <| Remove id
+                            , Aria.label <| "Remove " ++ product.name ++ " From Cart"
+                            ]
+                            [ binSvg "tw:fill-[rgba(30,12,3,0.4)] tw:group-hover:fill-[rgba(214,34,70,1)]" ]
                         ]
-                    ]
-                , td [ class "align-middle" ]
-                    [ div [ class "font-weight-bold" ]
-                        [ a (routeLinkAttributes <| ProductDetails product.slug <| Just variant.id)
-                            [ Product.nameWithLotSize product variant ]
-                        ]
-                    , small
-                        [ class "text-muted" ]
-                        [ text <| "Item #" ++ product.baseSKU ++ variant.skuSuffix ]
-                    ]
-                , td [ class "text-right align-middle" ]
-                    [ text <| Format.cents <| variantPrice variant ]
-                , td [ class "text-right align-middle" ]
-                    [ text <| Format.cents <| centsMap ((*) quantity) <| variantPrice variant ]
-                , td [ class "text-center align-middle" ]
-                    [ button
-                        [ class "btn btn-link text-danger"
-                        , onClick <| Remove id
-                        , Aria.label <| "Remove " ++ product.name ++ " From Cart"
-                        ]
-                        [ icon "times" ]
                     ]
                 ]
 
         tableFooter =
-            tfoot [] <|
-                 footerRow "font-weight-bold" "Sub-Total" totals.subTotal
+            div [ class "tw:flex tw:flex-col tw:gap-[12px]" ] <|
+                footerRow "font-weight-bold" "Sub-Total" totals.subTotal
                     :: List.map chargeRow charges.surcharges
                     ++ [ htmlOrBlank chargeRow <|
                             Maybe.map .charge charges.shippingMethod
@@ -287,10 +304,9 @@ view authStatus ({ quantities } as form_) ({ items, charges } as cartDetails) =
                 chargeRow charges.tax
 
         footerRow rowClass content amount =
-            tr [ class rowClass ]
-                [ td [ colspan 4, class "text-right" ] [ text <| content ++ ":" ]
-                , td [ class "text-right" ] [ text <| Format.cents amount ]
-                , td [] []
+            div [ class <| rowClass ++ " tw:flex" ]
+                [ div [ class "tw:grow" ] [ text <| content ++ ":" ]
+                , div [ class "" ] [ text <| Format.cents amount ]
                 ]
 
         chargeRow charge =
@@ -305,152 +321,40 @@ view authStatus ({ quantities } as form_) ({ items, charges } as cartDetails) =
 
         formIsUnchanged =
             isFormUnchanged quantities items
+
+        titleView =
+            h3 [ class "tw:px-[16px] tw:text-[32px] tw:leading-[32px] tw:pb-[20px]" ] [ text "Your cart" ]
     in
     if not (List.isEmpty items) then
-        [ h1 [] [ text "Shopping Cart" ]
-        , hr [] []
+        [ titleView
         , viewIf cartDetails.isDisabled <|
             div [ class "alert alert-danger static-page" ]
                 [ rawHtml cartDetails.disabledMessage ]
-        , p [ class "text-center font-weight-bold" ]
-            [ text <| "Total Items: " ++ String.fromInt itemCount ++ " Amount: " ++ Format.cents totals.total
-            ]
-        , form [ class "mb-4", onSubmit Submit ]
+        , form [ class "tw:pl-[16px] tw:flex tw:gap-[20px] tw:flex-col tw:lg:flex-row", onSubmit Submit ]
             [ cartTable
-            , mobileCartTable form_ cartDetails totals
             , buttons
             ]
         ]
 
     else
-        [ h1 [] [ text "Shopping Cart" ]
-        , hr [] []
-        , p [] [ text "You haven't added anything to your Shopping Cart yet!" ]
+        [ titleView
+        , p [ class "tw:px-[16px]" ] [ text "You haven't added anything to your Shopping Cart yet!" ]
         ]
 
 
-mobileCartTable : Form -> CartDetails -> { subTotal : Cents, total : Cents } -> Html Msg
-mobileCartTable { quantities } { items, charges } totals =
-    let
-        cartRow { id, product, variant } =
-            let productImage = productMainImage product
-            in
-            div [ class "cart-mobile-product row py-4" ]
-                [ div [ class "col-4 mb-3" ]
-                    [ a (routeLinkAttributes <| ProductDetails product.slug <| Just variant.id)
-                        [ img
-                            [ class "img-fluid"
-                            , src <| imgSrcFallback productImage
-                            , imageToSrcSet productImage
-                            , productImageSizes
-                            ]
-                            []
-                        ]
-                    ]
-                , div [ class "col-8 pl-0 mb-2" ]
-                    [ a (routeLinkAttributes <| ProductDetails product.slug <| Just variant.id)
-                        [ h5 [ class "text-body mb-0 product-name-lotsize static-page" ]
-                            [ rawHtml product.name ]
-                        ]
-                    , div [ class "small text-muted" ]
-                        [ text <|
-                            "Item #"
-                                ++ product.baseSKU
-                                ++ variant.skuSuffix
-                                ++ (Maybe.map (\ls -> " - " ++ lotSizeToString ls) variant.lotSize
-                                        |> Maybe.withDefault ""
-                                   )
-                        ]
-                    , div [ class "text-danger" ]
-                        [ text <| Format.cents <| variantPrice variant ]
-                    , productInputs "d-none d-sm-flex d-md-none mt-2" id
-                    ]
-                , div [ class "col-12 d-sm-none" ]
-                    [ productInputs "" id
-                    ]
-                ]
 
-        productInputs class_ id =
-            div [ class <| "row " ++ class_ ]
-                [ div [ class "col-3 pr-0" ]
-                    [ input
-                        [ class "cart-quantity form-control"
-                        , type_ "number"
-                        , value <| String.fromInt <| Maybe.withDefault 1 <| Dict.get (fromCartItemId id) quantities
-                        , onIntInput <| Quantity id
-                        , A.min "1"
-                        , A.step "1"
-                        , numericInput
-                        , A.size 5
-                        ]
-                        []
-                    ]
-                , div [ class "col-5" ]
-                    [ button
-                        [ class "btn btn-block btn-secondary"
-                        , type_ "submit"
-                        , disabled formIsUnchanged
-                        ]
-                        [ text "Update" ]
-                    ]
-                , div [ class "col-4 pl-0" ]
-                    [ button
-                        [ class "btn btn-block btn-danger"
-                        , onClick <| Remove id
-                        ]
-                        [ text "Remove" ]
-                    ]
-                ]
-
-        totalRows =
-            List.concat
-                [ if totals.subTotal /= totals.total then
-                    total "Sub-Total" totals.subTotal
-
-                  else
-                    []
-                , Maybe.map (.charge >> chargeTotal) charges.shippingMethod
-                    |> Maybe.withDefault []
-                , List.concatMap chargeTotal charges.surcharges
-                , if charges.tax.amount /= Cents 0 then
-                    chargeTotal charges.tax
-
-                  else
-                    []
-                , total "Total" totals.total
-                ]
-
-        total name amount =
-            [ div [ class "col-8 font-weight-bold" ]
-                [ text <| name ++ ":" ]
-            , div [ class "col-4 text-right" ]
-                [ text <| Format.cents amount ]
-            ]
-
-        chargeTotal { description, amount } =
-            total description amount
-
-        formIsUnchanged =
-            isFormUnchanged quantities items
-    in
-    div [ class "d-md-none" ]
-        [ Keyed.node "div" [ class "cart-mobile-products mb-4" ] <|
-            List.map (\i -> ( String.fromInt <| fromCartItemId i.id, cartRow i )) items
-        , div [ class "row mb-4 " ] totalRows
-        ]
-
-
-productImageSizes : Html.Attribute msg
-productImageSizes =
-    A.attribute "sizes" <|
-        String.join ", "
-            [ "(max-width: 390px) 100px"
-            , "(max-width: 767px) 165px"
-            , "100px"
-            ]
-
-
-
+-- Note: Can't implement this button due to no remove all endpoint
+-- clearCartView =
+--     div [ class "tw:flex tw:pb-[12px]" ]
+--         [ span [ class "tw:text-[rgba(30,12,3,0.7)]" ] [ text <| "Items: " ++ String.fromInt itemCount ]
+--         , span [ class "tw:grow" ] []
+--         , button
+--             [ class "tw:hover:text-[rgba(214,34,70,1)] tw:text-[rgba(30,12,3,0.4)] tw:hover:text-underline"
+--             -- , onClick RemoveAll
+--             , Aria.label <| "Remove all from Cart"
+--             ]
+--             [ text "Clear shopping cart" ]
+--         ]
 -- UTILS
 
 

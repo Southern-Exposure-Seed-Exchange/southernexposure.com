@@ -1,4 +1,4 @@
-module Products.Views exposing (detailView, listView)
+module Products.Views exposing (..)
 
 import BootstrapGallery as Gallery
 import Category exposing (Category)
@@ -13,9 +13,9 @@ import Html.Extra exposing (viewIfLazy)
 import Html.Keyed as Keyed
 import Json.Decode as Decode
 import Messages exposing (Msg(..))
-import Model exposing (CartForms)
 import Models.Fields exposing (Cents(..), blankImage, centsToString, imageToSrcSet, imgSrcFallback, lotSizeToString)
 import PageData exposing (ProductData)
+import Pages.Cart.Type exposing (CartForms)
 import Paginate exposing (Paginated)
 import Product exposing (Product, ProductId(..), ProductVariant, ProductVariantId(..), productMainImage, variantPrice)
 import Products.Pagination as Pagination
@@ -39,6 +39,7 @@ import Views.Utils exposing (htmlOrBlank, icon, numericInput, onIntInput, rawHtm
 type ProductFormStyle
     = Card
     | Detail
+    | Checkout
 
 
 type alias CartFormData =
@@ -82,14 +83,6 @@ cartFormData addToCartForms ( product, variants ) =
 
         isOutOfStock =
             Product.isOutOfStock variantList
-
-        selectedItemNumber =
-            case maybeSelectedVariant of
-                Nothing ->
-                    product.baseSKU
-
-                Just v ->
-                    product.baseSKU ++ v.skuSuffix
 
         showVariantSelect =
             Dict.size variants > 1
@@ -236,7 +229,7 @@ cartFormData addToCartForms ( product, variants ) =
 
             False ->
                 []
-    , selectedItemNumber = selectedItemNumber
+    , selectedItemNumber = getItemNumber product maybeSelectedVariant
     , offersMeta = offers
     , requestFeedback = requestFeedback
     }
@@ -248,10 +241,11 @@ cartFormData addToCartForms ( product, variants ) =
 --------------------------------------------------------------
 
 
+productAttrView : String -> Maybe SeedAttribute -> Html msg
 productAttrView selectedItemNumber maybeSeedAttribute =
     div [ class "tw:flex tw:items-center" ]
         [ small [ class "text-muted d-block tw:grow" ]
-            [ text <| "Item #" ++ selectedItemNumber ]
+            [ renderItemNumber selectedItemNumber ]
         , htmlOrBlank SeedAttribute.icons maybeSeedAttribute
         ]
 
@@ -277,7 +271,7 @@ variantSelectView paddingClass variantSelect =
             variantSelect
 
 
-priceView : ProductFormStyle -> Maybe ProductVariant -> Html Msg
+priceView : ProductFormStyle -> Maybe ProductVariant -> Html msg
 priceView style maybeSelectedVariant =
     let
         class_ =
@@ -285,7 +279,7 @@ priceView style maybeSelectedVariant =
                 Card ->
                     "tw:text-[28px] tw:font-bold"
 
-                Detail ->
+                _ ->
                     "tw:text-[40px] tw:leading-[44px] tw:font-bold "
     in
     maybeSelectedVariant
@@ -353,32 +347,12 @@ detailFormView { maybeSelectedVariant, maybeSelectedVariantId, quantity, isOutOf
 detailView : CartForms -> PageData.ProductDetails -> List (Html Msg)
 detailView addToCartForms { product, variants, maybeSeedAttribute, categories } =
     let
-        productImage =
-            productMainImage product
-
         cartData =
             cartFormData addToCartForms ( product, variants )
-
-        imageView =
-            a
-                [ href <| productImage.original
-                , A.target "_self"
-                , Gallery.openOnClick ProductDetailsLightbox productImage
-                , Aria.label <| "View Product Image for " ++ product.name
-                ]
-                [ img
-                    [ src <| imgSrcFallback productImage
-                    , imageToSrcSet productImage
-                    , Microdata.image
-                    , alt <| "Product Image for " ++ product.name
-                    , class "tw:w-[360px] tw:h-[360px] tw:object-cover tw:rounded-[16px] clickable-image"
-                    ]
-                    []
-                ]
     in
     [ div (Microdata.product ++ [ class "tw:flex tw:gap-[40px]" ])
         [ div [ class "tw:shrink-0" ]
-            [ imageView
+            [ productImageGalleryView product
             ]
         , div []
             [ h6 [ class "tw:text-[32px]! tw:pb-[16px]" ]
@@ -435,28 +409,8 @@ cardFormView { maybeSelectedVariant, maybeSelectedVariantId, quantity, isOutOfSt
 
 cardView : CartFormData -> ProductData -> Html Msg
 cardView cartData ( product, variants, maybeSeedAttribute ) =
-    let
-        productImage =
-            productMainImage product
-    in
     div (Microdata.product ++ [ class "tw:bg-[rgba(77,170,154,0.06)] tw:rounded-[16px] tw:overflow-hidden tw:p-[16px] tw:flex tw:flex-col" ])
-        [ Keyed.node "a"
-            (Aria.label ("View Details for " ++ product.name)
-                :: routeLinkAttributes (ProductDetails product.slug Nothing)
-            )
-            [ ( "product-img-" ++ (String.fromInt <| (\(ProductId i) -> i) product.id)
-              , img
-                    [ src <| imgSrcFallback productImage
-                    , imageToSrcSet productImage
-
-                    -- , listImageSizes
-                    , Microdata.image
-                    , alt <| "Product Image for " ++ product.name
-                    , class "tw:w-full tw:h-[200px] tw:object-cover tw:rounded-[16px] clickable-image"
-                    ]
-                    []
-              )
-            ]
+        [ productImageLinkView "tw:w-full tw:h-[200px]" product Nothing
         , div [ class "tw:pt-[16px]" ]
             [ h6 [ class "mb-0 d-flex justify-content-between" ]
                 [ a (Microdata.url :: routeLinkAttributes (ProductDetails product.slug Nothing) ++ [ class "tw:line-clamp-2 tw:h-[39px]" ])
@@ -464,6 +418,62 @@ cardView cartData ( product, variants, maybeSeedAttribute ) =
                 ]
             ]
         , cardFormView cartData product maybeSeedAttribute
+        ]
+
+
+
+-- | Product image view, clicking it will redirect to the product detail
+
+
+productImageLinkView : String -> Product -> Maybe ProductVariantId-> Html msg
+productImageLinkView sizeClass product maybeVariantId =
+    let
+        productImage =
+            productMainImage product
+    in
+    Keyed.node "a"
+        (Aria.label ("View Details for " ++ product.name)
+            :: routeLinkAttributes (ProductDetails product.slug maybeVariantId)
+        )
+        [ ( "product-img-" ++ (String.fromInt <| (\(ProductId i) -> i) product.id)
+          , img
+                [ src <| imgSrcFallback productImage
+                , imageToSrcSet productImage
+
+                -- , listImageSizes
+                , Microdata.image
+                , alt <| "Product Image for " ++ product.name
+                , class <| sizeClass ++ " tw:object-cover tw:rounded-[16px] clickable-image"
+                ]
+                []
+          )
+        ]
+
+
+
+-- | Product image view, clicking it will open the gallery view
+
+
+productImageGalleryView : Product -> Html Msg
+productImageGalleryView product =
+    let
+        productImage =
+            productMainImage product
+    in
+    a
+        [ href <| productImage.original
+        , A.target "_self"
+        , Gallery.openOnClick ProductDetailsLightbox productImage
+        , Aria.label <| "View Product Image for " ++ product.name
+        ]
+        [ img
+            [ src <| imgSrcFallback productImage
+            , imageToSrcSet productImage
+            , Microdata.image
+            , alt <| "Product Image for " ++ product.name
+            , class "tw:w-[360px] tw:h-[360px] tw:object-cover tw:rounded-[16px] clickable-image"
+            ]
+            []
         ]
 
 
@@ -579,6 +589,24 @@ renderPrice variant =
                 text <| Format.cents variant.price
 
 
+getItemNumber : Product -> Maybe ProductVariant -> String
+getItemNumber product maybeSelectedVariant =
+    case maybeSelectedVariant of
+        Nothing ->
+            product.baseSKU
+
+        Just v ->
+            product.baseSKU ++ v.skuSuffix
+
+
+renderItemNumber : String -> Html msg
+renderItemNumber selectedItemNumber =
+    p
+        [ class "tw:text-[rgba(30,12,3,0.7)] tw:text-[14px] tw:leading-[20px]"
+        ]
+        [ text <| "Item #" ++ selectedItemNumber ]
+
+
 outOfStockBadge : Html msg
 outOfStockBadge =
     div [ class "tw:text-[rgba(214,34,70,1)] tw:pt-[4px] tw:pb-[4px] tw:px-[12px] tw:rounded-[8px] tw:bg-[rgba(214,34,70,0.1)] tw:border tw:border-[rgba(214,34,70,0.4)]" ]
@@ -614,7 +642,7 @@ addToCartInput style quantity product maybeSelectedVariant _ =
                         ]
                     )
 
-                Detail ->
+                _ ->
                     ( "tw:gap-[20px]"
                     , div [ class "tw:w-full" ]
                         [ Button.view
@@ -666,6 +694,13 @@ customNumberView style currentVal onChangeHandler increaseHandler decreaseHandle
                     { class_ = "tw:bg-white tw:border tw:border-[rgba(29,127,110,1)]"
                     , fillClass = "tw:fill-black"
                     , buttonSizeClass = "tw:w-[48px] tw:h-[48px] tw:hover:bg-[rgb(219,219,219)]"
+                    , formClass = "tw:w-[46px] tw:text-center tw:border-[rgba(29,127,110,1)]"
+                    }
+
+                Checkout ->
+                    { class_ = "tw:bg-white tw:border tw:border-[rgba(29,127,110,1)]"
+                    , fillClass = "tw:fill-black"
+                    , buttonSizeClass = "tw:w-[48px] tw:h-[40px] tw:hover:bg-[rgb(219,219,219)]"
                     , formClass = "tw:w-[46px] tw:text-center tw:border-[rgba(29,127,110,1)]"
                     }
     in
