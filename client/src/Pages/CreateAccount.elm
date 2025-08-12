@@ -10,18 +10,22 @@ module Pages.CreateAccount exposing
 -- TODO: Refactor module as a composition of the EditLogin & EditContact module forms.
 
 import Api
+import Components.Button as Button exposing (defaultButton)
+import Decode.Utils as Decode
 import Dict
 import Html exposing (..)
+import Html.Attributes exposing (class)
 import Html.Events exposing (onSubmit)
 import Json.Encode as Encode exposing (Value)
 import Ports
 import RemoteData exposing (WebData)
-import Routing exposing (Route(..))
+import Routing exposing (Route(..), reverse)
 import Update.Utils exposing (nothingAndNoCommand)
 import User exposing (AuthStatus)
 import Views.HorizontalForm as Form
+import Views.Utils exposing (legendView, pageTitleView)
 
-import Decode.Utils as Decode
+
 
 -- MODEL
 
@@ -159,33 +163,57 @@ view tagger model =
 
         inputField selector msg =
             Form.inputRow model.errors (selector model) (tagger << msg)
+
+        signupForm =
+            form [ onSubmit <| tagger SubmitForm ]
+                [ fieldset []
+                    [ legendView "New Customers"
+                    , signupInputs
+                    , Form.genericErrorText (not <| Dict.isEmpty model.errors)
+                    , Api.getErrorHtml "" model.errors
+                    , div [ class "tw:pb-[16px]" ] [ Button.view { defaultButton | label = "Register", type_ = Button.FormSubmit, padding = Button.Width "tw:w-[160px]" } ]
+                    ]
+                ]
+
+        signupInputs =
+            div [ class "tw:p-[16px] tw:bg-[rgba(30,12,3,0.03)] tw:rounded-[16px] tw:flex tw:flex-col tw:gap-[16px] tw:mb-[16px]" ]
+                [ requiredField .email Email "Email" "email" "email" "email"
+                , requiredField .password Password "Password" "password" "password" "new-password"
+                , requiredField .passwordConfirm PasswordConfirm "Confirm Password" "passwordConfirm" "password" "new-password"
+                ]
+
+        welcomeBackSection =
+            fieldset []
+                [ legendView "Returning Customers"
+                , div [ class "tw:pb-[16px]" ]
+                    [ p [ class "tw:p-[16px] tw:rounded-[16px] tw:bg-[rgba(167,215,197,0.1)]" ]
+                        [ text "Welcome back! Log in to continue shopping, view your past orders, and manage your saved preferences with ease."
+                        ]
+                    ]
+                , div [ class "tw:flex" ]
+                    [ Button.view { defaultButton | label = "Log in", style = Button.Outline, type_ = Button.Link <| reverse <| Login Nothing False }
+                    ]
+                ]
     in
-    [ h1 [] [ text "Create an Account" ]
-    , hr [] []
-    , Form.genericErrorText (not <| Dict.isEmpty model.errors)
-    , Api.getErrorHtml "" model.errors
-    , form [ onSubmit <| tagger SubmitForm ]
-        [ fieldset []
-            [ legend [] [ text "Login Information" ]
-            , requiredField .email Email "Email" "email" "email" "email"
-            , requiredField .password Password "Password" "password" "password" "new-password"
-            , requiredField .passwordConfirm PasswordConfirm "Confirm Password" "passwordConfirm" "password" "new-password"
-            ]
-        , Form.submitButton "Register"
+    [ pageTitleView "Create an Account"
+    , div [ class "tw:flex tw:grid tw:grid-cols-2 tw:gap-[40px] tw:pb-[60px]" ]
+        [ signupForm
+        , welcomeBackSection
         ]
     ]
 
 
 successView : List (Html msg)
 successView =
-    [ h1 [] [ text "Verify your email address" ]
-    , hr [] []
-    , p []
-        [ text <|
-            String.join " "
-                [ "One last step to complete your registration:"
-                , "please check your email inbox and follow the verification link we've sent you."
-                , "You can safely close this page now."
-                ]
+    [ pageTitleView "Verify your email address"
+    , div [ class "tw:grid tw:grid-cols-2" ]
+        [ p [ class "tw:p-[16px] tw:bg-[rgba(167,215,197,0.1)] tw:rounded-[16px]" ]
+            [ text <|
+                String.join " "
+                    [ "One last step to complete your registration:"
+                    , "please check your email inbox and follow the verification link we've sent you."
+                    , "You can safely close this page now."
+                    ]
+            ]
         ]
     ]

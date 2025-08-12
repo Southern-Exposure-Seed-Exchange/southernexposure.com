@@ -7,9 +7,10 @@ module Pages.ResetPassword exposing
     )
 
 import Api
+import Components.Button as Button exposing (defaultButton)
 import Dict
 import Html exposing (..)
-import Html.Attributes exposing (autofocus, class, for, href, id, name, required, type_, value)
+import Html.Attributes exposing (autofocus, class, for, href, id, name, placeholder, required, type_, value)
 import Html.Events exposing (onInput, onSubmit)
 import Json.Decode as Decode
 import Json.Encode as Encode
@@ -18,7 +19,7 @@ import RemoteData exposing (WebData)
 import Routing exposing (Route(..))
 import Update.Utils exposing (nothingAndNoCommand)
 import User exposing (AuthStatus)
-import Views.Utils exposing (autocomplete, emailInput)
+import Views.Utils exposing (autocomplete, emailInput, labelView, pageTitleView)
 
 
 
@@ -156,14 +157,14 @@ requestView tagger model =
         infoHtml =
             case model.requestSuccess of
                 Just True ->
-                    p [ class "text-success font-weight-bold" ]
+                    p [ class "tw:pt-[16px]! text-success font-weight-bold" ]
                         [ text <|
                             "Your reset request was successful, please "
                                 ++ "check your email for a password reset link."
                         ]
 
                 Just False ->
-                    p [ class "text-danger font-weight-bold" ]
+                    p [ class "tw:pt-[16px]! text-danger font-weight-bold" ]
                         [ text <|
                             "We encountered an error when trying to process your "
                                 ++ "request. Please try again or "
@@ -174,40 +175,45 @@ requestView tagger model =
 
                 Nothing ->
                     text ""
+
+        resetForm =
+            div []
+                [ p [ class "tw:pl-[16px] tw:pb-[16px]" ]
+                    [ text <|
+                        "Enter your email address below & we'll send you an email with a link "
+                            ++ "where you can change your password."
+                    ]
+                , form
+                    [ onSubmit <| tagger SubmitRequest
+                    ]
+                    [ div
+                        [ class "tw:p-[16px]! tw:rounded-[16px] tw:bg-[rgba(30,12,3,0.03)]"
+                        ]
+                        [ labelView "inputEmail" "Email Address"
+                        , input
+                            [ id "inputEmail"
+                            , class "form-control"
+                            , type_ "email"
+                            , name "email"
+                            , onInput <| tagger << Email
+                            , value model.email
+                            , required True
+                            , autofocus True
+                            , emailInput
+                            , autocomplete "email"
+                            ]
+                            []
+                        ]
+                    , infoHtml
+                    , div [ class "tw:pt-[16px]" ]
+                        [ Button.view { defaultButton | label = "Reset Password", type_ = Button.FormSubmit }
+                        ]
+                    ]
+                ]
     in
-    [ h1 [] [ text "Reset Password" ]
-    , hr [] []
-    , p []
-        [ text <|
-            "Enter your email address below & we'll send you an email with a link "
-                ++ "where you can change your password."
-        ]
-    , form [ onSubmit <| tagger SubmitRequest ]
-        [ infoHtml
-        , div [ class "form-group" ]
-            [ label [ class "font-weight-bold", for "inputEmail" ]
-                [ text "Email Address:" ]
-            , input
-                [ id "inputEmail"
-                , class "form-control"
-                , type_ "email"
-                , name "email"
-                , onInput <| tagger << Email
-                , value model.email
-                , required True
-                , autofocus True
-                , emailInput
-                , autocomplete "email"
-                ]
-                []
-            ]
-        , div [ class "form-group clearfix" ]
-            [ button
-                [ class "btn btn-primary float-right"
-                , type_ "submit"
-                ]
-                [ text "Reset Password" ]
-            ]
+    [ pageTitleView "Reset Password"
+    , div [ class "tw:flex tw:grid tw:grid-cols-2" ]
+        [ resetForm
         ]
     ]
 
@@ -239,13 +245,13 @@ inputRow errors msg inputValue inputId labelText errorField inputType completion
                     |> div [ class "invalid-feedback" ]
     in
     div [ class "form-group" ]
-        [ label [ class "font-weight-bold", for <| "input" ++ inputId ]
-            [ text <| labelText ++ ":" ]
+        [ labelView ("input" ++ inputId) labelText
         , input
             [ id <| "input" ++ inputId
             , class inputClass
             , type_ inputType
             , name inputId
+            , placeholder labelText
             , onInput msg
             , value inputValue
             , required isRequired
@@ -270,33 +276,35 @@ changeView tagger model code =
                         |> List.intersperse (br [] [])
                         |> p [ class "text-danger font-weight-bold" ]
     in
-    [ h1 [] [ text "Change Password" ]
-    , hr [] []
-    , form [ onSubmit <| tagger <| SubmitChange code ]
-        [ errorHtml
-        , inputRow model.changeErrors
-            (tagger << Password)
-            model.password
-            "password"
-            "Password"
-            "password"
-            "password"
-            "new-password"
-            True
-            True
-        , inputRow model.changeErrors
-            (tagger << PasswordConfirm)
-            model.passwordConfirm
-            "passwordConfirm"
-            "Confirm Password"
-            "password"
-            "password"
-            "new-password"
-            True
-            False
-        , div [ class "form-group clearfix" ]
-            [ button [ class "btn btn-primary float-right", type_ "submit" ]
-                [ text "Update Password" ]
+    [ pageTitleView "Change Password"
+    , div [ class "tw:grid tw:grid-cols-2" ]
+        [ form [ onSubmit <| tagger <| SubmitChange code ]
+            [ div [ class "tw:p-[16px] tw:rounded-[16px] tw:bg-[rgba(30,12,3,0.03)]" ]
+                [ inputRow model.changeErrors
+                    (tagger << Password)
+                    model.password
+                    "password"
+                    "Password"
+                    "password"
+                    "password"
+                    "new-password"
+                    True
+                    True
+                , inputRow model.changeErrors
+                    (tagger << PasswordConfirm)
+                    model.passwordConfirm
+                    "passwordConfirm"
+                    "Confirm Password"
+                    "password"
+                    "password"
+                    "new-password"
+                    True
+                    False
+                ]
+            , errorHtml
+            , div [ class "tw:pt-[16px]" ]
+                [ Button.view { defaultButton | label = "Update Password", type_ = Button.FormSubmit }
+                ]
             ]
         ]
     ]

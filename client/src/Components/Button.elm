@@ -2,6 +2,7 @@ module Components.Button exposing (..)
 
 import Html exposing (..)
 import Html.Attributes exposing (..)
+import Html.Events exposing (onClick)
 
 
 type Style
@@ -12,11 +13,13 @@ type Style
 type Padding
     = Default
     | Expand
+    | Width String
 
 
-type ButtonType
+type ButtonType msg
     = Link String -- a herf
     | FormSubmit -- button form submit
+    | TriggerMsg msg
     | Disabled
 
 
@@ -28,7 +31,7 @@ type ButtonSize
 type alias Config msg =
     { label : String
     , style : Style
-    , type_ : ButtonType
+    , type_ : ButtonType msg
     , icon : Maybe (Html msg)
     , iconEnd : Maybe (Html msg)
     , padding : Padding
@@ -84,6 +87,9 @@ view config =
 
                 Expand ->
                     "tw:w-full"
+
+                Width widthClass ->
+                    widthClass
 
         sizeClass =
             case config.size of
@@ -147,5 +153,13 @@ view config =
                 [ type_ "button"
                 , disabled True
                 , class allClass
+                ]
+                buttonContent
+
+        TriggerMsg msg ->
+            button
+                [ type_ "button"
+                , class allClass
+                , onClick msg
                 ]
                 buttonContent

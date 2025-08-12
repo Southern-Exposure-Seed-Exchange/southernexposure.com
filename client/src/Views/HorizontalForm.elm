@@ -11,22 +11,27 @@ module Views.HorizontalForm exposing
     )
 
 import Api
+import Components.Alert as Alert exposing (defaultAlert)
 import Dict
 import Html exposing (..)
-import Html.Attributes exposing (checked, class, for, id, name, required, rows, type_, value)
+import Html.Attributes exposing (checked, class, for, id, name, placeholder, required, rows, type_, value)
 import Html.Events exposing (on, onCheck, onInput, targetValue)
 import Json.Decode as Decode
-import Views.Utils exposing (autocomplete, disableGrammarly)
+import Views.Utils exposing (autocomplete, disableGrammarly, labelView)
 
 
 genericErrorText : Bool -> Html msg
 genericErrorText hasErrors =
     if hasErrors then
-        div [ id "form-errors-text", class "alert alert-danger" ]
-            [ text <|
-                "There were issues processing your request, "
-                    ++ "please correct any errors highlighted below "
-                    ++ "& resubmit the form."
+        div [ class "tw:pb-[16px]" ]
+            [ Alert.view
+                { defaultAlert
+                    | style = Alert.Danger
+                    , text =
+                        "There were issues processing your request, "
+                            ++ "please correct any errors highlighted below "
+                            ++ "& resubmit the form."
+                }
             ]
 
     else
@@ -78,6 +83,7 @@ inputRow errors inputValue inputMsg isRequired labelText errorField inputType au
     input
         [ id <| "input" ++ inputId
         , name inputId
+        , placeholder labelText
         , class inputClass
         , type_ inputType
         , value inputValue
@@ -87,7 +93,7 @@ inputRow errors inputValue inputMsg isRequired labelText errorField inputType au
         ]
         []
         |> (\i -> [ i, errorHtml ])
-        |> withLabel labelText isRequired
+        |> withLabelCol labelText isRequired
 
 
 textareaRow : Api.FormErrors -> String -> (String -> msg) -> Bool -> String -> String -> Int -> Html msg
@@ -254,4 +260,27 @@ withLabel labelText isRequired input =
             ]
             [ text <| labelText ++ ":", optionalHtml ]
         , div [ class "col" ] input
+        ]
+
+
+withLabelCol : String -> Bool -> List (Html msg) -> Html msg
+withLabelCol labelText isRequired input =
+    let
+        inputId =
+            String.filter (\c -> c /= ' ') labelText
+
+        optionalHtml =
+            if not isRequired then
+                small [ class "horizontal-optional-text d-block text-muted mr-1" ]
+                    [ text "(optional)" ]
+
+            else
+                text ""
+    in
+    div [ class "tw:flex tw:flex-col" ]
+        [ div [ class "tw:flex" ]
+            [ labelView ("input" ++ inputId) labelText
+            , optionalHtml
+            ]
+        , div [ class "" ] input
         ]
