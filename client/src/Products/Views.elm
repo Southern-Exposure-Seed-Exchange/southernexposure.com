@@ -5,7 +5,7 @@ import Category exposing (Category)
 import Components.Button as Button exposing (ButtonType(..), defaultButton)
 import Components.Form as Form
 import Components.Svg exposing (minusSvg, plusSvg, shoppingCartSvgSmall)
-import Dict exposing (Dict)
+import Dict exposing (Dict, get)
 import Html exposing (..)
 import Html.Attributes as A exposing (alt, attribute, class, for, href, id, selected, src, title, type_, value)
 import Html.Events exposing (on, onClick, onSubmit, targetValue)
@@ -205,10 +205,27 @@ cartFormData addToCartForms ( product, variants ) =
                         , text "Adding to Cart"
                         ]
 
-                RemoteData.Success _ ->
+                RemoteData.Success (Ok _) ->
                     div [ class "tw:py-[8px] tw:text-[rgb(77,170,154)] font-weight-bold small" ]
                         [ icon "check-circle mr-1"
                         , text "Added to Cart!"
+                        ]
+
+                RemoteData.Success (Err errors) ->
+                    div [ class "tw:py-[8px] text-danger font-weight-bold small" ]
+                        [ icon "times mr-1"
+                        , text "Error Adding To Cart: "
+                        , br [] []
+                        , case get "variant" errors of
+                            Just variantValidation ->
+                                text <| " " ++ String.join "\n" variantValidation
+                            Nothing ->
+                                text ""
+                        , case get "quantity" errors of
+                            Just quantityValidation ->
+                                text <| " " ++ String.join "\n" quantityValidation
+                            Nothing ->
+                                text ""
                         ]
 
                 RemoteData.Failure _ ->

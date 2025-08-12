@@ -9,6 +9,7 @@ module Pages.Checkout exposing
     , subscriptions
     , successView
     , update
+    , validateCart
     , view
     )
 
@@ -24,7 +25,7 @@ import Json.Encode as Encode exposing (Value)
 import Locations exposing (AddressLocations)
 import Models.Fields exposing (Cents(..), centsFromString, centsMap, centsMap2, imageToSrcSet, imgSrcFallback, lotSizeToString)
 import OrderDetails
-import PageData exposing (LineItemType(..))
+import PageData exposing (CartItemId(..), LineItemType(..))
 import Ports
 import Product exposing (productMainImage, variantPrice)
 import RemoteData exposing (WebData)
@@ -154,6 +155,8 @@ type Msg
     | HelcimEventReceived Decode.Value
     | ConfirmPayment
     | CancelPayment
+    | ValidateCart
+    | ValidateCartResponse (WebData (Result Api.FormErrors PageData.CartDetails))
 
 type alias HelcimCheckoutTokenResponse =
     { checkoutToken : String }
@@ -552,6 +555,17 @@ update msg model authStatus maybeSessionToken checkoutDetails =
                     )
         CancelPayment -> { model | confirmationModel = Nothing } |> nothingAndNoCommand
 
+        ValidateCart -> (model, Nothing, validateCart authStatus maybeSessionToken checkoutDetails)
+
+        ValidateCartResponse response ->
+            case response of
+                RemoteData.Success (Ok _) ->
+                    ( model, Nothing , Cmd.none )
+
+                RemoteData.Success (Err errors) ->
+                    ( { model | errors = errors }, Nothing, Ports.scrollToErrorMessage )
+
+                _ -> ( model, Nothing, Cmd.none )
 
 selectAddress : Int -> CheckoutAddress
 selectAddress addressId =
@@ -1098,6 +1112,29 @@ encodeAnalyticsPurchase orderId lines products =
         ]
 
 
+validateCart : AuthStatus -> Maybe String -> WebData PageData.CheckoutDetails -> Cmd Msg
+validateCart authStatus maybeCartToken checkoutDetails =
+    case checkoutDetails of
+        RemoteData.Success details ->
+            let items = details.items
+                fromCartItemId (CartItemId i) = i
+                encodedQuantities = Encode.object <|
+                    ( "quantities", Encode.object (List.map (\{ id, quantity } -> (String.fromInt (fromCartItemId id), Encode.int quantity)) items) )
+                        :: (Maybe.map (\token -> [ ( "sessionToken", Encode.string token ) ]) maybeCartToken |> Maybe.withDefault [])
+                cmd = case authStatus of
+                    User.Authorized _ ->
+                        Api.post Api.CartUpdateCustomer
+                            |> Api.withJsonBody encodedQuantities
+                            |> Api.withErrorHandler PageData.cartDetailsDecoder
+                            |> Api.sendRequest ValidateCartResponse
+
+                    User.Anonymous ->
+                        Api.post Api.CartUpdateAnonymous
+                            |> Api.withJsonBody encodedQuantities
+                            |> Api.withErrorHandler PageData.cartDetailsDecoder
+                            |> Api.sendRequest ValidateCartResponse
+            in cmd
+        _ -> Cmd.none
 
 -- View
 
@@ -1404,6 +1441,7 @@ view model authStatus locations checkoutDetails =
                     model.storeCredit
                     model.couponCode
                     (Dict.get "coupon" model.errors)
+                    model.errors
                 ]
             , div [ class "form-group" ]
                 [ label [ class "h4", for "commentsTextarea" ]
@@ -1624,9 +1662,12 @@ sameAddressesCheckbox billingSameAsShipping =
         ]
 
 
-summaryTable : PageData.CheckoutDetails -> String -> String -> Maybe (List String) -> Html Msg
-summaryTable ({ items, charges } as checkoutDetails) creditString couponCode couponErrors =
+summaryTable : PageData.CheckoutDetails -> String -> String -> Maybe (List String) -> Api.FormErrors -> Html Msg
+summaryTable ({ items, charges } as checkoutDetails) creditString couponCode couponErrors errors =
     let
+        cartItemError (CartItemId itemId) =
+            Dict.get (String.fromInt itemId) errors
+
         tableHeader =
             thead [ class "font-weight-bold" ]
                 [ tr []
@@ -1638,10 +1679,10 @@ summaryTable ({ items, charges } as checkoutDetails) creditString couponCode cou
                     ]
                 ]
 
-        productRow { product, variant, quantity } =
+        productRow { id, product, variant, quantity } =
             let productImage = productMainImage product
             in
-            tr []
+            (tr []
                 [ td [ class "align-middle text-center" ]
                     [ img
                         [ src <| imgSrcFallback productImage
@@ -1661,8 +1702,19 @@ summaryTable ({ items, charges } as checkoutDetails) creditString couponCode cou
                 , td [ class "text-right" ]
                     [ text <| Format.cents <| centsMap ((*) quantity) <| variantPrice variant ]
                 ]
+            :: case cartItemError id of
+                Just errs ->
+                    [ tr []
+                        [ td [ colspan 4, class "text-danger" ]
+                            [ text <| String.join ", " errs ]
+                        ]
+                    ]
+                Nothing ->
+                    []
+            )
 
-        mobileRow { product, variant, quantity } =
+
+        mobileRow { id, product, variant, quantity } =
             let productImage = productMainImage product
             in
             div [ class "row" ]
@@ -1688,6 +1740,14 @@ summaryTable ({ items, charges } as checkoutDetails) creditString couponCode cou
                     , div [ class "font-weight-bold item-total" ]
                         [ text <| Format.cents <| centsMap ((*) quantity) <| variantPrice variant ]
                     ]
+                , case cartItemError id of
+                    Just errs ->
+                        div [ class "col-12" ]
+                            [ small [ class "text-danger" ]
+                                [ text <| String.join ", " errs ]
+                            ]
+                    Nothing ->
+                        text ""
                 ]
 
         imageSizes =
@@ -1828,7 +1888,7 @@ summaryTable ({ items, charges } as checkoutDetails) creditString couponCode cou
     div []
         [ table [ class "d-none d-sm-table table table-striped table-sm checkout-products-table" ]
             [ tableHeader
-            , tbody [] <| List.map productRow items
+            , tbody [] <| List.concat (List.map productRow items)
             , tableFooter
             ]
         , div [ class "checkout-product-blocks d-sm-none" ]

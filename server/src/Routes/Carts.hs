@@ -2,14 +2,16 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE TypeFamilies #-}
 module Routes.Carts
     ( CartAPI
+    , ValidateCartParameters(..)
     , cartRoutes
     ) where
 
-import Control.Monad ((>=>), void, when)
+import Control.Monad ((>=>), forM, void, when)
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Trans (lift)
 import Data.Aeson ((.:), (.:?), (.=), FromJSON(..), ToJSON(..), object, withObject)
@@ -134,12 +136,18 @@ instance FromJSON CustomerAddParameters where
             <$> v .: "variant"
             <*> v .: "quantity"
 
-instance Validation CustomerAddParameters where
+data CustomerAddCartParameters = CustomerAddCartParameters
+    { cacpVariantId :: ProductVariantId
+    , cacpQuantity :: Natural
+    , cacpCartId :: CartId
+    }
+
+instance Validation CustomerAddCartParameters where
     validators parameters = do
-        variantErrors <- validateVariant $ capVariantId parameters
+        variantErrors <- validateVariant (cacpVariantId parameters) (cacpQuantity parameters) (cacpCartId parameters)
         return [ ( "variant", variantErrors )
                , ( "quantity"
-                 , [ V.zeroOrPositive $ capQuantity parameters
+                 , [ V.zeroOrPositive $ cacpQuantity parameters
                    ]
                  )
                ]
@@ -150,23 +158,23 @@ type CustomerAddRoute =
      :> Post '[JSON] (Cookied ())
 
 customerAddRoute :: WrappedAuthToken -> CustomerAddParameters -> App (Cookied ())
-customerAddRoute = validateCookieAndParameters $ \(Entity customerId _) parameters ->
-    let
-        productVariant =
-            capVariantId parameters
-        quantity =
-            capQuantity parameters
-        item cartId =
-            CartItem
-                { cartItemCartId = cartId
-                , cartItemProductVariantId = productVariant
-                , cartItemQuantity = fromIntegral quantity
-                }
-    in do
-        (Entity cartId _) <- getOrCreateCustomerCart customerId
+customerAddRoute token parameters = withCookie token $ \authToken -> do
+    (Entity customerId _) <- validateToken authToken
+    (Entity cartId _) <- getOrCreateCustomerCart customerId
+    validate (CustomerAddCartParameters (capVariantId parameters) (capQuantity parameters) cartId) >> do
+        let
+            productVariant =
+                capVariantId parameters
+            quantity =
+                capQuantity parameters
+            item =
+                CartItem
+                    { cartItemCartId = cartId
+                    , cartItemProductVariantId = productVariant
+                    , cartItemQuantity = fromIntegral quantity
+                    }
         void . runDB $ upsertBy (UniqueCartItem cartId productVariant)
-            (item cartId) [CartItemQuantity +=. fromIntegral quantity]
-
+            item [CartItemQuantity +=. fromIntegral quantity]
 
 data AnonymousAddParameters =
     AnonymousAddParameters
@@ -182,12 +190,18 @@ instance FromJSON AnonymousAddParameters where
             <*> v .: "quantity"
             <*> v .:? "sessionToken"
 
-instance Validation AnonymousAddParameters where
+data AnonymousAddCartParameters = AnonymousAddCartParameters
+    { aacpVariantId :: ProductVariantId
+    , aacpQuantity :: Natural
+    , aacpCartId :: CartId
+    }
+
+instance Validation AnonymousAddCartParameters where
     validators parameters = do
-        variantErrors <- validateVariant $ aapVariantId parameters
+        variantErrors <- validateVariant (aacpVariantId parameters) (aacpQuantity parameters) (aacpCartId parameters)
         return [ ( "variant", variantErrors )
                , ( "quantity"
-                 , [ V.zeroOrPositive $ aapQuantity parameters
+                 , [ V.zeroOrPositive $ aacpQuantity parameters
                    ]
                  )
                ]
@@ -197,47 +211,53 @@ type AnonymousAddRoute =
     :> Post '[PlainText] T.Text
 
 anonymousAddRoute :: AnonymousAddParameters -> App T.Text
-anonymousAddRoute = validate >=> \parameters ->
-    let
-        productVariant =
-            aapVariantId parameters
-        quantity =
-            aapQuantity parameters
-        maybeSessionToken =
-            aapSessionToken parameters
-        item cartId =
-            CartItem
-                { cartItemCartId = cartId
-                , cartItemProductVariantId = productVariant
-                , cartItemQuantity = fromIntegral quantity
-                }
-    in do
-        (token, Entity cartId _) <- getOrCreateAnonymousCart maybeSessionToken
+anonymousAddRoute parameters = do
+    (token, Entity cartId _) <- getOrCreateAnonymousCart (aapSessionToken parameters)
+    validate (AnonymousAddCartParameters (aapVariantId parameters) (aapQuantity parameters) cartId) >> do
+        let
+            productVariant =
+                aapVariantId parameters
+            quantity =
+                aapQuantity parameters
+            item =
+                CartItem
+                    { cartItemCartId = cartId
+                    , cartItemProductVariantId = productVariant
+                    , cartItemQuantity = fromIntegral quantity
+                    }
         void . runDB $ upsertBy (UniqueCartItem cartId productVariant)
-            (item cartId) [CartItemQuantity +=. fromIntegral quantity]
+            item [CartItemQuantity +=. fromIntegral quantity]
         return token
 
 
 -- | Ensure a Variant exists, is active, and is not sold out.
-validateVariant :: ProductVariantId -> App [(T.Text, Bool)]
-validateVariant variantId =
+validateVariant :: ProductVariantId -> Natural -> CartId -> App [(T.Text, Bool)]
+validateVariant variantId purchaseAmount cartId =
     runDB $ get variantId >>= \case
         Nothing ->
             return
-                [ ( "This Product Variant Does Not Exist.", True ) ]
-        Just variant ->
+                [ ( "This Product Does Not Exist.", True ) ]
+        Just variant -> do
+            mbCartQuantity <- fmap (fmap E.unValue . listToMaybe) <$> E.select $ do
+                (c E.:& ci) <- E.from $ E.table @Cart
+                    `E.innerJoin` E.table @CartItem
+                    `E.on` \(c E.:& ci) -> ci E.^. CartItemCartId E.==. c E.^. CartId
+                E.where_ $ c E.^. CartId E.==. E.val cartId
+                E.where_ $ ci E.^. CartItemProductVariantId E.==. E.val variantId
+                return $ ci E.^. CartItemQuantity
+
             let inactiveError =
-                    [ ( "This Product Variant is Inactive."
+                    [ ( "This Product is Inactive."
                         , not (productVariantIsActive variant)
                         )
                     ]
                 soldOutError =
-                    [ ( "This Product Variant is Sold Out."
-                        , productVariantQuantity variant <= 0
+                    [ ( "This Product has less stock than requested. " <> "Available: " <> T.pack (show $ productVariantQuantity variant) <>
+                        ". Requested: " <> T.pack (show (purchaseAmount + maybe 0 fromIntegral mbCartQuantity)) <> "."
+                        , productVariantQuantity variant < fromIntegral purchaseAmount + maybe 0 fromIntegral mbCartQuantity
                         )
                     ]
-            in
-            return $ inactiveError ++ soldOutError
+            return $ inactiveError <> soldOutError
 
 
 -- DETAILS
@@ -309,23 +329,21 @@ instance FromJSON CustomerUpdateParameters where
         CustomerUpdateParameters
             <$> v .: "quantities"
 
-instance Validation CustomerUpdateParameters where
-    validators parameters = return $
-        V.validateMap [V.zeroOrPositive] $ cupQuantities parameters
-
 type CustomerUpdateRoute =
        AuthProtect "cookie-auth"
     :> ReqBody '[JSON] CustomerUpdateParameters
     :> Post '[JSON] (Cookied CartDetailsData)
 
 customerUpdateRoute :: WrappedAuthToken -> CustomerUpdateParameters -> App (Cookied CartDetailsData)
-customerUpdateRoute = validateCookieAndParameters $ \customer@(Entity customerId _) parameters -> do
+customerUpdateRoute token parameters = withCookie token $ \authToken -> do
+    customer@(Entity customerId _) <- validateToken authToken
     maybeCart <- runDB . getBy . UniqueCustomerCart $ Just customerId
     case maybeCart of
         Nothing ->
             serverError err404
-        Just (Entity cartId _) ->
-            updateOrDeleteItems cartId $ cupQuantities parameters
+        Just (Entity cartId _) -> do
+            validate (ValidateCartParameters cartId (cupQuantities parameters)) >> do
+                updateOrDeleteItems cartId $ cupQuantities parameters
     getCustomerCartDetails customer
 
 
@@ -341,10 +359,6 @@ instance FromJSON AnonymousUpdateParameters where
             <$> v .: "sessionToken"
             <*> v .: "quantities"
 
-instance Validation AnonymousUpdateParameters where
-    validators parameters = return $
-        V.validateMap [ V.zeroOrPositive ] $ aupQuantities parameters
-
 type AnonymousUpdateRoute =
        ReqBody '[JSON] AnonymousUpdateParameters
     :> Post '[JSON] CartDetailsData
@@ -357,7 +371,8 @@ anonymousUpdateRoute parameters = do
         Nothing ->
             serverError err404
         Just (Entity cartId _) ->
-            updateOrDeleteItems cartId $ aupQuantities parameters
+            validate (ValidateCartParameters cartId (aupQuantities parameters)) >> do
+                updateOrDeleteItems cartId $ aupQuantities parameters
     anonymousDetailsRoute $ AnonymousDetailsParameters token
 
 
@@ -375,6 +390,32 @@ updateOrDeleteItems cartId =
         )
         (return ())
 
+
+data ValidateCartParameters = ValidateCartParameters CartId (M.Map Int64 Natural)
+
+instance Validation ValidateCartParameters where
+    validators (ValidateCartParameters cartId quantities) =
+        runDB $ forM (M.toList quantities) $ \(itemId, quantity) -> (T.pack $ show itemId,) <$> do
+            let nonNegativeQuantityValidation = V.zeroOrPositive quantity
+            mbVariantQuantity <- fmap (fmap E.unValue . listToMaybe) <$> E.select $ do
+                (c E.:& ci E.:& pv) <- E.from $ E.table @Cart
+                    `E.innerJoin` E.table @CartItem
+                        `E.on` (\(c E.:& ci) -> ci E.^. CartItemCartId E.==. c E.^. CartId)
+                    `E.innerJoin` E.table @ProductVariant
+                        `E.on` (\(_c E.:& ci E.:& pv) -> ci E.^. CartItemProductVariantId E.==. pv E.^. ProductVariantId)
+                E.where_ $ c E.^. CartId E.==. E.val cartId
+                E.where_ $ ci E.^. CartItemId E.==. E.val (toSqlKey itemId)
+                return $ pv E.^. ProductVariantQuantity
+            let variantStockValidation = case mbVariantQuantity of
+                    Nothing ->
+                        ("Product does not exist.", True)
+                    Just variantQuantity ->
+                        ( "This Product has less stock than requested. " <>
+                          "Available: " <> T.pack (show variantQuantity) <>
+                          ". Requested: " <> T.pack (show quantity) <> "."
+                        , variantQuantity < fromIntegral quantity
+                        )
+            return [nonNegativeQuantityValidation, variantStockValidation]
 
 -- COUNT
 
