@@ -7,9 +7,10 @@ module Pages.EditLogin exposing
     )
 
 import Api
+import Components.Button as Button exposing (defaultButton)
 import Dict
 import Html exposing (..)
-import Html.Attributes exposing (id)
+import Html.Attributes exposing (class, id)
 import Html.Events exposing (onSubmit)
 import Json.Decode as Decode
 import Json.Encode as Encode exposing (Value)
@@ -19,6 +20,7 @@ import Routing exposing (Route(..))
 import Update.Utils exposing (noCommand)
 import User exposing (AuthStatus(..))
 import Views.HorizontalForm as Form
+import Views.Utils exposing (pageTitleView)
 
 
 
@@ -167,13 +169,33 @@ view tagger model authStatus =
         inputs =
             [ Form.genericErrorText (not <| Dict.isEmpty model.errors)
             , Api.getErrorHtml "" model.errors
-            , inputRow (always email) Email False "Email" "email" "email" "email"
-            , inputRow (.password >> Maybe.withDefault "") Password False "Password" "password" "password" "new-password"
-            , inputRow (.passwordConfirm >> Maybe.withDefault "") PasswordConfirm False "Confirm Password" "passwordConfirm" "password" "new-password"
-            , Form.submitButton "Update"
+            , div [ class "tw:p-[16px] tw:bg-[rgba(30,12,3,0.03)] tw:rounded-[16px] tw:flex tw:flex-col tw:gap-[16px] tw:mb-[16px]" ]
+                [ inputRow (always email) Email False "Email" "email" "email" "email"
+                , inputRow (.password >> Maybe.withDefault "") Password False "Password" "password" "password" "new-password"
+                , inputRow (.passwordConfirm >> Maybe.withDefault "") PasswordConfirm False "Confirm Password" "passwordConfirm" "password" "new-password"
+                ]
+            , div []
+                [ Button.view { defaultButton | label = "Update", type_ = Button.FormSubmit, padding = Button.Width "tw:w-[160px]" }
+                ]
             ]
+
+        editLoginForm =
+            form
+                [ id "edit-form"
+                , onSubmit <| tagger Submit
+                ]
+                inputs
+
+        descView =
+            div [ class "tw:p-[16px] tw:rounded-[16px] tw:bg-[rgba(30,12,3,0.03)]" ]
+                [ text "Change your email or password to keep your account up to date and secure."
+                ]
     in
-    [ h1 [] [ text "Edit Login Details" ]
-    , hr [] []
-    , form [ id "edit-form", onSubmit <| tagger Submit ] inputs
+    [ pageTitleView "Edit Login Details"
+    , div [ class "tw:flex tw:grid tw:grid-cols-2 tw:gap-[40px] tw:pb-[60px]" ]
+        [ editLoginForm
+        , div []
+            [ descView
+            ]
+        ]
     ]

@@ -61,3 +61,22 @@ select:focus {
 .clickable-image {
   @apply tw:hover:brightness-80 tw:transition-all;
 }
+
+.se-table {
+  @apply tw:w-full tw:bg-[rgba(30,12,3,0.02)] tw:rounded-[16px] tw:text-left tw:overflow-hidden;
+}
+
+.se-table th {
+  @apply tw:p-[20px] tw:opacity-50;
+}
+
+.se-table td {
+  @apply tw:p-[20px];
+}
+.se-table thead {
+  @apply tw:border-b-[4px] tw:border-b-white;
+}
+
+.se-table tr:not(:last-child) {
+  @apply tw:border-b-[4px] tw:border-b-white;
+}

@@ -114,7 +114,7 @@ view customerId model tagger =
     , p []
         [ Alert.view
             { defaultAlert
-                | text = "You can't log into your account before you verify your email"
+                | content = text "You can't log into your account before you verify your email"
                 , style = Alert.Danger
             }
         , p [ class "tw:p-[16px]" ] [ andvertisementText ]

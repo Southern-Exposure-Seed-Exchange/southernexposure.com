@@ -5,7 +5,7 @@ module Views.HorizontalForm exposing
     , inputRow
     , selectElement
     , selectRow
-    , submitButton
+    , selectCol
     , textareaRow
     , withLabel
     )
@@ -27,10 +27,11 @@ genericErrorText hasErrors =
             [ Alert.view
                 { defaultAlert
                     | style = Alert.Danger
-                    , text =
-                        "There were issues processing your request, "
-                            ++ "please correct any errors highlighted below "
-                            ++ "& resubmit the form."
+                    , content =
+                        text <|
+                            "There were issues processing your request, "
+                                ++ "please correct any errors highlighted below "
+                                ++ "& resubmit the form."
                 }
             ]
 
@@ -38,12 +39,6 @@ genericErrorText hasErrors =
         text ""
 
 
-submitButton : String -> Html msg
-submitButton content =
-    div [ class "form-group clearfix" ]
-        [ button [ class "btn btn-primary float-right", type_ "submit" ]
-            [ text content ]
-        ]
 
 
 {-| TODO: Have users define a Field type w/ functions to convert to required
@@ -171,6 +166,12 @@ selectRow parser msg labelText isRequired options =
         |> List.singleton
         |> withLabel labelText isRequired
 
+selectCol : (String -> Result String a) -> (a -> msg) -> String -> Bool -> List (Html msg) -> Html msg
+selectCol parser msg labelText isRequired options =
+    selectElement labelText "" parser msg options
+        |> List.singleton
+        |> withLabelCol labelText isRequired
+
 
 {-| Make a `select` element without embedding it in row or label. Used for form
 rows with multiple inputs.
@@ -271,14 +272,14 @@ withLabelCol labelText isRequired input =
 
         optionalHtml =
             if not isRequired then
-                small [ class "horizontal-optional-text d-block text-muted mr-1" ]
+                small [ class "horizontal-optional-text d-block text-muted mr-1 tw:pb-[6px]" ]
                     [ text "(optional)" ]
 
             else
                 text ""
     in
     div [ class "tw:flex tw:flex-col" ]
-        [ div [ class "tw:flex" ]
+        [ div [ class "tw:flex tw:items-center tw:gap-[4px]" ]
             [ labelView ("input" ++ inputId) labelText
             , optionalHtml
             ]

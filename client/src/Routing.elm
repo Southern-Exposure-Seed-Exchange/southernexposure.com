@@ -8,6 +8,7 @@ module Routing exposing
     , newUrl
     , parseRoute
     , reverse
+    , showSearchbar
     )
 
 import Browser.Navigation
@@ -331,7 +332,7 @@ reverse route =
             joinPath [ "account", "login" ] ++ queryParams
 
         VerificationRequired customerId ->
-            joinPath [ "account", "unverified", String.fromInt customerId]
+            joinPath [ "account", "unverified", String.fromInt customerId ]
 
         ResetPassword _ ->
             joinPath [ "account", "reset-password" ]
@@ -349,8 +350,11 @@ reverse route =
             joinPath [ "account", "order", String.fromInt orderId ]
                 ++ withQueryStrings
                     [ case token of
-                        Nothing -> ""
-                        Just tok -> queryParameter ("token", tok)
+                        Nothing ->
+                            ""
+
+                        Just tok ->
+                            queryParameter ( "token", tok )
                     ]
 
         Cart ->
@@ -366,10 +370,12 @@ reverse route =
             joinPath [ "checkout", "success", String.fromInt orderId ]
                 ++ withQueryStrings
                     [ case token of
-                        Nothing -> ""
-                        Just tok -> queryParameter ("token", tok)
-                    ]
+                        Nothing ->
+                            ""
 
+                        Just tok ->
+                            queryParameter ( "token", tok )
+                    ]
 
         Admin adminRoute ->
             reverseAdmin adminRoute
@@ -645,3 +651,61 @@ type alias Key =
 newUrl : Key -> Route -> Cmd msg
 newUrl key =
     reverse >> Browser.Navigation.pushUrl key
+
+
+showSearchbar : Route -> Bool
+showSearchbar route =
+    case route of
+        Checkout ->
+            False
+
+        CheckoutSuccess _ _ ->
+            False
+
+        ProductDetails _ _ ->
+            False
+
+        QuickOrder ->
+            False
+
+        MyAccount ->
+            False
+
+        EditLogin ->
+            False
+
+        EditAddress ->
+            False
+
+        CreateAccount ->
+            False
+
+        Login _ _ ->
+            False
+
+        VerifyEmail _ ->
+            False
+
+        CreateAccountSuccess ->
+            False
+
+        VerificationRequired _ ->
+            False
+
+        OrderDetails _ _ ->
+            False
+
+        Redirect _ ->
+            False
+
+        NotFound ->
+            False
+
+        ResetPassword _ ->
+            False
+
+        Cart ->
+            False
+
+        _ ->
+            True
