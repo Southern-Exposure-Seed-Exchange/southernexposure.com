@@ -10,23 +10,25 @@ type Style
     | Danger
 
 
-type alias Config =
-    { text : String
+type alias Config msg =
+    { content : Html msg
     , style : Style
+    , icon : Maybe (Html msg)
     }
 
 
-defaultAlert : Config
+defaultAlert : Config msg
 defaultAlert =
-    { text = "Something went wrong"
+    { content = text "Something went wrong"
     , style = Success
+    , icon = Nothing
     }
 
 
-view : Config -> Html msg
+view : Config msg -> Html msg
 view config =
     let
-        iconSvg =
+        defaultIcon =
             case config.style of
                 Success ->
                     checkSvg
@@ -43,6 +45,13 @@ view config =
                     "tw:border-[rgba(214,34,70,0.4)] tw:text-[rgba(214,34,70,1)] tw:bg-[rgba(214,34,70,0.1)]"
     in
     div [ class <| class_ ++ " tw:p-[16px] tw:border tw:rounded-[16px] tw:flex tw:gap-[8px] tw:items-start" ]
-        [ div [ class "tw:pt-[3px]" ] [ iconSvg ]
-        , span [ class "" ] [ text config.text ]
+        [ case config.icon of
+            Just customIcon ->
+                customIcon
+
+            Nothing ->
+                div [ class "tw:pt-[3px]" ]
+                    [ defaultIcon
+                    ]
+        , span [ class "" ] [ config.content ]
         ]

@@ -8,6 +8,8 @@ module Pages.EditAddress exposing
 
 import Address exposing (AddressId(..))
 import Api
+import Components.Button as Button exposing (defaultButton)
+import Components.Svg exposing (binSvg)
 import Dict exposing (Dict)
 import Html exposing (..)
 import Html.Attributes exposing (..)
@@ -19,6 +21,7 @@ import RemoteData exposing (WebData)
 import Routing exposing (Route(..))
 import Update.Utils exposing (noCommand)
 import User exposing (AuthStatus)
+import Views.Utils exposing (pageTitleView)
 
 
 
@@ -211,23 +214,35 @@ view : Form -> AddressLocations -> PageData.AddressDetails -> List (Html Msg)
 view model locations { shippingAddresses, billingAddresses } =
     let
         addressSelect titleText msg addresses =
-            div [ class "text-center form-group" ]
-                [ label []
-                    [ span [ class "font-weight-bold" ] [ text titleText ]
-                    , Address.select (AddressId >> msg)
-                        model.selectedAddress
-                        addresses
-                        False
-                    ]
+            div [ class "" ]
+                [ label [ class "tw:text-[14px] tw:leading-[20px] tw:font-semibold" ]
+                    [ text titleText ]
+                , Address.select (AddressId >> msg)
+                    model.selectedAddress
+                    addresses
+                    False
                 ]
 
         addressForm =
             maybeSelectedIdAndForm
                 |> Maybe.map
                     (\( id, f ) ->
-                        Address.horizontalForm f locations
-                            |> div []
-                            |> Html.map (FormMsg (AddressId id))
+                        ([ div [ class "tw:flex tw:justify-between" ]
+                            [ p [ class "tw:opacity-70" ] [ text "Details" ]
+                            , button
+                                [ class "tw:flex tw:items-center tw:gap-[4px] tw:group tw:text-[rgba(30,12,3,0.4)] tw:hover:text-[rgba(214,34,70,1)] "
+                                , disabled (maybeSelectedAddress == Nothing)
+                                , type_ "button"
+                                , onClick Delete
+                                ]
+                                [ binSvg "tw:fill-[rgba(30,12,3,0.4)] tw:group-hover:fill-[rgba(214,34,70,1)]"
+                                , span [] [ text "Delete" ]
+                                ]
+                            ]
+                         ]
+                            ++ (List.map (\h -> Html.map (FormMsg (AddressId id)) h) <| Address.horizontalForm f locations)
+                        )
+                            |> div [ class "tw:p-[16px] tw:bg-[rgba(30,12,3,0.03)] tw:rounded-[16px] tw:flex tw:flex-col tw:gap-[16px] tw:mb-[16px]" ]
                     )
                 |> Maybe.withDefault (text "")
 
@@ -239,8 +254,7 @@ view model locations { shippingAddresses, billingAddresses } =
         renderCheckbox address =
             if not address.isDefault then
                 div [ class "form-group form-row align-items-center" ]
-                    [ div [ class "col-sm-3" ] []
-                    , div [ class "col" ]
+                    [ div [ class "col" ]
                         [ div [ class "form-check" ]
                             [ label [ class "form-check-label" ]
                                 [ input
@@ -273,20 +287,18 @@ view model locations { shippingAddresses, billingAddresses } =
                     )
 
         buttons =
-            div [ class "form-group text-right" ]
-                [ button
-                    [ class "btn btn-success mr-2"
-                    , disabled updateIsDisabled
-                    , type_ "submit"
-                    ]
-                    [ text "Update" ]
-                , button
-                    [ class "btn btn-danger"
-                    , disabled (maybeSelectedAddress == Nothing)
-                    , type_ "button"
-                    , onClick Delete
-                    ]
-                    [ text "Delete" ]
+            div [ class "tw:flex tw:pt-[28px] tw:justify-center" ]
+                [ Button.view
+                    { defaultButton
+                        | label = "Save"
+                        , padding = Button.Width "tw:w-[160px]"
+                        , type_ =
+                            if updateIsDisabled then
+                                Button.Disabled
+
+                            else
+                                Button.FormSubmit
+                    }
                 ]
 
         updateIsDisabled =
@@ -301,14 +313,11 @@ view model locations { shippingAddresses, billingAddresses } =
                 _ ->
                     True
     in
-    [ h1 [] [ text "Edit Addresses" ]
-    , hr [] []
+    [ pageTitleView "Edit Addresses"
     , Html.form [ onSubmit Update ]
-        [ div [ class "row" ]
-            [ div [ class "col text-right" ]
-                [ addressSelect "Shipping Addresses" SelectShipping shippingAddresses ]
-            , div [ class "col text-left" ]
-                [ addressSelect "Billing Addresses" SelectBilling billingAddresses ]
+        [ div [ class "tw:grid tw:grid-cols-2 tw:px-[16px] tw:gap-[16px] tw:pb-[20px]" ]
+            [ addressSelect "Shipping Addresses" SelectShipping shippingAddresses
+            , addressSelect "Billing Addresses" SelectBilling billingAddresses
             ]
         , addressForm
         , defaultCheckbox

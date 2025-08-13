@@ -383,12 +383,12 @@ horizontalForm { model, errors } locations =
         textField selector =
             Form.inputRow errors (selector model)
 
-        selectRow =
-            Form.selectRow Ok
+        selectCol =
+            Form.selectCol Ok
 
         countrySelect =
             List.map (locationToOption (Just << .country)) locations.countries
-                |> selectRow Country "Country" True
+                |> selectCol Country "Country" True
 
         locationToOption selector { code, name } =
             option [ value code, selected <| selector model == Just code ]
@@ -406,20 +406,26 @@ horizontalForm { model, errors } locations =
                     requiredField (stateCode >> Maybe.withDefault "") State "State / Province" "state" "state" "address-level1"
 
         regionSelect labelText =
-            List.map (locationToOption stateCode) >> selectRow State labelText True
+            List.map (locationToOption stateCode) >> selectCol State labelText True
 
         stateCode =
             .state >> Maybe.map Locations.fromRegion
     in
     [ Api.getErrorHtml "" errors
-    , requiredField .firstName FirstName "First Name" "firstName" "text" "given-name"
-    , requiredField .lastName LastName "Last Name" "lastName" "text" "family-name"
+    , div [ class "tw:grid tw:grid-cols-2 tw:gap-[16px]" ]
+        [ requiredField .firstName FirstName "First Name" "firstName" "text" "given-name"
+        , requiredField .lastName LastName "Last Name" "lastName" "text" "family-name"
+        ]
     , requiredField .street Street "Street Address" "addressOne" "text" "address-line1"
     , optionalField .addressTwo AddressTwo "Address Line 2" "addressTwo" "text" "address-line2"
-    , requiredField .city City "City" "city" "text" "address-level2"
-    , regionField
-    , requiredField .zipCode ZipCode "Zip Code" "zipCode" "text" "postal-code"
-    , countrySelect
+    , div [ class "tw:grid tw:grid-cols-2 tw:gap-[16px]" ]
+        [ countrySelect
+        , regionField
+        ]
+    , div [ class "tw:grid tw:grid-cols-2 tw:gap-[16px]" ]
+        [ requiredField .city City "City" "city" "text" "address-level2"
+        , requiredField .zipCode ZipCode "Zip Code" "zipCode" "text" "postal-code"
+        ]
     , requiredField .phoneNumber PhoneNumber "Phone Number" "phoneNumber" "tel" "tel"
     ]
 

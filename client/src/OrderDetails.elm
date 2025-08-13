@@ -17,65 +17,71 @@ import Views.Format as Format
 
 view : Time.Zone -> Int -> AddressLocations -> PageData.OrderDetails -> List (Html msg)
 view zone orderId locations orderDetails =
-    [ h1 []
+    [ h1 [ class "tw:pl-[8px] tw:text-[32px]!" ]
         [ text <| "Order #" ++ String.fromInt orderId
-        , small [] [ text <| " " ++ Format.date zone orderDetails.order.createdAt ]
         ]
-    , hr [] []
-    , h2 [] [text <| "Status: " ++ orderDetails.order.status ]
-    , div [ class "row mb-3" ] <|
-        case orderDetails.billingAddress of
-            Nothing ->
-                [ div [ class "col-12" ]
-                    [ addressCard locations "Shipping Details" orderDetails.shippingAddress ]
-                ]
+    , p [ class "tw:pl-[8px] tw:opacity-50" ]
+        [ text (Format.date zone orderDetails.order.createdAt)
+        ]
+    , h6 [ class "tw:pl-[8px] tw:pt-[8px]" ]
+        [ text <| "Status: " ++ orderDetails.order.status
+        ]
+    , div [ class "tw:pt-[20px] tw:pb-[86px] " ]
+        [ div [ class "tw:grid tw:grid-cols-2 tw:gap-[20px]" ] <|
+            [ div []
+                [ addressCard locations "Shipping Details" orderDetails.shippingAddress ]
+            ]
+                ++ (case orderDetails.billingAddress of
+                        Nothing ->
+                            []
 
-            Just billingAddress ->
-                [ div [ class "col-sm-6 mb-2" ]
-                    [ addressCard locations "Shipping Details" orderDetails.shippingAddress ]
-                , div [ class "col-sm-6" ]
-                    [ addressCard locations "Billing Details" billingAddress ]
-                ]
-    , if orderDetails.deliveryData == [] then
-        text ""
-      else
-        div [ class "row mb-3" ] [
-            div [ class "col-12" ]
-                [ deliveryCard orderDetails.deliveryData 
+                        Just billingAddress ->
+                            [ div []
+                                [ addressCard locations "Billing Details" billingAddress ]
+                            ]
+                   )
+        , if orderDetails.deliveryData == [] then
+            text ""
+
+          else
+            div [ class "tw:pt-[20px]" ]
+                [ div [ class "" ]
+                    [ deliveryCard orderDetails.deliveryData
+                    ]
                 ]
         ]
+
     , orderTable orderDetails
     ]
 
 
 addressCard : AddressLocations -> String -> Address.Model -> Html msg
 addressCard locations titleText address =
-    div [ class "card h-100" ]
-        [ div [ class "card-body" ]
-            [ h4 [ class "card-title" ] [ text titleText ]
-            , Address.card address locations
-            ]
+    div [ class "tw:bg-[rgba(30,12,3,0.03)] tw:rounded-[16px] tw:p-[24px]" ]
+        [ p [ class "tw:pb-[16px]" ] [ text titleText ]
+        , Address.card address locations
         ]
 
-deliveryCard : List(PageData.DeliveryData) -> Html msg
+
+deliveryCard : List PageData.DeliveryData -> Html msg
 deliveryCard deliveryData =
-    div [ class "card h-100" ]
-        [ div [ class "card-body" ]
-            [ h4 [ class "card-title" ] [ text "Delivery" ]
-            , ul []
-                (List.map (\d ->
-                    (li []
+    div [ class "tw:bg-[rgba(167,215,197,0.1)] tw:p-[24px] tw:rounded-[16px] tw:border tw:border-[rgba(77,170,154,1)]" ]
+        [ h4 [ class "tw:text-[18px] tw:leading-[24px] tw:pb-[16px]" ] [ text "Delivery" ]
+        , ul []
+            (List.map
+                (\d ->
+                    li []
                         [ text <| "Carrier: " ++ d.trackCarrier
                         , br [] []
                         , text <| "Tracking Number: " ++ d.trackNumber
                         , br [] []
                         , text <| "Pickup Date: " ++ d.trackPickupDate
-                        ])
-                    )
-                    deliveryData
+                        ]
                 )
-            ]
+                deliveryData
+            )
         ]
+
 
 type Tuple8 a b c d e f g h
     = Tuple8 a b c d e f g h
@@ -216,7 +222,7 @@ orderTable ({ lineItems, products } as details) =
                        , htmlOrBlank chargeRow maybeCouponDiscount
                        ]
                     ++ List.map chargeRow refunds
-                    ++ [ footerRow "font-weight-bold" "Total" total
+                    ++ [ footerRow "font-weight-bold tw:bg-[rgba(167,215,197,0.2)]" "Total" total
                        ]
 
         total =
@@ -241,7 +247,7 @@ orderTable ({ lineItems, products } as details) =
                     f a
     in
     div []
-        [ table [ class "d-none d-sm-table table table-striped table-sm" ]
+        [ table [ class "se-table" ]
             [ thead []
                 [ tr [ class "font-weight-bold" ]
                     [ th [] [ text "Product" ]

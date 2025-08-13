@@ -120,7 +120,7 @@ selectImageFile =
 
 
 pageTitleView label =
-    h1 [ class "tw:pl-[16px] tw:text-[32px]! tw:pb-[20px]" ] [ text label ]
+    h1 [ class "tw:pl-[8px] tw:text-[32px]! tw:pb-[20px]" ] [ text label ]
 
 
 legendView label =

@@ -130,14 +130,14 @@ view model logoutMsg =
                     Success ->
                         Alert.view
                             { defaultAlert
-                                | text = "Email was successfully verified!"
+                                | content = text "Email was successfully verified!"
                                 , style = Alert.Success
                             }
 
                     Expired ->
                         Alert.view
                             { defaultAlert
-                                | text = "Your verification link already expired. Please, check your mailbox for a new one."
+                                | content = text "Your verification link already expired. Please, check your mailbox for a new one."
                                 , style = Alert.Danger
                             }
                 , if model.status == Success then

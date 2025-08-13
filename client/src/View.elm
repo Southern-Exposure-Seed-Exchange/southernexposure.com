@@ -32,7 +32,7 @@ import Products.AdminViews as ProductAdmin
 import Products.Pagination as Pagination
 import Products.Views as ProductViews
 import RemoteData exposing (WebData)
-import Routing exposing (AdminRoute(..), Route(..), isAdminRoute)
+import Routing exposing (AdminRoute(..), Route(..), isAdminRoute, showSearchbar)
 import Search exposing (UniqueSearch(..))
 import SeedAttribute
 import SiteUI.Breadcrumbs as SiteBreadcrumbs
@@ -61,13 +61,6 @@ view ({ route, pageData, navigationData, zone, helcimUrl } as model) =
     let
         middleContent =
             case route of
-                Checkout ->
-                    div [ class "container", Aria.live "polite", id "main" ]
-                        [ div [ class "row justify-content-center" ]
-                            [ div [ class "col-md-10" ] pageContentIncludingSearch
-                            ]
-                        ]
-
                 Admin adminRoute ->
                     if not <| User.isAdmin model.currentUser then
                         withSidebar accessDeniedView
@@ -101,12 +94,16 @@ view ({ route, pageData, navigationData, zone, helcimUrl } as model) =
                     h2 [] [ text <| adminTitle model adminRoute ]
 
         advanceSearchView showDetail =
-            AdvancedSearch.view
-                showDetail
-                NavigateTo
-                AdvancedSearchMsg
-                model.advancedSearchData
-                model.categoryListData
+            if showSearchbar route == True then
+                AdvancedSearch.view
+                    showDetail
+                    NavigateTo
+                    AdvancedSearchMsg
+                    model.advancedSearchData
+                    model.categoryListData
+
+            else
+                [ text "" ]
 
         pageContentIncludingSearch =
             div [] (advanceSearchView route) :: pageContent
