@@ -32,7 +32,7 @@ import Models
     , SeedAttribute(..), Category(..), CategoryId, Unique(..), slugify
     , ProductToCategory(..)
     )
-import Models.Fields (LotSize(..), Cents, Milligrams, Region, formatCents, toGrams)
+import Models.Fields (InventoryPolicy(..), LotSize(..), Cents, Milligrams, Region, formatCents, toGrams)
 import Routes.CommonData
     ( AdminCategorySelect, makeAdminCategorySelects, validateCategorySelect
     , getAdditionalCategories
@@ -245,6 +245,7 @@ data VariantData =
         , vdQuantity :: Int
         , vdLotSize :: Maybe LotSize
         , vdIsActive :: Bool
+        , vdInventoryPolicy :: InventoryPolicy
         , vdId :: Maybe ProductVariantId
         -- ^ Only used in the EditProductRoute
         } deriving (Show)
@@ -257,6 +258,7 @@ instance FromJSON VariantData where
         vdLotSize <- v .: "lotSize"
         vdIsActive <- v .: "isActive"
         vdId <- v .: "id"
+        vdInventoryPolicy <- v .: "inventoryPolicy"
         return VariantData {..}
 
 instance ToJSON VariantData where
@@ -268,6 +270,7 @@ instance ToJSON VariantData where
             , "quantity" .= vdQuantity
             , "lotSize" .= vdLotSize
             , "isActive" .= vdIsActive
+            , "inventoryPolicy" .= vdInventoryPolicy
             ]
 
 data SeedData =
@@ -416,6 +419,7 @@ editProductDataRoute t productId = withAdminCookie t $ \_ ->
             , vdQuantity = fromIntegral productVariantQuantity
             , vdLotSize = productVariantLotSize
             , vdIsActive = productVariantIsActive
+            , vdInventoryPolicy = productVariantInventoryPolicy
             }
     makeAttributeData :: Entity SeedAttribute -> SeedData
     makeAttributeData (Entity _ SeedAttribute {..}) =
@@ -523,6 +527,7 @@ editProductRoute = validateAdminAndParameters $ \_ EditProductParameters {..} ->
                         , ProductVariantQuantity =. fromIntegral vdQuantity
                         , ProductVariantLotSize =. vdLotSize
                         , ProductVariantIsActive =. vdIsActive
+                        , ProductVariantInventoryPolicy =. vdInventoryPolicy
                         ]
                     unless vdIsActive $
                         deleteWhere [CartItemProductVariantId ==. variantId]
@@ -685,6 +690,7 @@ makeVariant pId VariantData {..} =
         , productVariantQuantity = fromIntegral vdQuantity
         , productVariantLotSize = vdLotSize
         , productVariantIsActive = vdIsActive
+        , productVariantInventoryPolicy = vdInventoryPolicy
         }
 
 makeAttributes :: ProductId -> SeedData -> SeedAttribute

@@ -25,7 +25,7 @@ import Json.Encode as Encode exposing (Value)
 import Locations exposing (AddressLocations)
 import Models.Fields exposing (Cents(..), centsFromString, centsMap, centsMap2, imageToSrcSet, imgSrcFallback, lotSizeToString)
 import OrderDetails
-import PageData exposing (CartItemId(..), LineItemType(..))
+import PageData exposing (CartItemId(..), LineItemType(..), showCartItemError, showCartItemWarning)
 import Ports
 import Product exposing (productMainImage, variantPrice)
 import RemoteData exposing (WebData)
@@ -392,7 +392,7 @@ update msg model authStatus maybeSessionToken checkoutDetails =
                             PageData.isFreeCheckout checkoutDetails || finalTotal == 0
 
                     in
-                    validateForm model (not freeCheckout) <|
+                    validateForm model (not freeCheckout) details <|
                         if freeCheckout then
                             ( { model | isProcessing = True }
                             , Nothing
@@ -709,14 +709,15 @@ getFinalTotal checkoutDetails storeCreditString =
 {-| Take the Form & a set of values to return when valid, checking that the
 passwords match & the state dropdowns have been selected.
 -}
-validateForm : Form -> Bool -> ( Form, Maybe OutMsg, Cmd Msg ) -> ( Form, Maybe OutMsg, Cmd Msg )
-validateForm model validateBilling validResult =
+validateForm : Form -> Bool -> PageData.CheckoutDetails -> ( Form, Maybe OutMsg, Cmd Msg ) -> ( Form, Maybe OutMsg, Cmd Msg )
+validateForm model validateBilling checkoutDetails validResult =
     let
         hasErrors =
             not <|
                 Dict.isEmpty modelErrors
                     && Dict.isEmpty billingErrors
                     && Dict.isEmpty shippingErrors
+                    && List.all (\i -> List.length i.errors == 0) checkoutDetails.items
 
         modelErrors =
                 Api.initialErrors
@@ -1665,9 +1666,6 @@ sameAddressesCheckbox billingSameAsShipping =
 summaryTable : PageData.CheckoutDetails -> String -> String -> Maybe (List String) -> Api.FormErrors -> Html Msg
 summaryTable ({ items, charges } as checkoutDetails) creditString couponCode couponErrors errors =
     let
-        cartItemError (CartItemId itemId) =
-            Dict.get (String.fromInt itemId) errors
-
         tableHeader =
             thead [ class "font-weight-bold" ]
                 [ tr []
@@ -1679,43 +1677,46 @@ summaryTable ({ items, charges } as checkoutDetails) creditString couponCode cou
                     ]
                 ]
 
-        productRow { id, product, variant, quantity } =
-            let productImage = productMainImage product
+        productRow p =
+            let productImage = productMainImage p.product
             in
-            (tr []
+            [ tr []
                 [ td [ class "align-middle text-center" ]
                     [ img
                         [ src <| imgSrcFallback productImage
                         , imageToSrcSet productImage
                         , imageSizes
-                        , alt <| "Product Image for " ++ product.name
+                        , alt <| "Product Image for " ++ p.product.name
                         ]
                         []
                     ]
                 , td []
-                    [ div [ class "font-weight-bold" ] [ Product.nameWithLotSize product variant ]
+                    [ div [ class "font-weight-bold" ] [ Product.nameWithLotSize p.product p.variant ]
                     , small [ class "text-muted" ]
-                        [ text <| "Item #" ++ product.baseSKU ++ variant.skuSuffix ]
+                        [ text <| "Item #" ++ p.product.baseSKU ++ p.variant.skuSuffix ]
                     ]
-                , td [ class "text-center" ] [ text <| String.fromInt quantity ]
-                , td [ class "text-right" ] [ text <| Format.cents <| variantPrice variant ]
+                , td [ class "text-center" ] [ text <| String.fromInt p.quantity ]
+                , td [ class "text-right" ] [ text <| Format.cents <| variantPrice p.variant ]
                 , td [ class "text-right" ]
-                    [ text <| Format.cents <| centsMap ((*) quantity) <| variantPrice variant ]
+                    [ text <| Format.cents <| centsMap ((*) p.quantity) <| variantPrice p.variant ]
                 ]
-            :: case cartItemError id of
-                Just errs ->
-                    [ tr []
-                        [ td [ colspan 4, class "text-danger" ]
-                            [ text <| String.join ", " errs ]
-                        ]
+            , viewIf (List.length p.errors > 0)
+                (tr []
+                    [ td [ colspan 5, class "text-danger" ]
+                        [ text <| String.join ", " (List.map showCartItemError p.errors) ]
                     ]
-                Nothing ->
-                    []
-            )
+                )
+            , viewIf (List.length p.warnings > 0)
+                (tr []
+                    [ td [ colspan 5, class "text-warning" ]
+                        [ text <| String.join ", " (List.map showCartItemWarning p.warnings) ]
+                    ]
+                )
+            ]
 
 
-        mobileRow { id, product, variant, quantity } =
-            let productImage = productMainImage product
+        mobileRow p =
+            let productImage = productMainImage p.product
             in
             div [ class "row" ]
                 [ div [ class "col-auto pr-0" ]
@@ -1727,27 +1728,31 @@ summaryTable ({ items, charges } as checkoutDetails) creditString couponCode cou
                         []
                     ]
                 , div [ class "col" ]
-                    [ div [ class "font-weight-bold" ] [ Product.nameWithLotSize product variant ]
+                    [ div [ class "font-weight-bold" ] [ Product.nameWithLotSize p.product p.variant ]
                     , small [ class "text-muted" ]
-                        [ text <| "Item #" ++ product.baseSKU ++ variant.skuSuffix ]
+                        [ text <| "Item #" ++ p.product.baseSKU ++ p.variant.skuSuffix ]
                     ]
                 , div [ class "col-12 mt-1 d-flex justify-content-between" ]
                     [ div []
-                        [ text <| Format.cents <| variantPrice variant
+                        [ text <| Format.cents <| variantPrice p.variant
                         , text " x "
-                        , text <| String.fromInt quantity
+                        , text <| String.fromInt p.quantity
                         ]
                     , div [ class "font-weight-bold item-total" ]
-                        [ text <| Format.cents <| centsMap ((*) quantity) <| variantPrice variant ]
+                        [ text <| Format.cents <| centsMap ((*) p.quantity) <| variantPrice p.variant ]
                     ]
-                , case cartItemError id of
-                    Just errs ->
-                        div [ class "col-12" ]
-                            [ small [ class "text-danger" ]
-                                [ text <| String.join ", " errs ]
-                            ]
-                    Nothing ->
-                        text ""
+                , viewIf (List.length p.errors > 0)
+                    (div [ class "col-12" ]
+                        [ small [ class "text-danger" ]
+                            [ text <| String.join ", " (List.map showCartItemError p.errors) ]
+                        ]
+                    )
+                , viewIf (List.length p.warnings > 0)
+                    (div [ class "col-12" ]
+                        [ small [ class "text-warning" ]
+                            [ text <| String.join ", " (List.map showCartItemWarning p.warnings) ]
+                        ]
+                    )
                 ]
 
         imageSizes =

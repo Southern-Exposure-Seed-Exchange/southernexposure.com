@@ -1468,17 +1468,11 @@ update msg ({ pageData, key } as model) =
                 updatedPageData =
                     { pageData | cartDetails = response }
 
-                updateCart m = case m.pageData.cartDetails of
-                    RemoteData.Success _ -> Cmd.map
-                        EditCartMsg
-                        (Cart.updateCart m.currentUser m.maybeSessionToken m.editCartForm Nothing)
-                    _ -> Cmd.none
             in
             { model | pageData = updatedPageData }
                 |> resetEditCartForm response
                 |> updateCartItemCountFromDetails (RemoteData.toMaybe response)
                 |> extraCommand (redirect403IfAnonymous key response)
-                |> extraCommand updateCart
 
         GetCartItemCount response ->
             { model | cartItemCount = response |> RemoteData.toMaybe |> Maybe.withDefault 0 }
@@ -1493,9 +1487,6 @@ update msg ({ pageData, key } as model) =
 
                         _ ->
                             pageData
-                validateCart m = Cmd.map
-                    CheckoutMsg
-                    (Checkout.validateCart m.currentUser m.maybeSessionToken m.pageData.checkoutDetails)
 
                 cmd =
                     case response of
@@ -1528,7 +1519,6 @@ update msg ({ pageData, key } as model) =
                             { model | pageData = updatedPageData }
                 )
                 |> extraCommand (redirect403IfAnonymous key response)
-                |> extraCommand validateCart
 
         GetCheckoutSuccessDetails response ->
             let

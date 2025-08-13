@@ -10,7 +10,7 @@ module Routes.CommonData
     , getProductData
     , BaseProductData(bpdName, bpdShippingRestrictions)
     , makeBaseProductData
-    , VariantData(vdId, vdProductId)
+    , VariantData(vdId, vdInventoryPolicy, vdProductId, vdQuantity)
     , makeVariantData
     , getVariantPrice
     , applySalesToVariants
@@ -31,6 +31,8 @@ module Routes.CommonData
     , PasswordValidationError(..)
     , handlePasswordValidationError
     , CartItemData(..)
+    , CartItemError(..)
+    , CartItemWarning(..)
     , getCartItems
     , CartCharges(..)
     , getCharges
@@ -162,6 +164,7 @@ data VariantData =
         , vdQuantity :: Int64
         , vdLotSize :: Maybe LotSize
         , vdIsActive :: Bool
+        , vdInventoryPolicy :: InventoryPolicy
         } deriving (Show)
 
 instance ToJSON VariantData where
@@ -175,6 +178,7 @@ instance ToJSON VariantData where
             , "quantity" .= vdQuantity
             , "lotSize" .= vdLotSize
             , "isActive" .= vdIsActive
+            , "inventoryPolicy" .= vdInventoryPolicy
             ]
 
 getVariantPrice :: VariantData -> Cents
@@ -230,6 +234,7 @@ makeVariantData (Entity variantId ProductVariant {..}) maybeSalePrice =
         , vdQuantity = productVariantQuantity
         , vdLotSize = productVariantLotSize
         , vdIsActive = productVariantIsActive
+        , vdInventoryPolicy = productVariantInventoryPolicy
         }
 
 -- | Get the CategorySales for the Product's Categories, than apply any
@@ -540,6 +545,36 @@ handlePasswordValidationError = \case
 
 -- Carts
 
+data CartItemError
+    = OutOfStockError Natural Natural
+    | GenericError T.Text
+
+instance ToJSON CartItemError where
+    toJSON (OutOfStockError available requested) =
+        object [ "code" .= ("OUT_OF_STOCK" :: T.Text)
+               , "available" .= available
+               , "requested" .= requested
+               ]
+    toJSON (GenericError message) =
+        object [ "code" .= ("GENERIC" :: T.Text)
+               , "message" .= message
+               ]
+
+data CartItemWarning
+    = LimitedAvailabilityWarning Int
+    -- ^ Currently available stock, the argument could be negative.
+    -- In this case, a backorder is required
+    | GenericWarning T.Text
+
+instance ToJSON CartItemWarning where
+    toJSON (LimitedAvailabilityWarning available) =
+        object [ "code" .= ("LIMITED_AVAILABILITY" :: T.Text)
+               , "available" .= available
+               ]
+    toJSON (GenericWarning message) =
+        object [ "code" .= ("GENERIC" :: T.Text)
+               , "message" .= message
+               ]
 
 data CartItemData =
     CartItemData
@@ -547,6 +582,8 @@ data CartItemData =
         , cidProduct :: BaseProductData
         , cidVariant :: VariantData
         , cidQuantity :: Int64
+        , cidErrors :: [CartItemError]
+        , cidWarnings :: [CartItemWarning]
         }
 
 instance ToJSON CartItemData where
@@ -555,6 +592,8 @@ instance ToJSON CartItemData where
                , "product" .= cidProduct item
                , "variant" .= cidVariant item
                , "quantity" .= cidQuantity item
+               , "errors" .= cidErrors item
+               , "warnings" .= cidWarnings item
                ]
 
 
@@ -627,10 +666,18 @@ getCartItems whereQuery = do
         E.orderBy [E.asc $ p E.^. ProductName]
         return (ci E.^. CartItemId, p, v, ci E.^. CartItemQuantity)
     mapM toItemData items
-    where toItemData (i, p, v, q) =
+    where toItemData (i, p, v@(Entity _ pv), q) =
             let
                 quantity =
                     E.unValue q
+                errors =
+                    [ OutOfStockError (fromIntegral $ productVariantQuantity pv) (fromIntegral quantity)
+                    | quantity > productVariantQuantity pv && productVariantInventoryPolicy pv == RequireStock
+                    ]
+                warnings =
+                    [ LimitedAvailabilityWarning (fromIntegral $ productVariantQuantity pv)
+                    | quantity > productVariantQuantity pv && productVariantInventoryPolicy pv == AllowBackorder
+                    ]
             in do
                 categories <- getAdditionalCategories (entityKey p)
                 maybeCategorySale <- listToMaybe <$> getCategorySales p
@@ -642,6 +689,8 @@ getCartItems whereQuery = do
                     , cidProduct = productData
                     , cidVariant = variantData
                     , cidQuantity = coerce quantity
+                    , cidErrors = errors
+                    , cidWarnings = warnings
                     }
 
 
