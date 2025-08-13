@@ -18,12 +18,11 @@ type alias CartForms =
 
 type alias Form =
     { quantities : Dict Int Int
-    , errors : FormErrors
     }
 
 initial : Form
 initial =
-    Form Dict.empty Dict.empty
+    Form Dict.empty
 
 -- UPDATE
 

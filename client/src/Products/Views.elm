@@ -17,7 +17,7 @@ import Models.Fields exposing (Cents(..), blankImage, centsToString, imageToSrcS
 import PageData exposing (ProductData)
 import Pages.Cart.Type exposing (CartForms)
 import Paginate exposing (Paginated)
-import Product exposing (Product, ProductId(..), ProductVariant, ProductVariantId(..), productMainImage, variantPrice)
+import Product exposing (InventoryPolicy(..), Product, ProductId(..), ProductVariant, ProductVariantId(..), productMainImage, variantPrice)
 import Products.Pagination as Pagination
 import Products.Sorting as Sorting
 import RemoteData
@@ -46,8 +46,6 @@ type alias CartFormData =
     { maybeSelectedVariant : Maybe ProductVariant
     , maybeSelectedVariantId : Maybe ProductVariantId
     , quantity : Int
-    , isOutOfStock : Bool
-    , isLimitedAvailablity : Bool
     , variantSelect : List (Html Msg)
     , selectedItemNumber : String
     , offersMeta : Html Never
@@ -71,18 +69,11 @@ cartFormData addToCartForms ( product, variants ) =
             variantList
                 |> List.filter
                     (\v ->
-                        if isOutOfStock then
-                            True
-
-                        else
-                            v.quantity > 0
+                        Product.isPurchaseable v
                     )
                 |> List.sortBy .skuSuffix
                 |> List.head
                 |> Maybe.map .id
-
-        isOutOfStock =
-            Product.isOutOfStock variantList
 
         showVariantSelect =
             Dict.size variants > 1
@@ -116,26 +107,10 @@ cartFormData addToCartForms ( product, variants ) =
                     else
                         [ s, Format.cents <| variantPrice variant ]
 
-                appendOoS l =
-                    if variant.quantity <= 0 then
-                        l ++ [ "OoS" ]
-
-                    else
-                        l
-
-                -- Disable the option unless the entire product is
-                -- out-of-stock.
-                disabledAttr =
-                    if isOutOfStock then
-                        []
-
-                    else
-                        [ A.disabled <| variant.quantity <= 0 ]
             in
             Maybe.map lotSizeToString variant.lotSize
                 |> Maybe.withDefault (product.baseSKU ++ variant.skuSuffix)
                 |> appendPrice
-                |> appendOoS
                 |> String.join " - "
                 |> text
                 |> List.singleton
@@ -144,7 +119,6 @@ cartFormData addToCartForms ( product, variants ) =
                      , selected (Just variant == maybeSelectedVariant)
                      , A.classList [ ( "out-of-stock", variant.quantity <= 0 ) ]
                      ]
-                        ++ disabledAttr
                     )
 
         variantList =
@@ -237,8 +211,6 @@ cartFormData addToCartForms ( product, variants ) =
     { maybeSelectedVariant = maybeSelectedVariant
     , maybeSelectedVariantId = maybeSelectedVariantId
     , quantity = quantity
-    , isOutOfStock = Product.isOutOfStock variantList
-    , isLimitedAvailablity = Product.isLimitedAvailablity variantList
     , variantSelect =
         case showVariantSelect of
             True ->
@@ -267,11 +239,12 @@ productAttrView selectedItemNumber maybeSeedAttribute =
         ]
 
 
+outOfStockView : String -> Maybe ProductVariant -> Html msg
 outOfStockView paddingClass maybeSelectedVariant =
     maybeSelectedVariant
         |> htmlOrBlank
             (\v ->
-                if v.quantity <= 0 then
+                if not (Product.isPurchaseable v) then
                     div [ class <| "tw:flex " ++ paddingClass ] [ outOfStockBadge ]
 
                 else
@@ -279,6 +252,18 @@ outOfStockView paddingClass maybeSelectedVariant =
             )
 
 
+limitedAvailabilityView : String -> Maybe ProductVariant -> Html msg
+limitedAvailabilityView paddingClass maybeSelectedVariant =
+    maybeSelectedVariant
+        |> htmlOrBlank
+            (\v ->
+                if Product.isLimitedAvailability v then
+                    div [ class <| "tw:flex " ++ paddingClass ] [ limitedAvailabilityBadge ]
+                else
+                    div [] []
+            )
+
+variantSelectView : String -> List (Html msg) -> Html msg
 variantSelectView paddingClass variantSelect =
     if List.isEmpty variantSelect then
         div [] []
@@ -304,7 +289,7 @@ priceView style maybeSelectedVariant =
 
 
 detailFormView : CartFormData -> Product -> Maybe SeedAttribute -> List Category -> Html Msg
-detailFormView { maybeSelectedVariant, maybeSelectedVariantId, quantity, isOutOfStock, variantSelect, selectedItemNumber, offersMeta, requestFeedback } product maybeSeedAttribute categories =
+detailFormView { maybeSelectedVariant, maybeSelectedVariantId, quantity, variantSelect, selectedItemNumber, offersMeta, requestFeedback } product maybeSeedAttribute categories =
     let
         formAttributes =
             (::) (class "add-to-cart-form tw:flex tw:flex-col tw:grow") <|
@@ -314,13 +299,6 @@ detailFormView { maybeSelectedVariant, maybeSelectedVariantId, quantity, isOutOf
 
                     Nothing ->
                         []
-
-        availabilityBadge =
-            if isOutOfStock then
-                addToCartInputDisabled
-
-            else
-                text ""
 
         categoryBlocks =
             List.filter (not << String.isEmpty << .description) categories
@@ -343,11 +321,11 @@ detailFormView { maybeSelectedVariant, maybeSelectedVariantId, quantity, isOutOf
             ]
         , div [ class "tw:pt-[12px] tw:pb-[24px]" ] [ priceView Detail maybeSelectedVariant ]
         , outOfStockView "tw:pb-[24px]" maybeSelectedVariant
+        , limitedAvailabilityView "tw:pb-[24px]" maybeSelectedVariant
         , variantSelectView "tw:pb-[24px]" variantSelect
         , Html.map never requestFeedback
         , div [ class "tw:pb-[28px] tw:w-full tw:flex tw:flex-col" ]
-            [ viewIfLazy (not isOutOfStock) (addToCartInput Detail quantity product maybeSelectedVariant)
-            , availabilityBadge
+            [ addToCartInput Detail quantity product maybeSelectedVariant
             ]
         , Html.map never offersMeta
         , div [ Microdata.description, class "tw:text-[16px] static-page" ] [ rawHtml product.longDescription ]
@@ -383,7 +361,7 @@ detailView addToCartForms { product, variants, maybeSeedAttribute, categories } 
 
 
 cardFormView : CartFormData -> Product -> Maybe SeedAttribute -> Html Msg
-cardFormView { maybeSelectedVariant, maybeSelectedVariantId, quantity, isOutOfStock, variantSelect, selectedItemNumber, offersMeta, requestFeedback } product maybeSeedAttribute =
+cardFormView { maybeSelectedVariant, maybeSelectedVariantId, quantity, variantSelect, selectedItemNumber, offersMeta, requestFeedback } product maybeSeedAttribute =
     let
         formAttributes =
             (::) (class "add-to-cart-form tw:flex tw:flex-col tw:grow") <|
@@ -394,16 +372,11 @@ cardFormView { maybeSelectedVariant, maybeSelectedVariantId, quantity, isOutOfSt
                     Nothing ->
                         []
 
-        availabilityBadge =
-            if isOutOfStock then
-                addToCartInputDisabled
-
-            else
-                text ""
     in
     form formAttributes
         [ div [ class "tw:pt-[12px] " ] [ productAttrView selectedItemNumber maybeSeedAttribute ]
         , outOfStockView "tw:pt-[12px]" maybeSelectedVariant
+        , limitedAvailabilityView "tw:pt-[12px]" maybeSelectedVariant
         , variantSelectView "tw:pt-[12px]" variantSelect
         , div [ Microdata.description, class "tw:pt-[16px] tw:line-clamp-4 tw:text-[14px] static-page" ] [ rawHtml product.longDescription ]
         , Microdata.mpnMeta product.baseSKU
@@ -416,8 +389,7 @@ cardFormView { maybeSelectedVariant, maybeSelectedVariantId, quantity, isOutOfSt
             , div [ class "tw:flex tw:items-center" ]
                 [ priceView Card maybeSelectedVariant
                 , div [ class "tw:grow" ] []
-                , viewIfLazy (not isOutOfStock) (addToCartInput Card quantity product maybeSelectedVariant)
-                , availabilityBadge
+                , addToCartInput Card quantity product maybeSelectedVariant
                 , Html.map never offersMeta
                 ]
             ]
@@ -641,14 +613,15 @@ addToCartInputDisabled =
             , size = Button.Large
         }
 
-
 limitedAvailabilityBadge : Html msg
 limitedAvailabilityBadge =
-    span [ class "badge badge-warning" ] [ text "Limited Availability" ]
+    div [ class "tw:text-[rgba(250,173,20,1)] tw:pt-[4px] tw:pb-[4px] tw:px-[12px] tw:rounded-[8px] tw:bg-[rgba(250,173,20,0.1)] tw:border tw:border-[rgba(250,173,20,0.4)]" ]
+        [ span [ class "tw:block tw:font-semibold tw:text-[14px] tw:leading-[20px]" ] [ text "Limited Stock — expect delays" ]
+        ]
 
 
-addToCartInput : ProductFormStyle -> Int -> Product -> Maybe ProductVariant -> () -> Html Msg
-addToCartInput style quantity product maybeSelectedVariant _ =
+addToCartInput : ProductFormStyle -> Int -> Product -> Maybe ProductVariant -> Html Msg
+addToCartInput style quantity product maybeSelectedVariant =
     let
         ( class_, buttonView ) =
             case style of
@@ -685,7 +658,7 @@ addToCartInput style quantity product maybeSelectedVariant _ =
     in
     case maybeSelectedVariant of
         Just selectedVariant ->
-            if selectedVariant.quantity <= 0 then
+            if not (Product.isPurchaseable selectedVariant) then
                 addToCartInputDisabled
 
             else

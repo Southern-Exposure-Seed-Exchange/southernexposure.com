@@ -15,7 +15,7 @@ import Html.Events exposing (onClick, onSubmit)
 import Html.Extra exposing (viewIf)
 import Json.Encode as Encode
 import Models.Fields exposing (Cents(..), centsMap)
-import PageData exposing (CartDetails, CartItemId(..))
+import PageData exposing (CartDetails, CartItemId(..), showCartItemError, showCartItemWarning)
 import Pages.Cart.Type exposing (..)
 import Product exposing (variantPrice)
 import Products.Views as ProductView
@@ -25,6 +25,7 @@ import User exposing (AuthStatus, unauthorized)
 import Views.Aria as Aria
 import Views.Format as Format
 import Views.Utils exposing (htmlOrBlank, icon, rawHtml, routeLinkAttributes)
+import Product exposing (InventoryPolicy(..))
 
 
 
@@ -37,7 +38,7 @@ fromCartDetails { items } =
         (\item acc -> Dict.insert ((\(CartItemId i) -> i) item.id) item.quantity acc)
         Dict.empty
         items
-        |> \i -> Form i Dict.empty
+        |> Form
 
 
 update :
@@ -55,8 +56,6 @@ update msg authStatus maybeCartToken model details =
                     Dict.update (fromCartItemId itemId)
                         (always <| Just quantity)
                         model.quantities
-                 , errors =
-                    Dict.remove (String.fromInt <| fromCartItemId itemId) model.errors
               }
             , Nothing
             , Cmd.none
@@ -79,8 +78,6 @@ update msg authStatus maybeCartToken model details =
                                     Just (a + 1)
                         )
                         model.quantities
-                , errors =
-                    Dict.remove (String.fromInt <| fromCartItemId itemId) model.errors
               }
             , Nothing
             , Cmd.none
@@ -107,15 +104,13 @@ update msg authStatus maybeCartToken model details =
                                         Just <| a - 1
                         )
                         model.quantities
-                , errors =
-                    Dict.remove (String.fromInt <| fromCartItemId itemId) model.errors
               }
             , Nothing
             , Cmd.none
             )
 
         Remove itemId ->
-            ( { model | errors = Dict.remove (String.fromInt <| fromCartItemId itemId) model.errors }, Nothing, removeItem authStatus maybeCartToken itemId )
+            ( model, Nothing, removeItem authStatus maybeCartToken itemId )
 
         Submit ->
             ( model, Nothing, updateCart authStatus maybeCartToken model (Just details) )
@@ -124,9 +119,6 @@ update msg authStatus maybeCartToken model details =
             case response of
                 RemoteData.Success (Ok cartDetails) ->
                     ( initial, Just cartDetails, Cmd.none )
-
-                RemoteData.Success (Err errors) ->
-                    ( { model | errors = errors }, Nothing, Cmd.none )
 
                 _ ->
                     ( model, Nothing, Cmd.none )
@@ -201,10 +193,18 @@ customerUpdateRequest body =
 
 
 view : AuthStatus -> Form -> CartDetails -> List (Html Msg)
-view authStatus ({ quantities, errors } as form_) ({ items, charges } as cartDetails) =
+view authStatus ({ quantities } as form_) ({ items, charges } as cartDetails) =
     let
         itemCount =
             List.foldl (.quantity >> (+)) 0 items
+
+        checkoutEnabled = List.all
+            (\item ->
+                if item.variant.inventoryPolicy == RequireStock then
+                    item.quantity <= item.variant.quantity
+                else True
+            )
+            items
 
         -- TODO: Add commas to format
         cartTable =
@@ -248,7 +248,7 @@ view authStatus ({ quantities, errors } as form_) ({ items, charges } as cartDet
                                 else
                                     " Checkout"
                             , type_ =
-                                if size errors > 0 then
+                                if not checkoutEnabled then
                                     Button.Disabled
                                 else Button.Link <| reverse Checkout
                             , iconEnd = Just arrowRightSvg
@@ -269,7 +269,7 @@ view authStatus ({ quantities, errors } as form_) ({ items, charges } as cartDet
                         ]
                 ]
 
-        productRow { id, product, variant, quantity } = div []
+        productRow { id, product, variant, quantity, errors, warnings } = div []
             [ div [ class "tw:flex tw:py-[20px]" ]
                 [ div [ class "tw:shrink-0" ]
                     [ ProductView.productImageLinkView "tw:w-[169px] tw:h-[130px]" product (Just variant.id)
@@ -308,12 +308,12 @@ view authStatus ({ quantities, errors } as form_) ({ items, charges } as cartDet
                         ]
                     ]
                 ]
-            , case (get (String.fromInt (fromCartItemId id)) errors) of
-                Just errs -> div [ class "tw:py-[8px] text-danger font-weight-bold small" ]
-                    [ text (String.join ", " errs) ]
-
-                Nothing ->
-                    text ""
+            , viewIf (List.length errors > 0) <|
+                div [ class "tw:py-[8px] text-danger font-weight-bold small" ]
+                    [ text <| String.join ", " (List.map showCartItemError errors) ]
+            , viewIf (List.length warnings > 0) <|
+                div [ class "tw:py-[8px] text-warning font-weight-bold small" ]
+                    [ text <| String.join ", " (List.map showCartItemWarning warnings) ]
             ]
 
         tableFooter =

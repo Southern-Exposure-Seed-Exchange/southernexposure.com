@@ -3,11 +3,12 @@ module Product exposing
     , ProductId(..)
     , ProductVariant
     , ProductVariantId(..)
+    , InventoryPolicy(..)
     , decoder
     , idDecoder
     , idEncoder
-    , isLimitedAvailablity
-    , isOutOfStock
+    , isLimitedAvailability
+    , isPurchaseable
     , nameWithLotSize
     , productMainImage
     , singleVariantName
@@ -99,6 +100,27 @@ type ProductVariantId
     = ProductVariantId Int
 
 
+type InventoryPolicy
+    = RequireStock
+    | AllowBackorder
+    | Unlimited
+
+inventoryPolicyDecoder : Decoder InventoryPolicy
+inventoryPolicyDecoder =
+    Decode.string
+        |> Decode.andThen
+            (\s ->
+                case s of
+                    "requireStock" ->
+                        Decode.succeed RequireStock
+                    "allowBackorder" ->
+                        Decode.succeed AllowBackorder
+                    "unlimited" ->
+                        Decode.succeed Unlimited
+                    _ ->
+                        Decode.fail ("Unknown inventory policy: " ++ s)
+            )
+
 {-| TODO: isActive is unused, quantity only used for in-stock status
 -}
 type alias ProductVariant =
@@ -109,9 +131,15 @@ type alias ProductVariant =
     , salePrice : Maybe Cents
     , quantity : Int
     , lotSize : Maybe LotSize
+    , inventoryPolicy : InventoryPolicy
     , isActive : Bool
     }
 
+isPurchaseable : ProductVariant -> Bool
+isPurchaseable variant = not (variant.quantity <= 0 && variant.inventoryPolicy == RequireStock)
+
+isLimitedAvailability : ProductVariant -> Bool
+isLimitedAvailability variant = variant.inventoryPolicy == AllowBackorder && variant.quantity <= 0
 
 variantPrice : ProductVariant -> Cents
 variantPrice { price, salePrice } =
@@ -128,14 +156,8 @@ variantDecoder =
         (Decode.field "salePrice" <| Decode.nullable <| Decode.map Cents Decode.int)
         (Decode.field "quantity" Decode.int)
         (Decode.field "lotSize" <| Decode.nullable lotSizeDecoder)
-        (Decode.field "isActive" Decode.bool)
-
-
-isOutOfStock : List ProductVariant -> Bool
-isOutOfStock =
-    List.all (\v -> v.quantity <= 0)
-
-
-isLimitedAvailablity : List ProductVariant -> Bool
-isLimitedAvailablity =
-    List.any (\v -> v.quantity <= 0)
+        (Decode.field "inventoryPolicy" inventoryPolicyDecoder)
+        |> Decode.andThen (\partialData ->
+                Decode.map (\isActive -> partialData isActive )
+                (Decode.field "isActive" Decode.bool)
+        )

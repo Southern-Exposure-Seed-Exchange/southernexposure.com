@@ -76,6 +76,7 @@ ProductVariant json
     quantity Int64
     lotSize LotSize Maybe
     isActive Bool
+    inventoryPolicy InventoryPolicy default='Unlimited'
     UniqueSku productId skuSuffix
     deriving Show
 
@@ -737,5 +738,9 @@ migrations =
     , 2 ~> 3 :=
         -- Add 'deleted' to 'Product'
         [ AddColumn "product" (Column "deleted" SqlBool [NotNull, Default $ toPersistValue False]) (Just $ toPersistValue False)
+        ]
+    , 3 ~> 4 :=
+        -- Add 'inventory_policy' to 'ProductVariant'
+        [ AddColumn "product_variant" (Column "inventory_policy" SqlString [NotNull, Default $ toPersistValue Unlimited]) (Just $ toPersistValue Unlimited)
         ]
     ]

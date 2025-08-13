@@ -479,6 +479,37 @@ formDecoder =
         |> Decode.required "imageUrls" (Decode.array Decode.string)
 
 
+type InventoryPolicy
+    = RequireStock
+    | AllowBackorder
+    | Unlimited
+
+inventoryPolicyToString : InventoryPolicy -> String
+inventoryPolicyToString policy =
+    case policy of
+        RequireStock -> "requireStock"
+
+        AllowBackorder -> "allowBackorder"
+
+        Unlimited -> "unlimited"
+
+decodeInventoryPolicy : Decoder String -> Decoder InventoryPolicy
+decodeInventoryPolicy = Decode.andThen
+    (\s ->
+        case s of
+            "requireStock" ->
+                Decode.succeed RequireStock
+
+            "allowBackorder" ->
+                Decode.succeed AllowBackorder
+
+            "unlimited" ->
+                Decode.succeed Unlimited
+
+            _ ->
+                Decode.fail ("Unknown inventory policy: " ++ s)
+    )
+
 type alias Variant =
     { skuSuffix : String
     , price : String
@@ -486,6 +517,7 @@ type alias Variant =
     , lotSizeAmount : String
     , lotSizeSelector : LotSizeSelector
     , isActive : Bool
+    , inventoryPolicy : InventoryPolicy
     , id : Maybe Int
     }
 
@@ -498,6 +530,7 @@ initialVariant =
     , lotSizeAmount = ""
     , lotSizeSelector = LSMass
     , isActive = True
+    , inventoryPolicy = Unlimited
     , id = Nothing
     }
 
@@ -545,13 +578,14 @@ variantDecoder =
                 Just (Plugs _) ->
                     LSPlugs
     in
-    Decode.map7 Variant
+    Decode.map8 Variant
         (Decode.field "skuSuffix" Decode.string)
         (Decode.field "price" <| Decode.map centsToString centsDecoder)
         (Decode.field "quantity" <| Decode.map String.fromInt Decode.int)
         (Decode.field "lotSize" <| Decode.map sizeToAmount <| Decode.nullable lotSizeDecoder)
         (Decode.field "lotSize" <| Decode.map sizeToSelector <| Decode.nullable lotSizeDecoder)
         (Decode.field "isActive" Decode.bool)
+        (Decode.field "inventoryPolicy" (decodeInventoryPolicy Decode.string))
         (Decode.field "id" <| Decode.nullable Decode.int)
 
 
@@ -723,6 +757,7 @@ type VariantMsg
     | InputLotSizeAmount String
     | SelectLotSizeSelector LotSizeSelector
     | ToggleVariantIsActive Bool
+    | SelectInventoryPolicy InventoryPolicy
 
 
 updateVariant : VariantMsg -> Variant -> Variant
@@ -746,6 +781,9 @@ updateVariant msg model =
         ToggleVariantIsActive val ->
             { model | isActive = val }
 
+        SelectInventoryPolicy val ->
+            { model | inventoryPolicy = val }
+
 
 {-| A validated variant has it's String inputs turned into the types expected
 by the API.
@@ -756,6 +794,7 @@ type alias ValidVariant =
     , quantity : Int
     , lotSize : Maybe LotSize
     , isActive : Bool
+    , inventoryPolicy : InventoryPolicy
     , id : Maybe Int
     }
 
@@ -771,6 +810,9 @@ variantEncoder variant =
                 |> Maybe.withDefault Encode.null
           )
         , ( "isActive", Encode.bool variant.isActive )
+        , ( "inventoryPolicy"
+          , Encode.string (inventoryPolicyToString variant.inventoryPolicy)
+          )
         , ( "id"
           , Maybe.map Encode.int variant.id
                 |> Maybe.withDefault Encode.null
@@ -823,6 +865,7 @@ validateVariant ({ lotSizeAmount } as variant) =
             , price = price
             , quantity = quantity
             , lotSize = lotSize
+            , inventoryPolicy = variant.inventoryPolicy
             }
         )
         |> Validation.apply "price" (Validation.cents variant.price)
@@ -1011,7 +1054,36 @@ variantForm errors index variant =
             (UpdateVariant index << ToggleVariantIsActive)
             "Is Enabled"
             (fieldName "isEnabled")
+        , inventoryPolicyRow index variant.inventoryPolicy
         , removeButton
+        ]
+
+inventoryPolicyRow : Int -> InventoryPolicy -> Html FormMsg
+inventoryPolicyRow index selectedPolicy =
+    let
+        options = [ RequireStock, AllowBackorder, Unlimited ]
+            |> List.map
+                (\p ->
+                    option
+                        [ value <| inventoryPolicyToString p
+                        , selected <| p == selectedPolicy
+                        ]
+                        [ text <| case p of
+                            RequireStock -> "Require Stock"
+                            AllowBackorder -> "Allow Backorder"
+                            Unlimited -> "Unlimited"
+                        ]
+                )
+    in
+    Form.withLabel "Inventory Policy"
+        True
+        [ select
+            [ id <| "input-inventoryPolicy"
+            , name <| "variant-inventoryPolicy"
+            , targetValue |> decodeInventoryPolicy |> Decode.map (UpdateVariant index << SelectInventoryPolicy) |> on "change"
+            , class "form-control w-25 d-inline-block"
+            ]
+            options
         ]
 
 

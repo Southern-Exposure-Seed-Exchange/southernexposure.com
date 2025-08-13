@@ -628,3 +628,38 @@ instance FromJSON SaleType where
                 PercentSale <$> v .: "amount"
             unexpected ->
                 fail $ "Unexpected SaleType type: " ++ T.unpack unexpected
+
+-- INVENTORY POLICY
+
+data InventoryPolicy
+    = RequireStock
+    -- ^ Purchase is disabled when QOH is 0.
+    | AllowBackorder
+    -- ^ Purchase is always allowed, but when QOH is 0 or less, a
+    -- disclaimer regarding increased shipping time is shown.
+    | Unlimited
+    -- ^ Purchase is always allowed, and no disclaimer is shown.
+    deriving (Show, Read, Eq, Generic)
+
+derivePersistField "InventoryPolicy"
+
+instance ToJSON InventoryPolicy where
+    toJSON = \case
+        RequireStock ->
+            "requireStock"
+        AllowBackorder ->
+            "allowBackorder"
+        Unlimited ->
+            "unlimited"
+
+instance FromJSON InventoryPolicy where
+    parseJSON = withText "InventoryPolicy" $ \t ->
+        case t of
+            "requireStock" ->
+                return RequireStock
+            "allowBackorder" ->
+                return AllowBackorder
+            "unlimited" ->
+                return Unlimited
+            _ ->
+                fail $ "Unexpected InventoryPolicy: " ++ T.unpack t

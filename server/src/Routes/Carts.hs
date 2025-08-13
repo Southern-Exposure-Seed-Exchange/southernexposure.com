@@ -16,7 +16,7 @@ import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Trans (lift)
 import Data.Aeson ((.:), (.:?), (.=), FromJSON(..), ToJSON(..), object, withObject)
 import Data.Int (Int64)
-import Data.Maybe (fromMaybe, listToMaybe)
+import Data.Maybe (catMaybes, fromMaybe, listToMaybe)
 import Data.Time.Clock (getCurrentTime, addUTCTime)
 import Database.Persist
     ( (+=.), (=.), (==.), Entity(..), get, getBy, insert, insertEntity, update
@@ -28,8 +28,9 @@ import Servant ((:>), (:<|>)(..), AuthProtect, ReqBody, JSON, PlainText, Get, Po
 
 import Auth
 import Models
-import Models.Fields (AddressType(..), AvalaraCustomerCode(..))
-import Routes.CommonData (CartItemData(..), CartCharges(..), getCartItems, getCharges, toAddressData)
+import Models.Fields (AddressType(..), AvalaraCustomerCode(..), InventoryPolicy(..))
+import Routes.CommonData
+    ( CartItemData(..), CartCharges(..), CartItemError(..), CartItemWarning(..), VariantData(..), getCartItems, getCharges, toAddressData)
 import Routes.Utils (generateUniqueToken, getDisabledCheckoutDetails)
 import Server
 import Validation (Validation(..))
@@ -256,6 +257,7 @@ validateVariant variantId purchaseAmount cartId =
                         ". Requested: " <> T.pack (show (purchaseAmount + maybe 0 fromIntegral mbCartQuantity)) <> "."
                         , productVariantQuantity variant < fromIntegral purchaseAmount + maybe 0 fromIntegral mbCartQuantity
                         )
+                    | productVariantInventoryPolicy variant == RequireStock
                     ]
             return $ inactiveError <> soldOutError
 
@@ -268,15 +270,17 @@ type CustomerDetailsRoute =
     :> Get '[JSON] (Cookied CartDetailsData)
 
 customerDetailsRoute :: WrappedAuthToken -> App (Cookied CartDetailsData)
-customerDetailsRoute token = withValidatedCookie token getCustomerCartDetails
+customerDetailsRoute token = withValidatedCookie token $ \entity -> getCustomerCartDetails entity Nothing
 
-getCustomerCartDetails :: Entity Customer -> App CartDetailsData
-getCustomerCartDetails (Entity customerId customer) =
+getCustomerCartDetails :: Entity Customer -> Maybe [CartItemData] -> App CartDetailsData
+getCustomerCartDetails (Entity customerId customer) maybeItems =
     runDB $ do
         (checkoutDisabled, disabledMsg) <- lift getDisabledCheckoutDetails
         shippingAddress <- getShipping
-        items <- getCartItems $ \c ->
-            c E.^. CartCustomerId E.==. E.just (E.val customerId)
+        items <- case maybeItems of
+            Just items -> return items
+            Nothing -> getCartItems $ \c ->
+                c E.^. CartCustomerId E.==. E.just (E.val customerId)
         let avalaraCode = fromAvalaraCustomerCode <$> customerAvalaraCode customer
         charges <- getCharges shippingAddress avalaraCode items Nothing False False
         return $ CartDetailsData items charges checkoutDisabled disabledMsg
@@ -293,7 +297,7 @@ getCustomerCartDetails (Entity customerId customer) =
 
 newtype AnonymousDetailsParameters =
     AnonymousDetailsParameters
-        { adpCartToken :: T.Text
+        { _adpCartToken :: T.Text
         }
 
 instance FromJSON AnonymousDetailsParameters where
@@ -306,11 +310,17 @@ type AnonymousDetailsRoute =
     :> Post '[JSON] CartDetailsData
 
 anonymousDetailsRoute :: AnonymousDetailsParameters -> App CartDetailsData
-anonymousDetailsRoute parameters =
+anonymousDetailsRoute (AnonymousDetailsParameters cartToken) = do
+    getAnonymousCartDetails cartToken Nothing
+
+getAnonymousCartDetails :: T.Text -> Maybe [CartItemData] -> App CartDetailsData
+getAnonymousCartDetails cartToken maybeItems =
     runDB $ do
         (checkoutDisabled, disabledMsg) <- lift getDisabledCheckoutDetails
-        items <- getCartItems $ \c ->
-            c E.^. CartSessionToken E.==. E.just (E.val $ adpCartToken parameters)
+        items <- case maybeItems of
+            Just items -> return items
+            Nothing -> getCartItems $ \c ->
+                c E.^. CartSessionToken E.==. E.just (E.val  cartToken)
         charges <- getCharges Nothing Nothing items Nothing False False
         return $ CartDetailsData items charges checkoutDisabled disabledMsg
 
@@ -338,13 +348,11 @@ customerUpdateRoute :: WrappedAuthToken -> CustomerUpdateParameters -> App (Cook
 customerUpdateRoute token parameters = withCookie token $ \authToken -> do
     customer@(Entity customerId _) <- validateToken authToken
     maybeCart <- runDB . getBy . UniqueCustomerCart $ Just customerId
-    case maybeCart of
+    items <- case maybeCart of
         Nothing ->
             serverError err404
-        Just (Entity cartId _) -> do
-            validate (ValidateCartParameters cartId (cupQuantities parameters)) >> do
-                updateOrDeleteItems cartId $ cupQuantities parameters
-    getCustomerCartDetails customer
+        Just (Entity cartId _) -> updateOrDeleteItems cartId $ cupQuantities parameters
+    getCustomerCartDetails customer (Just items)
 
 
 data AnonymousUpdateParameters =
@@ -367,28 +375,44 @@ anonymousUpdateRoute :: AnonymousUpdateParameters -> App CartDetailsData
 anonymousUpdateRoute parameters = do
     let token = aupCartToken parameters
     maybeCart <- runDB . getBy . UniqueAnonymousCart $ Just token
-    case maybeCart of
+    items <- case maybeCart of
         Nothing ->
             serverError err404
-        Just (Entity cartId _) ->
-            validate (ValidateCartParameters cartId (aupQuantities parameters)) >> do
-                updateOrDeleteItems cartId $ aupQuantities parameters
-    anonymousDetailsRoute $ AnonymousDetailsParameters token
+        Just (Entity cartId _) -> updateOrDeleteItems cartId $ aupQuantities parameters
+    getAnonymousCartDetails token (Just items)
 
 
-updateOrDeleteItems :: CartId -> M.Map Int64 Natural -> App ()
-updateOrDeleteItems cartId =
-    runDB . M.foldlWithKey
-        (\acc key val -> acc >>
-            if val == 0 then
-                deleteWhere
-                    [ CartItemId ==. toSqlKey key, CartItemCartId ==. cartId ]
-            else
-                updateWhere
-                    [ CartItemId ==. toSqlKey key, CartItemCartId ==. cartId ]
-                    [ CartItemQuantity =. fromIntegral val ]
-        )
-        (return ())
+updateOrDeleteItems :: CartId -> M.Map Int64 Natural -> App [CartItemData]
+updateOrDeleteItems cartId updates = runDB $ do
+    cartItems <- getCartItems $ \c ->
+        c E.^. CartId E.==. E.val cartId
+    fmap catMaybes $ forM cartItems $ \cartItem -> do
+        let cartItemIdRaw = E.fromSqlKey $ cidItemId cartItem
+        case M.lookup cartItemIdRaw updates of
+            Nothing -> return $ Just cartItem
+            Just newQuantity -> do
+                if newQuantity == 0 then do
+                    deleteWhere [ CartItemId ==. toSqlKey cartItemIdRaw, CartItemCartId ==. cartId ]
+                    return Nothing
+                else do
+                    if fromIntegral newQuantity > vdQuantity (cidVariant cartItem) then
+                        case vdInventoryPolicy (cidVariant cartItem) of
+                            RequireStock -> return $ Just $ cartItem
+                                { cidErrors = [OutOfStockError (fromIntegral $ vdQuantity (cidVariant cartItem)) (fromIntegral newQuantity)] }
+                            AllowBackorder -> do
+                                updateCartItem newQuantity (cidItemId cartItem)
+                                return $ Just cartItem { cidWarnings = [LimitedAvailabilityWarning], cidQuantity = fromIntegral newQuantity }
+                            Unlimited -> do
+                                updateCartItem newQuantity (cidItemId cartItem)
+                                return $ Just cartItem { cidQuantity = fromIntegral newQuantity }
+                    else do
+                        updateCartItem newQuantity (cidItemId cartItem)
+                        return $ Just cartItem { cidQuantity = fromIntegral newQuantity, cidErrors = [], cidWarnings = [] }
+    where
+        updateCartItem newQuantity cartItemId = do
+            updateWhere
+                [ CartItemId ==. cartItemId, CartItemCartId ==. cartId ]
+                [ CartItemQuantity =. fromIntegral newQuantity ]
 
 
 data ValidateCartParameters = ValidateCartParameters CartId (M.Map Int64 Natural)
@@ -397,7 +421,7 @@ instance Validation ValidateCartParameters where
     validators (ValidateCartParameters cartId quantities) =
         runDB $ forM (M.toList quantities) $ \(itemId, quantity) -> (T.pack $ show itemId,) <$> do
             let nonNegativeQuantityValidation = V.zeroOrPositive quantity
-            mbVariantQuantity <- fmap (fmap E.unValue . listToMaybe) <$> E.select $ do
+            mbVariantInfo <- fmap listToMaybe <$> E.select $ do
                 (c E.:& ci E.:& pv) <- E.from $ E.table @Cart
                     `E.innerJoin` E.table @CartItem
                         `E.on` (\(c E.:& ci) -> ci E.^. CartItemCartId E.==. c E.^. CartId)
@@ -405,17 +429,19 @@ instance Validation ValidateCartParameters where
                         `E.on` (\(_c E.:& ci E.:& pv) -> ci E.^. CartItemProductVariantId E.==. pv E.^. ProductVariantId)
                 E.where_ $ c E.^. CartId E.==. E.val cartId
                 E.where_ $ ci E.^. CartItemId E.==. E.val (toSqlKey itemId)
-                return $ pv E.^. ProductVariantQuantity
-            let variantStockValidation = case mbVariantQuantity of
+                return (pv E.^. ProductVariantQuantity, pv E.^. ProductVariantInventoryPolicy)
+            let variantStockValidation = case mbVariantInfo of
                     Nothing ->
-                        ("Product does not exist.", True)
-                    Just variantQuantity ->
-                        ( "This Product has less stock than requested. " <>
+                        [("Product does not exist.", True)]
+                    Just (E.Value variantQuantity, E.Value inventoryPolicy) ->
+                        [ ( "This Product has less stock than requested. " <>
                           "Available: " <> T.pack (show variantQuantity) <>
                           ". Requested: " <> T.pack (show quantity) <> "."
-                        , variantQuantity < fromIntegral quantity
-                        )
-            return [nonNegativeQuantityValidation, variantStockValidation]
+                          , variantQuantity < fromIntegral quantity
+                          )
+                        | inventoryPolicy == RequireStock
+                        ]
+            return $ nonNegativeQuantityValidation : variantStockValidation
 
 -- COUNT
 
