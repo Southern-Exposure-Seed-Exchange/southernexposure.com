@@ -189,7 +189,7 @@ requestView tagger model =
                     [ div
                         [ class "tw:p-[16px]! tw:rounded-[16px] tw:bg-[rgba(30,12,3,0.03)]"
                         ]
-                        [ labelView "inputEmail" "Email Address"
+                        [ labelView "inputEmail" "Email Address" True
                         , input
                             [ id "inputEmail"
                             , class "form-control"
@@ -245,7 +245,7 @@ inputRow errors msg inputValue inputId labelText errorField inputType completion
                     |> div [ class "invalid-feedback" ]
     in
     div [ class "form-group" ]
-        [ labelView ("input" ++ inputId) labelText
+        [ labelView ("input" ++ inputId) labelText True
         , input
             [ id <| "input" ++ inputId
             , class inputClass

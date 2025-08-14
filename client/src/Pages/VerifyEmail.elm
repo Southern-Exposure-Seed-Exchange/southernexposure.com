@@ -132,6 +132,7 @@ view model logoutMsg =
                             { defaultAlert
                                 | content = text "Email was successfully verified!"
                                 , style = Alert.Success
+                                , icon = Just Alert.defaultSuccessIcon
                             }
 
                     Expired ->
@@ -139,6 +140,7 @@ view model logoutMsg =
                             { defaultAlert
                                 | content = text "Your verification link already expired. Please, check your mailbox for a new one."
                                 , style = Alert.Danger
+                                , icon = Just Alert.defaultDangerIcon
                             }
                 , if model.status == Success then
                     div [ class "tw:p-[16px]" ]

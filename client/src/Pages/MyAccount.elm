@@ -40,7 +40,7 @@ view zone locations { storeCredit, orderSummaries } =
                                     , span [ class "tw:font-semibold" ] [ text <| Format.cents storeCredit ]
                                     , span [] [ text " of Store Credit available. You can use this during Checkout." ]
                                     ]
-                            , icon = Just (span [ class "tw:pt-[1px]" ] [ discountSvg ])
+                            , icon = Just (span [ class "tw:pt-[1px]" ] [ discountSvg "tw:fill-[#4DAA9A]" ])
                         }
                     ]
 

@@ -3,9 +3,9 @@ module Views.HorizontalForm exposing
     , dateRow
     , genericErrorText
     , inputRow
+    , selectCol
     , selectElement
     , selectRow
-    , selectCol
     , textareaRow
     , withLabel
     )
@@ -32,13 +32,12 @@ genericErrorText hasErrors =
                             "There were issues processing your request, "
                                 ++ "please correct any errors highlighted below "
                                 ++ "& resubmit the form."
+                    , icon = Just Alert.defaultDangerIcon
                 }
             ]
 
     else
         text ""
-
-
 
 
 {-| TODO: Have users define a Field type w/ functions to convert to required
@@ -166,6 +165,7 @@ selectRow parser msg labelText isRequired options =
         |> List.singleton
         |> withLabel labelText isRequired
 
+
 selectCol : (String -> Result String a) -> (a -> msg) -> String -> Bool -> List (Html msg) -> Html msg
 selectCol parser msg labelText isRequired options =
     selectElement labelText "" parser msg options
@@ -269,19 +269,10 @@ withLabelCol labelText isRequired input =
     let
         inputId =
             String.filter (\c -> c /= ' ') labelText
-
-        optionalHtml =
-            if not isRequired then
-                small [ class "horizontal-optional-text d-block text-muted mr-1 tw:pb-[6px]" ]
-                    [ text "(optional)" ]
-
-            else
-                text ""
     in
     div [ class "tw:flex tw:flex-col" ]
         [ div [ class "tw:flex tw:items-center tw:gap-[4px]" ]
-            [ labelView ("input" ++ inputId) labelText
-            , optionalHtml
+            [ labelView ("input" ++ inputId) labelText isRequired
             ]
         , div [ class "" ] input
         ]

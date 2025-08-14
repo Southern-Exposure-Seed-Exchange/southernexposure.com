@@ -2,15 +2,13 @@ module Views.Utils exposing (..)
 
 import File exposing (File)
 import File.Select as Select
-import Html exposing (Attribute, Html, div, h1, i, legend, text)
-import Html.Attributes exposing (attribute, class, href)
+import Html exposing (Attribute, Html, div, h1, i, label, legend, p, small, text)
+import Html.Attributes exposing (attribute, class, for, href)
 import Html.Events exposing (on)
 import Html.Events.Extra exposing (targetValueInt)
 import Json.Decode as Decode
 import Markdown exposing (defaultOptions)
 import Routing exposing (Route, reverse)
-import Html.Attributes exposing (for)
-import Html exposing (label)
 
 
 routeLinkAttributes : Route -> List (Attribute msg)
@@ -123,11 +121,28 @@ pageTitleView label =
     h1 [ class "tw:pl-[8px] tw:text-[32px]! tw:pb-[20px]" ] [ text label ]
 
 
+pageTitleWithSubView label sub =
+    div []
+        [ h1 [ class "tw:pl-[8px] tw:text-[32px]!" ]
+            [ text label
+            ]
+        , p [ class "tw:pl-[8px] tw:opacity-50" ]
+            [ text sub
+            ]
+        ]
+
+
 legendView label =
     legend [ class "tw:pl-[16px]! tw:pb-[16px]! tw:text-[16px]! tw:leading-[24px]! tw:font-semibold" ] [ text label ]
 
 
-labelView : String -> String -> Html msg
-labelView forInputName labelStr =
+labelView : String -> String -> Bool -> Html msg
+labelView forInputName labelStr isRequired =
     label [ class "tw:mb-0! tw:text-[14px] tw:leading-[20px] tw:font-semibold tw:pb-[6px]", for forInputName ]
-        [ text labelStr ]
+        [ text labelStr
+        , if not isRequired then
+            small [ class "text-muted" ] [ text " (optional)" ]
+
+          else
+            text ""
+        ]

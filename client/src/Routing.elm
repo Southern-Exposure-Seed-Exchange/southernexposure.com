@@ -665,9 +665,6 @@ showSearchbar route =
         ProductDetails _ _ ->
             False
 
-        QuickOrder ->
-            False
-
         MyAccount ->
             False
 

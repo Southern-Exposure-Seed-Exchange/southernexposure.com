@@ -54,6 +54,7 @@ import Views.ShippingAdmin as ShippingAdmin
 import Views.StaticPageAdmin as StaticPageAdmin
 import Views.SurchargesAdmin as SurchargesAdmin
 import Views.Utils exposing (pageOverlay, rawHtml)
+import Views.Utils exposing (pageTitleView)
 
 
 view : Model -> Document Msg
@@ -743,8 +744,8 @@ remoteFailureView error =
 
 notFoundView : List (Html msg)
 notFoundView =
-    [ h1 [] [ text "Page Not Found" ]
-    , p []
+    [ pageTitleView "Page Not Found"
+    , p [class "tw:pl-[8px]"]
         [ text <|
             "Sorry, we couldn't find the page your were looking for. "
                 ++ "If you got to this page from our site, please contact us so we can fix our links."
@@ -796,7 +797,7 @@ staticPageView { name, slug, content } =
                 text ""
 
             else
-                h1 [ class "tw:pb-[32px]" ] [ text name ]
+                h1 [ class "tw:pl-[8px] tw:pb-[32px]" ] [ text name ]
 
         html =
             rawHtml content
@@ -805,7 +806,7 @@ staticPageView { name, slug, content } =
         -- html = Mock.Home.view
     in
     [ header
-    , div [ class "static-page" ] [ html ]
+    , div [ class "static-page tw:pl-[8px]" ] [ html ]
     ]
 
 
