@@ -369,8 +369,7 @@ type alias Form =
     , baseSku : String
     , description : String
     , variants : Array Variant
-    , imageName : String
-    , imageData : String
+    , imageData : Maybe ImageData
     , isOrganic : Bool
     , isHeirloom : Bool
     , isSmallGrower : Bool
@@ -394,8 +393,7 @@ initialForm =
     , baseSku = ""
     , description = ""
     , variants = Array.repeat 1 initialVariant
-    , imageName = ""
-    , imageData = ""
+    , imageData = Nothing
     , isOrganic = False
     , isHeirloom = False
     , isSmallGrower = False
@@ -433,13 +431,9 @@ encodeForm model validVariants maybeProductId =
         , ( "categories", Encode.array Category.idEncoder model.categories )
         , ( "baseSku", Encode.string model.baseSku )
         , ( "longDescription", Encode.string model.description )
-        , ( "imagesData", Encode.array
-                (\(fileName, base64Image) ->
-                    Encode.object
-                        [ ( "fileName", Encode.string fileName )
-                        , ( "base64Image", Encode.string base64Image )
-                    ]
-                ) (Array.fromList [ (model.imageName, model.imageData) ])
+        -- TODO: consider multiple image updates when editing products
+        , ( "imageUpdates", Maybe.withDefault (Encode.object []) <|
+                Maybe.map (\d -> Encode.object [("0", encodeImageDataOperation (ImageDataUpdate d))]) model.imageData
           )
         , ( "keywords", Encode.string model.keywords )
         , ( "shippingRestrictions", Encode.array regionEncoder model.shippingRestrictions )
@@ -465,8 +459,7 @@ formDecoder =
         |> Decode.required "baseSku" Decode.string
         |> Decode.required "longDescription" Decode.string
         |> Decode.required "variants" (Decode.array variantDecoder)
-        |> Decode.hardcoded ""
-        |> Decode.hardcoded ""
+        |> Decode.hardcoded Nothing
         |> fromAttribute "organic"
         |> fromAttribute "heirloom"
         |> fromAttribute "smallGrower"
@@ -509,6 +502,34 @@ decodeInventoryPolicy = Decode.andThen
             _ ->
                 Decode.fail ("Unknown inventory policy: " ++ s)
     )
+
+type ImageDataOperation
+    = ImageDataDelete
+    | ImageDataUpdate ImageData
+
+encodeImageDataOperation : ImageDataOperation -> Value
+encodeImageDataOperation operation =
+    case operation of
+        ImageDataDelete ->
+            Encode.object [ ( "operation", Encode.string "delete" ) ]
+
+        ImageDataUpdate imageData ->
+            Encode.object
+                [ ( "operation", Encode.string "update" )
+                , ( "data", encodeImageData imageData )
+                ]
+
+type alias ImageData =
+    { fileName : String
+    , base64Image : String
+    }
+
+encodeImageData : ImageData -> Value
+encodeImageData { fileName, base64Image } =
+    Encode.object
+        [ ( "fileName", Encode.string fileName )
+        , ( "base64Image", Encode.string base64Image )
+        ]
 
 type alias Variant =
     { skuSuffix : String
@@ -698,12 +719,12 @@ updateForm key msg model =
             ( model, selectImageFile ImageUploaded )
 
         ImageUploaded imageFile ->
-            ( { model | imageName = File.name imageFile }
+            ( { model | imageData = Just (ImageData (File.name imageFile) "") }
             , Admin.encodeImageData ImageEncoded imageFile
             )
 
         ImageEncoded imageData ->
-            noCommand { model | imageData = imageData }
+            noCommand { model | imageData = Maybe.map (\d -> { d | base64Image = imageData }) model.imageData }
 
         UpdateVariant index subMsg ->
             noCommand
@@ -907,6 +928,12 @@ formView buttonText submitMsg msgWrapper model { categories } locations id =
                     , br [] []
                     , text "Click 'Delete Product' again to confirm."
                     ]
+        (imageName, imageData) = case model.imageData of
+            Just { fileName, base64Image } ->
+                ( fileName, base64Image )
+
+            Nothing ->
+                ( "", "" )
     in
     form [ class <| Admin.formSavingClass model, onSubmit submitMsg ] <|
         List.map (Html.map msgWrapper)
@@ -925,7 +952,7 @@ formView buttonText submitMsg msgWrapper model { categories } locations id =
             , Form.checkboxRow model.isSmallGrower ToggleSmallGrower "Is Small Grower" "isSmallGrower"
             , Form.checkboxRow model.isRegional ToggleRegional "Is SouthEast" "isSouthEast"
             , existingImage
-            , Admin.imageSelectRow model.imageName model.imageData SelectImage "Image"
+            , Admin.imageSelectRow imageName imageData SelectImage "Image"
             , h3 [] [ text "Variants" ]
             , div [] <|
                 List.intersperse (hr [] []) <|
