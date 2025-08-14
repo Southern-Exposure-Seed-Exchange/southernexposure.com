@@ -91,6 +91,8 @@ module PageData exposing
     , productDetailsDecoder
     , saleTypeEncoder
     , searchConfig
+    , showCartItemError
+    , showCartItemWarning
     )
 
 import Address
@@ -1428,21 +1430,85 @@ type CartItemId
     = CartItemId Int
 
 
+type CartItemError
+    = OutOfStockError Int Int
+    | GenericError String
+
+cartItemErrorDecoder : Decoder CartItemError
+cartItemErrorDecoder =
+    Decode.field "code" Decode.string |> Decode.andThen
+        (\code ->
+            case code of
+                "OUT_OF_STOCK" ->
+                    Decode.map2 OutOfStockError
+                        (Decode.field "available" Decode.int)
+                        (Decode.field "requested" Decode.int)
+
+                "GENERIC" ->
+                    Decode.map GenericError (Decode.field "message" Decode.string)
+                _ ->
+                    Decode.fail <| "Unknown CartItemError code: " ++ code
+        )
+
+showCartItemError : CartItemError -> String
+showCartItemError error =
+    case error of
+        OutOfStockError available requested ->
+            "This product has less stock available than requested. " ++
+            "Available: " ++ String.fromInt available ++
+            ". Requested: " ++ String.fromInt requested ++ "."
+        GenericError message ->
+            message
+
+type CartItemWarning
+    = LimitedAvailabilityWarning Int
+    | GenericWarning String
+
+cartItemWarningDecoder : Decoder CartItemWarning
+cartItemWarningDecoder =
+    Decode.field "code" Decode.string |> Decode.andThen
+        (\code ->
+            case code of
+                "LIMITED_AVAILABILITY" ->
+                    Decode.map LimitedAvailabilityWarning (Decode.field "available" Decode.int)
+
+                "GENERIC" ->
+                    Decode.map GenericWarning (Decode.field "message" Decode.string)
+
+                _ ->
+                    Decode.fail <| "Unknown CartItemWarning code: " ++ code
+        )
+
+showCartItemWarning : CartItemWarning -> String
+showCartItemWarning warning =
+    case warning of
+        LimitedAvailabilityWarning available ->
+            "This product has limited availability. " ++
+                if available > 0 then
+                    "Expect delays in delivery for order with more than " ++ String.fromInt available ++ " item(s)."
+                else "Expect delays in delivery. "
+        GenericWarning message ->
+            message
+
 type alias CartItem =
     { id : CartItemId
     , product : Product
     , variant : ProductVariant
     , quantity : Int
+    , errors : List CartItemError
+    , warnings : List CartItemWarning
     }
 
 
 cartItemDecoder : Decoder CartItem
 cartItemDecoder =
-    Decode.map4 CartItem
+    Decode.map6 CartItem
         (Decode.field "id" <| Decode.map CartItemId Decode.int)
         (Decode.field "product" Product.decoder)
         (Decode.field "variant" Product.variantDecoder)
         (Decode.field "quantity" Decode.int)
+        (Decode.field "errors" <| Decode.list cartItemErrorDecoder)
+        (Decode.field "warnings" <| Decode.list cartItemWarningDecoder)
 
 
 type alias CartCharge =
