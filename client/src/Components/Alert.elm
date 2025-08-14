@@ -7,6 +7,7 @@ import Html.Attributes exposing (..)
 
 type Style
     = Success
+    | Warning
     | Danger
 
 
@@ -25,21 +26,29 @@ defaultAlert =
     }
 
 
+defaultDangerIcon : Html msg
+defaultDangerIcon =
+    div [ class "tw:pt-[3px]" ]
+        [ warningSvg
+        ]
+
+defaultSuccessIcon : Html msg
+defaultSuccessIcon =
+    div [ class "tw:pt-[3px]" ]
+        [ checkSvg
+        ]
+
+
 view : Config msg -> Html msg
 view config =
     let
-        defaultIcon =
-            case config.style of
-                Success ->
-                    checkSvg
-
-                Danger ->
-                    warningSvg
-
         class_ =
             case config.style of
                 Success ->
                     "tw:border-[rgba(77,170,154,0.4)] tw:text-[rgba(77,170,154,1)] tw:bg-[rgba(77,170,154,0.1)]"
+
+                Warning ->
+                    "tw:border-[rgba(255,197,61,1)] tw:bg-[rgba(255,197,61,0.15)]"
 
                 Danger ->
                     "tw:border-[rgba(214,34,70,0.4)] tw:text-[rgba(214,34,70,1)] tw:bg-[rgba(214,34,70,0.1)]"
@@ -50,8 +59,7 @@ view config =
                 customIcon
 
             Nothing ->
-                div [ class "tw:pt-[3px]" ]
-                    [ defaultIcon
-                    ]
+                text ""
+
         , span [ class "" ] [ config.content ]
         ]

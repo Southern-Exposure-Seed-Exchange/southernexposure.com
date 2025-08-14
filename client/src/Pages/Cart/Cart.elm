@@ -24,8 +24,8 @@ import Routing exposing (Route(..), reverse)
 import User exposing (AuthStatus, unauthorized)
 import Views.Aria as Aria
 import Views.Format as Format
-import Views.Utils exposing (htmlOrBlank, icon, rawHtml, routeLinkAttributes)
 import Product exposing (InventoryPolicy(..))
+import Views.Utils exposing (htmlOrBlank, icon, rawHtml, routeLinkAttributes, pageTitleView)
 
 
 
@@ -355,8 +355,7 @@ view authStatus ({ quantities } as form_) ({ items, charges } as cartDetails) =
         formIsUnchanged =
             isFormUnchanged quantities items
 
-        titleView =
-            h3 [ class "tw:px-[16px] tw:text-[32px] tw:leading-[32px] tw:pb-[20px]" ] [ text "Your cart" ]
+        titleView = pageTitleView "Your cart"
     in
     if not (List.isEmpty items) then
         [ titleView
