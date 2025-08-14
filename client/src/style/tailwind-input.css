@@ -80,3 +80,17 @@ select:focus {
 .se-table tr:not(:last-child) {
   @apply tw:border-b-[4px] tw:border-b-white;
 }
+
+.se-table tfoot {
+  @apply tw:border-t-[4px] tw:border-t-white;
+}
+
+.se-ul {
+  display: block;
+  list-style-type: disc; /* default bullet */
+  padding-left: 40px;
+  margin: 1em 0;
+}
+.se-ul li {
+  padding-bottom: 8px;
+}

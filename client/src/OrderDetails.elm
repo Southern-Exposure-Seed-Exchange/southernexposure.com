@@ -13,16 +13,12 @@ import PageData
 import Product
 import Time
 import Views.Format as Format
+import Views.Utils exposing (pageTitleWithSubView)
 
 
 view : Time.Zone -> Int -> AddressLocations -> PageData.OrderDetails -> List (Html msg)
 view zone orderId locations orderDetails =
-    [ h1 [ class "tw:pl-[8px] tw:text-[32px]!" ]
-        [ text <| "Order #" ++ String.fromInt orderId
-        ]
-    , p [ class "tw:pl-[8px] tw:opacity-50" ]
-        [ text (Format.date zone orderDetails.order.createdAt)
-        ]
+    [ pageTitleWithSubView ("Order #" ++ String.fromInt orderId) (Format.date zone orderDetails.order.createdAt)
     , h6 [ class "tw:pl-[8px] tw:pt-[8px]" ]
         [ text <| "Status: " ++ orderDetails.order.status
         ]
@@ -50,7 +46,6 @@ view zone orderId locations orderDetails =
                     ]
                 ]
         ]
-
     , orderTable orderDetails
     ]
 

@@ -27,6 +27,7 @@ import Locations exposing (AddressLocations, Location, Region(..), regionDecoder
 import Views.Aria as Aria
 import Views.HorizontalForm as Form
 import Views.Utils exposing (autocomplete)
+import Views.Utils exposing (labelView)
 
 
 
@@ -259,7 +260,7 @@ card address locations =
     ]
         |> List.filterMap identity
         |> List.intersperse (br [] [])
-        |> Html.address []
+        |> Html.address [class ""]
 
 
 {-| TODO: Add Region to description
@@ -440,18 +441,7 @@ type FieldMsg msg
 inputField : Api.FormErrors -> String -> String -> FieldMsg msg -> String -> String -> String -> Bool -> Html msg
 inputField errors prefix inputValue fieldMsg labelText inputName autocompleteType isRequired =
     let
-        fieldLabel =
-            label
-                [ class "mb-0"
-                , for <| prefix ++ "-" ++ inputName ++ "Input"
-                ]
-                [ text labelText
-                , if not isRequired then
-                    small [ class "text-muted" ] [ text " (optional)" ]
-
-                  else
-                    text ""
-                ]
+        fieldLabel = labelView (prefix ++ "-" ++ inputName ++ "Input") labelText isRequired
 
         addressAutocomplete str =
             autocomplete <| prefix ++ " " ++ str
@@ -509,9 +499,7 @@ inputField errors prefix inputValue fieldMsg labelText inputName autocompleteTyp
 locationSelect : Api.FormErrors -> String -> String -> (String -> msg) -> List Location -> String -> String -> Html msg
 locationSelect errors prefix selectedValue selectMsg locations labelText inputName =
     let
-        fieldLabel =
-            label [ class "mb-0", for inputId ]
-                [ text labelText ]
+        fieldLabel = labelView inputId labelText True
 
         toOption { code, name } =
             option [ value code, selected <| selectedValue == code ] [ text name ]

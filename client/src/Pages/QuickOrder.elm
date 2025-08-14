@@ -8,6 +8,7 @@ module Pages.QuickOrder exposing
 
 import Api
 import Array exposing (Array)
+import Components.Button as Button exposing (ButtonType(..), defaultButton)
 import Dict
 import Html exposing (..)
 import Html.Attributes as A exposing (class, id, name, required, type_, value)
@@ -19,7 +20,8 @@ import Ports
 import RemoteData exposing (WebData)
 import User exposing (AuthStatus)
 import Views.Aria as Aria
-import Views.Utils exposing (numericInput)
+import Views.Utils exposing (numericInput, pageTitleView)
+import Components.Svg exposing (shoppingCartSvgSmall)
 
 
 
@@ -219,12 +221,14 @@ view model =
                 formColumns ->
                     rows ++ [ tr [] (formColumns ++ [ td [] [], td [] [] ]) ]
     in
-    [ h1 [] [ text "Quick Order" ]
-    , hr [] []
-    , p [] [ h5 [] [ text "Instructions" ], instructions ]
+    [ pageTitleView "Quick Order"
+    , div [ class "tw:pl-[8px]" ]
+        [ p [ class "tw:font-semibold" ] [ text "Instructions" ]
+        , instructions
+        ]
     , form [ id "quick-order-form", onSubmit Submit ]
         [ generalErrorHtml
-        , table [ class "table table-striped table-sm quick-order-table" ]
+        , table [ class "se-table" ]
             [ thead []
                 [ tr []
                     [ th [] [ text "Item Number" ]
@@ -237,11 +241,15 @@ view model =
                 |> applyOddRow
                 |> tbody []
             ]
-        , div [ class "form-group" ]
-            [ button [ class "btn btn-primary", type_ "submit" ]
-                [ text "Add to Cart" ]
-            , button [ class "btn btn-secondary ml-3", type_ "button", onClick AddRows ]
-                [ text "Add Rows" ]
+        , div [ class "tw:flex tw:justify-center tw:pt-[28px] tw:gap-[24px]" ]
+            [ Button.view { defaultButton | label = "Add Rows", style = Button.Outline, type_ = Button.TriggerMsg AddRows, padding = Button.Width "tw:w-[160px]" }
+            , Button.view
+                { defaultButton
+                    | label = "Add to Cart"
+                    , type_ = Button.FormSubmit
+                    , padding = Button.Width "tw:w-[160px]"
+                    , icon = Just <| shoppingCartSvgSmall
+                }
             ]
         ]
     ]
@@ -307,7 +315,7 @@ renderForm errors index model =
     , td [ withMobileClass "quantity" ]
         [ input
             [ id <| "quantity-" ++ String.fromInt index
-            , class "form-control"
+            , class "form-control tw:w-[80]!"
             , name <| "quantity-" ++ String.fromInt index
             , type_ "number"
             , A.min "1"
@@ -326,7 +334,7 @@ renderForm errors index model =
 
 instructions : Html msg
 instructions =
-    ul []
+    ul [ class "se-ul" ]
         [ li []
             [ text <|
                 String.join " "
@@ -339,21 +347,21 @@ instructions =
             ]
         , li []
             [ text "Press "
-            , code [] [ text "Tab" ]
+            , code [ class "tw:text-[#34c3ab]!" ] [ text "Tab" ]
             , text " to move between fields."
             ]
         , li []
             [ text "To add the items to your Shopping Cart, press "
-            , code [] [ text "Enter" ]
+            , code [ class "tw:text-[#34c3ab]!" ] [ text "Enter" ]
             , text " or click the "
-            , code [] [ text "Add to Cart" ]
+            , code [ class "tw:text-[#34c3ab]!" ] [ text "Add to Cart" ]
             , text <|
                 " button at the bottom of the page. You can review the "
                     ++ "items and quantities once they have been moved to your Cart."
             ]
         , li []
             [ text "To add more rows, click the "
-            , code [] [ text "Add Rows" ]
+            , code [ class "tw:text-[#34c3ab]!" ] [ text "Add Rows" ]
             , text " button at the bottom of the page."
             ]
         ]
