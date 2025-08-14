@@ -194,6 +194,7 @@ requestView tagger model =
                             [ id "inputEmail"
                             , class "form-control"
                             , type_ "email"
+                            , placeholder "Email Address"
                             , name "email"
                             , onInput <| tagger << Email
                             , value model.email

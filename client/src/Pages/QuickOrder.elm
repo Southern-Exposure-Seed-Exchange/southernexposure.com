@@ -22,6 +22,7 @@ import User exposing (AuthStatus)
 import Views.Aria as Aria
 import Views.Utils exposing (numericInput, pageTitleView)
 import Components.Svg exposing (shoppingCartSvgSmall)
+import Html.Attributes exposing (placeholder)
 
 
 
@@ -268,6 +269,7 @@ renderForm errors index model =
                 , class itemNumberClass
                 , name <| "item-number-" ++ String.fromInt index
                 , type_ "text"
+                , placeholder "Item Number"
                 , value model.sku
                 , onInput <| Sku index
                 , Aria.label "Item Number"

@@ -58,8 +58,10 @@ $breadcrumb-bg: white
 $breadcrumb-font-size: 14px
 $breadcrumb-active-color: rgba(30, 12, 3, 0.6)
 
-// TODO: check node modules to modify bootstrap variable
-// $input-border-color: green
+// Form input variables
+$input-border-color: #E8E7E6
+$input-border-radius: 8px
+$input-placeholder-color: rgba(187, 182, 179, 1)
 
 @import "~bootstrap/scss/variables"
 @import "~bootstrap/scss/bootstrap"
@@ -645,6 +647,9 @@ a.unlink
 
 a.unlink:hover
   color: inherit
+
+.form-control
+  box-shadow: 0 1px 2px 0 rgba(16, 24, 40, 0.05)
 
 /* Chrome, Safari, Edge, Opera */
 input.no-arrow::-webkit-outer-spin-button,

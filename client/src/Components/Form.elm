@@ -10,9 +10,9 @@ import Views.Utils exposing (numericInput, onIntInput)
 
 textView : String -> String -> String -> String -> Html msg
 textView typeParam nameParam placeholderParam ariaLabel =
-    div [ class "tw:w-full tw:py-[8px] tw:px-[12px] bg-white tw:rounded-[8px] tw:border tw:border-[rgba(232,231,230,1)]" ]
+    div [ class "tw:w-full" ]
         [ input
-            [ class "tw:block tw:w-full tw:placeholder:text-[rgba(187,182,179,1)]"
+            [ class "tw:block tw:w-full tw:placeholder:text-[rgba(187,182,179,1)] form-control"
             , type_ typeParam
             , name nameParam
             , placeholder placeholderParam
