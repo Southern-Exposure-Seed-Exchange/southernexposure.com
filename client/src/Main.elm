@@ -10,7 +10,7 @@ import Browser.Navigation
 import Categories.AdminViews as CategoryAdmin
 import Category exposing (CategoryId)
 import Components.ProfileNavbar as ProfileNavbar
--- import Components.Tooltip as Tooltip
+import Components.Tooltip as Tooltip
 import Dict
 import Http
 import Json.Decode as Decode
@@ -1732,21 +1732,15 @@ update msg ({ pageData, key } as model) =
                 ]
             )
 
-        -- TooltipMsg tooltipKey subMsg ->
-        --     let
-        --         newTooltipDict =
-        --             Dict.update tooltipKey
-        --                 (\mbTooltip ->
-        --                     case mbTooltip of
-        --                         Just t ->
-        --                             Just <| Tooltip.update subMsg t
+        TooltipMsg subMsg ->
+            let
+                shared =
+                    model.shared
 
-        --                         Nothing ->
-        --                             Just <| Tooltip.update subMsg Tooltip.init
-        --                 )
-        --                 model.tooltipDict
-        --     in
-        --     ( { model | tooltipDict = newTooltipDict }, Cmd.none )
+                newShared =
+                    { shared | tooltips = Tooltip.update subMsg model.shared.tooltips }
+            in
+            ( { model | shared = newShared }, Cmd.none )
 
 
 {-| Wrap the normal update function, checking to see if the page has finished

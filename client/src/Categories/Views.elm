@@ -1,6 +1,7 @@
 module Categories.Views exposing (details)
 
 import Category
+import Components.Tooltip as Tooltip
 import Html exposing (Html, a, div, h1, hr, img, text)
 import Html.Attributes exposing (alt, attribute, class, src)
 import Messages exposing (Msg)
@@ -16,11 +17,12 @@ import Views.Utils exposing (rawHtml, routeLinkAttributes)
 
 
 details :
-    Pagination.Data
+    ( Tooltip.Model, Tooltip.Msg -> Msg )
+    -> Pagination.Data
     -> CartForms
     -> Paginated ProductData { slug : String, sorting : Sorting.Option } PageData.CategoryDetails
     -> List (Html Msg)
-details pagination addToCartForms products =
+details ( tooltips, fromTooltipMsg ) pagination addToCartForms products =
     let
         { category, subCategories } =
             case Paginate.getResponseData products of
@@ -78,4 +80,4 @@ details pagination addToCartForms products =
         , div [ class "tw:pb-[32px]" ] []
         ]
     ]
-        ++ ProductViews.listView (CategoryDetails category.slug) pagination addToCartForms products
+        ++ ProductViews.listView ( tooltips, fromTooltipMsg ) (CategoryDetails category.slug) pagination addToCartForms products

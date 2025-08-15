@@ -6,7 +6,7 @@ import BootstrapGallery as Gallery
 import Browser exposing (UrlRequest)
 import Categories.AdminViews as CategoryAdmin
 import Components.ProfileNavbar as ProfileNavbar
--- import Components.Tooltip as Tooltip
+import Components.Tooltip as Tooltip
 import Locations exposing (AddressLocations)
 import Models.Fields exposing (ImageData)
 import PageData exposing (CustomerData, OrderData, ProductData)
@@ -67,7 +67,7 @@ type Msg
       -- My Account Page
     | ShowAllOrders
       -- Sub-Components
-    -- | TooltipMsg String Tooltip.Msg
+    | TooltipMsg Tooltip.Msg
     | ProfileNavbarMsg ProfileNavbar.Msg
       -- Sub-Messages
     | SearchMsg SiteSearch.Msg

@@ -4,7 +4,9 @@ import BootstrapGallery as Gallery
 import Category exposing (Category)
 import Components.Button as Button exposing (ButtonType(..), defaultButton)
 import Components.Form as Form
+import Components.SeedAttribute as SeedAttribute
 import Components.Svg exposing (minusSvg, plusSvg, shoppingCartSvgSmall)
+import Components.Tooltip as Tooltip
 import Dict exposing (Dict, get)
 import Html exposing (..)
 import Html.Attributes as A exposing (alt, attribute, class, for, href, id, selected, src, title, type_, value)
@@ -23,12 +25,12 @@ import Products.Sorting as Sorting
 import RemoteData
 import Routing exposing (Route(..))
 import SeedAttribute exposing (SeedAttribute)
-import Components.SeedAttribute as SeedAttribute
 import Views.Aria as Aria
 import Views.Format as Format
 import Views.Microdata as Microdata
 import Views.Pager as Pager
 import Views.Utils exposing (htmlOrBlank, icon, numericInput, onIntInput, rawHtml, routeLinkAttributes)
+import Data.Shared exposing (Shared)
 
 
 
@@ -118,7 +120,6 @@ cartFormData addToCartForms ( product, variants ) =
 
                     else
                         [ s, Format.cents <| variantPrice variant ]
-
             in
             Maybe.map lotSizeToString variant.lotSize
                 |> Maybe.withDefault (product.baseSKU ++ variant.skuSuffix)
@@ -127,11 +128,10 @@ cartFormData addToCartForms ( product, variants ) =
                 |> text
                 |> List.singleton
                 |> option
-                    ([ value <| String.fromInt <| fromVariantId variant.id
-                     , selected (Just variant == maybeSelectedVariant)
-                     , A.classList [ ( "out-of-stock", variant.quantity <= 0 ) ]
-                     ]
-                    )
+                    [ value <| String.fromInt <| fromVariantId variant.id
+                    , selected (Just variant == maybeSelectedVariant)
+                    , A.classList [ ( "out-of-stock", variant.quantity <= 0 ) ]
+                    ]
 
         variantList =
             Dict.values variants
@@ -205,11 +205,13 @@ cartFormData addToCartForms ( product, variants ) =
                         , case get "variant" errors of
                             Just variantValidation ->
                                 text <| " " ++ String.join "\n" variantValidation
+
                             Nothing ->
                                 text ""
                         , case get "quantity" errors of
                             Just quantityValidation ->
                                 text <| " " ++ String.join "\n" quantityValidation
+
                             Nothing ->
                                 text ""
                         ]
@@ -242,12 +244,12 @@ cartFormData addToCartForms ( product, variants ) =
 --------------------------------------------------------------
 
 
-productAttrView : String -> Maybe SeedAttribute -> Html msg
-productAttrView selectedItemNumber maybeSeedAttribute =
+productAttrView : Shared -> String -> Maybe SeedAttribute -> Html Msg
+productAttrView shared selectedItemNumber maybeSeedAttribute =
     div [ class "tw:flex tw:items-center" ]
         [ small [ class "text-muted d-block tw:grow" ]
             [ renderItemNumber selectedItemNumber ]
-        , htmlOrBlank SeedAttribute.icons maybeSeedAttribute
+        , htmlOrBlank (SeedAttribute.icons ( shared.tooltips, TooltipMsg )) maybeSeedAttribute
         ]
 
 
@@ -271,9 +273,11 @@ limitedAvailabilityView paddingClass maybeSelectedVariant =
             (\v ->
                 if Product.isLimitedAvailability v then
                     div [ class <| "tw:flex " ++ paddingClass ] [ limitedAvailabilityBadge ]
+
                 else
                     div [] []
             )
+
 
 variantSelectView : String -> List (Html msg) -> Html msg
 variantSelectView paddingClass variantSelect =
@@ -300,8 +304,8 @@ priceView style maybeSelectedVariant =
         |> htmlOrBlank (\v -> p [ class class_ ] [ renderPrice v ])
 
 
-detailFormView : CartFormData -> Product -> Maybe SeedAttribute -> List Category -> Html Msg
-detailFormView { maybeSelectedVariant, maybeSelectedVariantId, quantity, variantSelect, selectedItemNumber, offersMeta, requestFeedback } product maybeSeedAttribute categories =
+detailFormView : Shared -> CartFormData -> Product -> Maybe SeedAttribute -> List Category -> Html Msg
+detailFormView shared { maybeSelectedVariant, maybeSelectedVariantId, quantity, variantSelect, selectedItemNumber, offersMeta, requestFeedback } product maybeSeedAttribute categories =
     let
         formAttributes =
             (::) (class "add-to-cart-form tw:flex tw:flex-col tw:grow") <|
@@ -329,7 +333,7 @@ detailFormView { maybeSelectedVariant, maybeSelectedVariantId, quantity, variant
     in
     form formAttributes
         [ div [ class "tw:pb-[16px]" ]
-            [ productAttrView selectedItemNumber maybeSeedAttribute
+            [ productAttrView shared selectedItemNumber maybeSeedAttribute
             ]
         , div [ class "tw:pt-[12px] tw:pb-[24px]" ] [ priceView Detail maybeSelectedVariant ]
         , outOfStockView "tw:pb-[24px]" maybeSelectedVariant
@@ -351,8 +355,8 @@ detailFormView { maybeSelectedVariant, maybeSelectedVariantId, quantity, variant
         ]
 
 
-detailView : CartForms -> PageData.ProductDetails -> List (Html Msg)
-detailView addToCartForms { product, variants, maybeSeedAttribute, categories } =
+detailView : Shared -> CartForms -> PageData.ProductDetails -> List (Html Msg)
+detailView shared addToCartForms { product, variants, maybeSeedAttribute, categories } =
     let
         cartData =
             cartFormData addToCartForms ( product, variants )
@@ -366,14 +370,14 @@ detailView addToCartForms { product, variants, maybeSeedAttribute, categories } 
                 [ a (Microdata.url :: routeLinkAttributes (ProductDetails product.slug Nothing) ++ [ class "" ])
                     [ Product.singleVariantName product variants ]
                 ]
-            , detailFormView cartData product maybeSeedAttribute categories
+            , detailFormView shared cartData product maybeSeedAttribute categories
             ]
         ]
     ]
 
 
-cardFormView : CartFormData -> Product -> Maybe SeedAttribute -> Html Msg
-cardFormView { maybeSelectedVariant, maybeSelectedVariantId, quantity, variantSelect, selectedItemNumber, offersMeta, requestFeedback } product maybeSeedAttribute =
+cardFormView : ( Tooltip.Model, Tooltip.Msg -> Msg ) -> CartFormData -> Product -> Maybe SeedAttribute -> Html Msg
+cardFormView ( tooltips, fromTooltipMsg ) { maybeSelectedVariant, maybeSelectedVariantId, quantity, variantSelect, selectedItemNumber, offersMeta, requestFeedback } product maybeSeedAttribute =
     let
         formAttributes =
             (::) (class "add-to-cart-form tw:flex tw:flex-col tw:grow") <|
@@ -383,10 +387,9 @@ cardFormView { maybeSelectedVariant, maybeSelectedVariantId, quantity, variantSe
 
                     Nothing ->
                         []
-
     in
     form formAttributes
-        [ div [ class "tw:pt-[12px] " ] [ productAttrView selectedItemNumber maybeSeedAttribute ]
+        [ div [ class "tw:pt-[12px] " ] [ productAttrView ( tooltips, fromTooltipMsg ) selectedItemNumber maybeSeedAttribute ]
         , outOfStockView "tw:pt-[12px]" maybeSelectedVariant
         , limitedAvailabilityView "tw:pt-[12px]" maybeSelectedVariant
         , variantSelectView "tw:pt-[12px]" variantSelect
@@ -408,8 +411,8 @@ cardFormView { maybeSelectedVariant, maybeSelectedVariantId, quantity, variantSe
         ]
 
 
-cardView : CartFormData -> ProductData -> Html Msg
-cardView cartData ( product, variants, maybeSeedAttribute ) =
+cardView : ( Tooltip.Model, Tooltip.Msg -> Msg ) -> CartFormData -> ProductData -> Html Msg
+cardView ( tooltips, fromTooltipMsg ) cartData ( product, variants, maybeSeedAttribute ) =
     div (Microdata.product ++ [ class "tw:bg-[rgba(77,170,154,0.06)] tw:rounded-[16px] tw:overflow-hidden tw:p-[16px] tw:flex tw:flex-col" ])
         [ productImageLinkView "tw:w-full tw:h-[200px]" product Nothing
         , div [ class "tw:pt-[16px]" ]
@@ -418,7 +421,7 @@ cardView cartData ( product, variants, maybeSeedAttribute ) =
                     [ Product.singleVariantName product variants ]
                 ]
             ]
-        , cardFormView cartData product maybeSeedAttribute
+        , cardFormView ( tooltips, fromTooltipMsg ) cartData product maybeSeedAttribute
         ]
 
 
@@ -426,7 +429,7 @@ cardView cartData ( product, variants, maybeSeedAttribute ) =
 -- | Product image view, clicking it will redirect to the product detail
 
 
-productImageLinkView : String -> Product -> Maybe ProductVariantId-> Html msg
+productImageLinkView : String -> Product -> Maybe ProductVariantId -> Html msg
 productImageLinkView sizeClass product maybeVariantId =
     let
         productImage =
@@ -478,8 +481,8 @@ productImageGalleryView product =
         ]
 
 
-listView : (Pagination.Data -> Route) -> Pagination.Data -> CartForms -> Paginated ProductData a c -> List (Html Msg)
-listView routeConstructor pagination addToCartForms products =
+listView : ( Tooltip.Model, Tooltip.Msg -> Msg ) -> (Pagination.Data -> Route) -> Pagination.Data -> CartForms -> Paginated ProductData a c -> List (Html Msg)
+listView ( tooltips, fromTooltipMsg ) routeConstructor pagination addToCartForms products =
     let
         sortHtml =
             if productsCount > 1 then
@@ -544,7 +547,7 @@ listView routeConstructor pagination addToCartForms products =
                         cartData =
                             cartFormData addToCartForms ( p, v )
                     in
-                    cardView cartData productData
+                    cardView ( tooltips, fromTooltipMsg ) cartData productData
                 )
                 (Paginate.getCurrent products)
                 |> List.foldr (\r rs -> r :: rs) []
@@ -556,6 +559,7 @@ listView routeConstructor pagination addToCartForms products =
         , div [ class "tw:grid tw:grid-cols-1  tw:gap-[24px] tw:lg:grid-cols-3 " ]
             productRows
         , pager.viewBottom ()
+
         -- , SeedAttribute.legend
         ]
 
@@ -624,6 +628,7 @@ addToCartInputDisabled =
             , icon = Just <| shoppingCartSvgSmall
             , size = Button.Large
         }
+
 
 limitedAvailabilityBadge : Html msg
 limitedAvailabilityBadge =

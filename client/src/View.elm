@@ -53,8 +53,8 @@ import Views.SettingsAdmin as SettingsAdmin
 import Views.ShippingAdmin as ShippingAdmin
 import Views.StaticPageAdmin as StaticPageAdmin
 import Views.SurchargesAdmin as SurchargesAdmin
-import Views.Utils exposing (pageOverlay, rawHtml)
-import Views.Utils exposing (pageTitleView)
+import Views.Utils exposing (pageOverlay, pageTitleView, rawHtml)
+import Components.Tooltip as Tooltip
 
 
 view : Model -> Document Msg
@@ -112,7 +112,7 @@ view ({ route, pageData, navigationData, zone, helcimUrl } as model) =
         pageContent =
             case route of
                 ProductDetails _ _ ->
-                    withIntermediateText (ProductViews.detailView model.addToCartForms)
+                    withIntermediateText (ProductViews.detailView model.shared model.addToCartForms)
                         pageData.productDetails
 
                 CategoryDetails _ pagination ->
@@ -124,7 +124,7 @@ view ({ route, pageData, navigationData, zone, helcimUrl } as model) =
 
                     else
                         loadingInterstitial False
-                            :: CategoryViews.details pagination
+                            :: CategoryViews.details model.shared pagination
                                 model.addToCartForms
                                 pageData.categoryDetails
 
@@ -137,7 +137,7 @@ view ({ route, pageData, navigationData, zone, helcimUrl } as model) =
 
                     else
                         loadingInterstitial False
-                            :: searchResultsView data pagination model.addToCartForms pageData.searchResults
+                            :: searchResultsView model.shared data pagination model.addToCartForms pageData.searchResults
 
                 PageDetails _ _ ->
                     withIntermediateText staticPageView pageData.pageDetails
@@ -745,7 +745,7 @@ remoteFailureView error =
 notFoundView : List (Html msg)
 notFoundView =
     [ pageTitleView "Page Not Found"
-    , p [class "tw:pl-[8px]"]
+    , p [ class "tw:pl-[8px]" ]
         [ text <|
             "Sorry, we couldn't find the page your were looking for. "
                 ++ "If you got to this page from our site, please contact us so we can fix our links."
@@ -810,8 +810,8 @@ staticPageView { name, slug, content } =
     ]
 
 
-searchResultsView : Search.Data -> Pagination.Data -> Cart.CartForms -> PageData.SearchResults -> List (Html Msg)
-searchResultsView ({ query } as data) pagination addToCartForms products =
+searchResultsView : ( Tooltip.Model, Tooltip.Msg -> Msg ) -> Search.Data -> Pagination.Data -> Cart.CartForms -> PageData.SearchResults -> List (Html Msg)
+searchResultsView ( tooltips, fromTooltipMsg ) ({ query } as data) pagination addToCartForms products =
     let
         uniqueSearch =
             Search.uniqueSearch data
@@ -911,4 +911,4 @@ searchResultsView ({ query } as data) pagination addToCartForms products =
     , searchDescription
     , div [ class "tw:pb-[40px]" ] []
     ]
-        ++ ProductViews.listView (SearchResults data) pagination addToCartForms products
+        ++ ProductViews.listView ( tooltips, fromTooltipMsg ) (SearchResults data) pagination addToCartForms products

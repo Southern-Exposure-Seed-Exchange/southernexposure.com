@@ -1,6 +1,8 @@
 module Components.Tooltip exposing (..)
 
 import Components.Svg exposing (..)
+import Data.ViewKey exposing (ViewKey)
+import Dict exposing (Dict)
 import Html exposing (..)
 import Html.Attributes exposing (..)
 import Html.Events exposing (onClick, onMouseEnter, onMouseLeave)
@@ -8,25 +10,38 @@ import Html.Events.Extra exposing (onClickPreventDefault)
 
 
 type alias Config parentMsg =
-    { triggerEl : Html parentMsg
-    , tooltipContent : String
+    { key : ViewKey
+    , triggerEl : Html parentMsg
+    , text : String
     }
 
 
-type alias Model =
+type alias TooltipModel =
     { status : Bool
     }
 
 
+defaultTooltip : TooltipModel
+defaultTooltip =
+    { status = False }
+
+
+type alias TooltipKey =
+    String
+
+
+type alias Model =
+    Dict TooltipKey TooltipModel
+
+
 type Msg
     = None
-    | SetStatus Bool
+    | SetStatus TooltipKey Bool
 
 
 init : Model
 init =
-    { status = False
-    }
+    Dict.empty
 
 
 update : Msg -> Model -> Model
@@ -35,17 +50,26 @@ update msg model =
         None ->
             model
 
-        SetStatus status ->
-            { model | status = status }
+        SetStatus key status ->
+            Dict.update key
+                (\mbTooltip ->
+                    case mbTooltip of
+                        Just t ->
+                            Just <| { t | status = status }
+
+                        Nothing ->
+                            Just <| { status = status }
+                )
+                model
 
 
-view : (Msg -> parentMsg) -> Config parentMsg -> Model -> Html parentMsg
-view mkParentMsg config model =
+view : Config parentMsg -> { model : Model, toParentMsg : Msg -> parentMsg } -> Html parentMsg
+view config { model, toParentMsg } =
     div []
         [ div
             [ class "tw:cursor-pointer tw:select-none"
-            , onMouseEnter <| mkParentMsg <| SetStatus True
-            , onMouseLeave <| mkParentMsg <| SetStatus False
+            , onMouseEnter <| toParentMsg <| SetStatus config.key True
+            , onMouseLeave <| toParentMsg <| SetStatus config.key False
             ]
             [ config.triggerEl
             ]
@@ -53,9 +77,9 @@ view mkParentMsg config model =
             [ class "tw:relative" ]
             [ div
                 [ class "tw:absolute tw:z-50 tw:right-0 tw:top-[16px]" ]
-                [ if model.status == True then
+                [ if (Dict.get config.key model |> Maybe.withDefault defaultTooltip).status then
                     div [ class "tw:bg-black tw:text-white" ]
-                        [ text config.tooltipContent
+                        [ text config.text
                         ]
 
                   else

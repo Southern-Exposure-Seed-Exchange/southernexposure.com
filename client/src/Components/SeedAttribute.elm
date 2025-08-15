@@ -3,12 +3,14 @@ module Components.SeedAttribute exposing (..)
 -- import Messages exposing (Msg(..))
 
 import Components.Svg exposing (heirLoomSvg, organicSvg, smallFarmSvg, sunSvg)
+import Components.Tooltip as Tooltip
 import Dict exposing (Dict)
 import Html exposing (..)
 import Html.Attributes exposing (..)
-import Views.Images as Images
-import SeedAttribute as SeedAttribute
 import List exposing (all)
+import Messages exposing (Msg(..))
+import SeedAttribute
+import Views.Images as Images
 
 
 iconUrl : SeedAttribute.Attribute -> String
@@ -31,13 +33,13 @@ iconUrl attribute =
     Images.static <| "icons/" ++ url
 
 
-legend : Html msg
-legend =
+legend : ( Tooltip.Model, Tooltip.Msg -> msg ) -> Html msg
+legend ( tooltips, fromTooltipMsg ) =
     SeedAttribute.all
         |> List.map
             (\attribute ->
                 li [ class "media tw:flex tw:gap-[16px] tw:text-left" ]
-                    [ attributeToSvg attribute
+                    [ attributeToSvg ( tooltips, fromTooltipMsg ) attribute
                     , div [ class "media-body" ] [ text <| SeedAttribute.toDescription attribute ]
                     ]
             )
@@ -49,23 +51,24 @@ legend =
            )
 
 
-attributeToSvg : SeedAttribute.Attribute -> Html msg
-attributeToSvg attribute =
+attributeToSvg : ( Tooltip.Model, Tooltip.Msg -> msg ) -> SeedAttribute.Attribute -> Html msg
+attributeToSvg ( tooltips, fromTooltipMsg ) attribute =
     case attribute of
         SeedAttribute.Organic ->
             div []
                 [ organicSvg
                 ]
+            -- Tooltip.view "organic"
+            --     fromTooltipMsg
+            --     { triggerEl =
+            --         div []
+            --             [ organicSvg
+            --             ]
+            --     , text = "abc"
+            --     }
+            --     tooltips
 
-        -- Tooltip.view
-        --     (TooltipMsg "organic")
-        --     { triggerEl =
-        --         div []
-        --             [ organicSvg
-        --             ]
-        --     , text = "abc"
-        --     }
-        --     (Dict.get "organic" tooltipDict |> Maybe.withDefault Tooltip.init)
+        -- (Dict.get "organic" tooltipDict |> Maybe.withDefault Tooltip.init)
         SeedAttribute.Heirloom ->
             div []
                 [ heirLoomSvg
@@ -82,8 +85,8 @@ attributeToSvg attribute =
                 ]
 
 
-icons : SeedAttribute.SeedAttribute -> Html msg
-icons { isOrganic, isHeirloom, isRegional, isSmallGrower } =
+icons : ( Tooltip.Model, Tooltip.Msg -> msg ) -> SeedAttribute.SeedAttribute -> Html msg
+icons ( tooltips, fromTooltipMsg ) { isOrganic, isHeirloom, isRegional, isSmallGrower } =
     [ ( isOrganic, SeedAttribute.Organic )
     , ( isHeirloom, SeedAttribute.Heirloom )
     , ( isRegional, SeedAttribute.Regional )
@@ -93,7 +96,7 @@ icons { isOrganic, isHeirloom, isRegional, isSmallGrower } =
         |> List.map
             (Tuple.second
                 >> (\attribute ->
-                        attributeToSvg attribute
+                        attributeToSvg ( tooltips, fromTooltipMsg ) attribute
                    )
             )
         |> div [ class "tw:flex tw:gap-[10px]" ]

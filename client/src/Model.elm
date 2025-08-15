@@ -7,7 +7,8 @@ import Api exposing (Endpoint(..))
 import BootstrapGallery as Gallery
 import Categories.AdminViews as CategoryAdmin
 import Components.ProfileNavbar as ProfileNavbar
--- import Components.Tooltip as Tooltip
+import Components.Tooltip as Tooltip
+import Data.Shared exposing (Shared)
 import Dict exposing (Dict)
 import Models.Fields exposing (ImageData)
 import PageData exposing (PageData)
@@ -40,6 +41,7 @@ import Views.SettingsAdmin as SettingsAdmin
 import Views.ShippingAdmin as ShippingAdmin
 import Views.StaticPageAdmin as StaticPageAdmin
 import Views.SurchargesAdmin as SurchargesAdmin
+import Messages exposing (Msg(..))
 
 
 type alias Model =
@@ -92,8 +94,9 @@ type alias Model =
 
     -- sub-component
     , profileNavbar : ProfileNavbar.Model
-    -- , tooltipDict : Dict String Tooltip.Model
+    , shared : Shared
     }
+
 
 initial : Routing.Key -> Route -> String -> Model
 initial key route helcimUrl =
@@ -144,5 +147,8 @@ initial key route helcimUrl =
     , key = key
     , helcimUrl = helcimUrl
     , profileNavbar = ProfileNavbar.init
-    -- , tooltipDict = Dict.empty
+    , shared =
+        { tooltips = Tooltip.init
+        , tooltipsToParentMsg = TooltipMsg
+        }
     }
