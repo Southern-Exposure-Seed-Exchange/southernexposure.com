@@ -1,4 +1,5 @@
 @import "~bootstrap/scss/functions"
+@import '~@fontsource-variable/inter/wght.css';
 
 /** Variables **/
 /* Set the height of the Site Logo & Title */
@@ -79,13 +80,6 @@ $input-placeholder-color: rgba(187, 182, 179, 1)
   font-display: swap
   src: local('Poor Richard'), url('./static/fonts/PoorRichard.ttf') format('truetype')
 
-@font-face
-  font-family: 'Inter'
-  font-style: normal
-  font-weight: 400
-  font-display: swap
-  src: local('Inter'), url('./static/fonts/Inter.ttf') format('truetype')
-
 /* Set the Site Title to the stylized serif font */
 div#site-title h1.media-heading
   font-family: 'Poor Richard', 'Glass Antiqua', Helvetica, Arial, sans-serif
@@ -94,7 +88,7 @@ div#site-title h1.media-heading
 /* Set Header & Nav text to a Serif font */
 h1, h2, h3, h4, h5, h6, .h1, .h2, .h3, .h4, .h5, .h6, #category-navbar, legend, .nav-pills
   // font-family: 'Crimson Text', Georgia, serif
-  font-family: 'Inter', Georgia, serif
+  font-family: 'Inter Variable', Georgia, serif
   font-weight: 600
   margin-bottom: 0px
 
@@ -114,7 +108,7 @@ hr
 /** Site Layout **/
 /* Set our background image */
 body
-  font-family: 'Inter', serif
+  font-family: 'Inter Variable', serif
   background-color: white
   // transition: initial
   // background-image: linear-gradient(rgba(0,0,0,0.25), rgba(0,0,0,0.25)), url('./static/img/sese_background.jpg')

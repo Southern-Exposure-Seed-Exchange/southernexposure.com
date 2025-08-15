@@ -28,6 +28,7 @@
     "dependencies": {
         "@babel/core": "^7.9.0",
         "@babel/preset-env": "^7.9.5",
+        "@fontsource-variable/inter": "^5.2.6",
         "autoprefixer": "^10.4.21",
         "babel-loader": "^8.1.0",
         "bootstrap": "^4",
