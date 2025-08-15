@@ -182,7 +182,8 @@ app.ports.subscribeToHelcimMessages.subscribe(function() {
     window.removeEventListener('message', helcimMessageListener);
   }
   helcimMessageListener = function(event) {
-    app.ports.helcimMessageReceived.send(event.data);
+    if (event.origin == "https://secure.helcim.app")
+      app.ports.helcimMessageReceived.send(event.data);
   }
 
   window.addEventListener('message', helcimMessageListener);
