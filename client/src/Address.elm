@@ -28,6 +28,7 @@ import Views.Aria as Aria
 import Views.HorizontalForm as Form
 import Views.Utils exposing (autocomplete)
 import Views.Utils exposing (labelView)
+import Html.Attributes exposing (placeholder)
 
 
 
@@ -477,6 +478,7 @@ inputField errors prefix inputValue fieldMsg labelText inputName autocompleteTyp
         [ fieldLabel
         , input
             [ id <| prefix ++ "-" ++ inputName ++ "Input"
+            , placeholder labelText
             , classList
                 [ ( "form-control", True )
                 , ( "is-invalid", hasErrors )

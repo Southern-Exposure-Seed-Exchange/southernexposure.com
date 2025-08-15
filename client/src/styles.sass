@@ -1,4 +1,5 @@
 @import "~bootstrap/scss/functions"
+@import '~@fontsource-variable/inter/wght.css';
 
 /** Variables **/
 /* Set the height of the Site Logo & Title */
@@ -38,7 +39,7 @@ $navbar-padding-x: 10px
 $navbar-light-color: $black-2
 $navbar-light-active-color: $black-2
 $navbar-light-active-bg: darken($pink-2, 7.5%)
-$navbar-light-hover-color: $orange-yellow
+$navbar-light-hover-color: black
 $navbar-light-hover-bg: $pink-2
 $navbar-light-toggler-border-color: $light-pale-tan
 $navbar-light-toggler-icon-bg: str-replace(url("data:image/svg+xml;charset=utf8,%3Csvg viewBox='0 0 30 30' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath stroke='#{$light-pale-tan}' stroke-width='2' stroke-linecap='round' stroke-miterlimit='10' d='M4 7h22M4 15h22M4 23h22'/%3E%3C/svg%3E"), "#", "%23") !default;
@@ -58,6 +59,11 @@ $breadcrumb-bg: white
 $breadcrumb-font-size: 14px
 $breadcrumb-active-color: rgba(30, 12, 3, 0.6)
 
+// Form input variables
+$input-border-color: #E8E7E6
+$input-border-radius: 8px
+$input-placeholder-color: rgba(187, 182, 179, 1)
+
 @import "~bootstrap/scss/variables"
 @import "~bootstrap/scss/bootstrap"
 
@@ -74,13 +80,6 @@ $breadcrumb-active-color: rgba(30, 12, 3, 0.6)
   font-display: swap
   src: local('Poor Richard'), url('./static/fonts/PoorRichard.ttf') format('truetype')
 
-@font-face
-  font-family: 'Inter'
-  font-style: normal
-  font-weight: 400
-  font-display: swap
-  src: local('Inter'), url('./static/fonts/Inter.ttf') format('truetype')
-
 /* Set the Site Title to the stylized serif font */
 div#site-title h1.media-heading
   font-family: 'Poor Richard', 'Glass Antiqua', Helvetica, Arial, sans-serif
@@ -89,7 +88,7 @@ div#site-title h1.media-heading
 /* Set Header & Nav text to a Serif font */
 h1, h2, h3, h4, h5, h6, .h1, .h2, .h3, .h4, .h5, .h6, #category-navbar, legend, .nav-pills
   // font-family: 'Crimson Text', Georgia, serif
-  font-family: 'Inter', Georgia, serif
+  font-family: 'Inter Variable', Georgia, serif
   font-weight: 600
   margin-bottom: 0px
 
@@ -103,14 +102,13 @@ address
 hr
   margin: 0px
 
-
 .poor-richard
   font-family: 'Poor Richard', 'Glass Antiqua', Helvetica, Arial, sans-serif
 
 /** Site Layout **/
 /* Set our background image */
 body
-  font-family: 'Inter', serif
+  font-family: 'Inter Variable', serif
   background-color: white
   // transition: initial
   // background-image: linear-gradient(rgba(0,0,0,0.25), rgba(0,0,0,0.25)), url('./static/img/sese_background.jpg')
@@ -176,6 +174,8 @@ body > div.container, body > nav.container
     &, .dropdown-menu
       /* De-emphasize */
       font-weight: normal
+    .nav-link:hover
+      text-decoration: underline
     /* Space Out Navbar Links */
     .nav-link
       // padding: 0.75rem 1rem
@@ -185,11 +185,11 @@ body > div.container, body > nav.container
       // background-color: $navbar-light-active-bg
       text-decoration: underline
     .dropdown-menu
-      /* Increase font size */
-      font-size: 1.2rem
-      /* Remove corner rounding from top corners */
-      border-top-left-radius: 0
-      border-top-right-radius: 0
+      border-radius: 16px
+      border: 1px solid #E8E7E6
+      box-shadow: 0 1px 2px 0 rgba(16, 24, 40, 0.05)
+      top: 70px
+      padding: 12px
 
       /* Highlight a hovered or clicked item */
       a:hover, a:active
@@ -200,10 +200,16 @@ body > div.container, body > nav.container
         color: $black-2
         background-color: $pale-tan-accent
 
+  .dropdown-item
+    border-radius: 8px
+    padding: 12px 20px
+    width: auto
+
   /* Properly space multi-column Nav dropdown menus */
   .multi-column-dropdown
     .dropdown-item
-      padding: 0.25rem 1.5rem
+      border-radius: 8px
+      padding: 12px 20px
       width: auto
     +media-breakpoint-up(md)
       min-width: 650px
@@ -642,6 +648,9 @@ a.unlink
 
 a.unlink:hover
   color: inherit
+
+.form-control
+  box-shadow: 0 1px 2px 0 rgba(16, 24, 40, 0.05)
 
 /* Chrome, Safari, Edge, Opera */
 input.no-arrow::-webkit-outer-spin-button,

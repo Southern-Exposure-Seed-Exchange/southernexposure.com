@@ -26,6 +26,7 @@ type ButtonType msg
 type ButtonSize
     = Small
     | Large
+    | Custom String
 
 
 type alias Config msg =
@@ -81,15 +82,20 @@ view config =
                             "tw:bg-[#4DAA9A]! tw:text-white! tw:hover:bg-[#34C3AB]! tw:active:bg-[#1D7F6E]!"
 
         paddingClass =
-            case config.padding of
-                Default ->
-                    "tw:px-[16px]"
+            case config.size of
+                Custom _ ->
+                    ""
 
-                Expand ->
-                    "tw:w-full"
+                _ ->
+                    case config.padding of
+                        Default ->
+                            "tw:px-[16px]"
 
-                Width widthClass ->
-                    widthClass
+                        Expand ->
+                            "tw:w-full"
+
+                        Width widthClass ->
+                            widthClass
 
         sizeClass =
             case config.size of
@@ -98,6 +104,9 @@ view config =
 
                 Large ->
                     "tw:py-[12px]"
+
+                Custom class_ ->
+                    class_
 
         allClass =
             "tw:block tw:text-[16px] tw:leading-[24px] tw:rounded-[8px]! tw:no-underline! tw:flex tw:gap-[8px] tw:items-center tw:justify-center"
