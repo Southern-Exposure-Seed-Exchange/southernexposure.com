@@ -15,9 +15,12 @@ module Pages.Checkout exposing
 
 import Address exposing (AddressId(..))
 import Api
+import Components.Alert as Alert exposing (defaultAlert)
+import Components.Button as Button exposing (defaultButton)
+import Components.Svg exposing (..)
 import Dict
 import Html exposing (..)
-import Html.Attributes as A exposing (alt, attribute, checked, class, colspan, for, id, href, name, required, rows, src, step, type_, value)
+import Html.Attributes as A exposing (alt, attribute, checked, class, colspan, for, href, id, name, placeholder, required, rows, src, step, type_, value)
 import Html.Events exposing (onCheck, onClick, onInput, onSubmit)
 import Html.Extra exposing (viewIf)
 import Json.Decode as Decode
@@ -30,13 +33,16 @@ import Ports
 import Product exposing (productMainImage, variantPrice)
 import RemoteData exposing (WebData)
 import Routing exposing (Route(..), reverse)
+import String.Extra exposing (toSentenceCase)
 import Time
 import Update.Utils exposing (nothingAndNoCommand)
 import User exposing (AuthStatus)
 import Views.Aria as Aria
 import Views.Format as Format
 import Views.HorizontalForm exposing (genericErrorText)
-import Views.Utils exposing (decimalInput, disableGrammarly, emailInput, icon, pageOverlay, rawHtml)
+import Views.Utils exposing (decimalInput, disableGrammarly, emailInput, icon, labelView, pageOverlay, pageTitleView, pageTitleWithSubView, rawHtml)
+
+
 
 -- Model
 
@@ -44,6 +50,7 @@ import Views.Utils exposing (decimalInput, disableGrammarly, emailInput, icon, p
 type CheckoutAddress
     = ExistingAddress AddressId
     | NewAddress Address.Form
+
 
 type alias Form =
     { email : String
@@ -158,13 +165,16 @@ type Msg
     | ValidateCart
     | ValidateCartResponse (WebData (Result Api.FormErrors PageData.CartDetails))
 
+
 type alias HelcimCheckoutTokenResponse =
     { checkoutToken : String }
+
 
 helcimCheckoutTokenResponseDecoder : Decode.Decoder HelcimCheckoutTokenResponse
 helcimCheckoutTokenResponseDecoder =
     Decode.map HelcimCheckoutTokenResponse
         (Decode.field "token" Decode.string)
+
 
 type alias CheckoutResponse =
     { guestToken : String
@@ -173,10 +183,12 @@ type alias CheckoutResponse =
     , orderProducts : List PageData.OrderProduct
     }
 
+
 type alias HelcimPayInitEvent =
     { eventName : String
     , eventStatus : Bool
     }
+
 
 helcimPayInitEventDecoder : Decode.Decoder HelcimPayInitEvent
 helcimPayInitEventDecoder =
@@ -184,11 +196,13 @@ helcimPayInitEventDecoder =
         (Decode.field "eventName" Decode.string)
         (Decode.field "eventStatus" Decode.bool)
 
+
 type alias HelcimPayCheckoutEvent =
     { eventName : String
     , eventStatus : String
     , eventMessage : Result String HelcimEventMessage
     }
+
 
 helcimPayCheckoutEventDecoder : Decode.Decoder HelcimPayCheckoutEvent
 helcimPayCheckoutEventDecoder =
@@ -201,16 +215,20 @@ helcimPayCheckoutEventDecoder =
                     case Decode.decodeString helcimEventMessageDecoder jsonString of
                         Ok eventData ->
                             Decode.succeed (Ok eventData)
+
                         -- If we failed to decode an actual event, then eventMessage
                         -- contains a string with the error.
                         Err _ ->
                             Decode.succeed (Err jsonString)
                 )
         )
+
+
 type alias HelcimEventMessage =
     { status : Int
     , data : HelcimEventData
     }
+
 
 helcimEventMessageDecoder : Decode.Decoder HelcimEventMessage
 helcimEventMessageDecoder =
@@ -218,16 +236,19 @@ helcimEventMessageDecoder =
         (Decode.field "status" Decode.int)
         (Decode.field "data" helcimEventDataDecoder)
 
+
 type alias HelcimEventData =
-  { data : HelcimEventDataInternal
-  , hash : String
-  }
+    { data : HelcimEventDataInternal
+    , hash : String
+    }
+
 
 helcimEventDataDecoder : Decode.Decoder HelcimEventData
 helcimEventDataDecoder =
     Decode.map2 HelcimEventData
         (Decode.field "data" helcimEventDataInternalDecoder)
         (Decode.field "hash" Decode.string)
+
 
 type alias HelcimEventDataInternal =
     { amount : String
@@ -246,6 +267,7 @@ type alias HelcimEventDataInternal =
     , transactionType : String
     }
 
+
 helcimEventDataInternalDecoder : Decode.Decoder HelcimEventDataInternal
 helcimEventDataInternalDecoder =
     Decode.map8 HelcimEventDataInternal
@@ -257,20 +279,25 @@ helcimEventDataInternalDecoder =
         (Decode.field "cardNumber" Decode.string)
         (Decode.field "cardToken" Decode.string)
         (Decode.field "currency" Decode.string)
-        |> Decode.andThen (\partialEventData ->
-            Decode.map6 (\customerCode dateCreated invoiceNumber status transactionId transactionType ->
-                partialEventData customerCode dateCreated invoiceNumber status transactionId transactionType
+        |> Decode.andThen
+            (\partialEventData ->
+                Decode.map6
+                    (\customerCode dateCreated invoiceNumber status transactionId transactionType ->
+                        partialEventData customerCode dateCreated invoiceNumber status transactionId transactionType
+                    )
+                    (Decode.field "customerCode" Decode.string)
+                    (Decode.field "dateCreated" Decode.string)
+                    (Decode.field "invoiceNumber" Decode.string)
+                    (Decode.field "status" Decode.string)
+                    (Decode.field "transactionId" Decode.string)
+                    (Decode.field "type" Decode.string)
             )
-            (Decode.field "customerCode" Decode.string)
-            (Decode.field "dateCreated" Decode.string)
-            (Decode.field "invoiceNumber" Decode.string)
-            (Decode.field "status" Decode.string)
-            (Decode.field "transactionId" Decode.string)
-            (Decode.field "type" Decode.string)
-        )
+
+
 type HelcimPayEvent
     = HelcimPayInit HelcimPayInitEvent
     | HelcimPayCheckout HelcimPayCheckoutEvent
+
 
 helcimPayEventDecoder : Decode.Decoder HelcimPayEvent
 helcimPayEventDecoder =
@@ -278,6 +305,7 @@ helcimPayEventDecoder =
         [ Decode.map HelcimPayInit helcimPayInitEventDecoder
         , Decode.map HelcimPayCheckout helcimPayCheckoutEventDecoder
         ]
+
 
 anonymousResponseDecoder : Decode.Decoder CheckoutResponse
 anonymousResponseDecoder =
@@ -308,12 +336,13 @@ subscriptions =
     Ports.helcimMessageReceived HelcimEventReceived
 
 
-update : Msg ->
-         Form ->
-         AuthStatus ->
-         Maybe String ->
-         WebData PageData.CheckoutDetails ->
-         ( Form, Maybe OutMsg, Cmd Msg )
+update :
+    Msg
+    -> Form
+    -> AuthStatus
+    -> Maybe String
+    -> WebData PageData.CheckoutDetails
+    -> ( Form, Maybe OutMsg, Cmd Msg )
 update msg model authStatus maybeSessionToken checkoutDetails =
     case msg of
         Email email ->
@@ -390,7 +419,6 @@ update msg model authStatus maybeSessionToken checkoutDetails =
 
                         freeCheckout =
                             PageData.isFreeCheckout checkoutDetails || finalTotal == 0
-
                     in
                     validateForm model (not freeCheckout) details <|
                         if freeCheckout then
@@ -409,7 +437,6 @@ update msg model authStatus maybeSessionToken checkoutDetails =
             let
                 orderId =
                     response.orderId
-
 
                 outMsg =
                     if authStatus == User.Anonymous then
@@ -522,7 +549,8 @@ update msg model authStatus maybeSessionToken checkoutDetails =
             model |> nothingAndNoCommand
 
         HelcimCheckoutTokenReceived (RemoteData.Success (Ok token)) ->
-            ( { model | checkoutToken = Just token.checkoutToken }, Nothing
+            ( { model | checkoutToken = Just token.checkoutToken }
+            , Nothing
             , Cmd.batch [ Ports.appendHelcimPayIframe token.checkoutToken, Ports.subscribeToHelcimMessages () ]
             )
 
@@ -535,37 +563,50 @@ update msg model authStatus maybeSessionToken checkoutDetails =
         HelcimCheckoutTokenReceived _ ->
             { model | isPaymentProcessing = False } |> nothingAndNoCommand
 
-        HelcimEventReceived event -> case Decode.decodeValue helcimPayEventDecoder event of
-            Err _ ->
-                { model | errors = Api.addError "" "Unexpected HelcimPay.js response." model.errors, isPaymentProcessing = False } |> nothingAndNoCommand
+        HelcimEventReceived event ->
+            case Decode.decodeValue helcimPayEventDecoder event of
+                Err _ ->
+                    { model | errors = Api.addError "" "Unexpected HelcimPay.js response." model.errors, isPaymentProcessing = False } |> nothingAndNoCommand
 
-            Ok (HelcimPayInit _) -> model |> nothingAndNoCommand
+                Ok (HelcimPayInit _) ->
+                    model |> nothingAndNoCommand
 
-            Ok (HelcimPayCheckout checkoutEvent) ->
-                case checkoutDetails of
-                    RemoteData.Success details -> handleHelcimCheckoutEvent model details checkoutEvent
-                    _ -> ( model, Nothing, Cmd.none )
+                Ok (HelcimPayCheckout checkoutEvent) ->
+                    case checkoutDetails of
+                        RemoteData.Success details ->
+                            handleHelcimCheckoutEvent model details checkoutEvent
+
+                        _ ->
+                            ( model, Nothing, Cmd.none )
+
         ConfirmPayment ->
             case model.confirmationModel of
-                Nothing -> model |> nothingAndNoCommand
+                Nothing ->
+                    model |> nothingAndNoCommand
+
                 Just confirmationModel ->
                     ( { model | confirmationModel = Nothing, isProcessing = True }
                     , Nothing
-                    , placeOrder model authStatus maybeSessionToken (Just (confirmationModel.cardToken, confirmationModel.customerCode)) checkoutDetails
+                    , placeOrder model authStatus maybeSessionToken (Just ( confirmationModel.cardToken, confirmationModel.customerCode )) checkoutDetails
                     )
-        CancelPayment -> { model | confirmationModel = Nothing } |> nothingAndNoCommand
 
-        ValidateCart -> (model, Nothing, validateCart authStatus maybeSessionToken checkoutDetails)
+        CancelPayment ->
+            { model | confirmationModel = Nothing } |> nothingAndNoCommand
+
+        ValidateCart ->
+            ( model, Nothing, validateCart authStatus maybeSessionToken checkoutDetails )
 
         ValidateCartResponse response ->
             case response of
                 RemoteData.Success (Ok _) ->
-                    ( model, Nothing , Cmd.none )
+                    ( model, Nothing, Cmd.none )
 
                 RemoteData.Success (Err errors) ->
                     ( { model | errors = errors }, Nothing, Ports.scrollToErrorMessage )
 
-                _ -> ( model, Nothing, Cmd.none )
+                _ ->
+                    ( model, Nothing, Cmd.none )
+
 
 selectAddress : Int -> CheckoutAddress
 selectAddress addressId =
@@ -720,7 +761,7 @@ validateForm model validateBilling checkoutDetails validResult =
                     && List.all (\i -> List.length i.errors == 0) checkoutDetails.items
 
         modelErrors =
-                Api.initialErrors
+            Api.initialErrors
 
         shippingErrors =
             checkAddressRegion model.shippingAddress
@@ -852,39 +893,50 @@ getHelcimCheckoutToken authStatus =
                 |> Api.withErrorHandler helcimCheckoutTokenResponseDecoder
                 |> Api.sendRequest HelcimCheckoutTokenReceived
 
-placeOrder : Form -> AuthStatus -> Maybe String -> Maybe (String, String) -> WebData PageData.CheckoutDetails -> Cmd Msg
+
+placeOrder : Form -> AuthStatus -> Maybe String -> Maybe ( String, String ) -> WebData PageData.CheckoutDetails -> Cmd Msg
 placeOrder model authStatus maybeSessionToken helcimData checkoutDetails =
     let
         customerData =
-            Encode.object (
-                [ ( "shippingAddress", encodedShippingAddress )
-                , ( "billingAddress", encodedBillingAddress )
-                , ( "storeCredit", encodedStoreCredit )
-                , ( "priorityShipping", Encode.bool model.priorityShipping )
-                , ( "couponCode", encodeStringAsMaybe model.couponCode )
-                , ( "comment", Encode.string model.comment )
-                ] ++ (helcimData |> Maybe.map (\(helcimToken, helcimCustomerCode) ->
-                    [ ( "helcimToken", Encode.string helcimToken )
-                    , ( "helcimCustomerCode", Encode.string helcimCustomerCode )
-                    ]
-                ) |> Maybe.withDefault [])
-            )
+            Encode.object
+                ([ ( "shippingAddress", encodedShippingAddress )
+                 , ( "billingAddress", encodedBillingAddress )
+                 , ( "storeCredit", encodedStoreCredit )
+                 , ( "priorityShipping", Encode.bool model.priorityShipping )
+                 , ( "couponCode", encodeStringAsMaybe model.couponCode )
+                 , ( "comment", Encode.string model.comment )
+                 ]
+                    ++ (helcimData
+                            |> Maybe.map
+                                (\( helcimToken, helcimCustomerCode ) ->
+                                    [ ( "helcimToken", Encode.string helcimToken )
+                                    , ( "helcimCustomerCode", Encode.string helcimCustomerCode )
+                                    ]
+                                )
+                            |> Maybe.withDefault []
+                       )
+                )
 
         anonymousData =
-            Encode.object (
-                [ ( "shippingAddress", encodedShippingAddress )
-                , ( "billingAddress", encodedBillingAddress )
-                , ( "priorityShipping", Encode.bool model.priorityShipping )
-                , ( "couponCode", encodeStringAsMaybe model.couponCode )
-                , ( "comment", Encode.string model.comment )
-                , ( "sessionToken", encodeMaybe Encode.string maybeSessionToken )
-                , ( "email", Encode.string model.email )
-                ] ++ (helcimData |> Maybe.map (\(helcimToken, helcimCustomerCode) ->
-                    [ ( "helcimToken", Encode.string helcimToken )
-                    , ( "helcimCustomerCode", Encode.string helcimCustomerCode )
-                    ]
-                ) |> Maybe.withDefault [])
-            )
+            Encode.object
+                ([ ( "shippingAddress", encodedShippingAddress )
+                 , ( "billingAddress", encodedBillingAddress )
+                 , ( "priorityShipping", Encode.bool model.priorityShipping )
+                 , ( "couponCode", encodeStringAsMaybe model.couponCode )
+                 , ( "comment", Encode.string model.comment )
+                 , ( "sessionToken", encodeMaybe Encode.string maybeSessionToken )
+                 , ( "email", Encode.string model.email )
+                 ]
+                    ++ (helcimData
+                            |> Maybe.map
+                                (\( helcimToken, helcimCustomerCode ) ->
+                                    [ ( "helcimToken", Encode.string helcimToken )
+                                    , ( "helcimCustomerCode", Encode.string helcimCustomerCode )
+                                    ]
+                                )
+                            |> Maybe.withDefault []
+                       )
+                )
 
         encodedStoreCredit =
             model.storeCredit
@@ -970,6 +1022,7 @@ placeOrder model authStatus maybeSessionToken helcimData checkoutDetails =
                 |> Api.withErrorHandler decoder
                 |> Api.sendRequest SubmitResponse
 
+
 handleHelcimCheckoutEvent : Form -> PageData.CheckoutDetails -> HelcimPayCheckoutEvent -> ( Form, Maybe OutMsg, Cmd Msg )
 handleHelcimCheckoutEvent model checkoutDetails checkoutEvent =
     if checkoutEvent.eventName == "helcim-pay-js-" ++ (model.checkoutToken |> Maybe.withDefault "") then
@@ -978,6 +1031,7 @@ handleHelcimCheckoutEvent model checkoutDetails checkoutEvent =
             , Nothing
             , Ports.removeHelcimPayIframe ()
             )
+
         else if checkoutEvent.eventStatus == "ABORTED" then
             case checkoutEvent.eventMessage of
                 Err errors ->
@@ -985,36 +1039,49 @@ handleHelcimCheckoutEvent model checkoutDetails checkoutEvent =
                     , Nothing
                     , Ports.removeHelcimPayIframe ()
                     )
+
                 Ok _ ->
-                    ( { model | checkoutToken = Nothing, isPaymentProcessing = False
-                      , errors = Api.addError "" "Unexpected HelcimPay.js response for ABORTED event." model.errors
-                      }
-                    , Nothing
-                    , Ports.removeHelcimPayIframe ()
-                    )
-        else case checkoutEvent.eventMessage of
-            Err errors -> { model | errors = Api.addError "" errors model.errors, isPaymentProcessing = False } |> nothingAndNoCommand
-            Ok eventMessage ->
-                if eventMessage.data.data.status == "APPROVED" then
                     ( { model
                         | checkoutToken = Nothing
                         , isPaymentProcessing = False
-                        , confirmationModel = Just (initPaymentConfirmation
-                            eventMessage.data.data.cardNumber
-                            (getFinalTotal checkoutDetails model.storeCredit)
-                            eventMessage.data.data.cardToken
-                            eventMessage.data.data.customerCode)
+                        , errors = Api.addError "" "Unexpected HelcimPay.js response for ABORTED event." model.errors
                       }
                     , Nothing
                     , Ports.removeHelcimPayIframe ()
                     )
-                else
-                    ( { model | checkoutToken = Nothing, isPaymentProcessing = False, errors = Api.addError "" "Helcim purchase was declined." model.errors }
-                    , Nothing
-                    , Ports.removeHelcimPayIframe ()
-                    )
+
+        else
+            case checkoutEvent.eventMessage of
+                Err errors ->
+                    { model | errors = Api.addError "" errors model.errors, isPaymentProcessing = False } |> nothingAndNoCommand
+
+                Ok eventMessage ->
+                    if eventMessage.data.data.status == "APPROVED" then
+                        ( { model
+                            | checkoutToken = Nothing
+                            , isPaymentProcessing = False
+                            , confirmationModel =
+                                Just
+                                    (initPaymentConfirmation
+                                        eventMessage.data.data.cardNumber
+                                        (getFinalTotal checkoutDetails model.storeCredit)
+                                        eventMessage.data.data.cardToken
+                                        eventMessage.data.data.customerCode
+                                    )
+                          }
+                        , Nothing
+                        , Ports.removeHelcimPayIframe ()
+                        )
+
+                    else
+                        ( { model | checkoutToken = Nothing, isPaymentProcessing = False, errors = Api.addError "" "Helcim purchase was declined." model.errors }
+                        , Nothing
+                        , Ports.removeHelcimPayIframe ()
+                        )
+
     else
         model |> nothingAndNoCommand
+
 
 {-| TODO: This is probably repeated other places, stick in a Json.Utils module.
 -}
@@ -1117,25 +1184,38 @@ validateCart : AuthStatus -> Maybe String -> WebData PageData.CheckoutDetails ->
 validateCart authStatus maybeCartToken checkoutDetails =
     case checkoutDetails of
         RemoteData.Success details ->
-            let items = details.items
-                fromCartItemId (CartItemId i) = i
-                encodedQuantities = Encode.object <|
-                    ( "quantities", Encode.object (List.map (\{ id, quantity } -> (String.fromInt (fromCartItemId id), Encode.int quantity)) items) )
-                        :: (Maybe.map (\token -> [ ( "sessionToken", Encode.string token ) ]) maybeCartToken |> Maybe.withDefault [])
-                cmd = case authStatus of
-                    User.Authorized _ ->
-                        Api.post Api.CartUpdateCustomer
-                            |> Api.withJsonBody encodedQuantities
-                            |> Api.withErrorHandler PageData.cartDetailsDecoder
-                            |> Api.sendRequest ValidateCartResponse
+            let
+                items =
+                    details.items
 
-                    User.Anonymous ->
-                        Api.post Api.CartUpdateAnonymous
-                            |> Api.withJsonBody encodedQuantities
-                            |> Api.withErrorHandler PageData.cartDetailsDecoder
-                            |> Api.sendRequest ValidateCartResponse
-            in cmd
-        _ -> Cmd.none
+                fromCartItemId (CartItemId i) =
+                    i
+
+                encodedQuantities =
+                    Encode.object <|
+                        ( "quantities", Encode.object (List.map (\{ id, quantity } -> ( String.fromInt (fromCartItemId id), Encode.int quantity )) items) )
+                            :: (Maybe.map (\token -> [ ( "sessionToken", Encode.string token ) ]) maybeCartToken |> Maybe.withDefault [])
+
+                cmd =
+                    case authStatus of
+                        User.Authorized _ ->
+                            Api.post Api.CartUpdateCustomer
+                                |> Api.withJsonBody encodedQuantities
+                                |> Api.withErrorHandler PageData.cartDetailsDecoder
+                                |> Api.sendRequest ValidateCartResponse
+
+                        User.Anonymous ->
+                            Api.post Api.CartUpdateAnonymous
+                                |> Api.withJsonBody encodedQuantities
+                                |> Api.withErrorHandler PageData.cartDetailsDecoder
+                                |> Api.sendRequest ValidateCartResponse
+            in
+            cmd
+
+        _ ->
+            Cmd.none
+
+
 
 -- View
 
@@ -1178,8 +1258,8 @@ view model authStatus locations checkoutDetails =
         billingCard =
             if model.billingSameAsShipping then
                 addressCard
-                    [ h4 [ class "card-title" ]
-                        [ span [ class "mr-4" ] [ text "Billing Details" ]
+                    [ div [ class "tw:text-[16px] tw:leading-[20px] tw:opacity-70 tw:flex tw:pb-[16px]" ]
+                        [ span [ class "tw:grow" ] [ text "Billing Details" ]
                         , sameAddressesCheckbox model.billingSameAsShipping
                         ]
                     , billingAddressText
@@ -1224,14 +1304,17 @@ view model authStatus locations checkoutDetails =
                     text ""
 
                 _ ->
-                    div [ class "col-6 d-flex flex-column" ]
+                    div [ class "tw:pt-[60px]" ]
                         [ h5 [] [ text "Store Credit" ]
-                        , p []
-                            [ text "You have "
-                            , b [] [ text <| Format.cents checkoutDetails.storeCredit ]
-                            , text " of store credit available."
+                        , div [ class "tw:pt-[20px] tw:flex tw:gap-[8px]" ]
+                            [ div [ class "tw:pt-[2px]" ] [ discountSvg "tw:fill-black" ]
+                            , p [ class "" ]
+                                [ text "You have "
+                                , b [ class "tw:text-[#4DAA9A]" ] [ text <| Format.cents checkoutDetails.storeCredit ]
+                                , text " of store credit available."
+                                ]
                             ]
-                        , div [ class "input-group mt-auto mb-3" ]
+                        , div [ class "input-group mt-auto mb-3 tw:pt-[16px]" ]
                             [ div [ class "input-group-prepend" ]
                                 [ span [ class "input-group-text" ] [ text "$" ] ]
                             , input
@@ -1263,9 +1346,9 @@ view model authStatus locations checkoutDetails =
                 |> Cents
 
         priorityShippingForm =
-            div [ class "col-sm-6" ]
+            div [ class "tw:pt-[60px]" ]
                 [ h5 [] [ text "Priority Shipping & Handling" ]
-                , p []
+                , p [ class "tw:pt-[20px]" ]
                     [ b [] [ text "Rush my order!" ]
                     , text <|
                         " Selecting this option will put your order at the top of our "
@@ -1279,7 +1362,7 @@ view model authStatus locations checkoutDetails =
                     ]
                 , Maybe.withDefault priorityNotAvailable <|
                     Maybe.map (always <| text "") priorityFee
-                , div [ class "form-check" ]
+                , div [ class "form-check tw:pt-[20px]" ]
                     [ input
                         [ id "priority-shipping-input"
                         , class "form-check-input"
@@ -1295,13 +1378,22 @@ view model authStatus locations checkoutDetails =
                         ]
                         [ text "Add Priority Shipping & Handling" ]
                     ]
-                , p [ class "text-danger" ]
-                    [ small []
-                        [ text <|
-                            "We cannot apply priority shipping and handling to seasonal "
-                                ++ "items(potatoes, sweet potatoes, garlic, perennial "
-                                ++ "onions, ginseng, & goldenseal)."
-                        ]
+                , div [ class "tw:pt-[20px]" ]
+                    [ Alert.view
+                        { defaultAlert
+                            | content =
+                                span []
+                                    [ span []
+                                        [ text <|
+                                            "We cannot apply priority shipping and handling to seasonal items"
+                                        ]
+                                    , span [ class "tw:font-semibold" ]
+                                        [ text <|
+                                            "(potatoes, sweet potatoes, garlic, perennial onions, ginseng, & goldenseal)."
+                                        ]
+                                    ]
+                            , style = Alert.Warning
+                        }
                     ]
                 ]
 
@@ -1374,15 +1466,15 @@ view model authStatus locations checkoutDetails =
 
         buttonContents =
             if model.isPaymentProcessing || model.isProcessing then
-                [ text "Placing Order..."
-                , icon "spinner fa-spin ml-2"
-                ]
+                { text = "Placing Order..."
+                , icon = Just <| icon "spinner fa-spin ml-2"
+                }
 
             else if freeCheckout then
-                [ text "Place Order" ]
+                { text = "Place Order", icon = Nothing }
 
             else
-                [ text "Pay with Credit Card" ]
+                { text = "Pay with Credit Card", icon = Just <| icon "arrow-right" }
 
         processingOverlay =
             pageOverlay model.isProcessing "Processing..."
@@ -1395,8 +1487,7 @@ view model authStatus locations checkoutDetails =
                 Just confirmationModel ->
                     viewConfirmationOverlay confirmationModel
     in
-    [ h1 [] [ text "Checkout" ]
-    , hr [] []
+    [ pageTitleView "Checkout"
     , if checkoutDetails.isDisabled then
         div [ class "alert alert-danger static-page" ]
             [ rawHtml checkoutDetails.disabledMessage ]
@@ -1408,7 +1499,7 @@ view model authStatus locations checkoutDetails =
             , genericErrorText hasErrors
             , div [ class "mb-3" ] [ generalErrors ]
             , guestCard
-            , div [ class "row mb-3" ]
+            , div [ class "tw:grid tw:grid-cols-2 tw:gap-[16px]" ]
                 [ addressForm
                     { cardTitle = "Shipping Details"
                     , msg = ShippingMsg
@@ -1429,14 +1520,16 @@ view model authStatus locations checkoutDetails =
                     text ""
 
                   else
-                    billingCard
+                    div []
+                        [ billingCard
+                        ]
                 ]
-            , div [ class "row mb-3" ]
+            , div [ class "tw:grid tw:grid-cols-2 tw:gap-[16px]" ]
                 [ storeCreditForm
                 , viewIf priorityShipingEnabled priorityShippingForm
                 , mobileCouponCodeForm
                 ]
-            , div [ class "mb-3" ]
+            , div [ class "tw:pt-[60px]" ]
                 [ h4 [] [ text "Order Summary" ]
                 , summaryTable checkoutDetails
                     model.storeCredit
@@ -1444,29 +1537,34 @@ view model authStatus locations checkoutDetails =
                     (Dict.get "coupon" model.errors)
                     model.errors
                 ]
-            , div [ class "form-group" ]
+            , div [ class "tw:pt-[48px]" ]
                 [ label [ class "h4", for "commentsTextarea" ]
                     [ text "Additional Comments" ]
-                , textarea
-                    [ id "commentsTextarea"
-                    , class "form-control"
-                    , rows 4
-                    , onInput Comment
-                    , value model.comment
-                    , disableGrammarly
-                    ]
-                    []
-                , p [ class "text-muted" ]
-                    [ small [] [ text "Please include any special shipping requirements you may have." ]
+                , div [ class "tw:pt-[20px]" ]
+                    [ textarea
+                        [ id "commentsTextarea"
+                        , placeholder "Please include any special shipping requirements you may have."
+                        , class "form-control"
+                        , rows 4
+                        , onInput Comment
+                        , value model.comment
+                        , disableGrammarly
+                        ]
+                        []
                     ]
                 ]
-            , div [ class "form-group text-right" ]
-                [ button
-                    [ class "btn btn-primary"
-                    , type_ "submit"
-                    , A.disabled model.isProcessing
-                    ]
-                    buttonContents
+            , div [ class "tw:flex tw:justify-end tw:pt-[20px]" ]
+                [ Button.view
+                    { defaultButton
+                        | label = buttonContents.text
+                        , iconEnd = buttonContents.icon
+                        , type_ =
+                            if model.isProcessing then
+                                Button.Disabled
+
+                            else
+                                Button.FormSubmit
+                    }
                 ]
             ]
     ]
@@ -1594,7 +1692,7 @@ addressForm config =
                     isNewAddressWithExistingAddresses || not address.isDefault
 
                 checkbox =
-                    div [ class "form-check" ]
+                    div [ class "form-check tw:pt-[16px]" ]
                         [ label [ class "form-check-label" ]
                             [ input
                                 [ class "form-check-input"
@@ -1617,13 +1715,14 @@ addressForm config =
                 ]
 
         addressSelect =
-            Address.select config.selectMsg addressId config.selectAddresses True
-                |> List.singleton
-                |> div [ class "form-group" ]
+            div [ class "form-group" ]
+                [ labelView "" (toSentenceCase config.prefix ++ " Address") True
+                , Address.select config.selectMsg addressId config.selectAddresses True
+                ]
     in
     addressCard
-        [ h4 [ class "card-title" ]
-            [ span [ class "mr-4" ] [ text config.cardTitle ]
+        [ div [ class "tw:text-[16px] tw:leading-[20px] tw:opacity-70 tw:pb-[16px] tw:flex" ]
+            [ span [ class "tw:grow" ] [ text config.cardTitle ]
             , sameAsShippingCheckbox
             ]
         , selectHtml
@@ -1643,8 +1742,8 @@ addressCard contents fullWidth =
             else
                 "col-md-6 mb-2"
     in
-    div [ class divClass ]
-        [ div [ class "card" ] [ div [ class "card-body pt-3" ] contents ] ]
+    div [ class "tw:bg-[rgba(30,12,3,0.03)] tw:p-[16px] tw:rounded-[16px]" ]
+        contents
 
 
 sameAddressesCheckbox : Bool -> Html Msg
@@ -1678,7 +1777,9 @@ summaryTable ({ items, charges } as checkoutDetails) creditString couponCode cou
                 ]
 
         productRow p =
-            let productImage = productMainImage p.product
+            let
+                productImage =
+                    productMainImage p.product
             in
             [ tr []
                 [ td [ class "align-middle text-center" ]
@@ -1714,9 +1815,10 @@ summaryTable ({ items, charges } as checkoutDetails) creditString couponCode cou
                 )
             ]
 
-
         mobileRow p =
-            let productImage = productMainImage p.product
+            let
+                productImage =
+                    productMainImage p.product
             in
             div [ class "row" ]
                 [ div [ class "col-auto pr-0" ]
@@ -1812,22 +1914,19 @@ summaryTable ({ items, charges } as checkoutDetails) creditString couponCode cou
                     "Total"
                     finalTotal
                 <|
-                    div [ class "form-group form-inline" ]
-                        [ input
-                            [ class "form-control form-control-sm"
-                            , type_ "text"
-                            , onInput CouponCode
-                            , value couponCode
-                            , A.placeholder "Coupon Code"
-                            , Aria.label "Coupon Code"
+                    div [ class "tw:flex tw:gap-[10px] tw:items-center" ]
+                        [ div [ class "tw:w-[156px]" ]
+                            [ input
+                                [ class "form-control form-control-sm"
+                                , type_ "text"
+                                , onInput CouponCode
+                                , value couponCode
+                                , A.placeholder "Coupon Code"
+                                , Aria.label "Coupon Code"
+                                ]
+                                []
                             ]
-                            []
-                        , button
-                            [ class "btn btn-sm btn-link ml-2"
-                            , type_ "button"
-                            , onClick ApplyCoupon
-                            ]
-                            [ text "Apply" ]
+                        , Button.view { defaultButton | label = "Apply", type_ = Button.TriggerMsg ApplyCoupon, style = Button.Outline }
                         , couponErrors
                             |> Maybe.map (\errs -> small [] [ Api.errorHtml errs ])
                             |> Maybe.withDefault (text "")
@@ -1890,17 +1989,19 @@ summaryTable ({ items, charges } as checkoutDetails) creditString couponCode cou
                     credit
                         |> centsMap2 (\total c -> total - c) totals.total
     in
-    div []
-        [ table [ class "d-none d-sm-table table table-striped table-sm checkout-products-table" ]
+    div [ class "tw:pt-[20px]" ]
+        [ table [ class "se-table" ]
             [ tableHeader
             , tbody [] <| List.concat (List.map productRow items)
             , tableFooter
             ]
-        , div [ class "checkout-product-blocks d-sm-none" ]
-            [ div [] <| List.map mobileRow items
-            , table [ class "table table-striped table-sm checkout-products-table" ]
-                [ tableFooter ]
-            ]
+
+        -- TODO: enable this for mobile view
+        -- , div [ class "checkout-product-blocks d-sm-none" ]
+        --     [ div [] <| List.map mobileRow items
+        --     , table [ class "table table-striped table-sm checkout-products-table" ]
+        --         [ tableFooter ]
+        --     ]
         ]
 
 
@@ -1911,22 +2012,27 @@ successView zone orderId guest locations orderDetails =
             if not guest then
                 text ""
 
-            else div [ class "alert alert-info clearfix d-flex justify-content-between" ]
-                [ text <| String.join " "
-                    [ "To enhance your experience, consider registering on our website"
-                    , "to view order history"
+            else
+                div [ class "tw:pt-[20px]" ]
+                    [ Alert.view
+                        { defaultAlert
+                            | content =
+                                div [ class "tw:flex tw:gap-[8px] tw:items-center tw:justify-between tw:w-full" ]
+                                    [ span [ class "tw:font-semibold" ]
+                                        [ text <|
+                                            String.join " "
+                                                [ "To enhance your experience, consider registering on our website"
+                                                , "to view order history."
+                                                ]
+                                        ]
+                                    , Button.view { defaultButton | label = "Create an Account", type_ = Button.Link <| reverse CreateAccount, style = Button.Outline }
+                                    ]
+                        }
                     ]
-                , a
-                    [ class "btn btn-primary ml-1"
-                    , href <| reverse CreateAccount
-                    ]
-                    [ text "Create an Account" ]
-                ]
-
 
         commentHtml =
             if not (String.isEmpty orderDetails.order.comment) then
-                p []
+                p [ class "tw:pl-[8px] tw:pt-[20px]" ]
                     [ b [] [ text "Comment: " ]
                     , text orderDetails.order.comment
                     ]
@@ -1936,28 +2042,33 @@ successView zone orderId guest locations orderDetails =
 
         orderDate =
             orderDetails.order.createdAt
+
+        thankYouView =
+            div [ class "tw:flex tw:p-[16px] tw:rounded-[16px] tw:border-[2px] tw:border-[rgba(77,170,154,0.4)] tw:gap-[12px]" ]
+                [ handHeartSvg
+                , div []
+                    [ p [ class "tw:font-semibold tw:pb-[12px]" ] [ text "Thanks for your order!" ]
+                    , p [] [ text "We will review your order today & will get in touch with you if we need any clarifications." ]
+                    , p [ class "tw:font-semibold tw:opacity-70" ]
+                        [ text "We will email you a tracking number once your order has shipped."
+                        ]
+                    ]
+                ]
     in
-    [ h1 [] [ text "Order Complete" ]
-    , hr [] []
-    , h2 [] [ text "Thanks for your order!" ]
+    [ pageTitleWithSubView ("Order #" ++ String.fromInt orderId) (Format.date zone orderDate)
+    , div [ class "tw:pt-[20px]" ]
+        [ thankYouView
+        ]
     , newAccountAlert
-    , p [] [ text "We will review your order today & will get in touch with you if we need any clarifications." ]
-    , p [ class "text-center font-weight-bold text-primary mb-2" ]
-        [ text "We will email you a tracking number once your order has shipped."
-        ]
-    , h3 []
-        [ text <| "Order #" ++ String.fromInt orderId
-        , small [] [ text <| " " ++ Format.date zone orderDate ]
-        ]
-    , div [ class "row mb-3" ] <|
+    , div [ class "tw:grid tw:grid-cols-2 tw:gap-[20px] tw:pt-[20px]" ] <|
         case orderDetails.billingAddress of
             Just billingAddress ->
-                [ div [ class "col-6" ]
+                [ div [ class "" ]
                     [ OrderDetails.addressCard locations
                         "Shipping Details"
                         orderDetails.shippingAddress
                     ]
-                , div [ class "col-6" ]
+                , div [ class "" ]
                     [ OrderDetails.addressCard locations
                         "Billing Details"
                         billingAddress
@@ -1965,15 +2076,17 @@ successView zone orderId guest locations orderDetails =
                 ]
 
             Nothing ->
-                [ div [ class "col-12" ]
+                [ div [ class "" ]
                     [ OrderDetails.addressCard locations
                         "Shipping Details"
                         orderDetails.shippingAddress
                     ]
                 ]
     , commentHtml
+    , div [ class "tw:pt-[20px]" ] []
     , OrderDetails.orderTable orderDetails
     ]
+
 
 type alias PaymentConfirmationModel =
     { showConfirmation : Bool
@@ -1982,6 +2095,18 @@ type alias PaymentConfirmationModel =
     , cardToken : String
     , customerCode : String
     }
+
+
+mockConfirmationModel : PaymentConfirmationModel
+mockConfirmationModel =
+    -- Mainly use for testing purpose
+    { showConfirmation = True
+    , amount = Cents 1000
+    , f4l6Card = "abc"
+    , cardToken = "def"
+    , customerCode = "111"
+    }
+
 
 initPaymentConfirmation : String -> Cents -> String -> String -> PaymentConfirmationModel
 initPaymentConfirmation f4l6Card amount cardToken customerCode =
@@ -1992,23 +2117,21 @@ initPaymentConfirmation f4l6Card amount cardToken customerCode =
     , customerCode = customerCode
     }
 
+
 viewConfirmationOverlay : PaymentConfirmationModel -> Html Msg
-viewConfirmationOverlay model = div [ class "card-page-overlay" ]
-    [ div [ class "card h-30" ]
-        [ div [ class "card-body" ]
-            [ h4 [ class "card-title" ] [ text "Confirm Payment" ]
+viewConfirmationOverlay model =
+    div [ class "card-page-overlay" ]
+        [ div [ class "tw:bg-white tw:p-[32px] tw:rounded-[12px]" ]
+            [ h4 [ class "tw:pb-[16px]" ] [ text "Confirm Payment" ]
             , [ text "Please confirm your payment details before proceeding:"
               , text ("Amount: " ++ Format.cents model.amount)
               , text ("Payment method ending in '" ++ String.slice 6 10 model.f4l6Card ++ "'")
               ]
                 |> List.intersperse (br [] [])
                 |> Html.address []
-            , div [ class "form-group" ]
-                [ button [ class "btn btn-primary", type_ "button", onClick ConfirmPayment ]
-                    [ text "Confirm Payment" ]
-                , button [ class "btn btn-secondary ml-3", type_ "button", onClick CancelPayment ]
-                    [ text "Cancel" ]
+            , div [ class "tw:pt-[20px] tw:grid tw:grid-cols-2 tw:gap-[12px]" ]
+                [ Button.view { defaultButton | label = "Cancel", style = Button.Outline, type_ = Button.TriggerMsg CancelPayment }
+                , Button.view { defaultButton | label = "Confirm", type_ = Button.TriggerMsg ConfirmPayment }
                 ]
             ]
         ]
-    ]

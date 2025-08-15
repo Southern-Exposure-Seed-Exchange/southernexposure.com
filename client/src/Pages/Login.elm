@@ -211,7 +211,7 @@ view tagger model redirectTo clearCart =
         loginInputs =
             div [ class "tw:p-[16px] tw:bg-[rgba(30,12,3,0.03)] tw:rounded-[16px] tw:flex tw:flex-col tw:gap-[16px] tw:mb-[16px]" ]
                 [ div [ class "" ]
-                    [ labelView "emailInput" "Email Address"
+                    [ labelView "emailInput" "Email Address" True
                     , input
                         [ id "emailInput"
                         , class "form-control"
@@ -226,7 +226,7 @@ view tagger model redirectTo clearCart =
                         []
                     ]
                 , div [ class "" ]
-                    [ labelView "passwordInput" "Password"
+                    [ labelView "passwordInput" "Password" True
                     , input
                         [ id "passwordInput"
                         , class "form-control"

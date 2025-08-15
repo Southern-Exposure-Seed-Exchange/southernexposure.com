@@ -116,6 +116,7 @@ view customerId model tagger =
             { defaultAlert
                 | content = text "You can't log into your account before you verify your email"
                 , style = Alert.Danger
+                , icon = Just Alert.defaultDangerIcon
             }
         , p [ class "tw:p-[16px]" ] [ andvertisementText ]
         , div [ class "tw:flex" ]
