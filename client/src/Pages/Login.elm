@@ -24,6 +24,7 @@ import Routing exposing (Route(..), reverse)
 import Update.Utils exposing (nothingAndNoCommand)
 import User exposing (AuthStatus, UserId(..))
 import Views.Utils exposing (..)
+import Html.Attributes exposing (placeholder)
 
 
 
@@ -216,6 +217,7 @@ view tagger model redirectTo clearCart =
                         [ id "emailInput"
                         , class "form-control"
                         , type_ "email"
+                        , placeholder "Email Address"
                         , onInput <| tagger << Email
                         , value model.email
                         , required True
@@ -231,6 +233,7 @@ view tagger model redirectTo clearCart =
                         [ id "passwordInput"
                         , class "form-control"
                         , type_ "password"
+                        , placeholder "Password"
                         , onInput <| tagger << Password
                         , value model.password
                         , required True

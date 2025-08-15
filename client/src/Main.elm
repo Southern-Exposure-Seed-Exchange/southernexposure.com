@@ -10,6 +10,7 @@ import Browser.Navigation
 import Categories.AdminViews as CategoryAdmin
 import Category exposing (CategoryId)
 import Components.ProfileNavbar as ProfileNavbar
+-- import Components.Tooltip as Tooltip
 import Dict
 import Http
 import Json.Decode as Decode
@@ -1467,7 +1468,6 @@ update msg ({ pageData, key } as model) =
             let
                 updatedPageData =
                     { pageData | cartDetails = response }
-
             in
             { model | pageData = updatedPageData }
                 |> resetEditCartForm response
@@ -1500,24 +1500,24 @@ update msg ({ pageData, key } as model) =
                         _ ->
                             Cmd.none
             in
-                ((\a -> Tuple.pair a cmd) <|
-                    case ( pageData.checkoutDetails, response ) of
-                        ( RemoteData.Success _, RemoteData.Success (Ok _) ) ->
-                            { model | pageData = updatedPageData }
+            ((\a -> Tuple.pair a cmd) <|
+                case ( pageData.checkoutDetails, response ) of
+                    ( RemoteData.Success _, RemoteData.Success (Ok _) ) ->
+                        { model | pageData = updatedPageData }
 
-                        ( _, RemoteData.Success (Ok details) ) ->
-                            { model
-                                | pageData = updatedPageData
-                                , checkoutForm =
-                                    Checkout.initialWithDefaults
-                                        details.shippingAddresses
-                                        details.billingAddresses
-                                        details.restrictionsError
-                            }
+                    ( _, RemoteData.Success (Ok details) ) ->
+                        { model
+                            | pageData = updatedPageData
+                            , checkoutForm =
+                                Checkout.initialWithDefaults
+                                    details.shippingAddresses
+                                    details.billingAddresses
+                                    details.restrictionsError
+                        }
 
-                        _ ->
-                            { model | pageData = updatedPageData }
-                )
+                    _ ->
+                        { model | pageData = updatedPageData }
+            )
                 |> extraCommand (redirect403IfAnonymous key response)
 
         GetCheckoutSuccessDetails response ->
@@ -1731,6 +1731,22 @@ update msg ({ pageData, key } as model) =
                         Cmd.none
                 ]
             )
+
+        -- TooltipMsg tooltipKey subMsg ->
+        --     let
+        --         newTooltipDict =
+        --             Dict.update tooltipKey
+        --                 (\mbTooltip ->
+        --                     case mbTooltip of
+        --                         Just t ->
+        --                             Just <| Tooltip.update subMsg t
+
+        --                         Nothing ->
+        --                             Just <| Tooltip.update subMsg Tooltip.init
+        --                 )
+        --                 model.tooltipDict
+        --     in
+        --     ( { model | tooltipDict = newTooltipDict }, Cmd.none )
 
 
 {-| Wrap the normal update function, checking to see if the page has finished
@@ -2299,7 +2315,8 @@ updateCartVariant (ProductId productId) variantId model =
 updateCartFormRequestStatus : ProductId -> WebData (Result Api.FormErrors a) -> ( Model, Cmd Msg ) -> ( Model, Cmd Msg )
 updateCartFormRequestStatus (ProductId productId) response ( { addToCartForms } as model, cmd ) =
     let
-        unitResponse = RemoteData.map (Result.map (always ())) response
+        unitResponse =
+            RemoteData.map (Result.map (always ())) response
 
         updatedForms =
             Dict.update productId updateForm addToCartForms
