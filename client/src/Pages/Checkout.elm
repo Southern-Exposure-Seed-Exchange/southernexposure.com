@@ -1439,6 +1439,7 @@ view model authStatus locations checkoutDetails =
                     [ input
                         [ class "form-control"
                         , type_ "text"
+                        , placeholder "Coupon Code"
                         , onInput CouponCode
                         , value model.couponCode
                         ]
@@ -1596,6 +1597,7 @@ guestForm model =
                 , inputClass emailErrors
                 , name "email"
                 , type_ "email"
+                , placeholder "Email Address"
                 , required True
                 , onInput Email
                 , value model.email
@@ -1785,6 +1787,7 @@ summaryTable ({ items, charges } as checkoutDetails) creditString couponCode cou
                 [ td [ class "align-middle text-center" ]
                     [ img
                         [ src <| imgSrcFallback productImage
+                        , class "tw:rounded-[8px]"
                         , imageToSrcSet productImage
                         , imageSizes
                         , alt <| "Product Image for " ++ p.product.name
@@ -1917,7 +1920,7 @@ summaryTable ({ items, charges } as checkoutDetails) creditString couponCode cou
                     div [ class "tw:flex tw:gap-[10px] tw:items-center" ]
                         [ div [ class "tw:w-[156px]" ]
                             [ input
-                                [ class "form-control form-control-sm"
+                                [ class "form-control"
                                 , type_ "text"
                                 , onInput CouponCode
                                 , value couponCode
@@ -1926,7 +1929,9 @@ summaryTable ({ items, charges } as checkoutDetails) creditString couponCode cou
                                 ]
                                 []
                             ]
-                        , Button.view { defaultButton | label = "Apply", type_ = Button.TriggerMsg ApplyCoupon, style = Button.Outline }
+                        , div []
+                            [ Button.view { defaultButton | label = "Apply", type_ = Button.TriggerMsg ApplyCoupon, style = Button.Outline }
+                            ]
                         , couponErrors
                             |> Maybe.map (\errs -> small [] [ Api.errorHtml errs ])
                             |> Maybe.withDefault (text "")

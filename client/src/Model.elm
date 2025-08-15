@@ -7,6 +7,7 @@ import Api exposing (Endpoint(..))
 import BootstrapGallery as Gallery
 import Categories.AdminViews as CategoryAdmin
 import Components.ProfileNavbar as ProfileNavbar
+-- import Components.Tooltip as Tooltip
 import Dict exposing (Dict)
 import Models.Fields exposing (ImageData)
 import PageData exposing (PageData)
@@ -91,6 +92,7 @@ type alias Model =
 
     -- sub-component
     , profileNavbar : ProfileNavbar.Model
+    -- , tooltipDict : Dict String Tooltip.Model
     }
 
 initial : Routing.Key -> Route -> String -> Model
@@ -142,4 +144,5 @@ initial key route helcimUrl =
     , key = key
     , helcimUrl = helcimUrl
     , profileNavbar = ProfileNavbar.init
+    -- , tooltipDict = Dict.empty
     }

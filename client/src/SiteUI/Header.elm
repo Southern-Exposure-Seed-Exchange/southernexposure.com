@@ -3,17 +3,18 @@ module SiteUI.Header exposing (adminView, view)
 import Components.Button as Button exposing (defaultButton)
 import Components.IconButton as IconButton
 import Components.ProfileNavbar as ProfileNavbar
-import Components.Svg exposing (shoppingCartSvg)
+import Components.Svg exposing (..)
 import Html exposing (Html, a, br, div, h1, img, li, small, span, text, ul)
 import Html.Attributes exposing (alt, class, href, id, src, target)
 import Html.Events.Extra exposing (onClickPreventDefault)
 import Messages exposing (Msg(..))
+import Model exposing (Model)
 import Routing exposing (AdminRoute(..), Route(..), reverse)
+import Search exposing (UniqueSearch(..))
 import SiteUI.Search as SiteSearch
 import User exposing (AuthStatus(..))
 import Views.Images as Images
 import Views.Utils exposing (routeLinkAttributes)
-import Model exposing (Model)
 
 
 view : Model -> (SiteSearch.Msg -> Msg) -> SiteSearch.Data -> AuthStatus -> Int -> Html Msg
@@ -58,6 +59,14 @@ logoAndName linkRoute =
         ]
 
 
+searchIcon : Html Msg
+searchIcon =
+    a
+        [ class "tw:relative tw:p-[6px]! tw:cursor-pointer tw:group", href "/all-products" ]
+        [ searchSvgBig
+        ]
+
+
 cartIcon : Int -> Html Msg
 cartIcon cartItemCount =
     a
@@ -90,7 +99,12 @@ linksAndSearch model searchTagger searchData authStatus cartItemCount =
                 [ a (class "p-2" :: attrs) [ text content ] ]
     in
     div [ class "tw:hidden tw:md:flex tw:md:gap-[16px] tw:flex tw:items-center" ] <|
-        [ cartIcon cartItemCount
+        [ if Routing.showSearchbar model.route then
+            text ""
+
+          else
+            searchIcon
+        , cartIcon cartItemCount
         , Button.view { defaultButton | label = "Quick order", type_ = Button.Link <| reverse QuickOrder, style = Button.Outline }
         ]
             ++ (case authStatus of

@@ -23,6 +23,7 @@ import Products.Sorting as Sorting
 import RemoteData
 import Routing exposing (Route(..))
 import SeedAttribute exposing (SeedAttribute)
+import Components.SeedAttribute as SeedAttribute
 import Views.Aria as Aria
 import Views.Format as Format
 import Views.Microdata as Microdata
@@ -555,7 +556,7 @@ listView routeConstructor pagination addToCartForms products =
         , div [ class "tw:grid tw:grid-cols-1  tw:gap-[24px] tw:lg:grid-cols-3 " ]
             productRows
         , pager.viewBottom ()
-        , SeedAttribute.legend
+        -- , SeedAttribute.legend
         ]
 
     else

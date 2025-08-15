@@ -90,7 +90,7 @@ view model =
             div [ class "tw:flex tw:flex-col tw:bg-white tw:rounded-[16px] tw:shrink-0 tw:shadow-lg" ]
                 [ dropdownItemView (TriggerHref MyAccount) orderSvg "Orders"
                 , dropdownItemView (TriggerHref EditLogin) passwordSvg "Edit login details"
-                , dropdownItemView (TriggerHref EditAddress) deliverySvg "Edit billing & shipping addresses"
+                , dropdownItemView (TriggerHref EditAddress) deliverySvg "Edit addresses"
                 , dropdownItemView (TriggerOnClick <| SetMsgToParent LogOut) signOutSvg "Log out"
                 ]
         , closeOnClick = True

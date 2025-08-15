@@ -1,7 +1,8 @@
 module AdvancedSearch exposing (Msg(..), update, view)
 
 import Category exposing (CategoryId(..))
-import Components.Svg exposing (heirLoomSvg, organicSvg, searchSvg, smallFarmSvg, sunSvg)
+import Components.Button as Button exposing (..)
+import Components.Svg exposing (heirLoomSvg, organicSvg, searchSvg, searchSvgBig, smallFarmSvg, sunSvg)
 import Html exposing (..)
 import Html.Attributes exposing (checked, class, id, name, placeholder, selected, src, type_, value)
 import Html.Events exposing (on, onCheck, onClick, onInput, onSubmit, targetValue)
@@ -149,14 +150,11 @@ mainView route routingMsg formMsg data categories =
                 |> Decode.map (String.toInt >> Maybe.map CategoryId >> msg)
                 |> on "change"
 
-        submitButton =
-            button [ class "shrink-0", type_ "submit" ] [ searchSvg ]
-
+        -- button [ class "shrink-0", type_ "submit" ] [ searchSvg "tw:fill-[#1E0C03]"]
         searchBar : Html msg
         searchBar =
-            div [ class "tw:w-full tw:py-[16px] tw:px-[18px] bg-white tw:rounded-[16px] tw:border tw:border-[rgba(232,231,230,1)] tw:flex tw:gap-[8px] tw:items-center " ]
-                [ submitButton
-                , input
+            div [ class "tw:w-full tw:py-[8px] tw:pl-[18px] tw:pr-[8px] bg-white tw:rounded-[16px] tw:border tw:border-[rgba(232,231,230,1)] tw:flex tw:gap-[8px] tw:items-center " ]
+                [ input
                     [ id "keywords"
                     , class "tw:block tw:w-full tw:placeholder:text-[rgba(187,182,179,1)]"
                     , type_ "search"
@@ -167,6 +165,9 @@ mainView route routingMsg formMsg data categories =
                     ]
                     []
                 , categorySelect
+                , div [ class "tw:pl-[10px]" ]
+                    [ Button.view { defaultButton | label = "", icon = Just <| searchSvg "tw:fill-white", type_ = Button.FormSubmit, size = Button.Custom "tw:py-[10px] tw:px-[20px]" }
+                    ]
                 ]
 
         searchIn =
