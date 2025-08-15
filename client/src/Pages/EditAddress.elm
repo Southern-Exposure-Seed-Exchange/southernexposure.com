@@ -6,8 +6,8 @@ module Pages.EditAddress exposing
     , view
     )
 
-import Address exposing (AddressId(..))
-import Api
+import Data.Api as Api
+import Components.Address.Address as Address exposing (AddressId(..))
 import Components.Button as Button exposing (defaultButton)
 import Components.Svg exposing (binSvg)
 import Dict exposing (Dict)
@@ -15,13 +15,13 @@ import Html exposing (..)
 import Html.Attributes exposing (..)
 import Html.Events exposing (onCheck, onClick, onSubmit)
 import Json.Decode as Decode
-import Locations exposing (AddressLocations)
-import PageData
+import Data.Locations as Locations exposing (AddressLocations)
+import Data.PageData as PageData
 import RemoteData exposing (WebData)
-import Routing exposing (Route(..))
-import Update.Utils exposing (noCommand)
-import User exposing (AuthStatus)
-import Views.Utils exposing (pageTitleView)
+import Data.Routing.Routing as Routing exposing (Route(..))
+import Utils.Update exposing (noCommand)
+import Data.User as User exposing (AuthStatus)
+import Utils.View exposing (pageTitleView)
 
 
 

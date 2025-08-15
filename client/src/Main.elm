@@ -1,25 +1,25 @@
 module Main exposing (main)
 
-import Address
-import AdvancedSearch
-import Api
+import Components.Address.Address as Address
+import Components.AdvancedSearch as AdvancedSearch
+import Data.Api as Api
 import BootstrapGallery as Gallery
 import Browser
 import Browser.Dom as Dom
 import Browser.Navigation
-import Categories.AdminViews as CategoryAdmin
-import Category exposing (CategoryId)
+import Components.Categories.AdminViews as CategoryAdmin
+import Data.Category as Category exposing (CategoryId)
 import Components.ProfileNavbar as ProfileNavbar
 -- import Components.Tooltip as Tooltip
 import Dict
 import Http
 import Json.Decode as Decode
 import Json.Encode as Encode
-import Locations
-import Messages exposing (Msg(..))
-import Model exposing (Model)
-import Models.Fields exposing (imageDataLightboxConfig)
-import PageData exposing (CartItemId(..), PageData)
+import Data.Locations as Locations
+import Data.Msg exposing (Msg(..))
+import Data.Model as Model exposing (Model)
+import Data.Fields exposing (imageDataLightboxConfig)
+import Data.PageData as PageData exposing (CartItemId(..), PageData)
 import Pages.Cart.Cart as Cart
 import Pages.Cart.Type as Cart
 import Pages.Checkout as Checkout
@@ -35,31 +35,31 @@ import Pages.VerifyEmail as VerifyEmail
 import Paginate exposing (Paginated)
 import Ports
 import Process
-import Product exposing (ProductId(..), ProductVariantId(..), productMainImage)
-import Products.AdminViews as ProductAdmin
-import Products.Pagination as Pagination
+import Data.Product as Product exposing (ProductId(..), ProductVariantId(..), productMainImage)
+import Components.Products.AdminViews as ProductAdmin
+import Components.Products.Pagination as Pagination
 import RemoteData exposing (WebData)
-import Routing exposing (AdminRoute(..), Route(..), parseRoute)
-import Search exposing (UniqueSearch(..))
-import SiteUI
-import SiteUI.Search as SiteSearch
-import StaticPage exposing (StaticPageId)
+import Data.Routing.Routing as Routing exposing (AdminRoute(..), Route(..), parseRoute)
+import Data.Search as Search exposing (UniqueSearch(..))
+import Data.SiteUI as SiteUI
+import Components.SiteUI.Search as SiteSearch
+import Data.StaticPage as StaticPage exposing (StaticPageId)
 import Task
 import Time
-import Update.Utils exposing (batchCommand, discardCommand, extraCommand, noCommand, updateAndCommand, withCommand)
+import Utils.Update exposing (batchCommand, discardCommand, extraCommand, noCommand, updateAndCommand, withCommand)
 import Url exposing (Url)
-import User exposing (AuthStatus)
+import Data.User as User exposing (AuthStatus)
 import View exposing (view)
-import Views.AdminDashboard as AdminDashboard
-import Views.CategorySalesAdmin as CategorySalesAdmin
-import Views.CouponAdmin as CouponAdmin
-import Views.CustomerAdmin as CustomerAdmin
-import Views.OrderAdmin as OrderAdmin
-import Views.ProductSalesAdmin as ProductSalesAdmin
-import Views.SettingsAdmin as SettingsAdmin
-import Views.ShippingAdmin as ShippingAdmin
-import Views.StaticPageAdmin as StaticPageAdmin
-import Views.SurchargesAdmin as SurchargesAdmin
+import Components.Admin.AdminDashboard as AdminDashboard
+import Components.Admin.CategorySalesAdmin as CategorySalesAdmin
+import Components.Admin.CouponAdmin as CouponAdmin
+import Components.Admin.CustomerAdmin as CustomerAdmin
+import Components.Admin.OrderAdmin as OrderAdmin
+import Components.Admin.ProductSalesAdmin as ProductSalesAdmin
+import Components.Admin.SettingsAdmin as SettingsAdmin
+import Components.Admin.ShippingAdmin as ShippingAdmin
+import Components.Admin.StaticPageAdmin as StaticPageAdmin
+import Components.Admin.SurchargesAdmin as SurchargesAdmin
 
 
 main : Program Flags Model Msg

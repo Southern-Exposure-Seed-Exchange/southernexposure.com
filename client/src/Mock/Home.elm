@@ -3,7 +3,7 @@ module Mock.Home exposing (..)
 import Components.Button as Button exposing (defaultButton)
 import Html exposing (..)
 import Html.Attributes exposing (..)
-import Views.Images as Images
+import Utils.Images as Images
 
 
 

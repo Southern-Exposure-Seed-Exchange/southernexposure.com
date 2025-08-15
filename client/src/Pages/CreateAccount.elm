@@ -9,9 +9,9 @@ module Pages.CreateAccount exposing
 
 -- TODO: Refactor module as a composition of the EditLogin & EditContact module forms.
 
-import Api
+import Data.Api as Api
 import Components.Button as Button exposing (defaultButton)
-import Decode.Utils as Decode
+import Utils.Decode as Decode
 import Dict
 import Html exposing (..)
 import Html.Attributes exposing (class)
@@ -19,11 +19,11 @@ import Html.Events exposing (onSubmit)
 import Json.Encode as Encode exposing (Value)
 import Ports
 import RemoteData exposing (WebData)
-import Routing exposing (Route(..), reverse)
-import Update.Utils exposing (nothingAndNoCommand)
-import User exposing (AuthStatus)
-import Views.HorizontalForm as Form
-import Views.Utils exposing (legendView, pageTitleView)
+import Data.Routing.Routing as Routing exposing (Route(..), reverse)
+import Utils.Update exposing (nothingAndNoCommand)
+import Data.User as User exposing (AuthStatus)
+import Components.HorizontalForm as Form
+import Utils.View exposing (legendView, pageTitleView)
 
 
 

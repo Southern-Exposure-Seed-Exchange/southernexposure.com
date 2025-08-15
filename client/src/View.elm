@@ -1,19 +1,19 @@
 module View exposing (pageDescription, pageImage, pageTitle, view)
 
-import AdvancedSearch
+import Components.AdvancedSearch as AdvancedSearch
 import BootstrapGallery as Gallery
 import Browser exposing (Document)
-import Categories.AdminViews as CategoryAdminViews
-import Categories.Views as CategoryViews
+import Components.Categories.AdminViews as CategoryAdminViews
+import Components.Categories.Views as CategoryViews
 import Html exposing (..)
 import Html.Attributes exposing (class, href, id, target)
 import Html.Events exposing (onClick)
 import Http
-import Messages exposing (Msg(..))
+import Data.Msg exposing (Msg(..))
 import Mock.Home
-import Model exposing (Model)
-import OrderDetails
-import PageData
+import Data.Model as Model exposing (Model)
+import Components.OrderDetails as OrderDetails
+import Data.PageData as PageData
 import Pages.Cart.Cart as Cart
 import Pages.Cart.Type as Cart
 import Pages.Checkout as Checkout
@@ -27,34 +27,34 @@ import Pages.ResetPassword as ResetPassword
 import Pages.VerificationRequired as VerificationRequired
 import Pages.VerifyEmail as VerifyEmail
 import Paginate
-import Product exposing (productMainImage)
-import Products.AdminViews as ProductAdmin
-import Products.Pagination as Pagination
-import Products.Views as ProductViews
+import Data.Product as Product exposing (productMainImage)
+import Components.Products.AdminViews as ProductAdmin
+import Components.Products.Pagination as Pagination
+import Components.Products.Views as ProductViews
 import RemoteData exposing (WebData)
-import Routing exposing (AdminRoute(..), Route(..), isAdminRoute, showSearchbar)
-import Search exposing (UniqueSearch(..))
-import SeedAttribute
-import SiteUI.Breadcrumbs as SiteBreadcrumbs
-import SiteUI.Footer as SiteFooter
-import SiteUI.Header as SiteHeader
-import SiteUI.Navigation as SiteNavigation
-import SiteUI.Sidebar as SiteSidebar
-import StaticPage exposing (StaticPage)
-import User exposing (unauthorized)
-import Views.AdminDashboard as AdminDashboard
-import Views.Aria as Aria
-import Views.CategorySalesAdmin as CategorySalesAdmin
-import Views.CouponAdmin as CouponAdmin
-import Views.CustomerAdmin as CustomerAdmin
-import Views.OrderAdmin as OrderAdmin
-import Views.ProductSalesAdmin as ProductSalesAdmin
-import Views.SettingsAdmin as SettingsAdmin
-import Views.ShippingAdmin as ShippingAdmin
-import Views.StaticPageAdmin as StaticPageAdmin
-import Views.SurchargesAdmin as SurchargesAdmin
-import Views.Utils exposing (pageOverlay, rawHtml)
-import Views.Utils exposing (pageTitleView)
+import Data.Routing.Routing as Routing exposing (AdminRoute(..), Route(..), isAdminRoute, showSearchbar)
+import Data.Search as Search exposing (UniqueSearch(..))
+import Data.SeedAttribute as SeedAttribute
+import Components.SiteUI.Breadcrumbs as SiteBreadcrumbs
+import Components.SiteUI.Footer as SiteFooter
+import Components.SiteUI.Header as SiteHeader
+import Components.SiteUI.Navigation as SiteNavigation
+import Components.SiteUI.Sidebar as SiteSidebar
+import Data.StaticPage as StaticPage exposing (StaticPage)
+import Data.User as User exposing (unauthorized)
+import Components.Admin.AdminDashboard as AdminDashboard
+import Components.Aria as Aria
+import Components.Admin.CategorySalesAdmin as CategorySalesAdmin
+import Components.Admin.CouponAdmin as CouponAdmin
+import Components.Admin.CustomerAdmin as CustomerAdmin
+import Components.Admin.OrderAdmin as OrderAdmin
+import Components.Admin.ProductSalesAdmin as ProductSalesAdmin
+import Components.Admin.SettingsAdmin as SettingsAdmin
+import Components.Admin.ShippingAdmin as ShippingAdmin
+import Components.Admin.StaticPageAdmin as StaticPageAdmin
+import Components.Admin.SurchargesAdmin as SurchargesAdmin
+import Utils.View exposing (pageOverlay, rawHtml)
+import Utils.View exposing (pageTitleView)
 
 
 view : Model -> Document Msg

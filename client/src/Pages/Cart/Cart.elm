@@ -5,7 +5,7 @@ module Pages.Cart.Cart exposing
     , view
     )
 
-import Api
+import Data.Api as Api
 import Components.Button as Button exposing (defaultButton)
 import Components.Svg exposing (..)
 import Dict exposing (Dict, get, size)
@@ -14,18 +14,18 @@ import Html.Attributes exposing (class)
 import Html.Events exposing (onClick, onSubmit)
 import Html.Extra exposing (viewIf)
 import Json.Encode as Encode
-import Models.Fields exposing (Cents(..), centsMap)
-import PageData exposing (CartDetails, CartItemId(..), showCartItemError, showCartItemWarning)
+import Data.Fields exposing (Cents(..), centsMap)
+import Data.PageData as PageData exposing (CartDetails, CartItemId(..), showCartItemError, showCartItemWarning)
 import Pages.Cart.Type exposing (..)
-import Product exposing (variantPrice)
-import Products.Views as ProductView
+import Data.Product as Product exposing (variantPrice)
+import Components.Products.Views as ProductView
 import RemoteData
-import Routing exposing (Route(..), reverse)
-import User exposing (AuthStatus, unauthorized)
-import Views.Aria as Aria
-import Views.Format as Format
-import Product exposing (InventoryPolicy(..))
-import Views.Utils exposing (htmlOrBlank, icon, rawHtml, routeLinkAttributes, pageTitleView)
+import Data.Routing.Routing as Routing exposing (Route(..), reverse)
+import Data.User as User exposing (AuthStatus, unauthorized)
+import Components.Aria as Aria
+import Utils.Format as Format
+import Data.Product as Product exposing (InventoryPolicy(..))
+import Utils.View exposing (htmlOrBlank, icon, rawHtml, routeLinkAttributes, pageTitleView)
 
 
 
