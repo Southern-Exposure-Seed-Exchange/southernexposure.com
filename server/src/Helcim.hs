@@ -103,7 +103,7 @@ createVerifyCheckout customerCode = do
             , ccrDisplayContactFields = Nothing
             , ccrCustomStyling = Just $ CustomStyling
                 { csAppearance = Just "light"
-                , csBrandColor = Just "158312"
+                , csBrandColor = Just "4DAA9A"
                 , csCornerRadius = Just "rounded"
                 , csCtaButtonText = Just "pay"
                 }
