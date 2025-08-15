@@ -175,13 +175,26 @@ data ProductParameters =
         , ppCategories :: [CategoryId]
         , ppBaseSku :: T.Text
         , ppLongDescription :: T.Text
-        , ppImagesData :: [ProductImageData]
+        , ppImageUpdates :: M.Map Int ProductImageOperation
         -- ^ Base64 Encoded image file and the image name
         , ppKeywords :: T.Text
         , ppShippingRestrictions :: [Region]
         , ppVariantData :: [VariantData]
         , ppSeedAttribute :: Maybe SeedData
         } deriving (Show)
+
+data ProductImageOperation
+    = ProductImageDelete
+    | ProductImageUpdate ProductImageData
+    deriving (Show)
+
+instance FromJSON ProductImageOperation where
+    parseJSON = withObject "ProductImageOperation" $ \v -> do
+        opType <- v .: "operation"
+        case opType of
+            "delete" -> return ProductImageDelete
+            "update" -> ProductImageUpdate <$> v .: "data"
+            _ -> fail $ "Unknown operation type: " ++ T.unpack opType
 
 data ProductImageData = ProductImageData
     { pidFileName :: T.Text
@@ -201,7 +214,7 @@ instance FromJSON ProductParameters where
         ppCategories <- v .: "categories"
         ppBaseSku <- v .: "baseSku"
         ppLongDescription <- v .: "longDescription"
-        ppImagesData <- v .: "imagesData"
+        ppImageUpdates <- v .: "imageUpdates"
         ppKeywords <- fromMaybe "" <$> (v .:? "keywords")
         ppShippingRestrictions <- v .: "shippingRestrictions"
         ppVariantData <- v .: "variants"
@@ -312,7 +325,12 @@ newProductRoute = validateAdminAndParameters $ \_ p@ProductParameters {..} -> do
     time <- liftIO getCurrentTime
     imageFileNames <- mapM
         (\(ProductImageData fileName encodedImage) -> makeImageFromBase64 "products" fileName encodedImage)
-        ppImagesData
+        (mapMaybe
+            (\case
+                ProductImageUpdate imageData -> Just imageData
+                _ -> Nothing
+            ) (M.elems ppImageUpdates)
+        )
     runDB $ do
         (prod, extraCategories) <- makeProduct p imageFileNames time
         productId <- insert prod
@@ -473,10 +491,10 @@ editProductRoute :: WrappedAuthToken -> EditProductParameters -> App (Cookied Pr
 editProductRoute = validateAdminAndParameters $ \_ EditProductParameters {..} -> do
     let ProductParameters {..} = eppProduct
     imageUpdate <-
-        if not (null ppImagesData) then do
-            imageFileNames <- mapM
-                (\(ProductImageData fileName encodedImage) -> do makeImageFromBase64 "products" fileName encodedImage)
-                ppImagesData
+        if not (null ppImageUpdates) then do
+            imageUrls <- fmap (fmap (\(Entity _ p) -> productImageUrls p)) $ runDB $ selectFirst [ProductId ==. eppId] []
+            let existingImages = fromMaybe [] imageUrls
+            imageFileNames <- updateImageList ppImageUpdates existingImages
             return [ ProductImageUrls =. imageFileNames ]
         else
             return []
@@ -532,6 +550,27 @@ editProductRoute = validateAdminAndParameters $ \_ EditProductParameters {..} ->
                     unless vdIsActive $
                         deleteWhere [CartItemProductVariantId ==. variantId]
     return eppId
+    where
+        updateImageList :: M.Map Int ProductImageOperation -> [T.Text] -> App [T.Text]
+        updateImageList imageUpdates oldImageUrls = do
+            let maxIdx = max (if null oldImageUrls then -1 else length oldImageUrls - 1)
+                    (if null (M.keys imageUpdates) then -1 else maximum (M.keys imageUpdates))
+            let buildList idx
+                    | idx > maxIdx = return []
+                    | otherwise = case M.lookup idx imageUpdates of
+                        Just ProductImageDelete ->
+                            buildList (idx + 1)
+                        Just (ProductImageUpdate (ProductImageData fileName encodedImage)) -> do
+                            img <- makeImageFromBase64 "products" fileName encodedImage
+                            rest <- buildList (idx + 1)
+                            return $ img : rest
+                        Nothing ->
+                            case drop idx oldImageUrls of
+                                (img : _) -> do
+                                    rest <- buildList (idx + 1)
+                                    return $ img : rest
+                                [] -> buildList (idx + 1)
+            buildList 0
 
 -- EXPORT
 
