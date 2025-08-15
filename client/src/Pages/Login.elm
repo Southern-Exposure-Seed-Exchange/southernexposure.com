@@ -8,7 +8,7 @@ module Pages.Login exposing
     , view
     )
 
-import Api
+import Data.Api as Api
 import Browser.Navigation
 import Components.Button as Button exposing (defaultButton)
 import Components.Svg exposing (..)
@@ -20,10 +20,10 @@ import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode exposing (Value)
 import Ports
 import RemoteData exposing (WebData)
-import Routing exposing (Route(..), reverse)
-import Update.Utils exposing (nothingAndNoCommand)
-import User exposing (AuthStatus, UserId(..))
-import Views.Utils exposing (..)
+import Data.Routing.Routing as Routing exposing (Route(..), reverse)
+import Utils.Update exposing (nothingAndNoCommand)
+import Data.User as User exposing (AuthStatus, UserId(..))
+import Utils.View exposing (..)
 import Html.Attributes exposing (placeholder)
 
 

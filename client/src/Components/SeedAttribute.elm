@@ -1,13 +1,13 @@
 module Components.SeedAttribute exposing (..)
 
--- import Messages exposing (Msg(..))
+-- import Data.Msg exposing (Msg(..))
 
 import Components.Svg exposing (heirLoomSvg, organicSvg, smallFarmSvg, sunSvg)
 import Dict exposing (Dict)
 import Html exposing (..)
 import Html.Attributes exposing (..)
-import Views.Images as Images
-import SeedAttribute as SeedAttribute
+import Utils.Images as Images
+import Data.SeedAttribute as SeedAttribute
 import List exposing (all)
 
 

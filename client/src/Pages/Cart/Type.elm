@@ -1,11 +1,11 @@
 module Pages.Cart.Type exposing (..)
 
-import Api exposing (FormErrors)
+import Data.Api as Api exposing (FormErrors)
 import Dict exposing (Dict)
 import Html exposing (..)
 import RemoteData
-import PageData exposing (CartItemId(..))
-import Product exposing (ProductVariantId)
+import Data.PageData as PageData exposing (CartItemId(..))
+import Data.Product as Product exposing (ProductVariantId)
 import RemoteData exposing (WebData)
 
 

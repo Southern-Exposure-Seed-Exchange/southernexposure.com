@@ -13,8 +13,8 @@ module Pages.Checkout exposing
     , view
     )
 
-import Address exposing (AddressId(..))
-import Api
+import Components.Address.Address as Address exposing (AddressId(..))
+import Data.Api as Api
 import Components.Alert as Alert exposing (defaultAlert)
 import Components.Button as Button exposing (defaultButton)
 import Components.Svg exposing (..)
@@ -25,22 +25,22 @@ import Html.Events exposing (onCheck, onClick, onInput, onSubmit)
 import Html.Extra exposing (viewIf)
 import Json.Decode as Decode
 import Json.Encode as Encode exposing (Value)
-import Locations exposing (AddressLocations)
-import Models.Fields exposing (Cents(..), centsFromString, centsMap, centsMap2, imageToSrcSet, imgSrcFallback, lotSizeToString)
-import OrderDetails
-import PageData exposing (CartItemId(..), LineItemType(..), showCartItemError, showCartItemWarning)
+import Data.Locations as Locations exposing (AddressLocations)
+import Data.Fields exposing (Cents(..), centsFromString, centsMap, centsMap2, imageToSrcSet, imgSrcFallback, lotSizeToString)
+import Components.OrderDetails as OrderDetails
+import Data.PageData as PageData exposing (CartItemId(..), LineItemType(..), showCartItemError, showCartItemWarning)
 import Ports
-import Product exposing (productMainImage, variantPrice)
+import Data.Product as Product exposing (productMainImage, variantPrice)
 import RemoteData exposing (WebData)
-import Routing exposing (Route(..), reverse)
+import Data.Routing.Routing as Routing exposing (Route(..), reverse)
 import String.Extra exposing (toSentenceCase)
 import Time
-import Update.Utils exposing (nothingAndNoCommand)
-import User exposing (AuthStatus)
-import Views.Aria as Aria
-import Views.Format as Format
-import Views.HorizontalForm exposing (genericErrorText)
-import Views.Utils exposing (decimalInput, disableGrammarly, emailInput, icon, labelView, pageOverlay, pageTitleView, pageTitleWithSubView, rawHtml)
+import Utils.Update exposing (nothingAndNoCommand)
+import Data.User as User exposing (AuthStatus)
+import Components.Aria as Aria
+import Utils.Format as Format
+import Components.HorizontalForm exposing (genericErrorText)
+import Utils.View exposing (decimalInput, disableGrammarly, emailInput, icon, labelView, pageOverlay, pageTitleView, pageTitleWithSubView, rawHtml)
 
 
 
@@ -1574,7 +1574,7 @@ view model authStatus locations checkoutDetails =
 guestForm : Form -> Html Msg
 guestForm model =
     let
-        -- TODO: Use Views.Form when we pull it out of the Address module.
+        -- TODO: Use Components.Admin.Form when we pull it out of the Address module.
         fieldLabel inputId content =
             label [ class "mb-0", for inputId ] [ text content ]
 

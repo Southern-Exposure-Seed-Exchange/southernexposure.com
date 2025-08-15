@@ -7,7 +7,7 @@ module Pages.VerifyEmail exposing
     , view
     )
 
-import Api
+import Data.Api as Api
 import Components.Alert as Alert exposing (defaultAlert)
 import Components.Button as Button exposing (defaultButton)
 import Dict
@@ -17,11 +17,11 @@ import Html.Events exposing (onClick)
 import Json.Decode as Decode exposing (Decoder)
 import Ports
 import RemoteData exposing (WebData)
-import Routing exposing (Route(..))
-import Update.Utils exposing (nothingAndNoCommand)
-import User exposing (AuthStatus)
-import Views.HorizontalForm as Form
-import Views.Utils exposing (pageTitleView)
+import Data.Routing.Routing as Routing exposing (Route(..))
+import Utils.Update exposing (nothingAndNoCommand)
+import Data.User as User exposing (AuthStatus)
+import Components.HorizontalForm as Form
+import Utils.View exposing (pageTitleView)
 
 
 type alias Form =

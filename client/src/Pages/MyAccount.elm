@@ -1,19 +1,19 @@
 module Pages.MyAccount exposing (getDetails, view)
 
-import Api
+import Data.Api as Api
 import Components.Alert as Alert exposing (defaultAlert)
 import Components.Button as Button exposing (ButtonType(..), defaultButton)
 import Components.Svg exposing (discountSvg)
 import Html exposing (..)
 import Html.Attributes exposing (class)
-import Locations exposing (AddressLocations)
-import Messages exposing (Msg(..))
-import Models.Fields exposing (Cents(..))
-import PageData exposing (MyAccount)
-import Routing exposing (Route(..), reverse)
+import Data.Locations as Locations exposing (AddressLocations)
+import Data.Msg exposing (Msg(..))
+import Data.Fields exposing (Cents(..))
+import Data.PageData as PageData exposing (MyAccount)
+import Data.Routing.Routing as Routing exposing (Route(..), reverse)
 import Time
-import Views.Format as Format
-import Views.Utils exposing (pageTitleView)
+import Utils.Format as Format
+import Utils.View exposing (pageTitleView)
 
 
 getDetails : Maybe Int -> Cmd Msg

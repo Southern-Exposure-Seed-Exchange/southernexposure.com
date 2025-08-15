@@ -4,8 +4,8 @@ import Html exposing (..)
 import Html.Attributes as A exposing (..)
 import Html.Events exposing (on, targetValue)
 import Json.Decode as Decode
-import Views.Aria as Aria
-import Views.Utils exposing (numericInput, onIntInput)
+import Components.Aria as Aria
+import Utils.View exposing (numericInput, onIntInput)
 
 
 textView : String -> String -> String -> String -> Html msg

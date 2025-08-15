@@ -6,7 +6,7 @@ module Pages.EditLogin exposing
     , view
     )
 
-import Api
+import Data.Api as Api
 import Components.Button as Button exposing (defaultButton)
 import Dict
 import Html exposing (..)
@@ -16,11 +16,11 @@ import Json.Decode as Decode
 import Json.Encode as Encode exposing (Value)
 import Ports
 import RemoteData exposing (WebData)
-import Routing exposing (Route(..))
-import Update.Utils exposing (noCommand)
-import User exposing (AuthStatus(..))
-import Views.HorizontalForm as Form
-import Views.Utils exposing (pageTitleView)
+import Data.Routing.Routing as Routing exposing (Route(..))
+import Utils.Update exposing (noCommand)
+import Data.User as User exposing (AuthStatus(..))
+import Components.HorizontalForm as Form
+import Utils.View exposing (pageTitleView)
 
 
 
