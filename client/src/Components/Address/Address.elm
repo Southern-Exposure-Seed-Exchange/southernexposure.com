@@ -15,7 +15,10 @@ module Components.Address.Address exposing
     , update
     )
 
+import Components.Aria as Aria
+import Components.HorizontalForm as Form
 import Data.Api as Api
+import Data.Locations as Locations exposing (AddressLocations, Location, Region(..), regionDecoder, regionEncoder)
 import Dict
 import Html exposing (..)
 import Html.Attributes exposing (class, classList, for, id, name, placeholder, required, selected, type_, value)
@@ -23,9 +26,6 @@ import Html.Events exposing (on, onInput, targetValue)
 import Html.Events.Extra exposing (onChange)
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode exposing (Value)
-import Data.Locations as Locations exposing (AddressLocations, Location, Region(..), regionDecoder, regionEncoder)
-import Components.Aria as Aria
-import Components.HorizontalForm as Form
 import Utils.View exposing (autocomplete, labelView)
 
 

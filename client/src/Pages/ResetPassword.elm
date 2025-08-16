@@ -6,8 +6,10 @@ module Pages.ResetPassword exposing
     , view
     )
 
-import Data.Api as Api
 import Components.Button as Button exposing (defaultButton)
+import Data.Api as Api
+import Data.Routing.Routing as Routing exposing (Route(..))
+import Data.User as User exposing (AuthStatus)
 import Dict
 import Html exposing (..)
 import Html.Attributes exposing (autofocus, class, for, href, id, name, placeholder, required, type_, value)
@@ -16,9 +18,7 @@ import Json.Decode as Decode
 import Json.Encode as Encode
 import Ports
 import RemoteData exposing (WebData)
-import Data.Routing.Routing as Routing exposing (Route(..))
 import Utils.Update exposing (nothingAndNoCommand)
-import Data.User as User exposing (AuthStatus)
 import Utils.View exposing (autocomplete, emailInput, labelView, pageTitleView)
 
 

@@ -1,11 +1,11 @@
 module Components.SiteUI.Footer exposing (view)
 
-import Html exposing (..)
-import Html.Attributes exposing (..)
+import Components.Microdata as Microdata
 import Data.Msg exposing (Msg)
 import Data.Routing.Routing as Routing exposing (Route(..))
+import Html exposing (..)
+import Html.Attributes exposing (..)
 import Utils.Images as Images
-import Components.Microdata as Microdata
 import Utils.View exposing (routeLinkAttributes)
 
 
@@ -116,7 +116,7 @@ view =
                 , div [ class "tw:pt-[40px]" ]
                     [ hr [] []
                     , div [ class "tw:pt-[32px] tw:flex" ]
-                        [ div [ class "tw:grow"] [ text "Copyright © 2020 Southern Exposure Seed Exchange" ]
+                        [ div [ class "tw:grow" ] [ text "Copyright © 2020 Southern Exposure Seed Exchange" ]
                         , div [ class "tw:flex tw:gap-[24px]" ]
                             [ staticPageLink "privacy" "Privacy Notice"
                             , staticPageLink "conditions" "Conditions of Use"

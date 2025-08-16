@@ -18,8 +18,8 @@ import Components.AdvancedSearch as AdvancedSearch
 import Components.Categories.AdminViews as CategoryAdmin
 import Components.Products.AdminViews as ProductAdmin
 import Components.ProfileNavbar as ProfileNavbar
-import Components.Tooltip as Tooltip
 import Components.SiteUI.Search as SiteSearch
+import Components.Tooltip as Tooltip
 import Data.Api as Api
 import Data.Fields exposing (ImageData)
 import Data.Locations exposing (AddressLocations)

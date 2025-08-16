@@ -30,11 +30,11 @@ here.
 
 -}
 
-import Data.Api as Api
 import Array exposing (Array)
+import Data.Api as Api
+import Data.Fields exposing (Cents, Milligrams, centsFromString, milligramsFromString)
 import Dict
 import Iso8601
-import Data.Fields exposing (Cents, Milligrams, centsFromString, milligramsFromString)
 import Time exposing (Posix)
 
 

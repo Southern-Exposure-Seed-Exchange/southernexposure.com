@@ -5,9 +5,9 @@ module Utils.Format exposing
     , dateTime
     )
 
+import Data.Fields exposing (Cents(..))
 import DateFormat
 import Decimal
-import Data.Fields exposing (Cents(..))
 import Time exposing (Posix, Zone)
 
 

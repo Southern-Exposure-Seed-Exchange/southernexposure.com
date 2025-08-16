@@ -5,12 +5,12 @@ module Components.OrderDetails exposing
     )
 
 import Components.Address.Address as Address
-import Html exposing (..)
-import Html.Attributes exposing (class, colspan)
-import Data.Locations as Locations exposing (AddressLocations)
 import Data.Fields exposing (Cents(..), centsMap)
+import Data.Locations exposing (AddressLocations)
 import Data.PageData as PageData
 import Data.Product as Product
+import Html exposing (..)
+import Html.Attributes exposing (class, colspan)
 import Time
 import Utils.Format as Format
 import Utils.View exposing (pageTitleWithSubView)

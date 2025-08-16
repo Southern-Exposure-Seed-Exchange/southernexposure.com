@@ -1,9 +1,9 @@
 module Data.Product exposing
-    ( Product
+    ( InventoryPolicy(..)
+    , Product
     , ProductId(..)
     , ProductVariant
     , ProductVariantId(..)
-    , InventoryPolicy(..)
     , decoder
     , idDecoder
     , idEncoder
@@ -16,14 +16,14 @@ module Data.Product exposing
     , variantPrice
     )
 
+import Components.Microdata as Microdata
+import Data.Fields exposing (Cents(..), ImageData, LotSize, blankImage, imageDecoder, lotSizeDecoder, lotSizeToString)
 import Dict exposing (Dict)
 import Html exposing (Html, span)
 import Html.Attributes exposing (class)
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode exposing (Value)
 import Markdown exposing (defaultOptions)
-import Data.Fields exposing (Cents(..), ImageData, LotSize, blankImage, imageDecoder, lotSizeDecoder, lotSizeToString)
-import Components.Microdata as Microdata
 
 
 type ProductId
@@ -83,7 +83,9 @@ singleVariantName product variants =
 
 
 productMainImage : Product -> ImageData
-productMainImage product = List.head product.images |> Maybe.withDefault blankImage
+productMainImage product =
+    List.head product.images |> Maybe.withDefault blankImage
+
 
 decoder : Decoder Product
 decoder =
@@ -105,6 +107,7 @@ type InventoryPolicy
     | AllowBackorder
     | Unlimited
 
+
 inventoryPolicyDecoder : Decoder InventoryPolicy
 inventoryPolicyDecoder =
     Decode.string
@@ -113,13 +116,17 @@ inventoryPolicyDecoder =
                 case s of
                     "requireStock" ->
                         Decode.succeed RequireStock
+
                     "allowBackorder" ->
                         Decode.succeed AllowBackorder
+
                     "unlimited" ->
                         Decode.succeed Unlimited
+
                     _ ->
                         Decode.fail ("Unknown inventory policy: " ++ s)
             )
+
 
 {-| TODO: isActive is unused, quantity only used for in-stock status
 -}
@@ -135,11 +142,16 @@ type alias ProductVariant =
     , isActive : Bool
     }
 
+
 isPurchaseable : ProductVariant -> Bool
-isPurchaseable variant = not (variant.quantity <= 0 && variant.inventoryPolicy == RequireStock)
+isPurchaseable variant =
+    not (variant.quantity <= 0 && variant.inventoryPolicy == RequireStock)
+
 
 isLimitedAvailability : ProductVariant -> Bool
-isLimitedAvailability variant = variant.inventoryPolicy == AllowBackorder && variant.quantity <= 0
+isLimitedAvailability variant =
+    variant.inventoryPolicy == AllowBackorder && variant.quantity <= 0
+
 
 variantPrice : ProductVariant -> Cents
 variantPrice { price, salePrice } =
@@ -157,7 +169,8 @@ variantDecoder =
         (Decode.field "quantity" Decode.int)
         (Decode.field "lotSize" <| Decode.nullable lotSizeDecoder)
         (Decode.field "inventoryPolicy" inventoryPolicyDecoder)
-        |> Decode.andThen (\partialData ->
-                Decode.map (\isActive -> partialData isActive )
-                (Decode.field "isActive" Decode.bool)
-        )
+        |> Decode.andThen
+            (\partialData ->
+                Decode.map (\isActive -> partialData isActive)
+                    (Decode.field "isActive" Decode.bool)
+            )

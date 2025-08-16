@@ -23,7 +23,7 @@ import Components.ProfileNavbar as ProfileNavbar
 import Components.SiteUI.Search as SiteSearch
 import Components.Tooltip as Tooltip
 import Data.Api as Api
-import Data.Category as Category exposing (CategoryId)
+import Data.Category exposing (CategoryId)
 import Data.Fields exposing (imageDataLightboxConfig)
 import Data.Locations as Locations
 import Data.Model as Model exposing (Model)

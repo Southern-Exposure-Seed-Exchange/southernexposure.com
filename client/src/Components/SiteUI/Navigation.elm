@@ -1,20 +1,20 @@
 module Components.SiteUI.Navigation exposing (adminView, view)
 
-import Data.Category as Category exposing (CategoryId(..))
+import Components.Aria as Aria
 import Components.Navbar as Navbar
+import Components.Products.Pagination as Pagination
+import Components.SiteUI.Search as SiteSearch
+import Data.Category as Category exposing (CategoryId(..))
+import Data.Msg exposing (Msg(..))
+import Data.Routing.Routing as Routing exposing (AdminRoute(..), Route(..), reverse)
+import Data.Search as Search
+import Data.SiteUI as SiteUI exposing (NavigationData)
+import Data.User as User exposing (AuthStatus(..))
 import Dict
 import Html exposing (Html, a, button, div, form, li, node, span, text, ul)
 import Html.Attributes exposing (attribute, class, href, id, target, type_)
 import Html.Events.Extra exposing (onClickPreventDefault)
-import Data.Msg exposing (Msg(..))
-import Components.Products.Pagination as Pagination
 import RemoteData exposing (WebData)
-import Data.Routing.Routing as Routing exposing (AdminRoute(..), Route(..), reverse)
-import Data.Search as Search
-import Data.SiteUI as SiteUI exposing (NavigationData)
-import Components.SiteUI.Search as SiteSearch
-import Data.User as User exposing (AuthStatus(..))
-import Components.Aria as Aria
 import Utils.View exposing (icon, routeLinkAttributes)
 
 

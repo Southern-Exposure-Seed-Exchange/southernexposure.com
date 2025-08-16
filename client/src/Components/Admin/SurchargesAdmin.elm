@@ -7,24 +7,24 @@ module Components.Admin.SurchargesAdmin exposing
     , view
     )
 
-import Data.Api as Api
 import Array exposing (Array)
+import Components.Admin.Admin as Admin
+import Components.HorizontalForm as Form
+import Data.Api as Api
 import Data.Category as Category exposing (CategoryId(..))
+import Data.Fields exposing (Cents, centsDecoder, centsEncoder, centsToString)
+import Data.PageData as PageData
+import Data.Routing.Routing as Routing exposing (AdminRoute(..), Route(..))
+import Data.Validation as Validation exposing (FormValidation)
 import Dict
 import Html exposing (Html, button, div, form, text)
 import Html.Attributes exposing (class, type_)
 import Html.Events exposing (onClick, onSubmit)
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode exposing (Value)
-import Data.Fields exposing (Cents, centsDecoder, centsEncoder, centsToString)
-import Data.PageData as PageData
 import Ports
 import RemoteData exposing (WebData)
-import Data.Routing.Routing as Routing exposing (AdminRoute(..), Route(..))
 import Utils.Update exposing (noCommand, removeIndex, updateArray)
-import Data.Validation as Validation exposing (FormValidation)
-import Components.Admin.Admin as Admin
-import Components.HorizontalForm as Form
 
 
 type alias Form =

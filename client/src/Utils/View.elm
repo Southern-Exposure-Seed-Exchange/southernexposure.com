@@ -1,5 +1,6 @@
 module Utils.View exposing (..)
 
+import Data.Routing.Routing exposing (Route, reverse)
 import File exposing (File)
 import File.Select as Select
 import Html exposing (Attribute, Html, div, h1, i, label, legend, p, small, text)
@@ -8,7 +9,6 @@ import Html.Events exposing (on)
 import Html.Events.Extra exposing (targetValueInt)
 import Json.Decode as Decode
 import Markdown exposing (defaultOptions)
-import Data.Routing.Routing as Routing exposing (Route, reverse)
 
 
 routeLinkAttributes : Route -> List (Attribute msg)

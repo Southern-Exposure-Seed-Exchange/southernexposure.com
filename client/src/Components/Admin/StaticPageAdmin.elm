@@ -16,22 +16,22 @@ module Components.Admin.StaticPageAdmin exposing
     , updateNewForm
     )
 
+import Components.Admin.Admin as Admin exposing (equalsOriginal, formSavingClass, updateEditField)
+import Components.HorizontalForm as Form
 import Data.Api as Api
+import Data.PageData as PageData
+import Data.Routing.Routing as Routing exposing (AdminRoute(..), Route(..))
+import Data.StaticPage as StaticPage exposing (StaticPageId)
 import Dict
 import Html exposing (Html, a, div, form, h1, hr, table, tbody, td, text, th, thead, tr)
 import Html.Attributes exposing (class)
 import Html.Events exposing (onSubmit)
 import Json.Decode as Decode
 import Json.Encode as Encode
-import Utils.Utils exposing (slugify)
-import Data.PageData as PageData
 import Ports
 import RemoteData exposing (WebData)
-import Data.Routing.Routing as Routing exposing (AdminRoute(..), Route(..))
-import Data.StaticPage as StaticPage exposing (StaticPageId)
 import Utils.Update exposing (noCommand)
-import Components.Admin.Admin as Admin exposing (equalsOriginal, formSavingClass, updateEditField)
-import Components.HorizontalForm as Form
+import Utils.Utils exposing (slugify)
 import Utils.View exposing (htmlOrBlank, rawHtml, routeLinkAttributes)
 
 

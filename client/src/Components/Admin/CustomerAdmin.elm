@@ -11,8 +11,15 @@ module Components.Admin.CustomerAdmin exposing
     , updateSearchForm
     )
 
-import Data.Api as Api
 import Components.Address.Address as Address
+import Components.Admin.Admin as Admin exposing (equalsOriginal, updateEditField)
+import Components.HorizontalForm as Form
+import Components.Pager as Pager
+import Data.Api as Api
+import Data.Fields exposing (Cents(..), centsFromString)
+import Data.Locations exposing (AddressLocations)
+import Data.PageData as PageData exposing (CustomerData)
+import Data.Routing.Routing as Routing exposing (AdminRoute(..), Route(..))
 import Dict
 import Html exposing (Html, a, button, div, form, h2, hr, table, tbody, td, text, th, thead, tr)
 import Html.Attributes exposing (class, href, target, type_)
@@ -20,18 +27,11 @@ import Html.Events exposing (onClick, onSubmit)
 import Html.Extra exposing (viewIf)
 import Json.Decode as Decode
 import Json.Encode as Encode
-import Data.Locations as Locations exposing (AddressLocations)
-import Data.Fields exposing (Cents(..), centsFromString)
-import Data.PageData as PageData exposing (CustomerData)
 import Paginate exposing (Paginated)
 import RemoteData exposing (WebData)
-import Data.Routing.Routing as Routing exposing (AdminRoute(..), Route(..))
 import Time exposing (Zone)
-import Utils.Update exposing (noCommand)
-import Components.Admin.Admin as Admin exposing (equalsOriginal, updateEditField)
 import Utils.Format as Format
-import Components.HorizontalForm as Form
-import Components.Pager as Pager
+import Utils.Update exposing (noCommand)
 import Utils.View exposing (htmlOrBlank, routeLinkAttributes)
 
 

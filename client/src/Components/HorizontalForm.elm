@@ -10,8 +10,8 @@ module Components.HorizontalForm exposing
     , withLabel
     )
 
-import Data.Api as Api
 import Components.Alert as Alert exposing (defaultAlert)
+import Data.Api as Api
 import Dict
 import Html exposing (..)
 import Html.Attributes exposing (checked, class, for, id, name, placeholder, required, rows, type_, value)

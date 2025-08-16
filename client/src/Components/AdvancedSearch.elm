@@ -1,19 +1,19 @@
 module Components.AdvancedSearch exposing (Msg(..), update, view)
 
-import Data.Category as Category exposing (CategoryId(..))
+import Components.Aria as Aria
 import Components.Button as Button exposing (..)
-import Components.Svg exposing (heirLoomSvg, organicSvg, searchSvg, searchSvgBig, smallFarmSvg, sunSvg)
-import Html exposing (..)
-import Html.Attributes exposing (checked, class, id, name, placeholder, selected, src, type_, value)
-import Html.Events exposing (on, onCheck, onClick, onInput, onSubmit, targetValue)
-import Json.Decode as Decode
 import Components.Products.Pagination as Pagination
-import RemoteData exposing (RemoteData(..), WebData)
-import Data.Routing.Routing as Routing exposing (Route(..))
+import Components.Svg exposing (heirLoomSvg, organicSvg, searchSvg, smallFarmSvg, sunSvg)
+import Data.Category exposing (CategoryId(..))
+import Data.Routing.Routing exposing (Route(..))
 import Data.Search as Search
 import Data.SeedAttribute as SeedAttribute
-import Data.SiteUI as SiteUI exposing (CategoryListData)
-import Components.Aria as Aria
+import Data.SiteUI exposing (CategoryListData)
+import Html exposing (..)
+import Html.Attributes exposing (checked, class, id, name, placeholder, selected, type_, value)
+import Html.Events exposing (on, onCheck, onClick, onInput, onSubmit, targetValue)
+import Json.Decode as Decode
+import RemoteData exposing (RemoteData(..), WebData)
 
 
 type Msg
@@ -80,7 +80,7 @@ mainView route routingMsg formMsg data categories =
                     ]
                 ]
 
-        filterInput { msg, attribute, selector, content, svgIcon } =
+        filterInput { msg, selector, content, svgIcon } =
             div [ class "form-check d-block tw:py-[8px]" ]
                 [ label [ class "form-check-label tw:flex! tw:items-center tw:gap-[8px] tw:cursor-pointer" ]
                     [ input

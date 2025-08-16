@@ -1,6 +1,9 @@
 module Components.Admin.SettingsAdmin exposing (Form, Msg, getSettings, initialForm, update, view)
 
+import Components.Admin.Admin as Admin exposing (formSavingClass)
+import Components.HorizontalForm as Form
 import Data.Api as Api
+import Data.Routing.Routing as Routing exposing (AdminRoute(..), Route(..))
 import Dict
 import Html exposing (Html, div, fieldset, form, legend, text)
 import Html.Attributes exposing (class)
@@ -9,10 +12,7 @@ import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode exposing (Value)
 import Ports
 import RemoteData exposing (WebData)
-import Data.Routing.Routing as Routing exposing (AdminRoute(..), Route(..))
 import Utils.Update exposing (noCommand)
-import Components.Admin.Admin as Admin exposing (formSavingClass)
-import Components.HorizontalForm as Form
 
 
 

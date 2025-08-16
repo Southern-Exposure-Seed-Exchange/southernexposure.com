@@ -18,9 +18,17 @@ module Components.Products.AdminViews exposing
     , updateNewForm
     )
 
-import Data.Api as Api
 import Array exposing (Array)
+import Components.Admin.Admin as Admin
+import Components.HorizontalForm as Form
+import Data.Api as Api
 import Data.Category as Category exposing (CategoryId(..))
+import Data.Fields exposing (Cents(..), LotSize(..), centsDecoder, centsEncoder, centsToString, lotSizeDecoder, lotSizeEncoder, milligramsToGrams, milligramsToString)
+import Data.Locations as Locations exposing (AddressLocations, Region(..), regionDecoder, regionEncoder)
+import Data.PageData as PageData
+import Data.Product as Product exposing (ProductId(..))
+import Data.Routing.Routing as Routing exposing (AdminRoute(..), Route(..))
+import Data.Validation as Validation
 import Dict
 import File exposing (File)
 import Html exposing (Html, a, br, button, div, fieldset, form, h3, hr, img, input, label, option, select, table, tbody, td, text, th, thead, tr)
@@ -30,19 +38,11 @@ import Html.Extra exposing (viewIf)
 import Json.Decode as Decode exposing (Decoder)
 import Json.Decode.Pipeline as Decode
 import Json.Encode as Encode exposing (Value)
-import Data.Locations as Locations exposing (AddressLocations, Region(..), regionDecoder, regionEncoder)
-import Data.Fields exposing (Cents(..), LotSize(..), centsDecoder, centsEncoder, centsToString, lotSizeDecoder, lotSizeEncoder, milligramsToGrams, milligramsToString)
-import Utils.Utils exposing (slugify)
-import Data.PageData as PageData
 import Ports
-import Data.Product as Product exposing (ProductId(..))
 import RemoteData exposing (WebData)
-import Data.Routing.Routing as Routing exposing (AdminRoute(..), Route(..))
-import Utils.Update exposing (noCommand, removeIndex, updateArray)
-import Data.Validation as Validation
-import Components.Admin.Admin as Admin
-import Components.HorizontalForm as Form
 import Utils.Images exposing (media)
+import Utils.Update exposing (noCommand, removeIndex, updateArray)
+import Utils.Utils exposing (slugify)
 import Utils.View exposing (htmlOrBlank, routeLinkAttributes, selectImageFile)
 
 
@@ -73,7 +73,7 @@ type ListMsg
     | RestoreResponse (WebData ())
 
 
-updateListForm : Routing.Key -> ListMsg -> ListForm -> (ListForm, Cmd ListMsg)
+updateListForm : Routing.Key -> ListMsg -> ListForm -> ( ListForm, Cmd ListMsg )
 updateListForm key msg model =
     case msg of
         InputQuery val ->
@@ -86,13 +86,15 @@ updateListForm key msg model =
             noCommand { model | showDeleted = val }
 
         RestoreProduct productId ->
-            (model, Api.post (Api.AdminRestoreDeletedProduct productId)
+            ( model
+            , Api.post (Api.AdminRestoreDeletedProduct productId)
                 |> Api.withJsonResponse (Decode.succeed ())
                 |> Api.sendRequest RestoreResponse
             )
 
         RestoreResponse _ ->
             ( model, Routing.newUrl key <| Admin ProductList )
+
 
 list : ListForm -> PageData.AdminProductListData -> List (Html ListMsg)
 list listForm { products } =
@@ -105,12 +107,12 @@ list listForm { products } =
                 , td [] [ text <| String.join ", " categories ]
                 , td [ class "text-center" ] [ Admin.activeIcon isActive ]
                 , td []
-                    [
-                        if not isDeleted then
-                            a (routeLinkAttributes <| Admin <| ProductEdit id)
-                                [ text "Edit" ]
-                        else
-                            button [ onClick (RestoreProduct id) ] [ text "Restore" ]
+                    [ if not isDeleted then
+                        a (routeLinkAttributes <| Admin <| ProductEdit id)
+                            [ text "Edit" ]
+
+                      else
+                        button [ onClick (RestoreProduct id) ] [ text "Restore" ]
                     ]
                 ]
 
@@ -431,9 +433,11 @@ encodeForm model validVariants maybeProductId =
         , ( "categories", Encode.array Category.idEncoder model.categories )
         , ( "baseSku", Encode.string model.baseSku )
         , ( "longDescription", Encode.string model.description )
+
         -- TODO: consider multiple image updates when editing products
-        , ( "imageUpdates", Maybe.withDefault (Encode.object []) <|
-                Maybe.map (\d -> Encode.object [("0", encodeImageDataOperation (ImageDataUpdate d))]) model.imageData
+        , ( "imageUpdates"
+          , Maybe.withDefault (Encode.object []) <|
+                Maybe.map (\d -> Encode.object [ ( "0", encodeImageDataOperation (ImageDataUpdate d) ) ]) model.imageData
           )
         , ( "keywords", Encode.string model.keywords )
         , ( "shippingRestrictions", Encode.array regionEncoder model.shippingRestrictions )
@@ -477,35 +481,43 @@ type InventoryPolicy
     | AllowBackorder
     | Unlimited
 
+
 inventoryPolicyToString : InventoryPolicy -> String
 inventoryPolicyToString policy =
     case policy of
-        RequireStock -> "requireStock"
+        RequireStock ->
+            "requireStock"
 
-        AllowBackorder -> "allowBackorder"
+        AllowBackorder ->
+            "allowBackorder"
 
-        Unlimited -> "unlimited"
+        Unlimited ->
+            "unlimited"
+
 
 decodeInventoryPolicy : Decoder String -> Decoder InventoryPolicy
-decodeInventoryPolicy = Decode.andThen
-    (\s ->
-        case s of
-            "requireStock" ->
-                Decode.succeed RequireStock
+decodeInventoryPolicy =
+    Decode.andThen
+        (\s ->
+            case s of
+                "requireStock" ->
+                    Decode.succeed RequireStock
 
-            "allowBackorder" ->
-                Decode.succeed AllowBackorder
+                "allowBackorder" ->
+                    Decode.succeed AllowBackorder
 
-            "unlimited" ->
-                Decode.succeed Unlimited
+                "unlimited" ->
+                    Decode.succeed Unlimited
 
-            _ ->
-                Decode.fail ("Unknown inventory policy: " ++ s)
-    )
+                _ ->
+                    Decode.fail ("Unknown inventory policy: " ++ s)
+        )
+
 
 type ImageDataOperation
     = ImageDataDelete
     | ImageDataUpdate ImageData
+
 
 encodeImageDataOperation : ImageDataOperation -> Value
 encodeImageDataOperation operation =
@@ -519,10 +531,12 @@ encodeImageDataOperation operation =
                 , ( "data", encodeImageData imageData )
                 ]
 
+
 type alias ImageData =
     { fileName : String
     , base64Image : String
     }
+
 
 encodeImageData : ImageData -> Value
 encodeImageData { fileName, base64Image } =
@@ -530,6 +544,7 @@ encodeImageData { fileName, base64Image } =
         [ ( "fileName", Encode.string fileName )
         , ( "base64Image", Encode.string base64Image )
         ]
+
 
 type alias Variant =
     { skuSuffix : String
@@ -770,7 +785,6 @@ updateForm key msg model =
                     noCommand model
 
 
-
 type VariantMsg
     = InputSkuSuffix String
     | InputPrice String
@@ -901,7 +915,9 @@ formView buttonText submitMsg msgWrapper model { categories } locations id =
     let
         inputRow s =
             Form.inputRow model.errors (s model)
-        imageUrl = List.head (Array.toList model.imageUrls) |> Maybe.withDefault ""
+
+        imageUrl =
+            List.head (Array.toList model.imageUrls) |> Maybe.withDefault ""
 
         existingImage =
             if not <| String.isEmpty imageUrl then
@@ -917,23 +933,29 @@ formView buttonText submitMsg msgWrapper model { categories } locations id =
 
             else
                 text ""
+
         deleteAction i =
             if model.showDeleteConfirm then
                 DeleteConfirmed i
+
             else
                 Delete i
-        deleteWarningText = viewIf model.showDeleteConfirm <|
-            div [ class "text-danger" ]
+
+        deleteWarningText =
+            viewIf model.showDeleteConfirm <|
+                div [ class "text-danger" ]
                     [ text "Are you sure? This will completely delete the current product and all its variants."
                     , br [] []
                     , text "Click 'Delete Product' again to confirm."
                     ]
-        (imageName, imageData) = case model.imageData of
-            Just { fileName, base64Image } ->
-                ( fileName, base64Image )
 
-            Nothing ->
-                ( "", "" )
+        ( imageName, imageData ) =
+            case model.imageData of
+                Just { fileName, base64Image } ->
+                    ( fileName, base64Image )
+
+                Nothing ->
+                    ( "", "" )
     in
     form [ class <| Admin.formSavingClass model, onSubmit submitMsg ] <|
         List.map (Html.map msgWrapper)
@@ -968,22 +990,26 @@ formView buttonText submitMsg msgWrapper model { categories } locations id =
                     ]
                     [ text "Add Variant" ]
                 , htmlOrBlank
-                    (\(ProductId i) -> a
-                        [ class "ml-3 btn btn-secondary"
-                        , type_ "button"
-                        , href ("/api/admin/products/export/" ++ String.fromInt i)
-                        , download ("product-" ++ String.fromInt i ++ "-export.csv")
-                        ]
-                        [ text "Export as CSV" ]
-                    ) id
+                    (\(ProductId i) ->
+                        a
+                            [ class "ml-3 btn btn-secondary"
+                            , type_ "button"
+                            , href ("/api/admin/products/export/" ++ String.fromInt i)
+                            , download ("product-" ++ String.fromInt i ++ "-export.csv")
+                            ]
+                            [ text "Export as CSV" ]
+                    )
+                    id
                 , htmlOrBlank
-                    (\i -> button
-                        [ class "ml-3 btn btn-danger"
-                        , type_ "button"
-                        , onClick <| deleteAction i
-                        ]
-                        [ text "Delete Product" ]
-                    ) id
+                    (\i ->
+                        button
+                            [ class "ml-3 btn btn-danger"
+                            , type_ "button"
+                            , onClick <| deleteAction i
+                            ]
+                            [ text "Delete Product" ]
+                    )
+                    id
                 ]
             ]
 
@@ -1085,22 +1111,30 @@ variantForm errors index variant =
         , removeButton
         ]
 
+
 inventoryPolicyRow : Int -> InventoryPolicy -> Html FormMsg
 inventoryPolicyRow index selectedPolicy =
     let
-        options = [ RequireStock, AllowBackorder, Unlimited ]
-            |> List.map
-                (\p ->
-                    option
-                        [ value <| inventoryPolicyToString p
-                        , selected <| p == selectedPolicy
-                        ]
-                        [ text <| case p of
-                            RequireStock -> "Require Stock"
-                            AllowBackorder -> "Allow Backorder"
-                            Unlimited -> "Unlimited"
-                        ]
-                )
+        options =
+            [ RequireStock, AllowBackorder, Unlimited ]
+                |> List.map
+                    (\p ->
+                        option
+                            [ value <| inventoryPolicyToString p
+                            , selected <| p == selectedPolicy
+                            ]
+                            [ text <|
+                                case p of
+                                    RequireStock ->
+                                        "Require Stock"
+
+                                    AllowBackorder ->
+                                        "Allow Backorder"
+
+                                    Unlimited ->
+                                        "Unlimited"
+                            ]
+                    )
     in
     Form.withLabel "Inventory Policy"
         True

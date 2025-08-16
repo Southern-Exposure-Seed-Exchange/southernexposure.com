@@ -11,26 +11,26 @@ module Components.Admin.OrderAdmin exposing
     , updateSearchForm
     )
 
+import Components.Admin.Admin as Admin
+import Components.HorizontalForm as Form
+import Components.OrderDetails as OrderDetails
+import Components.Pager as Pager
 import Data.Api as Api
+import Data.Fields exposing (Cents(..), centsFromString)
+import Data.Locations as Locations exposing (AddressLocations)
+import Data.PageData as PageData exposing (OrderData)
+import Data.Routing.Routing as Routing exposing (AdminRoute(..), Route(..))
 import Dict
 import Html exposing (Html, a, div, form, h4, hr, li, td, text, th, thead, tr, ul)
 import Html.Attributes exposing (class, href, target)
 import Html.Events exposing (onSubmit)
 import Json.Decode as Decode
 import Json.Encode as Encode
-import Data.Locations as Locations exposing (AddressLocations)
-import Data.Fields exposing (Cents(..), centsFromString)
-import Components.OrderDetails as OrderDetails
-import Data.PageData as PageData exposing (OrderData)
 import Paginate exposing (Paginated)
 import RemoteData exposing (WebData)
-import Data.Routing.Routing as Routing exposing (AdminRoute(..), Route(..))
 import Time exposing (Zone)
-import Utils.Update exposing (noCommand)
-import Components.Admin.Admin as Admin
 import Utils.Format as Format
-import Components.HorizontalForm as Form
-import Components.Pager as Pager
+import Utils.Update exposing (noCommand)
 import Utils.View exposing (htmlOrBlank, routeLinkAttributes)
 
 

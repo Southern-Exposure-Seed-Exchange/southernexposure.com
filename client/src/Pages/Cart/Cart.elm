@@ -5,27 +5,26 @@ module Pages.Cart.Cart exposing
     , view
     )
 
-import Data.Api as Api
+import Components.Aria as Aria
 import Components.Button as Button exposing (defaultButton)
+import Components.Products.Views as ProductView
 import Components.Svg exposing (..)
+import Data.Api as Api
+import Data.Fields exposing (Cents(..), centsMap)
+import Data.PageData as PageData exposing (CartDetails, CartItemId(..), showCartItemError, showCartItemWarning)
+import Data.Product as Product exposing (InventoryPolicy(..), variantPrice)
+import Data.Routing.Routing as Routing exposing (Route(..), reverse)
+import Data.User as User exposing (AuthStatus, unauthorized)
 import Dict exposing (Dict, get, size)
 import Html exposing (..)
 import Html.Attributes exposing (class)
 import Html.Events exposing (onClick, onSubmit)
 import Html.Extra exposing (viewIf)
 import Json.Encode as Encode
-import Data.Fields exposing (Cents(..), centsMap)
-import Data.PageData as PageData exposing (CartDetails, CartItemId(..), showCartItemError, showCartItemWarning)
 import Pages.Cart.Type exposing (..)
-import Data.Product as Product exposing (variantPrice)
-import Components.Products.Views as ProductView
 import RemoteData
-import Data.Routing.Routing as Routing exposing (Route(..), reverse)
-import Data.User as User exposing (AuthStatus, unauthorized)
-import Components.Aria as Aria
 import Utils.Format as Format
-import Data.Product as Product exposing (InventoryPolicy(..))
-import Utils.View exposing (htmlOrBlank, icon, rawHtml, routeLinkAttributes, pageTitleView)
+import Utils.View exposing (htmlOrBlank, icon, pageTitleView, rawHtml, routeLinkAttributes)
 
 
 
@@ -130,7 +129,7 @@ updateCart authStatus maybeCartToken { quantities } mbCartDetails =
         changed =
             case mbCartDetails of
                 Nothing ->
-                    List.map (\(id, quantity) -> (String.fromInt id, Encode.int quantity)) (Dict.toList quantities)
+                    List.map (\( id, quantity ) -> ( String.fromInt id, Encode.int quantity )) (Dict.toList quantities)
 
                 Just { items } ->
                     -- Get the changed quantities from the form and the current cart items
@@ -198,13 +197,16 @@ view authStatus ({ quantities } as form_) ({ items, charges } as cartDetails) =
         itemCount =
             List.foldl (.quantity >> (+)) 0 items
 
-        checkoutEnabled = List.all
-            (\item ->
-                if item.variant.inventoryPolicy == RequireStock then
-                    item.quantity <= item.variant.quantity
-                else True
-            )
-            items
+        checkoutEnabled =
+            List.all
+                (\item ->
+                    if item.variant.inventoryPolicy == RequireStock then
+                        item.quantity <= item.variant.quantity
+
+                    else
+                        True
+                )
+                items
 
         -- TODO: Add commas to format
         cartTable =
@@ -250,7 +252,9 @@ view authStatus ({ quantities } as form_) ({ items, charges } as cartDetails) =
                             , type_ =
                                 if not checkoutEnabled then
                                     Button.Disabled
-                                else Button.Link <| reverse Checkout
+
+                                else
+                                    Button.Link <| reverse Checkout
                             , iconEnd = Just arrowRightSvg
                         }
                     ]
@@ -269,52 +273,53 @@ view authStatus ({ quantities } as form_) ({ items, charges } as cartDetails) =
                         ]
                 ]
 
-        productRow { id, product, variant, quantity, errors, warnings } = div []
-            [ div [ class "tw:flex tw:py-[20px]" ]
-                [ div [ class "tw:shrink-0" ]
-                    [ ProductView.productImageLinkView "tw:w-[169px] tw:h-[130px]" product (Just variant.id)
-                    ]
-                , div [ class "tw:pl-[28px] tw:pr-[10px] tw:grow tw:flex tw:flex-col" ]
-                    [ a ([ class "tw:font-semibold" ] ++ (routeLinkAttributes <| ProductDetails product.slug <| Just variant.id))
-                        [ Product.nameWithLotSize product variant ]
-                    , ProductView.renderItemNumber (ProductView.getItemNumber product (Just variant))
-                    , div [ class "tw:grow" ] []
-                    , div [ class "tw:flex tw:flex-col tw:items-start" ]
-                        [ ProductView.customNumberView ProductView.Checkout
-                            (Maybe.withDefault 1 <| Dict.get (fromCartItemId id) quantities)
-                            (SetFormQuantity id)
-                            (IncreaseFormQuantity id)
-                            (DecreaseFormQuantity id)
+        productRow { id, product, variant, quantity, errors, warnings } =
+            div []
+                [ div [ class "tw:flex tw:py-[20px]" ]
+                    [ div [ class "tw:shrink-0" ]
+                        [ ProductView.productImageLinkView "tw:w-[169px] tw:h-[130px]" product (Just variant.id)
                         ]
-                    ]
-                , div [ class "tw:w-[155px] tw:shrink-0" ]
-                    [ div [ class "tw:flex" ]
-                        [ div [ class "tw:grow tw:flex tw:flex-col tw:items-center" ]
-                            [ p [ class "tw:pt-[3px] tw:text-[20px] tw:leading-[28px] tw:font-semibold" ]
-                                [ text <| Format.cents <| centsMap ((*) quantity) <| variantPrice variant
-                                ]
-                            , if quantity > 1 then
-                                p [class "tw:text-[12px] tw:leading-[16px] tw:opacity-80"] [ text <| (Format.cents <| variantPrice variant) ++ " / pc" ]
+                    , div [ class "tw:pl-[28px] tw:pr-[10px] tw:grow tw:flex tw:flex-col" ]
+                        [ a ([ class "tw:font-semibold" ] ++ (routeLinkAttributes <| ProductDetails product.slug <| Just variant.id))
+                            [ Product.nameWithLotSize product variant ]
+                        , ProductView.renderItemNumber (ProductView.getItemNumber product (Just variant))
+                        , div [ class "tw:grow" ] []
+                        , div [ class "tw:flex tw:flex-col tw:items-start" ]
+                            [ ProductView.customNumberView ProductView.Checkout
+                                (Maybe.withDefault 1 <| Dict.get (fromCartItemId id) quantities)
+                                (SetFormQuantity id)
+                                (IncreaseFormQuantity id)
+                                (DecreaseFormQuantity id)
+                            ]
+                        ]
+                    , div [ class "tw:w-[155px] tw:shrink-0" ]
+                        [ div [ class "tw:flex" ]
+                            [ div [ class "tw:grow tw:flex tw:flex-col tw:items-center" ]
+                                [ p [ class "tw:pt-[3px] tw:text-[20px] tw:leading-[28px] tw:font-semibold" ]
+                                    [ text <| Format.cents <| centsMap ((*) quantity) <| variantPrice variant
+                                    ]
+                                , if quantity > 1 then
+                                    p [ class "tw:text-[12px] tw:leading-[16px] tw:opacity-80" ] [ text <| (Format.cents <| variantPrice variant) ++ " / pc" ]
 
-                              else
-                                p [] []
+                                  else
+                                    p [] []
+                                ]
+                            , button
+                                [ class "tw:p-[6px] tw:cursor-pointer tw:group"
+                                , onClick <| Remove id
+                                , Aria.label <| "Remove " ++ product.name ++ " From Cart"
+                                ]
+                                [ binSvg "tw:fill-[rgba(30,12,3,0.4)] tw:group-hover:fill-[rgba(214,34,70,1)]" ]
                             ]
-                        , button
-                            [ class "tw:p-[6px] tw:cursor-pointer tw:group"
-                            , onClick <| Remove id
-                            , Aria.label <| "Remove " ++ product.name ++ " From Cart"
-                            ]
-                            [ binSvg "tw:fill-[rgba(30,12,3,0.4)] tw:group-hover:fill-[rgba(214,34,70,1)]" ]
                         ]
                     ]
+                , viewIf (List.length errors > 0) <|
+                    div [ class "tw:py-[8px] text-danger font-weight-bold small" ]
+                        [ text <| String.join ", " (List.map showCartItemError errors) ]
+                , viewIf (List.length warnings > 0) <|
+                    div [ class "tw:py-[8px] text-warning font-weight-bold small" ]
+                        [ text <| String.join ", " (List.map showCartItemWarning warnings) ]
                 ]
-            , viewIf (List.length errors > 0) <|
-                div [ class "tw:py-[8px] text-danger font-weight-bold small" ]
-                    [ text <| String.join ", " (List.map showCartItemError errors) ]
-            , viewIf (List.length warnings > 0) <|
-                div [ class "tw:py-[8px] text-warning font-weight-bold small" ]
-                    [ text <| String.join ", " (List.map showCartItemWarning warnings) ]
-            ]
 
         tableFooter =
             div [ class "tw:flex tw:flex-col tw:gap-[12px]" ] <|
@@ -355,7 +360,8 @@ view authStatus ({ quantities } as form_) ({ items, charges } as cartDetails) =
         formIsUnchanged =
             isFormUnchanged quantities items
 
-        titleView = pageTitleView "Your cart"
+        titleView =
+            pageTitleView "Your cart"
     in
     if not (List.isEmpty items) then
         [ titleView

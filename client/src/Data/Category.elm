@@ -9,9 +9,9 @@ module Data.Category exposing
     , maybeIdParser
     )
 
+import Data.Fields exposing (ImageData, blankImage, imageDecoder)
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode
-import Data.Fields exposing (ImageData, blankImage, imageDecoder)
 
 
 type CategoryId

@@ -6,18 +6,18 @@ module Pages.VerificationRequired exposing
     , view
     )
 
-import Data.Api as Api
 import Components.Alert as Alert exposing (defaultAlert)
 import Components.Button as Button exposing (defaultButton)
-import Utils.Decode as Decode
+import Components.HorizontalForm as Form
+import Data.Api as Api
+import Data.Routing.Routing as Routing exposing (Route(..))
 import Dict
 import Html exposing (..)
 import Html.Attributes exposing (class, disabled)
 import Html.Events exposing (onClick)
 import Ports
 import RemoteData exposing (WebData)
-import Data.Routing.Routing as Routing exposing (Route(..))
-import Components.HorizontalForm as Form
+import Utils.Decode as Decode
 import Utils.View exposing (icon, pageTitleView)
 
 

@@ -1,5 +1,9 @@
 module Components.Admin.AdminDashboard exposing (Model, Msg, initialModel, update, view)
 
+import Data.Fields exposing (Cents(..))
+import Data.Locations as Locations exposing (AddressLocations)
+import Data.PageData exposing (AdminDashboardData, DashboardCustomer, DashboardGraphData, DashboardOrder)
+import Data.Routing.Routing exposing (AdminRoute(..), Route(..))
 import DateFormat
 import Decimal
 import Html exposing (Html, a, div, h5, p, table, tbody, td, text, tr)
@@ -17,11 +21,7 @@ import LineChart.Interpolation as Interpolation
 import LineChart.Junk as Junk
 import LineChart.Legends as Legends
 import LineChart.Line as Line
-import Data.Locations as Locations exposing (AddressLocations)
-import Data.Fields exposing (Cents(..))
-import Data.PageData as PageData exposing (AdminDashboardData, DashboardCustomer, DashboardGraphData, DashboardOrder)
 import RemoteData exposing (WebData)
-import Data.Routing.Routing as Routing exposing (AdminRoute(..), Route(..))
 import Time exposing (Zone)
 import Utils.Format as Format
 import Utils.View exposing (icon, routeLinkAttributes)
