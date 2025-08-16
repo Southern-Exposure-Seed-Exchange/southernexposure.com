@@ -1,25 +1,44 @@
 module Main exposing (main)
 
-import Components.Address.Address as Address
-import Components.AdvancedSearch as AdvancedSearch
-import Data.Api as Api
 import BootstrapGallery as Gallery
 import Browser
 import Browser.Dom as Dom
 import Browser.Navigation
+import Components.Address.Address as Address
+import Components.Admin.AdminDashboard as AdminDashboard
+import Components.Admin.CategorySalesAdmin as CategorySalesAdmin
+import Components.Admin.CouponAdmin as CouponAdmin
+import Components.Admin.CustomerAdmin as CustomerAdmin
+import Components.Admin.OrderAdmin as OrderAdmin
+import Components.Admin.ProductSalesAdmin as ProductSalesAdmin
+import Components.Admin.SettingsAdmin as SettingsAdmin
+import Components.Admin.ShippingAdmin as ShippingAdmin
+import Components.Admin.StaticPageAdmin as StaticPageAdmin
+import Components.Admin.SurchargesAdmin as SurchargesAdmin
+import Components.AdvancedSearch as AdvancedSearch
 import Components.Categories.AdminViews as CategoryAdmin
-import Data.Category as Category exposing (CategoryId)
+import Components.Products.AdminViews as ProductAdmin
+import Components.Products.Pagination as Pagination
 import Components.ProfileNavbar as ProfileNavbar
--- import Components.Tooltip as Tooltip
+import Components.SiteUI.Search as SiteSearch
+import Components.Tooltip as Tooltip
+import Data.Api as Api
+import Data.Category as Category exposing (CategoryId)
+import Data.Fields exposing (imageDataLightboxConfig)
+import Data.Locations as Locations
+import Data.Model as Model exposing (Model)
+import Data.Msg exposing (Msg(..))
+import Data.PageData as PageData exposing (CartItemId(..), PageData)
+import Data.Product as Product exposing (ProductId(..), ProductVariantId(..), productMainImage)
+import Data.Routing.Routing as Routing exposing (AdminRoute(..), Route(..), parseRoute)
+import Data.Search as Search exposing (UniqueSearch(..))
+import Data.SiteUI as SiteUI
+import Data.StaticPage as StaticPage exposing (StaticPageId)
+import Data.User as User exposing (AuthStatus)
 import Dict
 import Http
 import Json.Decode as Decode
 import Json.Encode as Encode
-import Data.Locations as Locations
-import Data.Msg exposing (Msg(..))
-import Data.Model as Model exposing (Model)
-import Data.Fields exposing (imageDataLightboxConfig)
-import Data.PageData as PageData exposing (CartItemId(..), PageData)
 import Pages.Cart.Cart as Cart
 import Pages.Cart.Type as Cart
 import Pages.Checkout as Checkout
@@ -35,31 +54,12 @@ import Pages.VerifyEmail as VerifyEmail
 import Paginate exposing (Paginated)
 import Ports
 import Process
-import Data.Product as Product exposing (ProductId(..), ProductVariantId(..), productMainImage)
-import Components.Products.AdminViews as ProductAdmin
-import Components.Products.Pagination as Pagination
 import RemoteData exposing (WebData)
-import Data.Routing.Routing as Routing exposing (AdminRoute(..), Route(..), parseRoute)
-import Data.Search as Search exposing (UniqueSearch(..))
-import Data.SiteUI as SiteUI
-import Components.SiteUI.Search as SiteSearch
-import Data.StaticPage as StaticPage exposing (StaticPageId)
 import Task
 import Time
-import Utils.Update exposing (batchCommand, discardCommand, extraCommand, noCommand, updateAndCommand, withCommand)
 import Url exposing (Url)
-import Data.User as User exposing (AuthStatus)
+import Utils.Update exposing (batchCommand, discardCommand, extraCommand, noCommand, updateAndCommand, withCommand)
 import View exposing (view)
-import Components.Admin.AdminDashboard as AdminDashboard
-import Components.Admin.CategorySalesAdmin as CategorySalesAdmin
-import Components.Admin.CouponAdmin as CouponAdmin
-import Components.Admin.CustomerAdmin as CustomerAdmin
-import Components.Admin.OrderAdmin as OrderAdmin
-import Components.Admin.ProductSalesAdmin as ProductSalesAdmin
-import Components.Admin.SettingsAdmin as SettingsAdmin
-import Components.Admin.ShippingAdmin as ShippingAdmin
-import Components.Admin.StaticPageAdmin as StaticPageAdmin
-import Components.Admin.SurchargesAdmin as SurchargesAdmin
 
 
 main : Program Flags Model Msg
@@ -1732,21 +1732,17 @@ update msg ({ pageData, key } as model) =
                 ]
             )
 
-        -- TooltipMsg tooltipKey subMsg ->
-        --     let
-        --         newTooltipDict =
-        --             Dict.update tooltipKey
-        --                 (\mbTooltip ->
-        --                     case mbTooltip of
-        --                         Just t ->
-        --                             Just <| Tooltip.update subMsg t
+        TooltipMsg subMsg ->
+            let
+                modelShared =
+                    model.shared
 
-        --                         Nothing ->
-        --                             Just <| Tooltip.update subMsg Tooltip.init
-        --                 )
-        --                 model.tooltipDict
-        --     in
-        --     ( { model | tooltipDict = newTooltipDict }, Cmd.none )
+                ( tooltips, cmd ) =
+                    Tooltip.update subMsg model.shared.tooltips
+            in
+            ( { model | shared = { modelShared | tooltips = tooltips } }
+            , Cmd.map TooltipMsg cmd
+            )
 
 
 {-| Wrap the normal update function, checking to see if the page has finished

@@ -1,26 +1,28 @@
 module Components.Categories.Views exposing (details)
 
-import Data.Category as Category
-import Html exposing (Html, a, div, h1, hr, img, text)
-import Html.Attributes exposing (alt, attribute, class, src)
-import Data.Msg exposing (Msg)
-import Data.Fields exposing (imageToSrcSet, imgSrcFallback)
-import Data.PageData as PageData exposing (ProductData)
-import Pages.Cart.Type exposing (CartForms)
-import Paginate exposing (Paginated)
 import Components.Products.Pagination as Pagination
 import Components.Products.Sorting as Sorting
 import Components.Products.Views as ProductViews
-import Data.Routing.Routing as Routing exposing (Route(..))
+import Data.Category as Category
+import Data.Fields exposing (imageToSrcSet, imgSrcFallback)
+import Data.Msg exposing (Msg)
+import Data.PageData as PageData exposing (ProductData)
+import Data.Routing.Routing exposing (Route(..))
+import Data.Shared exposing (Shared)
+import Html exposing (Html, a, div, h1, hr, img, text)
+import Html.Attributes exposing (alt, attribute, class, src)
+import Pages.Cart.Type exposing (CartForms)
+import Paginate exposing (Paginated)
 import Utils.View exposing (rawHtml, routeLinkAttributes)
 
 
 details :
-    Pagination.Data
+    Shared
+    -> Pagination.Data
     -> CartForms
     -> Paginated ProductData { slug : String, sorting : Sorting.Option } PageData.CategoryDetails
     -> List (Html Msg)
-details pagination addToCartForms products =
+details shared pagination addToCartForms products =
     let
         { category, subCategories } =
             case Paginate.getResponseData products of
@@ -78,4 +80,4 @@ details pagination addToCartForms products =
         , div [ class "tw:pb-[32px]" ] []
         ]
     ]
-        ++ ProductViews.listView (CategoryDetails category.slug) pagination addToCartForms products
+        ++ ProductViews.listView shared (CategoryDetails category.slug) pagination addToCartForms products

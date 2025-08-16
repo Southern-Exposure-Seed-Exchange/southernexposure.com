@@ -1,15 +1,34 @@
 module Data.Msg exposing (Msg(..))
 
-import Components.AdvancedSearch as AdvancedSearch
-import Data.Api as Api
+-- import Components.Tooltip as Tooltip
+
 import BootstrapGallery as Gallery
 import Browser exposing (UrlRequest)
+import Components.Admin.AdminDashboard as AdminDashboard
+import Components.Admin.CategorySalesAdmin as CategorySalesAdmin
+import Components.Admin.CouponAdmin as CouponAdmin
+import Components.Admin.CustomerAdmin as CustomerAdmin
+import Components.Admin.OrderAdmin as OrderAdmin
+import Components.Admin.ProductSalesAdmin as ProductSalesAdmin
+import Components.Admin.SettingsAdmin as SettingsAdmin
+import Components.Admin.ShippingAdmin as ShippingAdmin
+import Components.Admin.StaticPageAdmin as StaticPageAdmin
+import Components.Admin.SurchargesAdmin as SurchargesAdmin
+import Components.AdvancedSearch as AdvancedSearch
 import Components.Categories.AdminViews as CategoryAdmin
+import Components.Products.AdminViews as ProductAdmin
 import Components.ProfileNavbar as ProfileNavbar
--- import Components.Tooltip as Tooltip
-import Data.Locations as Locations exposing (AddressLocations)
+import Components.Tooltip as Tooltip
+import Components.SiteUI.Search as SiteSearch
+import Data.Api as Api
 import Data.Fields exposing (ImageData)
+import Data.Locations exposing (AddressLocations)
 import Data.PageData as PageData exposing (CustomerData, OrderData, ProductData)
+import Data.Product exposing (ProductId, ProductVariantId)
+import Data.Routing.Routing exposing (Route)
+import Data.SiteUI exposing (CategoryListData, NavigationData)
+import Data.StaticPage exposing (StaticPage)
+import Data.User as User
 import Pages.Cart.Type as Cart
 import Pages.Checkout as Checkout
 import Pages.CreateAccount as CreateAccount
@@ -21,25 +40,8 @@ import Pages.ResetPassword as ResetPassword
 import Pages.VerificationRequired as VerificationRequired
 import Pages.VerifyEmail as VerifyEmail
 import Paginate
-import Data.Product as Product exposing (ProductId, ProductVariantId)
-import Components.Products.AdminViews as ProductAdmin
 import RemoteData exposing (WebData)
-import Data.Routing.Routing as Routing exposing (Route)
-import Data.SiteUI as SiteUI exposing (CategoryListData, NavigationData)
-import Components.SiteUI.Search as SiteSearch
-import Data.StaticPage as StaticPage exposing (StaticPage)
 import Time
-import Data.User as User
-import Components.Admin.AdminDashboard as AdminDashboard
-import Components.Admin.CategorySalesAdmin as CategorySalesAdmin
-import Components.Admin.CouponAdmin as CouponAdmin
-import Components.Admin.CustomerAdmin as CustomerAdmin
-import Components.Admin.OrderAdmin as OrderAdmin
-import Components.Admin.ProductSalesAdmin as ProductSalesAdmin
-import Components.Admin.SettingsAdmin as SettingsAdmin
-import Components.Admin.ShippingAdmin as ShippingAdmin
-import Components.Admin.StaticPageAdmin as StaticPageAdmin
-import Components.Admin.SurchargesAdmin as SurchargesAdmin
 
 
 type Msg
@@ -67,8 +69,8 @@ type Msg
       -- My Account Page
     | ShowAllOrders
       -- Sub-Components
-    -- | TooltipMsg String Tooltip.Msg
     | ProfileNavbarMsg ProfileNavbar.Msg
+    | TooltipMsg Tooltip.Msg
       -- Sub-Messages
     | SearchMsg SiteSearch.Msg
     | AdvancedSearchMsg AdvancedSearch.Msg
