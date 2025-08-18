@@ -14,10 +14,19 @@ module Pages.Checkout exposing
     )
 
 import Components.Address.Address as Address exposing (AddressId(..))
-import Data.Api as Api
 import Components.Alert as Alert exposing (defaultAlert)
+import Components.Aria as Aria
 import Components.Button as Button exposing (defaultButton)
+import Components.HorizontalForm exposing (genericErrorText)
+import Components.OrderDetails as OrderDetails
 import Components.Svg exposing (..)
+import Data.Api as Api
+import Data.Fields exposing (Cents(..), centsFromString, centsMap, centsMap2, imageToSrcSet, imgSrcFallback, lotSizeToString)
+import Data.Locations as Locations exposing (AddressLocations)
+import Data.PageData as PageData exposing (CartItemId(..), LineItemType(..), showCartItemError, showCartItemWarning)
+import Data.Product as Product exposing (productMainImage, variantPrice)
+import Data.Routing.Routing as Routing exposing (Route(..), reverse)
+import Data.User as User exposing (AuthStatus)
 import Dict
 import Html exposing (..)
 import Html.Attributes as A exposing (alt, attribute, checked, class, colspan, for, href, id, name, placeholder, required, rows, src, step, type_, value)
@@ -25,21 +34,12 @@ import Html.Events exposing (onCheck, onClick, onInput, onSubmit)
 import Html.Extra exposing (viewIf)
 import Json.Decode as Decode
 import Json.Encode as Encode exposing (Value)
-import Data.Locations as Locations exposing (AddressLocations)
-import Data.Fields exposing (Cents(..), centsFromString, centsMap, centsMap2, imageToSrcSet, imgSrcFallback, lotSizeToString)
-import Components.OrderDetails as OrderDetails
-import Data.PageData as PageData exposing (CartItemId(..), LineItemType(..), showCartItemError, showCartItemWarning)
 import Ports
-import Data.Product as Product exposing (productMainImage, variantPrice)
 import RemoteData exposing (WebData)
-import Data.Routing.Routing as Routing exposing (Route(..), reverse)
 import String.Extra exposing (toSentenceCase)
 import Time
-import Utils.Update exposing (nothingAndNoCommand)
-import Data.User as User exposing (AuthStatus)
-import Components.Aria as Aria
 import Utils.Format as Format
-import Components.HorizontalForm exposing (genericErrorText)
+import Utils.Update exposing (nothingAndNoCommand)
 import Utils.View exposing (decimalInput, disableGrammarly, emailInput, icon, labelView, pageOverlay, pageTitleView, pageTitleWithSubView, rawHtml)
 
 

@@ -1,16 +1,16 @@
 module Pages.MyAccount exposing (getDetails, view)
 
-import Data.Api as Api
 import Components.Alert as Alert exposing (defaultAlert)
 import Components.Button as Button exposing (ButtonType(..), defaultButton)
 import Components.Svg exposing (discountSvg)
-import Html exposing (..)
-import Html.Attributes exposing (class)
+import Data.Api as Api
+import Data.Fields exposing (Cents(..))
 import Data.Locations as Locations exposing (AddressLocations)
 import Data.Msg exposing (Msg(..))
-import Data.Fields exposing (Cents(..))
 import Data.PageData as PageData exposing (MyAccount)
 import Data.Routing.Routing as Routing exposing (Route(..), reverse)
+import Html exposing (..)
+import Html.Attributes exposing (class)
 import Time
 import Utils.Format as Format
 import Utils.View exposing (pageTitleView)

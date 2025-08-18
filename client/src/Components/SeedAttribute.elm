@@ -1,14 +1,14 @@
 module Components.SeedAttribute exposing (..)
 
--- import Data.Msg exposing (Msg(..))
-
 import Components.Svg exposing (heirLoomSvg, organicSvg, smallFarmSvg, sunSvg)
-import Dict exposing (Dict)
+import Components.Tooltip as Tooltip
+import Data.SeedAttribute as SeedAttribute
+import Data.Shared exposing (Shared)
+import Data.ViewKey exposing (ViewKey)
 import Html exposing (..)
 import Html.Attributes exposing (..)
+import List
 import Utils.Images as Images
-import Data.SeedAttribute as SeedAttribute
-import List exposing (all)
 
 
 iconUrl : SeedAttribute.Attribute -> String
@@ -53,37 +53,20 @@ attributeToSvg : SeedAttribute.Attribute -> Html msg
 attributeToSvg attribute =
     case attribute of
         SeedAttribute.Organic ->
-            div []
-                [ organicSvg
-                ]
+            organicSvg
 
-        -- Tooltip.view
-        --     (TooltipMsg "organic")
-        --     { triggerEl =
-        --         div []
-        --             [ organicSvg
-        --             ]
-        --     , text = "abc"
-        --     }
-        --     (Dict.get "organic" tooltipDict |> Maybe.withDefault Tooltip.init)
         SeedAttribute.Heirloom ->
-            div []
-                [ heirLoomSvg
-                ]
+            heirLoomSvg
 
         SeedAttribute.Regional ->
-            div []
-                [ sunSvg
-                ]
+            sunSvg
 
         SeedAttribute.SmallGrower ->
-            div []
-                [ smallFarmSvg
-                ]
+            smallFarmSvg
 
 
-icons : SeedAttribute.SeedAttribute -> Html msg
-icons { isOrganic, isHeirloom, isRegional, isSmallGrower } =
+icons : Shared -> ViewKey -> (Tooltip.Msg -> msg) -> SeedAttribute.SeedAttribute -> Html msg
+icons shared parentKey mkParentMsg { isOrganic, isHeirloom, isRegional, isSmallGrower } =
     [ ( isOrganic, SeedAttribute.Organic )
     , ( isHeirloom, SeedAttribute.Heirloom )
     , ( isRegional, SeedAttribute.Regional )
@@ -93,7 +76,14 @@ icons { isOrganic, isHeirloom, isRegional, isSmallGrower } =
         |> List.map
             (Tuple.second
                 >> (\attribute ->
-                        attributeToSvg attribute
+                        Tooltip.view
+                            { key = parentKey ++ SeedAttribute.toString attribute
+                            , triggerEl = attributeToSvg attribute
+                            , text = SeedAttribute.toDescription attribute
+                            , mkParentMsg = mkParentMsg
+                            , widthClass = Just "tw:w-[200px]"
+                            }
+                            shared.tooltips
                    )
             )
         |> div [ class "tw:flex tw:gap-[10px]" ]

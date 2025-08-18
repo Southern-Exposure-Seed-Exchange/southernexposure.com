@@ -3,16 +3,16 @@ module Components.SiteUI.Header exposing (adminView, view)
 import Components.Button as Button exposing (defaultButton)
 import Components.IconButton as IconButton
 import Components.ProfileNavbar as ProfileNavbar
+import Components.SiteUI.Search as SiteSearch
 import Components.Svg exposing (..)
+import Data.Model as Model exposing (Model)
+import Data.Msg exposing (Msg(..))
+import Data.Routing.Routing as Routing exposing (AdminRoute(..), Route(..), reverse)
+import Data.Search as Search exposing (UniqueSearch(..))
+import Data.User as User exposing (AuthStatus(..))
 import Html exposing (Html, a, br, div, h1, img, li, small, span, text, ul)
 import Html.Attributes exposing (alt, class, href, id, src, target)
 import Html.Events.Extra exposing (onClickPreventDefault)
-import Data.Msg exposing (Msg(..))
-import Data.Model as Model exposing (Model)
-import Data.Routing.Routing as Routing exposing (AdminRoute(..), Route(..), reverse)
-import Data.Search as Search exposing (UniqueSearch(..))
-import Components.SiteUI.Search as SiteSearch
-import Data.User as User exposing (AuthStatus(..))
 import Utils.Images as Images
 import Utils.View exposing (routeLinkAttributes)
 

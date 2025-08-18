@@ -8,23 +8,22 @@ module Pages.Login exposing
     , view
     )
 
-import Data.Api as Api
 import Browser.Navigation
 import Components.Button as Button exposing (defaultButton)
 import Components.Svg exposing (..)
+import Data.Api as Api
+import Data.Routing.Routing as Routing exposing (Route(..), reverse)
+import Data.User as User exposing (AuthStatus, UserId(..))
 import Dict
 import Html exposing (..)
-import Html.Attributes exposing (autofocus, checked, class, for, href, id, required, target, type_, value)
+import Html.Attributes exposing (autofocus, checked, class, for, href, id, placeholder, required, target, type_, value)
 import Html.Events exposing (onCheck, onInput, onSubmit)
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode exposing (Value)
 import Ports
 import RemoteData exposing (WebData)
-import Data.Routing.Routing as Routing exposing (Route(..), reverse)
 import Utils.Update exposing (nothingAndNoCommand)
-import Data.User as User exposing (AuthStatus, UserId(..))
 import Utils.View exposing (..)
-import Html.Attributes exposing (placeholder)
 
 
 

@@ -8,8 +8,11 @@ module Data.SeedAttribute exposing
     , toString
     )
 
-import Json.Decode as Decode exposing (Decoder)
 import Data.Product as Product exposing (ProductId(..))
+import Json.Decode as Decode exposing (Decoder)
+
+
+
 -- import Utils.Images as Images
 
 
@@ -48,7 +51,6 @@ type Attribute
 all : List Attribute
 all =
     [ Organic, Heirloom, Regional, SmallGrower ]
-
 
 
 toString : Attribute -> String

@@ -1,10 +1,10 @@
 module Components.Form exposing (..)
 
+import Components.Aria as Aria
 import Html exposing (..)
 import Html.Attributes as A exposing (..)
 import Html.Events exposing (on, targetValue)
 import Json.Decode as Decode
-import Components.Aria as Aria
 import Utils.View exposing (numericInput, onIntInput)
 
 
@@ -62,4 +62,3 @@ selectView { tagId, ariaLabel, onSelectHandler, values, valueDecoder, view } =
         , Aria.label ariaLabel
         ]
         (List.map view values)
-

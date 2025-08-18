@@ -96,22 +96,22 @@ module Data.PageData exposing
     )
 
 import Components.Address.Address as Address
+import Components.Products.Pagination as Pagination
+import Components.Products.Sorting as Sorting
 import Data.Api as Api
 import Data.Category as Category exposing (Category, CategoryId(..))
+import Data.Fields exposing (Cents(..), ImageData, LotSize, centsDecoder, centsEncoder, centsMap, centsMap2, imageDecoder, lotSizeDecoder)
+import Data.Locations as Locations exposing (AddressLocations, Region, regionDecoder)
+import Data.Product as Product exposing (Product, ProductId, ProductVariant, ProductVariantId(..), variantPrice)
+import Data.Search as Search
+import Data.SeedAttribute as SeedAttribute exposing (SeedAttribute)
+import Data.StaticPage as StaticPage exposing (StaticPage, StaticPageId)
 import Dict exposing (Dict)
 import Iso8601
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode exposing (Value)
-import Data.Locations as Locations exposing (AddressLocations, Region, regionDecoder)
-import Data.Fields exposing (Cents(..), ImageData, LotSize, centsDecoder, centsEncoder, centsMap, centsMap2, imageDecoder, lotSizeDecoder)
 import Paginate exposing (Paginated)
-import Data.Product as Product exposing (Product, ProductId, ProductVariant, ProductVariantId(..), variantPrice)
-import Components.Products.Pagination as Pagination
-import Components.Products.Sorting as Sorting
 import RemoteData exposing (WebData)
-import Data.Search as Search
-import Data.SeedAttribute as SeedAttribute exposing (SeedAttribute)
-import Data.StaticPage as StaticPage exposing (StaticPage, StaticPageId)
 import Time exposing (Posix)
 
 
@@ -476,11 +476,12 @@ isFreeCheckout =
 -- Order Details
 
 
-type alias DeliveryData = 
+type alias DeliveryData =
     { trackNumber : String
     , trackCarrier : String
-    , trackPickupDate : String 
+    , trackPickupDate : String
     }
+
 
 deliveryDataDecoder : Decoder DeliveryData
 deliveryDataDecoder =
@@ -488,6 +489,7 @@ deliveryDataDecoder =
         (Decode.field "trackNumber" Decode.string)
         (Decode.field "trackCarrier" Decode.string)
         (Decode.field "trackPickupDate" Decode.string)
+
 
 type alias OrderDetails =
     { order : Order
@@ -916,10 +918,11 @@ adminEditCustomerDataDecoder =
         (Decode.field "stripeId" <| Decode.nullable Decode.string)
         (Decode.field "helcimCustomerId" <| Decode.nullable Decode.int)
         (Decode.field "avalaraCode" <| Decode.nullable Decode.string)
-        |> Decode.andThen (\partialData ->
-            Decode.map (\orders -> partialData orders)
-            (Decode.field "orders" <| Decode.list customerOrderDataDecoder)
-        )
+        |> Decode.andThen
+            (\partialData ->
+                Decode.map (\orders -> partialData orders)
+                    (Decode.field "orders" <| Decode.list customerOrderDataDecoder)
+            )
 
 
 type alias CustomerOrderData =
@@ -1425,7 +1428,6 @@ variantDictDecoder =
             )
 
 
-
 type CartItemId
     = CartItemId Int
 
@@ -1434,61 +1436,78 @@ type CartItemError
     = OutOfStockError Int Int
     | GenericError String
 
+
 cartItemErrorDecoder : Decoder CartItemError
 cartItemErrorDecoder =
-    Decode.field "code" Decode.string |> Decode.andThen
-        (\code ->
-            case code of
-                "OUT_OF_STOCK" ->
-                    Decode.map2 OutOfStockError
-                        (Decode.field "available" Decode.int)
-                        (Decode.field "requested" Decode.int)
+    Decode.field "code" Decode.string
+        |> Decode.andThen
+            (\code ->
+                case code of
+                    "OUT_OF_STOCK" ->
+                        Decode.map2 OutOfStockError
+                            (Decode.field "available" Decode.int)
+                            (Decode.field "requested" Decode.int)
 
-                "GENERIC" ->
-                    Decode.map GenericError (Decode.field "message" Decode.string)
-                _ ->
-                    Decode.fail <| "Unknown CartItemError code: " ++ code
-        )
+                    "GENERIC" ->
+                        Decode.map GenericError (Decode.field "message" Decode.string)
+
+                    _ ->
+                        Decode.fail <| "Unknown CartItemError code: " ++ code
+            )
+
 
 showCartItemError : CartItemError -> String
 showCartItemError error =
     case error of
         OutOfStockError available requested ->
-            "This product has less stock available than requested. " ++
-            "Available: " ++ String.fromInt available ++
-            ". Requested: " ++ String.fromInt requested ++ "."
+            "This product has less stock available than requested. "
+                ++ "Available: "
+                ++ String.fromInt available
+                ++ ". Requested: "
+                ++ String.fromInt requested
+                ++ "."
+
         GenericError message ->
             message
+
 
 type CartItemWarning
     = LimitedAvailabilityWarning Int
     | GenericWarning String
 
+
 cartItemWarningDecoder : Decoder CartItemWarning
 cartItemWarningDecoder =
-    Decode.field "code" Decode.string |> Decode.andThen
-        (\code ->
-            case code of
-                "LIMITED_AVAILABILITY" ->
-                    Decode.map LimitedAvailabilityWarning (Decode.field "available" Decode.int)
+    Decode.field "code" Decode.string
+        |> Decode.andThen
+            (\code ->
+                case code of
+                    "LIMITED_AVAILABILITY" ->
+                        Decode.map LimitedAvailabilityWarning (Decode.field "available" Decode.int)
 
-                "GENERIC" ->
-                    Decode.map GenericWarning (Decode.field "message" Decode.string)
+                    "GENERIC" ->
+                        Decode.map GenericWarning (Decode.field "message" Decode.string)
 
-                _ ->
-                    Decode.fail <| "Unknown CartItemWarning code: " ++ code
-        )
+                    _ ->
+                        Decode.fail <| "Unknown CartItemWarning code: " ++ code
+            )
+
 
 showCartItemWarning : CartItemWarning -> String
 showCartItemWarning warning =
     case warning of
         LimitedAvailabilityWarning available ->
-            "This product has limited availability. " ++
-                if available > 0 then
-                    "Expect delays in delivery for order with more than " ++ String.fromInt available ++ " item(s)."
-                else "Expect delays in delivery. "
+            "This product has limited availability. "
+                ++ (if available > 0 then
+                        "Expect delays in delivery for order with more than " ++ String.fromInt available ++ " item(s)."
+
+                    else
+                        "Expect delays in delivery. "
+                   )
+
         GenericWarning message ->
             message
+
 
 type alias CartItem =
     { id : CartItemId

@@ -5,14 +5,14 @@ module Components.SiteUI.Search exposing
     , update
     )
 
-import Html exposing (Html, button, div, input, text)
-import Html.Attributes exposing (class, name, required, type_, value)
-import Html.Events exposing (onInput, onSubmit)
+import Components.Aria as Aria
+import Components.Microdata as Microdata
 import Components.Products.Pagination as Pagination
 import Data.Routing.Routing as Routing exposing (Route(..))
 import Data.Search as Search
-import Components.Aria as Aria
-import Components.Microdata as Microdata
+import Html exposing (Html, button, div, input, text)
+import Html.Attributes exposing (class, name, required, type_, value)
+import Html.Events exposing (onInput, onSubmit)
 
 
 type alias Data =

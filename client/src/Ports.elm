@@ -19,13 +19,14 @@ port module Ports exposing
     , scrollToTop
     , setCartItemCount
     , setPageTitle
-    , subscribeToHelcimMessages
     , storeAuthDetails
     , storeCartSessionToken
+    , subscribeToHelcimMessages
     , updatePageMetadata
     )
 
 import Json.Encode exposing (Value)
+
 
 
 -- Page Change
@@ -102,13 +103,19 @@ port cartItemCountChanged : (Int -> msg) -> Sub msg
 
 -- Checkout
 
+
 port subscribeToHelcimMessages : () -> Cmd msg
+
 
 port helcimMessageReceived : (Value -> msg) -> Sub msg
 
+
 port removeHelcimPayIframe : () -> Cmd msg
 
+
 port appendHelcimPayIframe : String -> Cmd msg
+
+
 
 -- SEO / Analytics
 

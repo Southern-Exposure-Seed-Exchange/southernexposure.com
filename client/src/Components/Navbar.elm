@@ -5,7 +5,7 @@ import Html.Attributes exposing (..)
 import RemoteData
 
 
-view navigationData rootCategory mobileOnlyItems=
+view navigationData rootCategory mobileOnlyItems =
     let
         categoryNavigation =
             RemoteData.toMaybe navigationData

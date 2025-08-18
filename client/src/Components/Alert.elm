@@ -32,6 +32,7 @@ defaultDangerIcon =
         [ warningSvg
         ]
 
+
 defaultSuccessIcon : Html msg
 defaultSuccessIcon =
     div [ class "tw:pt-[3px]" ]
@@ -60,6 +61,5 @@ view config =
 
             Nothing ->
                 text ""
-
         , config.content
         ]

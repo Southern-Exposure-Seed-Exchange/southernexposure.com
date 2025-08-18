@@ -2,11 +2,10 @@ module Components.ProfileNavbar exposing (..)
 
 import Components.Dropdown as Dropdown
 import Components.Svg exposing (..)
+import Data.Routing.Routing exposing (Route(..), reverse)
 import Html exposing (..)
 import Html.Attributes exposing (..)
-import Html.Events exposing (onClick)
 import Html.Events.Extra exposing (onClickPreventDefault)
-import Data.Routing.Routing as Routing exposing (Route(..), reverse)
 import Utils.Html exposing (ClickType(..))
 
 

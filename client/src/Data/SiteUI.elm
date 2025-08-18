@@ -1,9 +1,9 @@
 module Data.SiteUI exposing
-    ( NavigationData
-    , navigationDecoder
+    ( CategoryData
     , CategoryListData
-    , CategoryData
+    , NavigationData
     , categoryListDecoder
+    , navigationDecoder
     )
 
 import Data.Category as Category exposing (Category, CategoryId(..))
@@ -40,6 +40,7 @@ stringToIntKeys =
                     Dict.insert newKey value newDict
         )
         Dict.empty
+
 
 type alias CategoryListData =
     List CategoryData

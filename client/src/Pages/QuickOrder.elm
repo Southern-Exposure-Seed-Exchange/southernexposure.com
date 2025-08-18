@@ -6,23 +6,22 @@ module Pages.QuickOrder exposing
     , view
     )
 
-import Data.Api as Api
 import Array exposing (Array)
+import Components.Aria as Aria
 import Components.Button as Button exposing (ButtonType(..), defaultButton)
+import Components.Svg exposing (shoppingCartSvgSmall)
+import Data.Api as Api
+import Data.User as User exposing (AuthStatus)
 import Dict
 import Html exposing (..)
-import Html.Attributes as A exposing (class, id, name, required, type_, value)
+import Html.Attributes as A exposing (class, id, name, placeholder, required, type_, value)
 import Html.Events exposing (on, onClick, onInput, onSubmit)
 import Html.Events.Extra exposing (targetValueInt)
 import Json.Decode as Decode
 import Json.Encode as Encode exposing (Value)
 import Ports
 import RemoteData exposing (WebData)
-import Data.User as User exposing (AuthStatus)
-import Components.Aria as Aria
 import Utils.View exposing (numericInput, pageTitleView)
-import Components.Svg exposing (shoppingCartSvgSmall)
-import Html.Attributes exposing (placeholder)
 
 
 

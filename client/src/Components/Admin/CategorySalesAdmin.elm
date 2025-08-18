@@ -12,9 +12,15 @@ module Components.Admin.CategorySalesAdmin exposing
     , updateNewForm
     )
 
-import Data.Api as Api
 import Array exposing (Array)
-import Data.Category as Category exposing (CategoryId(..))
+import Components.Admin.Admin as Admin exposing (updateEditField)
+import Components.HorizontalForm as Form
+import Data.Api as Api
+import Data.Category exposing (CategoryId(..))
+import Data.Fields exposing (centsToString)
+import Data.PageData as PageData exposing (AdminCategorySaleListData, AdminEditCategorySaleData, SaleType(..), saleTypeEncoder)
+import Data.Routing.Routing as Routing exposing (AdminRoute(..), Route(..))
+import Data.Validation as V exposing (formValidation)
 import Dict
 import Html exposing (Html, a, br, div, form, table, tbody, td, text, th, thead, tr)
 import Html.Attributes as A exposing (class, type_)
@@ -22,18 +28,12 @@ import Html.Events exposing (onSubmit)
 import Iso8601
 import Json.Decode as Decode
 import Json.Encode as Encode exposing (Value)
-import Data.Fields exposing (centsToString)
-import Utils.Utils exposing (posixToDateString)
-import Data.PageData as PageData exposing (AdminCategorySaleListData, AdminEditCategorySaleData, SaleType(..), saleTypeEncoder)
 import Ports
 import RemoteData exposing (WebData)
-import Data.Routing.Routing as Routing exposing (AdminRoute(..), Route(..))
 import Time exposing (Posix, Zone)
-import Utils.Update exposing (noCommand, removeIndex, updateArray)
-import Data.Validation as V exposing (formValidation)
-import Components.Admin.Admin as Admin exposing (updateEditField)
 import Utils.Format as Format
-import Components.HorizontalForm as Form
+import Utils.Update exposing (noCommand, removeIndex, updateArray)
+import Utils.Utils exposing (posixToDateString)
 import Utils.View exposing (routeLinkAttributes)
 
 

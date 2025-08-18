@@ -8,6 +8,7 @@
         "watch": "webpack-dev-server --port 7000 --https --hot",
         "build": "NODE_ENV=production webpack",
         "elm": "elm",
+        "format": "elm-format src/",
         "webpack": "webpack",
         "tailwind": "npx @tailwindcss/cli -i ./src/style/tailwind-input.css -o ./src/style/tailwind-output.css --minify",
         "tailwind-watch": "npx @tailwindcss/cli -i ./src/style/tailwind-input.css -o ./src/style/tailwind-output.css --minify --watch"

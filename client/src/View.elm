@@ -1,19 +1,45 @@
 module View exposing (pageDescription, pageImage, pageTitle, view)
 
-import Components.AdvancedSearch as AdvancedSearch
 import BootstrapGallery as Gallery
 import Browser exposing (Document)
+import Components.Admin.AdminDashboard as AdminDashboard
+import Components.Admin.CategorySalesAdmin as CategorySalesAdmin
+import Components.Admin.CouponAdmin as CouponAdmin
+import Components.Admin.CustomerAdmin as CustomerAdmin
+import Components.Admin.OrderAdmin as OrderAdmin
+import Components.Admin.ProductSalesAdmin as ProductSalesAdmin
+import Components.Admin.SettingsAdmin as SettingsAdmin
+import Components.Admin.ShippingAdmin as ShippingAdmin
+import Components.Admin.StaticPageAdmin as StaticPageAdmin
+import Components.Admin.SurchargesAdmin as SurchargesAdmin
+import Components.AdvancedSearch as AdvancedSearch
+import Components.Aria as Aria
 import Components.Categories.AdminViews as CategoryAdminViews
 import Components.Categories.Views as CategoryViews
+import Components.OrderDetails as OrderDetails
+import Components.Products.AdminViews as ProductAdmin
+import Components.Products.Pagination as Pagination
+import Components.Products.Views as ProductViews
+import Components.SiteUI.Breadcrumbs as SiteBreadcrumbs
+import Components.SiteUI.Footer as SiteFooter
+import Components.SiteUI.Header as SiteHeader
+import Components.SiteUI.Navigation as SiteNavigation
+import Components.SiteUI.Sidebar as SiteSidebar
+import Data.Model exposing (Model)
+import Data.Msg exposing (Msg(..))
+import Data.PageData as PageData
+import Data.Product exposing (productMainImage)
+import Data.Routing.Routing exposing (AdminRoute(..), Route(..), isAdminRoute, showSearchbar)
+import Data.Search as Search exposing (UniqueSearch(..))
+import Data.SeedAttribute as SeedAttribute
+import Data.Shared exposing (Shared)
+import Data.StaticPage exposing (StaticPage)
+import Data.User as User exposing (unauthorized)
 import Html exposing (..)
 import Html.Attributes exposing (class, href, id, target)
 import Html.Events exposing (onClick)
 import Http
-import Data.Msg exposing (Msg(..))
 import Mock.Home
-import Data.Model as Model exposing (Model)
-import Components.OrderDetails as OrderDetails
-import Data.PageData as PageData
 import Pages.Cart.Cart as Cart
 import Pages.Cart.Type as Cart
 import Pages.Checkout as Checkout
@@ -27,34 +53,8 @@ import Pages.ResetPassword as ResetPassword
 import Pages.VerificationRequired as VerificationRequired
 import Pages.VerifyEmail as VerifyEmail
 import Paginate
-import Data.Product as Product exposing (productMainImage)
-import Components.Products.AdminViews as ProductAdmin
-import Components.Products.Pagination as Pagination
-import Components.Products.Views as ProductViews
 import RemoteData exposing (WebData)
-import Data.Routing.Routing as Routing exposing (AdminRoute(..), Route(..), isAdminRoute, showSearchbar)
-import Data.Search as Search exposing (UniqueSearch(..))
-import Data.SeedAttribute as SeedAttribute
-import Components.SiteUI.Breadcrumbs as SiteBreadcrumbs
-import Components.SiteUI.Footer as SiteFooter
-import Components.SiteUI.Header as SiteHeader
-import Components.SiteUI.Navigation as SiteNavigation
-import Components.SiteUI.Sidebar as SiteSidebar
-import Data.StaticPage as StaticPage exposing (StaticPage)
-import Data.User as User exposing (unauthorized)
-import Components.Admin.AdminDashboard as AdminDashboard
-import Components.Aria as Aria
-import Components.Admin.CategorySalesAdmin as CategorySalesAdmin
-import Components.Admin.CouponAdmin as CouponAdmin
-import Components.Admin.CustomerAdmin as CustomerAdmin
-import Components.Admin.OrderAdmin as OrderAdmin
-import Components.Admin.ProductSalesAdmin as ProductSalesAdmin
-import Components.Admin.SettingsAdmin as SettingsAdmin
-import Components.Admin.ShippingAdmin as ShippingAdmin
-import Components.Admin.StaticPageAdmin as StaticPageAdmin
-import Components.Admin.SurchargesAdmin as SurchargesAdmin
-import Utils.View exposing (pageOverlay, rawHtml)
-import Utils.View exposing (pageTitleView)
+import Utils.View exposing (pageOverlay, pageTitleView, rawHtml)
 
 
 view : Model -> Document Msg
@@ -112,7 +112,7 @@ view ({ route, pageData, navigationData, zone, helcimUrl } as model) =
         pageContent =
             case route of
                 ProductDetails _ _ ->
-                    withIntermediateText (ProductViews.detailView model.addToCartForms)
+                    withIntermediateText (ProductViews.detailView model.shared model.addToCartForms)
                         pageData.productDetails
 
                 CategoryDetails _ pagination ->
@@ -124,7 +124,8 @@ view ({ route, pageData, navigationData, zone, helcimUrl } as model) =
 
                     else
                         loadingInterstitial False
-                            :: CategoryViews.details pagination
+                            :: CategoryViews.details model.shared
+                                pagination
                                 model.addToCartForms
                                 pageData.categoryDetails
 
@@ -137,7 +138,7 @@ view ({ route, pageData, navigationData, zone, helcimUrl } as model) =
 
                     else
                         loadingInterstitial False
-                            :: searchResultsView data pagination model.addToCartForms pageData.searchResults
+                            :: searchResultsView model.shared data pagination model.addToCartForms pageData.searchResults
 
                 PageDetails _ _ ->
                     withIntermediateText staticPageView pageData.pageDetails
@@ -745,7 +746,7 @@ remoteFailureView error =
 notFoundView : List (Html msg)
 notFoundView =
     [ pageTitleView "Page Not Found"
-    , p [class "tw:pl-[8px]"]
+    , p [ class "tw:pl-[8px]" ]
         [ text <|
             "Sorry, we couldn't find the page your were looking for. "
                 ++ "If you got to this page from our site, please contact us so we can fix our links."
@@ -810,8 +811,8 @@ staticPageView { name, slug, content } =
     ]
 
 
-searchResultsView : Search.Data -> Pagination.Data -> Cart.CartForms -> PageData.SearchResults -> List (Html Msg)
-searchResultsView ({ query } as data) pagination addToCartForms products =
+searchResultsView : Shared -> Search.Data -> Pagination.Data -> Cart.CartForms -> PageData.SearchResults -> List (Html Msg)
+searchResultsView shared ({ query } as data) pagination addToCartForms products =
     let
         uniqueSearch =
             Search.uniqueSearch data
@@ -911,4 +912,4 @@ searchResultsView ({ query } as data) pagination addToCartForms products =
     , searchDescription
     , div [ class "tw:pb-[40px]" ] []
     ]
-        ++ ProductViews.listView (SearchResults data) pagination addToCartForms products
+        ++ ProductViews.listView shared (SearchResults data) pagination addToCartForms products

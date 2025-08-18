@@ -3,14 +3,29 @@ module Data.Model exposing
     , initial
     )
 
-import Data.Api as Api exposing (Endpoint(..))
 import BootstrapGallery as Gallery
+import Components.Admin.AdminDashboard as AdminDashboard
+import Components.Admin.CategorySalesAdmin as CategorySalesAdmin
+import Components.Admin.CouponAdmin as CouponAdmin
+import Components.Admin.CustomerAdmin as CustomerAdmin
+import Components.Admin.OrderAdmin as OrderAdmin
+import Components.Admin.ProductSalesAdmin as ProductSalesAdmin
+import Components.Admin.SettingsAdmin as SettingsAdmin
+import Components.Admin.ShippingAdmin as ShippingAdmin
+import Components.Admin.StaticPageAdmin as StaticPageAdmin
+import Components.Admin.SurchargesAdmin as SurchargesAdmin
 import Components.Categories.AdminViews as CategoryAdmin
+import Components.Products.AdminViews as ProductAdmin
 import Components.ProfileNavbar as ProfileNavbar
--- import Components.Tooltip as Tooltip
-import Dict exposing (Dict)
+import Data.Api exposing (Endpoint(..))
 import Data.Fields exposing (ImageData)
 import Data.PageData as PageData exposing (PageData)
+import Data.Routing.Routing as Routing exposing (Route)
+import Data.Search as Search
+import Data.Shared exposing (Shared, initShared)
+import Data.SiteUI exposing (CategoryListData, NavigationData)
+import Data.User as User exposing (AuthStatus)
+import Dict
 import Pages.Cart.Cart as Cart
 import Pages.Cart.Type as Cart
 import Pages.Checkout as Checkout
@@ -22,24 +37,8 @@ import Pages.QuickOrder as QuickOrder
 import Pages.ResetPassword as ResetPassword
 import Pages.VerificationRequired as VerificationRequired
 import Pages.VerifyEmail as VerifyEmail
-import Data.Product as Product exposing (ProductVariantId)
-import Components.Products.AdminViews as ProductAdmin
 import RemoteData exposing (WebData)
-import Data.Routing.Routing as Routing exposing (Route)
-import Data.Search as Search
-import Data.SiteUI as SiteUI exposing (CategoryListData, NavigationData)
 import Time
-import Data.User as User exposing (AuthStatus)
-import Components.Admin.AdminDashboard as AdminDashboard
-import Components.Admin.CategorySalesAdmin as CategorySalesAdmin
-import Components.Admin.CouponAdmin as CouponAdmin
-import Components.Admin.CustomerAdmin as CustomerAdmin
-import Components.Admin.OrderAdmin as OrderAdmin
-import Components.Admin.ProductSalesAdmin as ProductSalesAdmin
-import Components.Admin.SettingsAdmin as SettingsAdmin
-import Components.Admin.ShippingAdmin as ShippingAdmin
-import Components.Admin.StaticPageAdmin as StaticPageAdmin
-import Components.Admin.SurchargesAdmin as SurchargesAdmin
 
 
 type alias Model =
@@ -92,8 +91,9 @@ type alias Model =
 
     -- sub-component
     , profileNavbar : ProfileNavbar.Model
-    -- , tooltipDict : Dict String Tooltip.Model
+    , shared : Shared
     }
+
 
 initial : Routing.Key -> Route -> String -> Model
 initial key route helcimUrl =
@@ -144,5 +144,5 @@ initial key route helcimUrl =
     , key = key
     , helcimUrl = helcimUrl
     , profileNavbar = ProfileNavbar.init
-    -- , tooltipDict = Dict.empty
+    , shared = initShared
     }

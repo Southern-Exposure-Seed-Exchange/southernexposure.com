@@ -12,7 +12,17 @@ clear; npm run -- watch --host 127.0.0.1 --server-type http
 clear; npm run tailwind-watch
 ```
 
-# Working with static page
+## Code format
+
+- You can run `npm run format` to format all the elm code which use `elm-format` in the background
+- If using Vscode, you can install elm extension and set this configuration in settings.json:
+```json
+    "[elm]": {
+        "editor.formatOnSave": true
+    }
+```
+
+## Working with static page
 
 - Write the static page view in `Mock` module, and use it for local development
 - Update `staticPageView` to use one of the Mock view function, to test it

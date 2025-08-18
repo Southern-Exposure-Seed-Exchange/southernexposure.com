@@ -25,18 +25,18 @@ module Data.Api exposing
 
 -}
 
+import Components.Products.Pagination as Pagination
 import Data.Category as Category exposing (CategoryId(..))
+import Data.Product as Product exposing (ProductId(..))
+import Data.Routing.Utils exposing (joinPath, queryFlag, queryParameter, withQueryStrings)
+import Data.StaticPage as StaticPage exposing (StaticPageId)
 import Dict exposing (Dict)
 import Html
 import Html.Attributes exposing (class)
 import Http
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode exposing (Value)
-import Data.Product as Product exposing (ProductId(..))
-import Components.Products.Pagination as Pagination
 import RemoteData exposing (WebData)
-import Data.Routing.Utils exposing (joinPath, queryFlag, queryParameter, withQueryStrings)
-import Data.StaticPage as StaticPage exposing (StaticPageId)
 
 
 
@@ -157,12 +157,12 @@ toUrl endpoint =
                 CustomerRegister ->
                     joinPath [ "customers", "register" ]
 
-                CustomerVerifyEmail uuid  ->
+                CustomerVerifyEmail uuid ->
                     joinPath [ "customers", "verify", uuid ]
 
                 CustomerRequestVerification customerId ->
-                    joinPath [ "customers", "request-verification"]
-                        ++ withQueryStrings [queryParameter ( "customer", String.fromInt customerId)]
+                    joinPath [ "customers", "request-verification" ]
+                        ++ withQueryStrings [ queryParameter ( "customer", String.fromInt customerId ) ]
 
                 CustomerAuthorize ->
                     joinPath [ "customers", "authorize" ]

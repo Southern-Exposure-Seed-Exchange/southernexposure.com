@@ -12,9 +12,9 @@ module Data.Search exposing
     )
 
 import Data.Category as Category exposing (CategoryId(..))
-import Json.Encode as Encode exposing (Value)
 import Data.Routing.Utils as Routing exposing (fromStringParam, fromStringWithDefaultParam, queryFlag, queryParameter)
 import Data.SeedAttribute as SeedAttribute
+import Json.Encode as Encode exposing (Value)
 import Url.Parser as Url exposing ((<?>))
 
 
@@ -32,6 +32,7 @@ type alias Data =
 type SearchScope
     = Titles
     | TitlesAndDescriptions
+
 
 type FormActionType
     = SubmitForm

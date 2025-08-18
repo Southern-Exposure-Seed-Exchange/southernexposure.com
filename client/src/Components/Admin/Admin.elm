@@ -22,23 +22,23 @@ module Components.Admin.Admin exposing
 {-| Helper functions for the Admin Components.Admin.
 -}
 
-import Data.Api as Api
 import Array exposing (Array)
 import Base64
+import Components.HorizontalForm as Form
+import Components.Pager as Pager
+import Data.Api as Api
 import Data.Category as Category exposing (CategoryId(..))
+import Data.PageData as PageData
 import Dict
 import File exposing (File)
 import Html exposing (Attribute, Html, br, button, div, form, img, input, option, select, span, table, tbody, text)
 import Html.Attributes exposing (class, disabled, id, name, required, selected, src, type_, value)
 import Html.Events exposing (on, onClick, onInput, onSubmit, targetValue)
 import Json.Decode as Decode
-import Utils.Utils exposing (slugify)
-import Data.PageData as PageData
 import Paginate exposing (Paginated)
 import RemoteData exposing (WebData)
 import Task
-import Components.HorizontalForm as Form
-import Components.Pager as Pager
+import Utils.Utils exposing (slugify)
 import Utils.View exposing (icon)
 
 

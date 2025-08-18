@@ -12,8 +12,12 @@ module Components.Categories.AdminViews exposing
     , updateNewForm
     )
 
+import Components.Admin.Admin as Admin exposing (equalsOriginal, formSavingClass, slugFrom, submitOrSavingButton, updateEditField)
+import Components.HorizontalForm as Form
 import Data.Api as Api exposing (FormErrors)
 import Data.Category as Category exposing (CategoryId(..))
+import Data.PageData as PageData
+import Data.Routing.Routing as Routing exposing (AdminRoute(..), Route(..))
 import Dict
 import File exposing (File)
 import Html exposing (Html, a, button, div, form, img, option, table, tbody, td, text, tr)
@@ -21,15 +25,11 @@ import Html.Attributes exposing (class, selected, src, style, type_, value)
 import Html.Events exposing (onClick, onSubmit)
 import Json.Decode as Decode
 import Json.Encode as Encode
-import Utils.Utils exposing (slugify)
-import Data.PageData as PageData
 import Ports
 import RemoteData
 import Result.Extra as Result
-import Data.Routing.Routing as Routing exposing (AdminRoute(..), Route(..))
 import Utils.Update exposing (noCommand)
-import Components.Admin.Admin as Admin exposing (equalsOriginal, formSavingClass, slugFrom, submitOrSavingButton, updateEditField)
-import Components.HorizontalForm as Form
+import Utils.Utils exposing (slugify)
 import Utils.View exposing (routeLinkAttributes, selectImageFile)
 
 

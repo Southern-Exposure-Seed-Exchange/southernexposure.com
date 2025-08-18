@@ -72,7 +72,7 @@ section1 =
 
 section2 =
     div []
-        [ h1 [ ] [ text "Featured Customer Favorites" ]
+        [ h1 [] [ text "Featured Customer Favorites" ]
         , div [ class "tw:grid tw:grid-cols-3 tw:gap-[12px] tw:w-fit tw:pb-[20px]" ]
             [ imageLinkView "/products/alabama-blue-collards/" "homepage/2-1.png" "alabama blue collards"
             , imageLinkView "/products/cossack-pineapple-ground-cherry/" "homepage/2-2.png" "cossack pineapple ground cherry"
@@ -124,7 +124,7 @@ section2 =
 
 section3 =
     div []
-        [ h1 [ ] [ text "Featured Customer Favorites" ]
+        [ h1 [] [ text "Featured Customer Favorites" ]
         , div [ class "tw:grid tw:grid-cols-3 tw:gap-[12px] tw:w-fit" ]
             [ imageLinkView "/vegetable-gardening-in-the-southeast-the-timber-press-guide-to-p-1722.html" "homepage/3-1.png" "Vegetable Gardening in the SE"
             , imageLinkView "/products/grow-great-vegetables-in-virginia/" "homepage/3-2.png" "Grow Great Virginia Vegetables"

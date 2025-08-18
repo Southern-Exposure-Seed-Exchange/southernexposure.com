@@ -9,12 +9,12 @@ text, etc.
 
 -}
 
+import Components.Aria as Aria
 import Components.Svg exposing (chevronLeftSvg, chevronRightSvg)
-import Html exposing (Html, a, b, div, li, node, span, text, ul)
+import Data.Routing.Routing exposing (Route)
+import Html exposing (Html, a, b, div, node, span, text)
 import Html.Attributes exposing (class, tabindex)
 import Paginate exposing (Paginated)
-import Data.Routing.Routing as Routing exposing (Route)
-import Components.Aria as Aria
 import Utils.View exposing (routeLinkAttributes)
 
 
