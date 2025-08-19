@@ -24,10 +24,9 @@ clear; npm run tailwind-watch
 
 ## Working with static page
 
-- Write the static page view in `Mock` module, and use it for local development
-- Update `staticPageView` to use one of the Mock view function, to test it
-- When everything is ready, copy the html content from the browser and input it into the admin panel
-- A list of generated html can be found in `client/src/Mock` which contain `home.html`. More will be added when other static pages are ready.
+- Homepage can be edited in `src/Mock/home.html`
+- Other pages are copied from the production at the moments
+- After updating the html, update them in the admin panel
 
 
 ## Note:

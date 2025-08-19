@@ -1,115 +1,68 @@
 module Components.SiteUI.Header exposing (adminView, view)
 
+-- import Components.MobileNav as MobileNav
+
 import Components.Button as Button exposing (defaultButton)
 import Components.IconButton as IconButton
 import Components.ProfileNavbar as ProfileNavbar
+import Components.Shared exposing (cartIcon, logoAndName, searchIcon)
 import Components.SiteUI.Search as SiteSearch
 import Components.Svg exposing (..)
-import Data.Model as Model exposing (Model)
+import Data.Category exposing (CategoryId)
+import Data.Model exposing (Model)
 import Data.Msg exposing (Msg(..))
 import Data.Routing.Routing as Routing exposing (AdminRoute(..), Route(..), reverse)
 import Data.Search as Search exposing (UniqueSearch(..))
-import Data.User as User exposing (AuthStatus(..))
+import Data.SiteUI exposing (NavigationData)
+import Data.User exposing (AuthStatus(..))
 import Html exposing (Html, a, br, div, h1, img, li, small, span, text, ul)
 import Html.Attributes exposing (alt, class, href, id, src, target)
 import Html.Events.Extra exposing (onClickPreventDefault)
-import Utils.Images as Images
+import RemoteData exposing (WebData)
 import Utils.View exposing (routeLinkAttributes)
 
 
-view : Model -> (SiteSearch.Msg -> Msg) -> SiteSearch.Data -> AuthStatus -> Int -> Html Msg
-view model searchTagger searchData authStatus cartItemCount =
-    div [ class "container" ]
-        [ div [ id "site-header", class "tw:py-[30px] tw:flex tw:items-center tw:w-full" ]
+view :
+    Model
+    -> (SiteSearch.Msg -> Msg)
+    -> SiteSearch.Data
+    -> AuthStatus
+    -> Int
+    -> Route
+    -> WebData NavigationData
+    -> List CategoryId
+    -> Html Msg
+view model searchTagger searchData authStatus cartItemCount route navigationData activeCategoryIds =
+    div [ class "se-container tw:hidden tw:lg:block" ]
+        [ div [ id "site-header", class "tw:pt-[20px] tw:lg:pt-[30px] tw:pb-0 tw:lg:pb-[30px] tw:flex tw:items-center tw:w-full" ]
             [ logoAndName Routing.homePage
             , div [ class "tw:grow" ] []
-            , linksAndSearch model searchTagger searchData authStatus cartItemCount
+            , linksAndSearch model authStatus cartItemCount route navigationData activeCategoryIds model.searchData
             ]
         ]
 
 
-logoAndName : Route -> Html Msg
-logoAndName linkRoute =
+linksAndSearch : Model -> AuthStatus -> Int -> Route -> WebData NavigationData -> List CategoryId -> Search.Data -> Html Msg
+linksAndSearch model authStatus cartItemCount route navigationData activeCategoryIds searchData =
     let
-        logoImage =
-            div [ class "tw:w-[84px]" ]
-                [ img
-                    [ id "site-logo"
-                    , class ""
-
-                    -- , class "float-left mr-2 mx-lg-3"
-                    , src <| Images.static "logos/sese.png"
-                    , alt "SESE's Logo - Two Hands Supporting a Growing Flower"
-                    ]
-                    []
-                ]
-
-        titleLink =
-            a (class "d-block tw:text-[#1E0C03]! tw:text-[29px]" :: routeLinkAttributes linkRoute)
-                [ text "Southern Exposure"
-                , br [ class "d-none d-md-block" ] []
-                , text " Seed Exchange"
-                ]
-    in
-    div [ class "tw:flex tw:gap-[16px]" ]
-        [ a (class "my-auto" :: routeLinkAttributes linkRoute) [ logoImage ]
-        , div [ id "site-title", class "media-body my-auto" ]
-            [ h1 [ class "media-heading m-0" ] [ titleLink ]
-            ]
-        ]
-
-
-searchIcon : Html Msg
-searchIcon =
-    a
-        [ class "tw:relative tw:p-[6px]! tw:cursor-pointer tw:group", href "/all-products" ]
-        [ searchSvgBig
-        ]
-
-
-cartIcon : Int -> Html Msg
-cartIcon cartItemCount =
-    a
-        [ class "tw:relative tw:p-[6px]! tw:cursor-pointer tw:group", href (reverse Cart) ]
-        [ if cartItemCount > 0 then
-            div [ class "tw:absolute tw:top-[-6px] tw:right-[-6px]" ]
-                [ div [ class "tw:w-[24px] tw:h-[24px] tw:bg-[#D62246] tw:rounded-full tw:flex tw:items-center tw:justify-center" ]
-                    [ span [ class "tw:pt-[1px] tw:block tw:text-white tw:text-[12px]" ] [ text <| String.fromInt cartItemCount ]
-                    ]
-                ]
-
-          else
-            div [] []
-        , IconButton.view shoppingCartSvg
-        ]
-
-
-
--- TODO: update this to support when the user is logged in after the design is ready
-
-
-linksAndSearch : Model -> (SiteSearch.Msg -> Msg) -> SiteSearch.Data -> AuthStatus -> Int -> Html Msg
-linksAndSearch model searchTagger searchData authStatus cartItemCount =
-    let
-        routeLink content route =
-            linkItem (routeLinkAttributes route) content
-
         linkItem attrs content =
             li [ class "d-inline-block ml-1" ]
                 [ a (class "p-2" :: attrs) [ text content ] ]
     in
-    div [ class "tw:hidden tw:md:flex tw:md:gap-[16px] tw:flex tw:items-center" ] <|
+    div [ class "tw:flex tw:gap-[16px] tw:flex tw:items-center" ] <|
         [ if Routing.showSearchbar model.route then
             text ""
 
           else
             searchIcon
         , cartIcon cartItemCount
-        , Button.view { defaultButton | label = "Quick order", type_ = Button.Link <| reverse QuickOrder, style = Button.Outline }
+
+        -- , MobileNav.view route authStatus navigationData activeCategoryIds searchData
+        , Button.view { defaultButton | label = "Quick order", type_ = Button.Link <| reverse QuickOrder, style = Button.Outline, responsiveClass = "tw:hidden tw:lg:block" }
         ]
             ++ (case authStatus of
                     Anonymous ->
-                        [ Button.view { defaultButton | label = "Log in", type_ = Button.Link <| reverse <| Login Nothing False }
+                        [ Button.view { defaultButton | label = "Log in", type_ = Button.Link <| reverse <| Login Nothing False, responsiveClass = "tw:hidden tw:lg:block" }
                         ]
 
                     Authorized _ ->

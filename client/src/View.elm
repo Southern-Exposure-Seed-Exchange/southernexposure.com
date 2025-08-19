@@ -39,7 +39,6 @@ import Html exposing (..)
 import Html.Attributes exposing (class, href, id, target)
 import Html.Events exposing (onClick)
 import Http
-import Mock.Home
 import Pages.Cart.Cart as Cart
 import Pages.Cart.Type as Cart
 import Pages.Checkout as Checkout
@@ -79,10 +78,10 @@ view ({ route, pageData, navigationData, zone, helcimUrl } as model) =
                     withSidebar pageContentIncludingSearch
 
         withSidebar content =
-            div [ class "container", Aria.live "polite" ]
+            div [ class "se-container", Aria.live "polite" ]
                 [ div [ class "tw:flex tw:flex-col-reverse tw:lg:flex-row tw:gap-[40px]" ]
                     [ SiteSidebar.view route
-                    , div [ class "tw:w-full tw:grow", id "main" ] content
+                    , div [ class "tw:w-full tw:grow tw:min-h-screen tw:lg:min-h-auto", id "main" ] content
                     ]
                 ]
 
@@ -352,8 +351,8 @@ view ({ route, pageData, navigationData, zone, helcimUrl } as model) =
 
         else
             [ skipLink
-            , SiteHeader.view model SearchMsg model.searchData model.currentUser model.cartItemCount
-            , SiteNavigation.view route model.currentUser navigationData activeCategoryIds model.searchData
+            , SiteHeader.view model SearchMsg model.searchData model.currentUser model.cartItemCount route navigationData activeCategoryIds
+            , SiteNavigation.view route model.currentUser navigationData activeCategoryIds model.searchData model.cartItemCount
             , SiteBreadcrumbs.view route pageData
             , middleContent
             , SiteFooter.view
@@ -802,12 +801,9 @@ staticPageView { name, slug, content } =
 
         html =
             rawHtml content
-
-        -- Used when working on homepage:
-        -- html = Mock.Home.view
     in
     [ header
-    , div [ class "static-page tw:pl-[8px]" ] [ html ]
+    , div [ class "static-page tw:lg:pl-[8px]" ] [ html ]
     ]
 
 

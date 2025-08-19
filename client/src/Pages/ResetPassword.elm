@@ -213,7 +213,7 @@ requestView tagger model =
                 ]
     in
     [ pageTitleView "Reset Password"
-    , div [ class "tw:flex tw:grid tw:grid-cols-2" ]
+    , div [ class "tw:flex tw:grid tw:grid-cols-1 tw:lg:grid-cols-2" ]
         [ resetForm
         ]
     ]
@@ -278,7 +278,7 @@ changeView tagger model code =
                         |> p [ class "text-danger font-weight-bold" ]
     in
     [ pageTitleView "Change Password"
-    , div [ class "tw:grid tw:grid-cols-2" ]
+    , div [ class "tw:grid tw:grid-cols-1 tw:lg:grid-cols-2" ]
         [ form [ onSubmit <| tagger <| SubmitChange code ]
             [ div [ class "tw:p-[16px] tw:rounded-[16px] tw:bg-[rgba(30,12,3,0.03)]" ]
                 [ inputRow model.changeErrors

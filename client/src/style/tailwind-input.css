@@ -1,18 +1,26 @@
 /* @import "tailwindcss" source("../../src*.{elm,js}"); */
 @import "tailwindcss" source("../../src") prefix(tw);
 
-input:focus,
-textarea:focus,
-select:focus {
-  outline: 0;
+@theme {
+  --breakpoint-*: initial;
+
+  --breakpoint-sm: 576px;
+  --breakpoint-md: 768px;
+  --breakpoint-lg: 992px;
+  --breakpoint-xl: 1200px;
+  --breakpoint-2xl: 96rem;
 }
 
 .static-page a {
   @apply tw:text-[rgba(52,195,171,1)] tw:hover:text-[rgba(52,195,171,1)] tw:hover:underline;
 }
 
+.se-h1 {
+  @apply tw:text-[30px]! tw:lg:text-[40px]!;
+}
+
 .static-page h1 {
-  @apply tw:mb-[32px];
+  @apply tw:mb-[32px] tw:text-[30px]! tw:lg:text-[40px]!;
 }
 
 .static-page h2 {
@@ -93,4 +101,14 @@ select:focus {
 }
 .se-ul li {
   padding-bottom: 8px;
+}
+
+/* 1192 + 32 = 1224 */
+.se-container {
+  @apply tw:w-full tw:max-w-[1224px] tw:mx-auto tw:px-[16px];
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+  /* Chrome, Safari and Opera */
 }

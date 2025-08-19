@@ -2,7 +2,6 @@ module Components.IconButton exposing (..)
 
 import Html exposing (a, div, img)
 import Html.Attributes exposing (alt, class, href, src)
-import Utils.Images as Images
 
 
 view svgView =

@@ -6,7 +6,7 @@ import Components.Products.Pagination as Pagination
 import Data.Msg exposing (Msg(..))
 import Data.PageData as PageData exposing (PageData)
 import Data.Routing.Routing as Routing exposing (AdminRoute(..), Route(..))
-import Html exposing (Html, a, li, node, ol, span, text)
+import Html exposing (Html, a, div, li, node, ol, span, text)
 import Html.Attributes exposing (class, id)
 import Paginate
 import RemoteData
@@ -22,13 +22,13 @@ view route pageData =
                     :: childItems
 
         activeItem content position =
-            li (class "breadcrumb-item active" :: Microdata.itemListElement)
+            li (class "breadcrumb-item tw:shrink-0 tw:whitespace-nowrap active" :: Microdata.itemListElement)
                 [ span [ Microdata.name ] [ text content ]
                 , Microdata.positionMeta position
                 ]
 
         inactiveItem content itemRoute position =
-            li (class "breadcrumb-item" :: Microdata.itemListElement)
+            li (class "breadcrumb-item tw:shrink-0 tw:whitespace-nowrap" :: Microdata.itemListElement)
                 [ a (Microdata.item :: routeLinkAttributes itemRoute)
                     [ span [ Microdata.name ] [ text content ]
                     ]
@@ -253,5 +253,8 @@ view route pageData =
 
     else
         node "nav"
-            [ id "breadcrumbs", class "container d-print-none", Aria.label "breadcrumb" ]
-            [ ol (class "breadcrumb mb-0" :: Microdata.breadcrumbList) items ]
+            [ id "breadcrumbs", class "se-container d-print-none", Aria.label "breadcrumb" ]
+            [ div [ class "tw:py-[20px] tw:px-0 tw:lg:px-[16px]" ]
+                [ ol (class "breadcrumb mb-0 tw:flex tw:flex-nowrap! tw:overflow-y-auto no-scrollbar" :: Microdata.breadcrumbList) items
+                ]
+            ]

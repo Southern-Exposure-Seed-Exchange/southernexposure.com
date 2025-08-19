@@ -315,7 +315,7 @@ view model locations { shippingAddresses, billingAddresses } =
     in
     [ pageTitleView "Edit Addresses"
     , Html.form [ onSubmit Update ]
-        [ div [ class "tw:grid tw:grid-cols-2 tw:px-[16px] tw:gap-[16px] tw:pb-[20px]" ]
+        [ div [ class "tw:grid tw:grid-cols-1 tw:lg:grid-cols-2 tw:px-[16px] tw:gap-[16px] tw:pb-[20px]" ]
             [ addressSelect "Shipping Addresses" SelectShipping shippingAddresses
             , addressSelect "Billing Addresses" SelectBilling billingAddresses
             ]

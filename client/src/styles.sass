@@ -1,5 +1,5 @@
 @import "~bootstrap/scss/functions"
-@import '~@fontsource-variable/inter/wght.css';
+@import '~@fontsource-variable/inter/wght.css'
 
 /** Variables **/
 /* Set the height of the Site Logo & Title */
@@ -54,7 +54,8 @@ $input-color: #333
 
 $hr-border: #C0C0C0
 
-$breadcrumb-padding-y: 28px
+$breadcrumb-padding-y: 0px
+$breadcrumb-padding-x: 0px
 $breadcrumb-bg: white
 $breadcrumb-font-size: 14px
 $breadcrumb-active-color: rgba(30, 12, 3, 0.6)
@@ -63,6 +64,8 @@ $breadcrumb-active-color: rgba(30, 12, 3, 0.6)
 $input-border-color: #E8E7E6
 $input-border-radius: 8px
 $input-placeholder-color: rgba(187, 182, 179, 1)
+
+$grid-breakpoints: (xs: 0,sm: 992px,md: 992px,lg: 992px,xl: 1200px)
 
 @import "~bootstrap/scss/variables"
 @import "~bootstrap/scss/bootstrap"
@@ -115,6 +118,7 @@ body
   // background-attachment: fixed
   // background-size: contain
 
+
 /* Set the background color of the body content */
 body > div.container, body > nav.container
   background: $body-bg
@@ -164,8 +168,7 @@ body > div.container, body > nav.container
   nav
     border-radius: 4px
     +media-breakpoint-down(sm)
-      padding-top: 0.25rem
-      padding-bottom: 0.25rem
+      padding: 0
   /* Color the mobile navbar buttons */
   .navbar-toggler
     color: $light-pale-tan
@@ -178,18 +181,22 @@ body > div.container, body > nav.container
       text-decoration: underline
     /* Space Out Navbar Links */
     .nav-link
-      // padding: 0.75rem 1rem
-      padding: 32px 20px
+      padding: 12px 16px
+      +media-breakpoint-up(lg)
+        padding: 32px 20px
     /* Darken the Background of Active Nav Items */
     .active
       // background-color: $navbar-light-active-bg
       text-decoration: underline
     .dropdown-menu
-      border-radius: 16px
-      border: 1px solid #E8E7E6
+      border-radius: 0px
+      border: 0
       box-shadow: 0 1px 2px 0 rgba(16, 24, 40, 0.05)
       top: 70px
       padding: 12px
+      +media-breakpoint-up(lg)
+        border-radius: 16px
+        border: 1px solid #E8E7E6
 
       /* Highlight a hovered or clicked item */
       a:hover, a:active
