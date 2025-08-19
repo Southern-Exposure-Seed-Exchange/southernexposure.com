@@ -725,6 +725,11 @@ getCustomersCountRoute GetCustomersCountRequest {} = do
         c <- E.from $ E.table @Customer
         -- Exclude the "deleted" customer
         E.where_ $ c E.^. CustomerEmail E.!=. E.val deletedEmail
+        -- Only count customers that have at least one order
+        E.where_ $ E.exists $ do
+            o <- E.from $ E.table @Order
+            E.where_ (c E.^. CustomerId E.==. o E.^. OrderCustomerId)
+            return ()
         return E.countRows
     return $ GetCustomersCountResponse $ fromIntegral $ E.unValue $ head customerCount
 
@@ -766,7 +771,13 @@ downloadCustomersRoute DownloadCustomersRequest {..} = runDB $ do
                             return $ E.max_ (a E.^. AddressId)
                         )
                     )
+        -- Exclude the "deleted" customer
         E.where_ $ c E.^. CustomerEmail E.!=. E.val deletedEmail
+        -- Only select customers that have at least one order
+        E.where_ $ E.exists $ do
+            o <- E.from $ E.table @Order
+            E.where_ (c E.^. CustomerId E.==. o E.^. OrderCustomerId)
+            return ()
         E.orderBy [E.asc $ c E.^. CustomerId]
         E.offset (fromIntegral $ fromMaybe 1 dcrStartNumber - 1)
         E.limit (fromIntegral $ fromMaybe 100 dcrBatchSize)
