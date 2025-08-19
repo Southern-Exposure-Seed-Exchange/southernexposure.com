@@ -23,7 +23,9 @@ import Components.Svg exposing (..)
 import Data.Api as Api
 import Data.Fields exposing (Cents(..), centsFromString, centsMap, centsMap2, imageToSrcSet, imgSrcFallback, lotSizeToString)
 import Data.Locations as Locations exposing (AddressLocations)
-import Data.PageData as PageData exposing (CartItemId(..), LineItemType(..), showCartItemError, showCartItemWarning)
+import Data.PageData as PageData exposing
+    ( CartItemError(..), CartItemId(..), CartItemWarning(..), LineItemType(..)
+    , encodeCartItemError, encodeCartItemWarning, showCartItemError, showCartItemWarning)
 import Data.Product as Product exposing (productMainImage, variantPrice)
 import Data.Routing.Routing as Routing exposing (Route(..), reverse)
 import Data.User as User exposing (AuthStatus)
@@ -66,6 +68,7 @@ type alias Form =
     , errors : Api.FormErrors
     , isPaymentProcessing : Bool
     , isProcessing : Bool
+    , hasNewCartInventoryNotifications : Bool
     , checkoutToken : Maybe String
     , confirmationModel : Maybe PaymentConfirmationModel
     }
@@ -86,6 +89,7 @@ initial =
     , errors = Api.initialErrors
     , isPaymentProcessing = False
     , isProcessing = False
+    , hasNewCartInventoryNotifications = False
     , checkoutToken = Nothing
     , confirmationModel = Nothing
     }
@@ -131,6 +135,7 @@ initialWithDefaults shippingAddresses billingAddresses restrictionsError =
     , errors = errors
     , isPaymentProcessing = False
     , isProcessing = False
+    , hasNewCartInventoryNotifications = False
     , checkoutToken = Nothing
     , confirmationModel = Nothing
     }
@@ -158,13 +163,60 @@ type Msg
     | Submit
     | SubmitResponse (WebData (Result Api.FormErrors CheckoutResponse))
     | RefreshDetails (WebData (Result Api.FormErrors PageData.CheckoutDetails))
-    | HelcimCheckoutTokenReceived (WebData (Result Api.FormErrors HelcimCheckoutTokenResponse))
+    | HelcimCheckoutTokenReceived (WebData (Result Api.FormErrors (CartInventoryCheckResult HelcimCheckoutTokenResponse)))
     | HelcimEventReceived Decode.Value
     | ConfirmPayment
     | CancelPayment
     | ValidateCart
     | ValidateCartResponse (WebData (Result Api.FormErrors PageData.CartDetails))
 
+
+type alias CartInventoryNotifications =
+    { warnings : List (CartItemId, (List CartItemWarning))
+    , errors : List (CartItemId, (List CartItemError))
+    }
+
+checkoutDetailsToCartInventoryNotifications : PageData.CheckoutDetails -> CartInventoryNotifications
+checkoutDetailsToCartInventoryNotifications details =
+    { warnings = List.map (\cartItem -> ( cartItem.id, cartItem.warnings )) details.items
+    , errors = List.map (\cartItem -> ( cartItem.id, cartItem.errors )) details.items
+    }
+
+encodeCartInventoryNotifications : CartInventoryNotifications -> Value
+encodeCartInventoryNotifications notifications =
+    Encode.object
+        [ ( "warnings"
+          , Encode.object
+            (List.map (\((CartItemId id), warnings) ->
+                ( String.fromInt id, Encode.list encodeCartItemWarning warnings )
+            ) notifications.warnings)
+          )
+        , ( "errors"
+          , Encode.object
+            (List.map (\((CartItemId id), errors) ->
+                ( String.fromInt id, Encode.list encodeCartItemError errors )
+            ) notifications.errors)
+          )
+        ]
+
+type CartInventoryCheckResult a
+    = NoNewCartInventoryNotifications a
+    | NewCartInventoryNotifications
+
+cartInventoryCheckResultDecoder : Decode.Decoder a -> Decode.Decoder (CartInventoryCheckResult a)
+cartInventoryCheckResultDecoder innerDecoder =
+    Decode.field "status" Decode.string
+        |> Decode.andThen
+            (\status ->
+                case status of
+                    "ok" ->
+                        Decode.map NoNewCartInventoryNotifications (Decode.field "result" innerDecoder)
+
+                    "new-notifications" -> Decode.succeed NewCartInventoryNotifications
+
+                    _ ->
+                        Decode.fail ("Unexpected status: " ++ status)
+            )
 
 type alias HelcimCheckoutTokenResponse =
     { checkoutToken : String }
@@ -428,7 +480,10 @@ update msg model authStatus maybeSessionToken checkoutDetails =
                             )
 
                         else
-                            ( { model | isPaymentProcessing = True }, Nothing, getHelcimCheckoutToken authStatus )
+                            ( { model | isPaymentProcessing = True }
+                            , Nothing
+                            , getHelcimCheckoutToken authStatus maybeSessionToken (checkoutDetailsToCartInventoryNotifications details)
+                            )
 
                 _ ->
                     ( model, Nothing, Cmd.none )
@@ -548,11 +603,18 @@ update msg model authStatus maybeSessionToken checkoutDetails =
         RefreshDetails _ ->
             model |> nothingAndNoCommand
 
-        HelcimCheckoutTokenReceived (RemoteData.Success (Ok token)) ->
-            ( { model | checkoutToken = Just token.checkoutToken }
-            , Nothing
-            , Cmd.batch [ Ports.appendHelcimPayIframe token.checkoutToken, Ports.subscribeToHelcimMessages () ]
-            )
+        HelcimCheckoutTokenReceived (RemoteData.Success (Ok res)) ->
+            case res of
+                NoNewCartInventoryNotifications token ->
+                    ( { model | checkoutToken = Just token.checkoutToken }
+                    , Nothing
+                    , Cmd.batch [ Ports.appendHelcimPayIframe token.checkoutToken, Ports.subscribeToHelcimMessages () ]
+                    )
+                NewCartInventoryNotifications ->
+                    { model
+                    | isPaymentProcessing = False, isProcessing = False, hasNewCartInventoryNotifications = True
+                    } |> refreshDetails authStatus maybeSessionToken True model
+
 
         HelcimCheckoutTokenReceived (RemoteData.Success (Err errors)) ->
             { model | errors = errors, isPaymentProcessing = False } |> nothingAndNoCommand
@@ -880,17 +942,29 @@ encodeStringAsMaybe str =
         Encode.string str
 
 
-getHelcimCheckoutToken : AuthStatus -> Cmd Msg
-getHelcimCheckoutToken authStatus =
+getHelcimCheckoutToken : AuthStatus -> Maybe String -> CartInventoryNotifications -> Cmd Msg
+getHelcimCheckoutToken authStatus maybeSessionToken cartInventoryNotifications =
     case authStatus of
         User.Authorized _ ->
+            let
+                requestData = Encode.object
+                    [ ("cartInventoryNotifications", encodeCartInventoryNotifications cartInventoryNotifications) ]
+            in
             Api.post Api.CheckoutHelcimToken
-                |> Api.withErrorHandler helcimCheckoutTokenResponseDecoder
+                |> Api.withJsonBody requestData
+                |> Api.withErrorHandler (cartInventoryCheckResultDecoder helcimCheckoutTokenResponseDecoder)
                 |> Api.sendRequest HelcimCheckoutTokenReceived
 
         User.Anonymous ->
+            let
+                requestData = Encode.object
+                    [ ("cartInventoryNotifications", encodeCartInventoryNotifications cartInventoryNotifications)
+                    , ("sessionToken", encodeMaybe Encode.string maybeSessionToken)
+                    ]
+            in
             Api.post Api.CheckoutHelcimTokenAnonymous
-                |> Api.withErrorHandler helcimCheckoutTokenResponseDecoder
+                |> Api.withJsonBody requestData
+                |> Api.withErrorHandler (cartInventoryCheckResultDecoder helcimCheckoutTokenResponseDecoder)
                 |> Api.sendRequest HelcimCheckoutTokenReceived
 
 
@@ -1532,6 +1606,13 @@ view model authStatus locations checkoutDetails =
                 ]
             , div [ class "tw:pt-[60px]" ]
                 [ h4 [] [ text "Order Summary" ]
+                , viewIf model.hasNewCartInventoryNotifications
+                    (div [ class "tw:pt-[20px]" ] [ Alert.view
+                        { defaultAlert
+                            | content = text "Availability for some of the items in your cart has changed. Please review your order and proceed to the payment one more time."
+                            , style = Alert.Warning
+                        }
+                    ])
                 , summaryTable checkoutDetails
                     model.storeCredit
                     model.couponCode

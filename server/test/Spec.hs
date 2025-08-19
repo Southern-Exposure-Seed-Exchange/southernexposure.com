@@ -8,8 +8,10 @@ import Data.Aeson (Result(Success), FromJSON, fromJSON, ToJSON(..), eitherDecode
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LBS
 import Data.Int (Int64)
+import qualified Data.Map.Strict as M
 import Data.List.NonEmpty (NonEmpty(..))
 import Data.Ratio ((%))
+import qualified Data.Set as S
 import Data.Text (Text, pack)
 import Data.Text.Lazy (isInfixOf)
 import Data.Text.Encoding (decodeUtf8, encodeUtf8)
@@ -129,6 +131,7 @@ commonData =
         , priorityFeeTests
         , categorySaleTests
         , productSaleTests
+        , cartInventoryNotificationTests
         ]
 
 
@@ -317,6 +320,39 @@ productSaleTests = testGroup "Product Sale Calculations"
         salePrice <- forAll $ genCentRange $ Range.linear (normalPrice + 1) (normalPrice * 10)
         getVariantPrice (makeVariantData variant $ Just salePrice)
             === Cents normalPrice
+
+cartInventoryNotificationTests :: TestTree
+cartInventoryNotificationTests = testGroup "Cart Inventory Notifications"
+    [ testCase "No new notifications" noNewNotifications
+    , testCase "Some notifications resolved" someNotificationsResolved
+    , testCase "New notifications" newNotifications
+    ]
+    where
+        cartInventoryNotifications = CartInventoryNotifications
+            { cinWarnings = M.fromList [(1, S.fromList [LimitedAvailabilityWarning 5, GenericWarning "warning"])]
+            , cinErrors = M.fromList [(2, S.fromList [GenericError "error", OutOfStockError 3 10])]
+            }
+        noNewNotifications :: Assertion
+        noNewNotifications =
+            getUnseenCartInventoryNotifications cartInventoryNotifications cartInventoryNotifications @?=
+                CartInventoryNotifications M.empty M.empty
+        someNotificationsResolved :: Assertion
+        someNotificationsResolved = do
+            let notifications = CartInventoryNotifications
+                    { cinWarnings = M.fromList [(1, S.fromList [LimitedAvailabilityWarning 5])]
+                    , cinErrors = M.fromList [(2, S.fromList [GenericError "error"])]
+                    }
+            getUnseenCartInventoryNotifications cartInventoryNotifications notifications @?=
+                CartInventoryNotifications M.empty M.empty
+        newNotifications :: Assertion
+        newNotifications = do
+            let notifications = CartInventoryNotifications
+                    { cinWarnings = M.fromList [(1, S.fromList [LimitedAvailabilityWarning 5, GenericWarning "warning"]), (3, S.fromList [GenericWarning "new warning"])]
+                    , cinErrors = M.fromList [(4, S.fromList [OutOfStockError 2 5])]
+                    }
+            getUnseenCartInventoryNotifications cartInventoryNotifications notifications @?=
+                CartInventoryNotifications (M.fromList [(3, S.fromList [GenericWarning "new warning"])])
+                                           (M.fromList [(4, S.fromList [OutOfStockError 2 5])])
 
 
 -- STONE EDGE

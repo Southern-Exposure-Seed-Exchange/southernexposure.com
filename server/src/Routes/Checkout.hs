@@ -50,8 +50,8 @@ import Models
 import Models.Fields
 import Server
 import Routes.CommonData
-    ( CartItemData(..), CartCharges(..)
-    , CartCharge(..), getCartItems, getCharges, AddressData(..), toAddressData
+    ( CartItemData(..), CartInventoryCheckResult(..), CartInventoryNotifications(..), checkNewCartInventoryNotifications
+    , CartCharges(..), CartCharge(..), getCartItems, getCharges, AddressData(..), toAddressData
     , fromAddressData, ShippingCharge(..), VariantData(..), getVariantPrice
     , OrderDetails(..), toCheckoutOrder, getCheckoutProducts, CheckoutProduct, toDeliveryData
 
@@ -1349,6 +1349,14 @@ getOrderAndAddress customerId orderId =
 
 -- CHECKOUT TOKEN
 
+newtype CheckoutTokenParameters = CheckoutTokenParameters
+    { ctpCartInventoryNotifications :: CartInventoryNotifications }
+
+instance FromJSON CheckoutTokenParameters where
+    parseJSON = withObject "CheckoutTokenParameters" $ \v ->
+        CheckoutTokenParameters
+            <$> v .: "cartInventoryNotifications"
+
 newtype CheckoutTokenData = CheckoutTokenData
     { ctdToken :: CheckoutToken }
 
@@ -1358,17 +1366,42 @@ instance ToJSON CheckoutTokenData where
 
 -- When the user is authenticated,
 -- we can get their corresponding Helcim Customer id (if it exists) or create a new one.
-type CheckoutTokenRoute = AuthProtect "cookie-auth" :> Post '[JSON] (Cookied CheckoutTokenData)
+type CheckoutTokenRoute =
+    AuthProtect "cookie-auth" :>
+    ReqBody '[JSON] CheckoutTokenParameters :>
+    Post '[JSON] (Cookied (CartInventoryCheckResult CheckoutTokenData))
 
-getCheckoutTokenRoute :: WrappedAuthToken -> App (Cookied CheckoutTokenData)
-getCheckoutTokenRoute token = withValidatedCookie token $ \(Entity _ customer) ->
-    getCheckoutToken (customerHelcimCustomerId customer)
+getCheckoutTokenRoute
+    :: WrappedAuthToken -> CheckoutTokenParameters
+    -> App (Cookied (CartInventoryCheckResult CheckoutTokenData))
+getCheckoutTokenRoute token CheckoutTokenParameters {..} = withValidatedCookie token $ \(Entity customerId customer) -> runDB $ do
+    (Entity cartId _) <- getBy (UniqueCustomerCart $ Just customerId)
+        >>= maybe (throwIO CartNotFound) return
+    checkNewCartInventoryNotifications ctpCartInventoryNotifications cartId $
+        lift $ getCheckoutToken (customerHelcimCustomerId customer)
 
-type AnonymousCheckoutTokenRoute = Post '[JSON] CheckoutTokenData
+data AnonymousCheckoutTokenParameters = AnonymousCheckoutTokenParameters
+    { actpCartToken :: T.Text
+    , actpCartInventoryNotifications :: CartInventoryNotifications
+    }
 
-anonymousGetCheckoutTokenRoute :: App CheckoutTokenData
-anonymousGetCheckoutTokenRoute = do
-    getCheckoutToken Nothing
+instance FromJSON AnonymousCheckoutTokenParameters where
+    parseJSON = withObject "AnonymousCheckoutTokenParameters" $ \v ->
+        AnonymousCheckoutTokenParameters
+            <$> v .: "sessionToken"
+            <*> v .: "cartInventoryNotifications"
+
+
+type AnonymousCheckoutTokenRoute =
+    ReqBody '[JSON] AnonymousCheckoutTokenParameters :>
+    Post '[JSON] (CartInventoryCheckResult CheckoutTokenData)
+
+anonymousGetCheckoutTokenRoute :: AnonymousCheckoutTokenParameters -> App (CartInventoryCheckResult CheckoutTokenData)
+anonymousGetCheckoutTokenRoute AnonymousCheckoutTokenParameters {..} = runDB $ do
+    (Entity cartId _) <- getBy (UniqueAnonymousCart $ Just actpCartToken)
+        >>= maybe (throwIO CartNotFound) return
+    checkNewCartInventoryNotifications actpCartInventoryNotifications cartId $
+        lift $ getCheckoutToken Nothing
 
 getCheckoutToken :: Maybe Helcim.CustomerId -> App CheckoutTokenData
 getCheckoutToken mbHelcimCustomerId = do

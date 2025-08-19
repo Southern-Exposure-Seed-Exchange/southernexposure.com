@@ -36,6 +36,7 @@ import Server
 import Validation (Validation(..))
 
 import qualified Data.Map.Strict as M
+import qualified Data.Set as S
 import qualified Data.Text as T
 import qualified Database.Persist as P
 import qualified Database.Esqueleto.Experimental as E
@@ -398,11 +399,14 @@ updateOrDeleteItems cartId updates = runDB $ do
                     if fromIntegral newQuantity > vdQuantity (cidVariant cartItem) then
                         case vdInventoryPolicy (cidVariant cartItem) of
                             RequireStock -> return $ Just $ cartItem
-                                { cidErrors = [OutOfStockError (fromIntegral $ vdQuantity (cidVariant cartItem)) (fromIntegral newQuantity)] }
+                                { cidErrors = S.singleton $
+                                    OutOfStockError (fromIntegral $ vdQuantity (cidVariant cartItem)) (fromIntegral newQuantity)
+                                }
                             AllowBackorder -> do
                                 updateCartItem newQuantity (cidItemId cartItem)
                                 return $ Just cartItem
-                                    { cidWarnings = [LimitedAvailabilityWarning (fromIntegral $ vdQuantity (cidVariant cartItem))]
+                                    { cidWarnings = S.singleton $
+                                        LimitedAvailabilityWarning (fromIntegral $ vdQuantity (cidVariant cartItem))
                                     , cidQuantity = fromIntegral newQuantity
                                     }
                             Unlimited -> do
@@ -410,7 +414,7 @@ updateOrDeleteItems cartId updates = runDB $ do
                                 return $ Just cartItem { cidQuantity = fromIntegral newQuantity }
                     else do
                         updateCartItem newQuantity (cidItemId cartItem)
-                        return $ Just cartItem { cidQuantity = fromIntegral newQuantity, cidErrors = [], cidWarnings = [] }
+                        return $ Just cartItem { cidQuantity = fromIntegral newQuantity, cidErrors = S.empty, cidWarnings = S.empty }
     where
         updateCartItem newQuantity cartItemId = do
             updateWhere

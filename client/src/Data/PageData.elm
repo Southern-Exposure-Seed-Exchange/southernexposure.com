@@ -27,7 +27,9 @@ module Data.PageData exposing
     , AdminSharedProductData
     , CartDetails
     , CartItem
+    , CartItemError(..)
     , CartItemId(..)
+    , CartItemWarning(..)
     , CategoryDetails
     , CheckoutDetails
     , CouponType(..)
@@ -73,12 +75,16 @@ module Data.PageData exposing
     , adminProductSaleNewDataDecoder
     , blankCartDetails
     , cartDetailsDecoder
+    , cartItemErrorDecoder
+    , cartItemWarningDecoder
     , cartTotals
     , categoryConfig
     , categoryDetailsDecoder
     , checkoutDetailsDecoder
     , couponTypeEncoder
     , customersConfig
+    , encodeCartItemError
+    , encodeCartItemWarning
     , initial
     , isFreeCheckout
     , lineItemDecoder
@@ -1456,6 +1462,21 @@ cartItemErrorDecoder =
             )
 
 
+encodeCartItemError : CartItemError -> Value
+encodeCartItemError error =
+    case error of
+        OutOfStockError available requested ->
+            Encode.object
+                [ ( "code", Encode.string "OUT_OF_STOCK" )
+                , ( "available", Encode.int available )
+                , ( "requested", Encode.int requested )
+                ]
+        GenericError message ->
+            Encode.object
+                [ ( "code", Encode.string "GENERIC" )
+                , ( "message", Encode.string message )
+                ]
+
 showCartItemError : CartItemError -> String
 showCartItemError error =
     case error of
@@ -1492,6 +1513,20 @@ cartItemWarningDecoder =
                         Decode.fail <| "Unknown CartItemWarning code: " ++ code
             )
 
+
+encodeCartItemWarning : CartItemWarning -> Value
+encodeCartItemWarning warning =
+    case warning of
+        LimitedAvailabilityWarning available ->
+            Encode.object
+                [ ( "code", Encode.string "LIMITED_AVAILABILITY" )
+                , ( "available", Encode.int available )
+                ]
+        GenericWarning message ->
+            Encode.object
+                [ ( "code", Encode.string "GENERIC" )
+                , ( "message", Encode.string message )
+                ]
 
 showCartItemWarning : CartItemWarning -> String
 showCartItemWarning warning =
