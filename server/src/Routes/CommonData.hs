@@ -34,6 +34,10 @@ module Routes.CommonData
     , CartItemError(..)
     , CartItemWarning(..)
     , getCartItems
+    , CartInventoryNotifications(..)
+    , CartInventoryCheckResult(..)
+    , checkNewCartInventoryNotifications
+    , getUnseenCartInventoryNotifications
     , CartCharges(..)
     , getCharges
     , ShippingCharge(..)
@@ -60,6 +64,7 @@ import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Monad.Reader (MonadReader, lift, asks, void, when)
 import Data.Aeson ((.=), (.:), (.:?), ToJSON(..), FromJSON(..), object, withObject)
 import Data.Digest.Pure.MD5 (md5)
+import Data.Foldable (foldl')
 import Data.Int (Int64)
 import Data.List (intersect)
 import Data.Maybe (mapMaybe, listToMaybe, fromMaybe, maybeToList)
@@ -91,6 +96,8 @@ import qualified Data.ISO3166_CountryCodes as CountryCodes
 import qualified Data.StateCodes as StateCodes
 import qualified Data.List as L
 import qualified Data.Map.Strict as M
+import qualified Data.Map.Internal as M (dropMissing, merge, preserveMissing, zipWithMatched)
+import qualified Data.Set as S
 import qualified Data.Text as T
 import qualified Database.Esqueleto.Experimental as E
 import qualified Validation as V
@@ -548,6 +555,7 @@ handlePasswordValidationError = \case
 data CartItemError
     = OutOfStockError Natural Natural
     | GenericError T.Text
+    deriving (Eq, Ord, Show)
 
 instance ToJSON CartItemError where
     toJSON (OutOfStockError available requested) =
@@ -560,11 +568,23 @@ instance ToJSON CartItemError where
                , "message" .= message
                ]
 
+instance FromJSON CartItemError where
+    parseJSON = withObject "CartItemError" $ \v -> do
+        code <- v .: "code"
+        case (code :: T.Text) of
+            "OUT_OF_STOCK" ->
+                OutOfStockError <$> v .: "available" <*> v .: "requested"
+            "GENERIC" ->
+                GenericError <$> v .: "message"
+            _ ->
+                fail $ "Unknown CartItemError code: " ++ T.unpack code
+
 data CartItemWarning
     = LimitedAvailabilityWarning Int
     -- ^ Currently available stock, the argument could be negative.
     -- In this case, a backorder is required
     | GenericWarning T.Text
+    deriving (Eq, Ord, Show)
 
 instance ToJSON CartItemWarning where
     toJSON (LimitedAvailabilityWarning available) =
@@ -576,14 +596,22 @@ instance ToJSON CartItemWarning where
                , "message" .= message
                ]
 
+instance FromJSON CartItemWarning where
+    parseJSON = withObject "CartItemWarning" $ \v -> do
+        code <- v .: "code"
+        case (code :: T.Text) of
+            "LIMITED_AVAILABILITY" -> LimitedAvailabilityWarning <$> v .: "available"
+            "GENERIC" -> GenericWarning <$> v .: "message"
+            _ -> fail $ "Unknown CartItemWarning code: " ++ T.unpack code
+
 data CartItemData =
     CartItemData
         { cidItemId :: CartItemId
         , cidProduct :: BaseProductData
         , cidVariant :: VariantData
         , cidQuantity :: Int64
-        , cidErrors :: [CartItemError]
-        , cidWarnings :: [CartItemWarning]
+        , cidErrors :: S.Set CartItemError
+        , cidWarnings :: S.Set CartItemWarning
         }
 
 instance ToJSON CartItemData where
@@ -689,8 +717,8 @@ getCartItems whereQuery = do
                     , cidProduct = productData
                     , cidVariant = variantData
                     , cidQuantity = coerce quantity
-                    , cidErrors = errors
-                    , cidWarnings = warnings
+                    , cidErrors = S.fromList errors
+                    , cidWarnings = S.fromList warnings
                     }
 
 
@@ -986,6 +1014,91 @@ getShippingMethods maybeCountry items subTotal =
                 else
                     Nothing
 
+-- | Errors and warnings known for the current state of the cart.
+-- This is used to compare against the cart state in the database to ensure that user
+-- has the latest regarding the availability of the products in the cart.
+data CartInventoryNotifications = CartInventoryNotifications
+    { cinWarnings :: M.Map Int64 (S.Set CartItemWarning)
+    , cinErrors :: M.Map Int64 (S.Set CartItemError)
+    } deriving (Eq, Show)
+
+instance ToJSON CartInventoryNotifications where
+    toJSON (CartInventoryNotifications warnings errors) =
+        object
+            [ "warnings" .= warnings
+            , "errors" .= errors
+            ]
+
+instance FromJSON CartInventoryNotifications where
+    parseJSON = withObject "CartInventoryNotifications" $ \v ->
+        CartInventoryNotifications
+            <$> v .: "warnings"
+            <*> v .: "errors"
+
+getCartInventoryNotifications :: CartId -> AppSQL CartInventoryNotifications
+getCartInventoryNotifications cartId = do
+    items <- getCartItems $ \c -> c E.^. CartId E.==. E.val cartId
+    let (cinWarnings, cinErrors) = foldl' processItem (M.empty, M.empty) items
+    return $ CartInventoryNotifications cinWarnings cinErrors
+    where
+        processItem
+            :: (M.Map Int64 (S.Set CartItemWarning), M.Map Int64 (S.Set CartItemError))
+            -> CartItemData
+            -> (M.Map Int64 (S.Set CartItemWarning), M.Map Int64 (S.Set CartItemError))
+        processItem (warnings, errors) CartItemData{..} =
+            let
+                productVariantId = E.fromSqlKey cidItemId
+            in
+                ( M.insert productVariantId cidWarnings warnings
+                , M.insert productVariantId cidErrors errors
+                )
+
+getUnseenCartInventoryNotifications
+    :: CartInventoryNotifications
+    -> CartInventoryNotifications
+    -> CartInventoryNotifications
+getUnseenCartInventoryNotifications seenNotifications currentNotifications =
+    CartInventoryNotifications
+        { cinWarnings = filterNotNull $
+            merge (cinWarnings seenNotifications) (cinWarnings currentNotifications)
+        , cinErrors = filterNotNull $
+            merge (cinErrors seenNotifications) (cinErrors currentNotifications)
+        }
+    where
+        filterNotNull = M.filter (not . S.null)
+        -- We only keep the warnings and errors that are not seen yet.
+        -- If both current and seen have the same key, we keep the difference.
+        -- If seen has a key that is not in current, we ignore it.
+        -- If current has a key that is not in seen, we keep it as is.
+        merge seen current = M.merge
+            M.dropMissing
+            M.preserveMissing
+            (M.zipWithMatched $ \_ seenSet currentSet ->
+                S.difference currentSet seenSet
+            ) seen current
+
+data CartInventoryCheckResult a
+    = NoNewCartInventoryNotifications a
+    | NewCartInventoryNotifications
+
+instance ToJSON a => ToJSON (CartInventoryCheckResult a) where
+    toJSON (NoNewCartInventoryNotifications a) = object
+        [ "status" .= ("ok" :: T.Text)
+        , "result" .= a
+        ]
+    toJSON NewCartInventoryNotifications = object
+        [ "status" .= ("new-notifications" :: T.Text)
+        ]
+
+checkNewCartInventoryNotifications
+    :: CartInventoryNotifications -> CartId -> AppSQL a
+    -> AppSQL (CartInventoryCheckResult a)
+checkNewCartInventoryNotifications seenWarnings cartId action = do
+    currentWarnings <- getCartInventoryNotifications cartId
+    let unseenWarnings = getUnseenCartInventoryNotifications seenWarnings currentWarnings
+    if M.null (cinWarnings unseenWarnings) && M.null (cinErrors unseenWarnings)
+        then NoNewCartInventoryNotifications <$> action
+        else return NewCartInventoryNotifications
 
 -- Addresses
 
