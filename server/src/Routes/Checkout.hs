@@ -444,6 +444,7 @@ data PlaceOrderError
     | NoHelcimCustomer
     | HelcimError HelcimError
     | HelcimPaymentDeclined
+    | ItemsOutOfStock
     deriving (Show, Typeable)
 
 instance Exception PlaceOrderError
@@ -506,6 +507,8 @@ withPlaceOrderErrors shippingAddress =
                     <> T.intercalate ", " (map (T.pack . show) errors)
         HelcimPaymentDeclined ->
             V.singleError "Your payment was declined. Please try again or contact us for help."
+        ItemsOutOfStock ->
+            V.singleError "Some items in your cart are out of stock. Please remove them and try again."
 
 
 
@@ -1065,6 +1068,20 @@ helcimCharge cardToken customerCode ipAddress orderId orderTotal = do
                         , OrderHelcimCardType =. Just helcimCardType
                         ]
 
+-- | Check if there are any items that are out of stock and have 'RequireStock' inventory policy
+-- in the Cart. If there are, throw an 'ItemsOutOfStock' exception.
+checkCartItemsAvailability :: CartId -> AppSQL ()
+checkCartItemsAvailability cartId = do
+    unavailableItems <- E.select $ do
+        (ci E.:& pv) <- E.from $ E.table @CartItem
+            `E.innerJoin` E.table @ProductVariant
+                `E.on` (\(ci E.:& pv) -> ci E.^. CartItemProductVariantId E.==. pv E.^. ProductVariantId)
+        E.where_ $ pv E.^. ProductVariantInventoryPolicy E.==. E.val RequireStock
+        E.where_ $ ci E.^. CartItemQuantity E.>. pv E.^. ProductVariantQuantity
+        E.where_ $ ci E.^. CartItemCartId E.==. E.val cartId
+        return (ci, pv)
+    unless (null unavailableItems) $ throwIO ItemsOutOfStock
+
 -- | Create an Order and it's Line Items & Products, returning the ID, Total,
 -- & Applied Store Credit.
 --
@@ -1095,6 +1112,7 @@ createOrder
 createOrder ce@(Entity customerId customer) cartId shippingEntity
             billingId maybeStoreCredit priorityShipping maybeCouponCode
             maybeGuestToken comment currentTime = do
+    checkCartItemsAvailability cartId
     items <- getCartItems $ \c -> c E.^. CartId E.==. E.val cartId
     let order = Order
             { orderCustomerId = customerId
