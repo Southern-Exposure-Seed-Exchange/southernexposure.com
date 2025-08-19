@@ -448,9 +448,9 @@ data PlaceOrderError
 
 instance Exception PlaceOrderError
 
-withPlaceOrderErrors :: CustomerAddress -> App a -> App a
+withPlaceOrderErrors :: CustomerAddress -> AppSQL a -> AppSQL a
 withPlaceOrderErrors shippingAddress =
-    handle $ \case
+    handle $ lift . \case
         CartNotFound ->
             V.singleError
                 $ "We couldn't find any items in your Cart. This usually means "
@@ -535,6 +535,7 @@ data CustomerPlaceOrderParameters =
         , cpopCouponCode :: Maybe T.Text
         , cpopComment :: T.Text
         , cpopHelcimData :: Maybe (CardToken, Helcim.CustomerCode)
+        , cpopCartInventoryNotifications :: CartInventoryNotifications
         }
 
 instance FromJSON CustomerPlaceOrderParameters where
@@ -552,6 +553,7 @@ instance FromJSON CustomerPlaceOrderParameters where
                     (\cardToken -> do
                         customerCode <- v .: "helcimCustomerCode"
                         return $ Just (cardToken, customerCode))
+            <*> v .: "cartInventoryNotifications"
 
 instance Validation CustomerPlaceOrderParameters where
     validators parameters = do
@@ -608,7 +610,7 @@ type CustomerPlaceOrderRoute =
     :> Header "X-Real-IP" T.Text
     :> AuthProtect "cookie-auth"
     :> ReqBody '[JSON] CustomerPlaceOrderParameters
-    :> Post '[JSON] (Cookied PlaceOrderData)
+    :> Post '[JSON] (Cookied (CartInventoryCheckResult PlaceOrderData))
 
 
 -- | Place an Order using a Customer's Cart.
@@ -616,57 +618,64 @@ type CustomerPlaceOrderRoute =
 -- If the Customer has a StripeId, add a new Card & set it as their
 -- Default. Otherwise create a new Stripe Customer for them. Then charge
 -- the Stripe Customer.
-customerPlaceOrderRoute :: SockAddr -> Maybe T.Text -> Maybe T.Text -> WrappedAuthToken -> CustomerPlaceOrderParameters -> App (Cookied PlaceOrderData)
+customerPlaceOrderRoute
+    :: SockAddr -> Maybe T.Text -> Maybe T.Text -> WrappedAuthToken -> CustomerPlaceOrderParameters
+    -> App (Cookied (CartInventoryCheckResult PlaceOrderData))
 customerPlaceOrderRoute remoteHost forwardedFor realIP = validateCookieAndParameters $ \ce@(Entity customerId customer) parameters -> do
     let shippingParameter = cpopShippingAddress parameters
         maybeHelcimData = cpopHelcimData parameters
     currentTime <- liftIO getCurrentTime
-    orderId <- withPlaceOrderErrors shippingParameter . runDB $ do
-        (maybeBillingAddress, shippingAddress, order@(Entity orderId _), preTaxTotal, cartId, appliedCredit) <-
-            createAddressesAndOrder ce shippingParameter (cpopBillingAddress parameters)
-                (cpopStoreCredit parameters) (cpopPriorityShipping parameters)
-                (cpopCouponCode parameters) (cpopComment parameters) currentTime
-        when (appliedCredit > customerStoreCredit customer) $
-            throwIO NotEnoughStoreCredit
-        when (appliedCredit > mkCents 0) $
-            update customerId [CustomerStoreCredit -=. appliedCredit]
-        let remainingCredit = maybe (mkCents 0) (`subtractCents` appliedCredit) $ cpopStoreCredit parameters
-        when (preTaxTotal > mkCents 0 || preTaxTotal `plusCents` appliedCredit > mkCents 0 ) $
-            withAvalaraTransaction order preTaxTotal remainingCredit ce shippingAddress maybeBillingAddress $ \orderTotal ->
-                when (orderTotal >= mkCents 50) $ case (maybeBillingAddress, maybeHelcimData) of
-                    (Just (Entity _ billingAddress), Just (helcimToken, customerCode)) -> do
-                        getAndUpdateHelcimCustomerByCode customerId customer customerCode billingAddress (entityVal shippingAddress)
-                        helcimCharge helcimToken customerCode (getClientIP remoteHost forwardedFor realIP) orderId orderTotal
-                    (Nothing, _) ->
-                        throwIO BillingAddressRequired
-                    (_, Nothing) ->
-                        throwIO StripeTokenRequired
-        deleteCart cartId
-        reduceQuantities orderId
-        return orderId
-    runDB $ enqueuePostOrderTasks orderId
-    (orderLines, products) <- runDB $ (,)
-        <$> selectList [OrderLineItemOrderId ==. orderId] []
-        <*> getCheckoutProducts orderId
-    return $ PlaceOrderData
-        { podOrderId = orderId
-        , podLines = orderLines
-        , podProducts = products
-        }
+    orderCreationRes <- runDB $ do
+        (Entity cartId _) <- getBy (UniqueCustomerCart $ Just customerId)
+            >>= maybe (throwIO CartNotFound) return
+        checkNewCartInventoryNotifications (cpopCartInventoryNotifications parameters) cartId $ withPlaceOrderErrors shippingParameter $ do
+            (maybeBillingAddress, shippingAddress, order@(Entity orderId _), preTaxTotal, appliedCredit) <-
+                createAddressesAndOrder ce cartId shippingParameter (cpopBillingAddress parameters)
+                    (cpopStoreCredit parameters) (cpopPriorityShipping parameters)
+                    (cpopCouponCode parameters) (cpopComment parameters) currentTime
+            when (appliedCredit > customerStoreCredit customer) $
+                throwIO NotEnoughStoreCredit
+            when (appliedCredit > mkCents 0) $
+                update customerId [CustomerStoreCredit -=. appliedCredit]
+            let remainingCredit = maybe (mkCents 0) (`subtractCents` appliedCredit) $ cpopStoreCredit parameters
+            when (preTaxTotal > mkCents 0 || preTaxTotal `plusCents` appliedCredit > mkCents 0 ) $
+                withAvalaraTransaction order preTaxTotal remainingCredit ce shippingAddress maybeBillingAddress $ \orderTotal ->
+                    when (orderTotal >= mkCents 50) $ case (maybeBillingAddress, maybeHelcimData) of
+                        (Just (Entity _ billingAddress), Just (helcimToken, customerCode)) -> do
+                            getAndUpdateHelcimCustomerByCode customerId customer customerCode billingAddress (entityVal shippingAddress)
+                            helcimCharge helcimToken customerCode (getClientIP remoteHost forwardedFor realIP) orderId orderTotal
+                        (Nothing, _) ->
+                            throwIO BillingAddressRequired
+                        (_, Nothing) ->
+                            throwIO StripeTokenRequired
+            deleteCart cartId
+            reduceQuantities orderId
+            return orderId
+    case orderCreationRes of
+        NoNewCartInventoryNotifications orderId -> do
+            runDB $ enqueuePostOrderTasks orderId
+            (orderLines, products) <- runDB $ (,)
+                <$> selectList [OrderLineItemOrderId ==. orderId] []
+                <*> getCheckoutProducts orderId
+            return $ NoNewCartInventoryNotifications $ PlaceOrderData
+                { podOrderId = orderId
+                , podLines = orderLines
+                , podProducts = products
+                }
+        NewCartInventoryNotifications ->
+            return NewCartInventoryNotifications
     where
           createAddressesAndOrder
-            :: Entity Customer -> CustomerAddress -> Maybe CustomerAddress
+            :: Entity Customer -> CartId -> CustomerAddress -> Maybe CustomerAddress
             -> Maybe Cents -> Bool -> Maybe T.Text -> T.Text -> UTCTime
-            -> AppSQL (Maybe (Entity Address), Entity Address, Entity Order, Cents, CartId, Cents)
-          createAddressesAndOrder customer@(Entity customerId _) shippingParam billingParam maybeStoreCredit priorityShipping maybeCouponCode comment currentTime = do
+            -> AppSQL (Maybe (Entity Address), Entity Address, Entity Order, Cents, Cents)
+          createAddressesAndOrder customer@(Entity customerId _) cartId shippingParam billingParam maybeStoreCredit priorityShipping maybeCouponCode comment currentTime = do
             shippingAddress <- getOrInsertAddress Shipping customerId shippingParam
             billingAddress <- sequence $ getOrInsertAddress Billing customerId <$> billingParam
-            (Entity cartId _) <- getBy (UniqueCustomerCart $ Just customerId)
-                >>= maybe (throwIO CartNotFound) return
             (order, orderTotal, appliedCredit) <- createOrder
                 customer cartId shippingAddress (entityKey <$> billingAddress)
                 maybeStoreCredit priorityShipping maybeCouponCode Nothing comment currentTime
-            return (billingAddress, shippingAddress, order, orderTotal, cartId, appliedCredit)
+            return (billingAddress, shippingAddress, order, orderTotal, appliedCredit)
           getOrInsertAddress :: AddressType -> CustomerId -> CustomerAddress -> AppSQL (Entity Address)
           getOrInsertAddress addrType customerId = \case
             ExistingAddress addrId makeDefault -> do
@@ -701,6 +710,7 @@ data AnonymousPlaceOrderParameters =
         , apopComment :: T.Text
         , apopCartToken :: T.Text
         , apopHelcimData :: Maybe (CardToken, Helcim.CustomerCode)
+        , apopCartInventoryNotifications :: CartInventoryNotifications
         }
 
 instance FromJSON AnonymousPlaceOrderParameters where
@@ -719,6 +729,7 @@ instance FromJSON AnonymousPlaceOrderParameters where
                     (\cardToken -> do
                         customerCode <- v .: "helcimCustomerCode"
                         return $ Just (cardToken, customerCode))
+            <*> v .: "cartInventoryNotifications"
 
 instance Validation AnonymousPlaceOrderParameters where
     validators parameters = do
@@ -764,66 +775,71 @@ type AnonymousPlaceOrderRoute =
     :> Header "X-Forwarded-For" T.Text
     :> Header "X-Real-IP" T.Text
     :> ReqBody '[JSON] AnonymousPlaceOrderParameters
-    :> Post '[JSON] AnonymousPlaceOrderData
+    :> Post '[JSON] (CartInventoryCheckResult AnonymousPlaceOrderData)
 
 -- | Place an Order using an Anonymous Cart.
 --
 -- A new Customer & Order is created & the Customer is charged.
-anonymousPlaceOrderRoute :: SockAddr -> Maybe T.Text -> Maybe T.Text -> AnonymousPlaceOrderParameters -> App AnonymousPlaceOrderData
+anonymousPlaceOrderRoute :: SockAddr -> Maybe T.Text -> Maybe T.Text -> AnonymousPlaceOrderParameters -> App (CartInventoryCheckResult AnonymousPlaceOrderData)
 anonymousPlaceOrderRoute remoteHost forwardedFor realIP = validate >=> \parameters -> do
     let shippingParam = apopShippingAddress parameters
         billingParam = apopBillingAddress parameters
     currentTime <- liftIO getCurrentTime
-    (orderId, orderData) <- withPlaceOrderErrors (NewAddress shippingParam) . runDB $ do
-        Entity customerId customer <- createAnonymousCustomer parameters
-        (Entity cartId _) <- getBy (UniqueCustomerCart $ Just customerId)
+    orderCreationRes <- runDB $ do
+        (Entity cartId _) <- getBy (UniqueAnonymousCart $ Just $ apopCartToken parameters)
             >>= maybe (throwIO CartNotFound) return
-        let shippingAddress = fromAddressData Shipping customerId
-                shippingParam
-            maybeBillingAddress = fromAddressData Billing customerId
-                <$> billingParam
+        checkNewCartInventoryNotifications (apopCartInventoryNotifications parameters) cartId $ withPlaceOrderErrors (NewAddress shippingParam) $ do
+            Entity customerId customer <- createAnonymousCustomer parameters
+            let shippingAddress = fromAddressData Shipping customerId
+                    shippingParam
+                maybeBillingAddress = fromAddressData Billing customerId
+                    <$> billingParam
 
-        -- When customer with the same email makes multiple "anonymous" orders, we should
-        -- mark all previous addresses (shipping and billing) as non-default.
-        updateWhere [ AddressCustomerId ==. customerId, AddressType ==. Shipping ] [ AddressIsDefault =. False ]
-        when (isJust maybeBillingAddress) $ updateWhere [ AddressCustomerId ==. customerId, AddressType ==. Billing ] [ AddressIsDefault =. False ]
+            -- When customer with the same email makes multiple "anonymous" orders, we should
+            -- mark all previous addresses (shipping and billing) as non-default.
+            updateWhere [ AddressCustomerId ==. customerId, AddressType ==. Shipping ] [ AddressIsDefault =. False ]
+            when (isJust maybeBillingAddress) $ updateWhere [ AddressCustomerId ==. customerId, AddressType ==. Billing ] [ AddressIsDefault =. False ]
 
-        shippingId <- insert shippingAddress
-        billingId <- mapM insert maybeBillingAddress
-        let shippingEntity = Entity shippingId shippingAddress
-            billingEntity = Entity <$> billingId <*> maybeBillingAddress
-            customerEntity = Entity customerId customer
-        guestToken <- generateUniqueToken (UniqueGuestToken . Just)
-        (order@(Entity orderId _), preTaxTotal, _) <- createOrder
-            (Entity customerId customer) cartId shippingEntity billingId Nothing
-            (apopPriorityShipping parameters) (apopCouponCode parameters)
-            (Just guestToken) (apopComment parameters) currentTime
-        when (preTaxTotal > mkCents 0)
-            $ withAvalaraTransaction order preTaxTotal (mkCents 0) customerEntity shippingEntity billingEntity
-            $ \orderTotal ->
-                case (billingEntity, apopHelcimData parameters) of
-                    (Just (Entity _ billingAddress), Just (cardToken, customerCode)) -> do
-                        getAndUpdateHelcimCustomerByCode customerId customer customerCode billingAddress shippingAddress
-                        helcimCharge cardToken customerCode (getClientIP remoteHost forwardedFor realIP) orderId orderTotal
-                    (Nothing, _) ->
-                        throwIO BillingAddressRequired
-                    (_, Nothing) ->
-                        throwIO StripeTokenRequired
-        deleteCart cartId
-        reduceQuantities orderId
-        orderLines <- selectList [OrderLineItemOrderId ==. orderId] []
-        products <- getCheckoutProducts orderId
-        return
-            ( orderId
-            , AnonymousPlaceOrderData
-                { apodOrderId = orderId
-                , apodGuestToken = guestToken
-                , apodLines = orderLines
-                , apodProducts = products
-                }
-            )
-    runDB $ enqueuePostOrderTasks orderId
-    pure orderData
+            shippingId <- insert shippingAddress
+            billingId <- mapM insert maybeBillingAddress
+            let shippingEntity = Entity shippingId shippingAddress
+                billingEntity = Entity <$> billingId <*> maybeBillingAddress
+                customerEntity = Entity customerId customer
+            guestToken <- generateUniqueToken (UniqueGuestToken . Just)
+            (order@(Entity orderId _), preTaxTotal, _) <- createOrder
+                (Entity customerId customer) cartId shippingEntity billingId Nothing
+                (apopPriorityShipping parameters) (apopCouponCode parameters)
+                (Just guestToken) (apopComment parameters) currentTime
+            when (preTaxTotal > mkCents 0)
+                $ withAvalaraTransaction order preTaxTotal (mkCents 0) customerEntity shippingEntity billingEntity
+                $ \orderTotal ->
+                    case (billingEntity, apopHelcimData parameters) of
+                        (Just (Entity _ billingAddress), Just (cardToken, customerCode)) -> do
+                            getAndUpdateHelcimCustomerByCode customerId customer customerCode billingAddress shippingAddress
+                            helcimCharge cardToken customerCode (getClientIP remoteHost forwardedFor realIP) orderId orderTotal
+                        (Nothing, _) ->
+                            throwIO BillingAddressRequired
+                        (_, Nothing) ->
+                            throwIO StripeTokenRequired
+            deleteCart cartId
+            reduceQuantities orderId
+            orderLines <- selectList [OrderLineItemOrderId ==. orderId] []
+            products <- getCheckoutProducts orderId
+            return
+                ( orderId
+                , AnonymousPlaceOrderData
+                    { apodOrderId = orderId
+                    , apodGuestToken = guestToken
+                    , apodLines = orderLines
+                    , apodProducts = products
+                    }
+                )
+    case orderCreationRes of
+        NoNewCartInventoryNotifications (orderId, orderData) -> do
+            runDB $ enqueuePostOrderTasks orderId
+            pure $ NoNewCartInventoryNotifications orderData
+        NewCartInventoryNotifications ->
+            pure NewCartInventoryNotifications
     where
         createAnonymousCustomer parameters = do
             let email = apopEmail parameters

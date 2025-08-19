@@ -161,7 +161,7 @@ type Msg
     | ApplyCoupon
     | RemoveCoupon
     | Submit
-    | SubmitResponse (WebData (Result Api.FormErrors CheckoutResponse))
+    | SubmitResponse (WebData (Result Api.FormErrors (CartInventoryCheckResult CheckoutResponse)))
     | RefreshDetails (WebData (Result Api.FormErrors PageData.CheckoutDetails))
     | HelcimCheckoutTokenReceived (WebData (Result Api.FormErrors (CartInventoryCheckResult HelcimCheckoutTokenResponse)))
     | HelcimEventReceived Decode.Value
@@ -174,6 +174,12 @@ type Msg
 type alias CartInventoryNotifications =
     { warnings : List (CartItemId, (List CartItemWarning))
     , errors : List (CartItemId, (List CartItemError))
+    }
+
+emptyCartInventoryNotifications : CartInventoryNotifications
+emptyCartInventoryNotifications =
+    { warnings = []
+    , errors = []
     }
 
 checkoutDetailsToCartInventoryNotifications : PageData.CheckoutDetails -> CartInventoryNotifications
@@ -488,22 +494,28 @@ update msg model authStatus maybeSessionToken checkoutDetails =
                 _ ->
                     ( model, Nothing, Cmd.none )
 
-        SubmitResponse (RemoteData.Success (Ok response)) ->
-            let
-                orderId =
-                    response.orderId
+        SubmitResponse (RemoteData.Success (Ok res)) ->
+            case res of
+                NoNewCartInventoryNotifications response ->
+                    let
+                        orderId =
+                            response.orderId
 
-                outMsg =
-                    if authStatus == User.Anonymous then
-                        AnonymousOrderCompleted orderId response.guestToken
+                        outMsg =
+                            if authStatus == User.Anonymous then
+                                AnonymousOrderCompleted orderId response.guestToken
 
-                    else
-                        CustomerOrderCompleted orderId
+                            else
+                                CustomerOrderCompleted orderId
 
-                analyticsData =
-                    encodeAnalyticsPurchase orderId response.orderLines response.orderProducts
-            in
-            ( initial, Just outMsg, Ports.logPurchase analyticsData )
+                        analyticsData =
+                            encodeAnalyticsPurchase orderId response.orderLines response.orderProducts
+                    in
+                    ( initial, Just outMsg, Ports.logPurchase analyticsData )
+                NewCartInventoryNotifications ->
+                    { model
+                    | isPaymentProcessing = False, isProcessing = False, hasNewCartInventoryNotifications = True
+                    } |> refreshDetails authStatus maybeSessionToken True model
 
         SubmitResponse (RemoteData.Success (Err errors)) ->
             let
@@ -979,6 +991,7 @@ placeOrder model authStatus maybeSessionToken helcimData checkoutDetails =
                  , ( "priorityShipping", Encode.bool model.priorityShipping )
                  , ( "couponCode", encodeStringAsMaybe model.couponCode )
                  , ( "comment", Encode.string model.comment )
+                 , ( "cartInventoryNotifications", encodedCartInventoryNotifications )
                  ]
                     ++ (helcimData
                             |> Maybe.map
@@ -1000,6 +1013,7 @@ placeOrder model authStatus maybeSessionToken helcimData checkoutDetails =
                  , ( "comment", Encode.string model.comment )
                  , ( "sessionToken", encodeMaybe Encode.string maybeSessionToken )
                  , ( "email", Encode.string model.email )
+                 , ( "cartInventoryNotifications", encodedCartInventoryNotifications )
                  ]
                     ++ (helcimData
                             |> Maybe.map
@@ -1035,6 +1049,12 @@ placeOrder model authStatus maybeSessionToken helcimData checkoutDetails =
 
             else
                 encodeAddress model.billingAddress model.makeBillingDefault
+
+        encodedCartInventoryNotifications =
+            RemoteData.toMaybe checkoutDetails
+                |> Maybe.map checkoutDetailsToCartInventoryNotifications
+                |> Maybe.withDefault emptyCartInventoryNotifications
+                |> encodeCartInventoryNotifications
 
         isFreeCheckout =
             PageData.isFreeCheckout checkoutDetails || zeroTotalWithAppliedCredit
@@ -1087,13 +1107,13 @@ placeOrder model authStatus maybeSessionToken helcimData checkoutDetails =
         User.Anonymous ->
             Api.post Api.CheckoutPlaceOrderAnonymous
                 |> Api.withJsonBody anonymousData
-                |> Api.withErrorHandler decoder
+                |> Api.withErrorHandler (cartInventoryCheckResultDecoder decoder)
                 |> Api.sendRequest SubmitResponse
 
         User.Authorized _ ->
             Api.post Api.CheckoutPlaceOrderCustomer
                 |> Api.withJsonBody customerData
-                |> Api.withErrorHandler decoder
+                |> Api.withErrorHandler (cartInventoryCheckResultDecoder decoder)
                 |> Api.sendRequest SubmitResponse
 
 
