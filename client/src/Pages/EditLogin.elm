@@ -192,7 +192,7 @@ view tagger model authStatus =
                 ]
     in
     [ pageTitleView "Edit Login Details"
-    , div [ class "tw:flex tw:grid tw:grid-cols-2 tw:gap-[40px] tw:pb-[60px]" ]
+    , div [ class "tw:flex tw:grid tw:grid-cols-1 tw:lg:grid-cols-2 tw:gap-[40px] tw:pb-[60px]" ]
         [ editLoginForm
         , div []
             [ descView

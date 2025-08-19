@@ -3,7 +3,9 @@ module Components.SiteUI.Navigation exposing (adminView, view)
 import Components.Aria as Aria
 import Components.Navbar as Navbar
 import Components.Products.Pagination as Pagination
+import Components.Shared exposing (cartIcon, logoAndName, searchIcon)
 import Components.SiteUI.Search as SiteSearch
+import Components.Svg exposing (menuBurgerSvg)
 import Data.Category as Category exposing (CategoryId(..))
 import Data.Msg exposing (Msg(..))
 import Data.Routing.Routing as Routing exposing (AdminRoute(..), Route(..), reverse)
@@ -11,15 +13,15 @@ import Data.Search as Search
 import Data.SiteUI as SiteUI exposing (NavigationData)
 import Data.User as User exposing (AuthStatus(..))
 import Dict
-import Html exposing (Html, a, button, div, form, li, node, span, text, ul)
+import Html exposing (Html, a, button, div, form, hr, li, node, span, text, ul)
 import Html.Attributes exposing (attribute, class, href, id, target, type_)
 import Html.Events.Extra exposing (onClickPreventDefault)
 import RemoteData exposing (WebData)
 import Utils.View exposing (icon, routeLinkAttributes)
 
 
-view : Route -> AuthStatus -> WebData NavigationData -> List CategoryId -> Search.Data -> Html Msg
-view route authStatus navigationData activeCategoryIds searchData =
+view : Route -> AuthStatus -> WebData NavigationData -> List CategoryId -> Search.Data -> Int -> Html Msg
+view route authStatus navigationData activeCategoryIds searchData cartItemCount =
     let
         categoryNavigation =
             RemoteData.toMaybe navigationData
@@ -100,8 +102,10 @@ view route authStatus navigationData activeCategoryIds searchData =
             , mobileLink (PageDetails "growing-guides" Nothing) "Growing Guides"
             , mobileLink (PageDetails "retail-stores" Nothing) "Retail Stores"
             , mobileLink QuickOrder "Quick Order"
+            , hr [] []
             ]
                 ++ authLinks
+                ++ [ hr [] [] ]
 
         authLinks =
             if authStatus == Anonymous then
@@ -110,7 +114,9 @@ view route authStatus navigationData activeCategoryIds searchData =
                 ]
 
             else
-                [ mobileLink MyAccount "My Account"
+                [ mobileLink MyAccount "Orders"
+                , mobileLink EditLogin "Edit login details"
+                , mobileLink EditAddress "Edit addresses"
                 , li [ class "nav-item d-md-none" ]
                     [ a [ class "nav-link", href "/account/logout", onClickPreventDefault LogOut ]
                         [ text "Log Out" ]
@@ -139,35 +145,30 @@ view route authStatus navigationData activeCategoryIds searchData =
             else
                 ""
     in
-    div [ id "navigation", class "container" ]
+    div [ id "navigation", class "se-container" ]
         [ node "nav"
-            [ class "navbar navbar-expand-md navbar-light tw:bg-[#f6eee4] tw:rounded-[16px]!" ]
-            [ a
-                (Aria.label "View Your Shopping Cart"
-                    :: class "ml-auto navbar-toggler"
-                    :: routeLinkAttributes Cart
-                )
-                [ icon "shopping-cart p-1" ]
-            , button
-                [ class "navbar-toggler ml-2"
-                , type_ "button"
-                , attribute "data-toggle" "collapse"
-                , attribute "data-target" "#search-navbar"
-                , Aria.controls "search-navbar"
-                , Aria.expanded False
-                , Aria.label "Toggle search menu"
+            [ class "navbar navbar-expand-md navbar-light tw:lg:bg-[#f6eee4] tw:lg:rounded-[16px]!" ]
+            [ div [ class "tw:flex tw:lg:hidden tw:w-full tw:pt-[20px] tw:pb-[12px] tw:px-[16px] tw:items-center tw:gap-[16px]" ]
+                [ logoAndName Routing.homePage
+                , div [ class "tw:grow" ] []
+                , if Routing.showSearchbar route then
+                    text ""
+
+                  else
+                    searchIcon
+                , cartIcon cartItemCount
+                , button
+                    [ class "tw:p-[6px]"
+                    , type_ "button"
+                    , attribute "data-toggle" "collapse"
+                    , attribute "data-target" "#category-navbar"
+                    , Aria.controls "category-navbar"
+                    , Aria.expanded False
+                    , Aria.label "Toggle navigation"
+                    ]
+                    [ menuBurgerSvg ""
+                    ]
                 ]
-                [ icon "search p-1" ]
-            , button
-                [ class "navbar-toggler ml-2"
-                , type_ "button"
-                , attribute "data-toggle" "collapse"
-                , attribute "data-target" "#category-navbar"
-                , Aria.controls "category-navbar"
-                , Aria.expanded False
-                , Aria.label "Toggle navigation"
-                ]
-                [ span [ class "navbar-toggler-icon" ] [] ]
             , div [ id "search-navbar", class "collapse navbar-collapse" ]
                 [ div [ class "mt-2" ] [ SiteSearch.form SearchMsg "light" searchData ]
                 , ul [ class "nav navbar-nav" ]

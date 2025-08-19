@@ -42,7 +42,7 @@ view route =
                 |> pageLink
 
         pageLinks =
-            div [ Aria.role "navigation" ]
+            div [ class "tw:hidden tw:lg:block", Aria.role "navigation" ]
                 [ div [ class "tw:text-[16px] tw:leading-[20px] tw:py-[20px] tw:rounded-[16px] tw:bg-[rgba(254,245,233,0.6)]" ]
                     [ pageLink QuickOrder "Quick Order"
                     , staticPageLink "about-us" "About Us"

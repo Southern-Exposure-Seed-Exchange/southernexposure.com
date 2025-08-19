@@ -10,12 +10,19 @@ import Html.Events exposing (onMouseEnter, onMouseLeave)
 import Task
 
 
+type Align
+    = Middle
+    | Left
+    | Right
+
+
 type alias Config parentMsg =
     { key : ViewKey
     , triggerEl : Html parentMsg
     , text : String
     , mkParentMsg : Msg -> parentMsg
     , widthClass : Maybe String
+    , align : Align
     }
 
 
@@ -131,12 +138,25 @@ view config model =
             Dict.get config.key model |> Maybe.withDefault defaultTooltip
 
         leftPxMb =
-            case ( tooltip.width, tooltip.triggerWidth ) of
-                ( Just width, Just triggerWidth ) ->
-                    Just <| round <| negate (width / 2) + (triggerWidth / 2)
+            case config.align of
+                Middle ->
+                    case ( tooltip.width, tooltip.triggerWidth ) of
+                        ( Just width, Just triggerWidth ) ->
+                            Just <| round <| negate (width / 2) + (triggerWidth / 2)
 
-                _ ->
-                    Nothing
+                        _ ->
+                            Nothing
+
+                Left ->
+                    Just 0
+
+                Right ->
+                    case ( tooltip.width, tooltip.triggerWidth ) of
+                        ( Just width, Just triggerWidth ) ->
+                            Just <| round <| negate (width - triggerWidth)
+
+                        _ ->
+                            Nothing
 
         ( visibleClass, pointerEventClass, leftPx ) =
             case ( tooltip.status, leftPxMb ) of
@@ -173,7 +193,8 @@ view config model =
     in
     div []
         [ div
-            [ class "tw:relative" ]
+            -- TODO: fix tooltip in mobile view
+            [ class "tw:relative tw:hidden tw:lg:block" ]
             [ div
                 [ class <| pointerEventClass ++ " tw:z-50 tw:absolute tw:bottom-[8px]"
                 , style "left" (String.fromInt leftPx ++ "px")

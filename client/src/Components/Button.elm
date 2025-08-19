@@ -37,6 +37,7 @@ type alias Config msg =
     , iconEnd : Maybe (Html msg)
     , padding : Padding
     , size : ButtonSize
+    , responsiveClass : String
     }
 
 
@@ -49,6 +50,7 @@ defaultButton =
     , iconEnd = Nothing
     , padding = Default
     , size = Small
+    , responsiveClass = ""
     }
 
 
@@ -108,6 +110,14 @@ view config =
                 Custom class_ ->
                     class_
 
+        responsiveClass =
+            case config.responsiveClass of
+                "" ->
+                    "tw:block"
+
+                r ->
+                    r
+
         allClass =
             "tw:block tw:text-[16px] tw:leading-[24px] tw:rounded-[8px]! tw:no-underline! tw:flex tw:gap-[8px] tw:items-center tw:justify-center"
                 ++ " "
@@ -118,6 +128,8 @@ view config =
                 ++ cursorClass
                 ++ " "
                 ++ sizeClass
+                ++ " "
+                ++ responsiveClass
 
         iconContent =
             case config.icon of

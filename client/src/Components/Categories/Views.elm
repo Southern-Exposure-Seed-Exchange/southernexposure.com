@@ -35,7 +35,7 @@ details shared pagination addToCartForms products =
         subCategoryCards =
             if List.length subCategories > 0 then
                 List.map subCategoryCard subCategories
-                    |> div [ class "tw:grid tw:grid-cols-4 tw:gap-[24px]" ]
+                    |> div [ class "tw:grid tw:grid-cols-2 tw:lg:grid-cols-4 tw:gap-[24px] tw:pb-[32px]" ]
 
             else
                 text ""
@@ -56,10 +56,9 @@ details shared pagination addToCartForms products =
                         ]
                     ]
                 ]
-    in
-    [ div [ class "tw:px-[16px]" ]
-        [ div [ class "tw:flex tw:gap-[12px] tw:pb-[20px]" ]
-            [ div [ class "tw:rounded-[8px] tw:overflow-hidden tw:border tw:border-[rgba(30,12,3,0.08)]" ]
+
+        categoryImage =
+            div [ class "tw:rounded-[8px] tw:overflow-hidden tw:border tw:border-[rgba(30,12,3,0.08)]" ]
                 [ img
                     [ class "img-fluid"
                     , src <| imgSrcFallback category.image
@@ -69,7 +68,12 @@ details shared pagination addToCartForms products =
                     ]
                     []
                 ]
-            , h1 [ class "mb-0 pl-2" ] [ text category.name ]
+    in
+    [ div [ class "tw:px-0 tw:lg:px-[16px]" ]
+        [ div [ class "tw:flex tw:gap-[12px] tw:pb-[20px] tw:flex-col tw:lg:flex-row tw:lg:items-center tw:gap-[12px]" ]
+            [ div [ class "tw:flex tw:items-start" ]
+                [ categoryImage ]
+            , h1 [ class "mb-0 se-h1" ] [ text category.name ]
             ]
 
         -- , hr [ class "mt-2" ] []
@@ -77,7 +81,6 @@ details shared pagination addToCartForms products =
             [ rawHtml category.description
             ]
         , subCategoryCards
-        , div [ class "tw:pb-[32px]" ] []
         ]
     ]
         ++ ProductViews.listView shared (CategoryDetails category.slug) pagination addToCartForms products

@@ -257,7 +257,7 @@ view tagger model redirectTo clearCart =
                 ]
 
         createAccountSection =
-            fieldset []
+            fieldset [ class "tw:block" ]
                 [ legendView "New Customers"
                 , div [ class "tw:pb-[16px]" ]
                     [ p [ class "tw:p-[16px] tw:rounded-[16px] tw:bg-[rgba(167,215,197,0.1)]" ]
@@ -282,7 +282,7 @@ view tagger model redirectTo clearCart =
                 ]
     in
     [ pageTitleView "Sign in"
-    , div [ class "tw:flex tw:grid tw:grid-cols-2 tw:gap-[40px] tw:pb-[60px]" ]
+    , div [ class "tw:grid tw:grid-cols-1 tw:lg-grid-cols-2 tw:gap-[40px] tw:pb-[60px]" ]
         [ loginForm
         , createAccountSection
         ]

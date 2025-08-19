@@ -26,6 +26,7 @@ type alias Data =
     , isRegional : Bool
     , isSmallGrower : Bool
     , category : Maybe CategoryId
+    , mobileFilterStatus : Bool
     }
 
 
@@ -48,6 +49,7 @@ initial =
     , isRegional = False
     , isSmallGrower = False
     , category = Nothing
+    , mobileFilterStatus = False
     }
 
 
@@ -151,7 +153,7 @@ fromQueryString pathParser =
         <?> Routing.fromIntParam categoryFlagName CategoryId
         |> Url.map
             (\constructor q descr org heir reg eco cat ->
-                constructor <| Data q descr org heir reg eco cat
+                constructor <| Data q descr org heir reg eco cat initial.mobileFilterStatus
             )
 
 

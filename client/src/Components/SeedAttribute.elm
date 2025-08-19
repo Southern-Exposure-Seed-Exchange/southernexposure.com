@@ -82,6 +82,7 @@ icons shared parentKey mkParentMsg { isOrganic, isHeirloom, isRegional, isSmallG
                             , text = SeedAttribute.toDescription attribute
                             , mkParentMsg = mkParentMsg
                             , widthClass = Just "tw:w-[200px]"
+                            , align = Tooltip.Right
                             }
                             shared.tooltips
                    )

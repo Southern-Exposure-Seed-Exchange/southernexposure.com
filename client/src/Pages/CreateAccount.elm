@@ -196,7 +196,7 @@ view tagger model =
                 ]
     in
     [ pageTitleView "Create an Account"
-    , div [ class "tw:flex tw:grid tw:grid-cols-2 tw:gap-[40px] tw:pb-[60px]" ]
+    , div [ class "tw:grid tw:grid-cols-1 tw:lg:grid-cols-2 tw:gap-[40px] tw:pb-[60px]" ]
         [ signupForm
         , welcomeBackSection
         ]
@@ -206,7 +206,7 @@ view tagger model =
 successView : List (Html msg)
 successView =
     [ pageTitleView "Verify your email address"
-    , div [ class "tw:grid tw:grid-cols-2" ]
+    , div [ class "tw:grid tw:grid-cols-1 tw:lg:grid-cols-2" ]
         [ p [ class "tw:p-[16px] tw:bg-[rgba(167,215,197,0.1)] tw:rounded-[16px]" ]
             [ text <|
                 String.join " "

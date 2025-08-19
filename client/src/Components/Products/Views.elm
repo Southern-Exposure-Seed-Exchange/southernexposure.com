@@ -280,6 +280,7 @@ limitedAvailabilityView shared parentKey paddingClass maybeSelectedVariant =
                             , text = "This product has limited availability. Expect delays in delivery."
                             , mkParentMsg = TooltipMsg
                             , widthClass = Just "tw:w-[264px]"
+                            , align = Tooltip.Right
                             }
                             shared.tooltips
                         ]
@@ -374,8 +375,8 @@ detailView shared addToCartForms { product, variants, maybeSeedAttribute, catego
         cartData =
             cartFormData addToCartForms ( product, variants )
     in
-    [ div (Microdata.product ++ [ class "tw:flex tw:gap-[40px]" ])
-        [ div [ class "tw:shrink-0" ]
+    [ div (Microdata.product ++ [ class "tw:flex tw:gap-[40px] tw:flex-col tw:lg:flex-row tw:items-center tw:lg:items-start" ])
+        [ div [ class "tw:shrink-0 tw:flex" ]
             [ productImageGalleryView product
             ]
         , div []
@@ -488,7 +489,7 @@ productImageGalleryView product =
             , imageToSrcSet productImage
             , Microdata.image
             , alt <| "Product Image for " ++ product.name
-            , class "tw:w-[360px] tw:h-[360px] tw:object-cover tw:rounded-[16px] clickable-image"
+            , class "tw:w-[360px] tw:aspect-square tw:object-cover tw:rounded-[16px] clickable-image"
             ]
             []
         ]
@@ -499,7 +500,7 @@ listView shared routeConstructor pagination addToCartForms products =
     let
         sortHtml =
             if productsCount > 1 then
-                div [ class "tw:flex tw:justify-between tw:pb-[20px] tw:px-[20px] tw:items-center" ]
+                div [ class "tw:flex tw:justify-between tw:pb-[20px] tw:px-0 tw:lg:px-[20px] tw:items-center" ]
                     [ sortingInput
                     , pager.perPageLinks ()
                     ]

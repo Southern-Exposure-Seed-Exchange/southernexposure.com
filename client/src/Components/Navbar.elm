@@ -1,10 +1,15 @@
 module Components.Navbar exposing (..)
 
+import Data.Category exposing (Category)
+import Data.Msg exposing (Msg)
+import Data.SiteUI exposing (NavigationData)
+import Dict exposing (Dict)
 import Html exposing (..)
 import Html.Attributes exposing (..)
-import RemoteData
+import RemoteData exposing (WebData)
 
 
+view : WebData NavigationData -> (Dict Int (List Category) -> Category -> Html Msg) -> List (Html Msg) -> Html Msg
 view navigationData rootCategory mobileOnlyItems =
     let
         categoryNavigation =
@@ -12,7 +17,7 @@ view navigationData rootCategory mobileOnlyItems =
                 |> Maybe.map (\data -> List.map (rootCategory data.children) data.roots)
                 |> Maybe.withDefault []
     in
-    div [ id "category-navbar", class "collapse navbar-collapse" ]
+    div [ id "category-navbar", class "collapse navbar-collapse tw:pt-[32px] tw:lg:pt-0" ]
         [ ul [ class "navbar-nav d-flex text-left tw:text-[16px] tw:leading-[24px]" ] <|
             categoryNavigation
                 ++ mobileOnlyItems
