@@ -291,7 +291,7 @@ view model locations { shippingAddresses, billingAddresses } =
                 [ Button.view
                     { defaultButton
                         | label = "Save"
-                        , padding = Button.Width "tw:w-[160px]"
+                        , padding = Button.Width "tw:w-full tw:lg:w-[160px]"
                         , type_ =
                             if updateIsDisabled then
                                 Button.Disabled

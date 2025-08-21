@@ -162,8 +162,7 @@ fromQueryString pathParser =
 
 
 type UniqueSearch
-    = AttributeSearch SeedAttribute.Attribute
-    | AllProducts
+    = AllProducts
 
 
 uniqueSearch : Data -> Maybe UniqueSearch
@@ -174,19 +173,7 @@ uniqueSearch { query, searchIn, category, isOrganic, isHeirloom, isRegional, isS
                 none =
                     List.all ((==) False)
             in
-            if isOrganic && none [ isHeirloom, isRegional, isSmallGrower ] then
-                Just <| AttributeSearch SeedAttribute.Organic
-
-            else if isHeirloom && none [ isOrganic, isRegional, isSmallGrower ] then
-                Just <| AttributeSearch SeedAttribute.Heirloom
-
-            else if isRegional && none [ isOrganic, isHeirloom, isSmallGrower ] then
-                Just <| AttributeSearch SeedAttribute.Regional
-
-            else if isSmallGrower && none [ isOrganic, isHeirloom, isRegional ] then
-                Just <| AttributeSearch SeedAttribute.SmallGrower
-
-            else if none [ isOrganic, isHeirloom, isRegional, isSmallGrower ] then
+            if none [ isOrganic, isHeirloom, isRegional, isSmallGrower ] then
                 Just AllProducts
 
             else

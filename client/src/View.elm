@@ -79,7 +79,7 @@ view ({ route, pageData, navigationData, zone, helcimUrl } as model) =
 
         withSidebar content =
             div [ class "se-container", Aria.live "polite" ]
-                [ div [ class "tw:flex tw:flex-col-reverse tw:lg:flex-row tw:gap-[40px]" ]
+                [ div [ class "tw:flex tw:flex-col-reverse tw:lg:flex-row tw:gap-[100px] tw:lg:gap-[40px]" ]
                     [ SiteSidebar.view route
                     , div [ class "tw:w-full tw:grow tw:min-h-screen tw:lg:min-h-auto", id "main" ] content
                     ]
@@ -396,18 +396,6 @@ pageTitle ({ route, pageData } as model) =
                     case searchType of
                         AllProducts ->
                             "All Products"
-
-                        AttributeSearch SeedAttribute.Organic ->
-                            "Organic Products"
-
-                        AttributeSearch SeedAttribute.Heirloom ->
-                            "Heirloom Products"
-
-                        AttributeSearch SeedAttribute.Regional ->
-                            "South-Eastern Products"
-
-                        AttributeSearch SeedAttribute.SmallGrower ->
-                            "Products from Small Farms in our Grower Network"
 
         PageDetails _ _ ->
             getFromPageData .pageDetails .name
@@ -745,7 +733,7 @@ remoteFailureView error =
 notFoundView : List (Html msg)
 notFoundView =
     [ pageTitleView "Page Not Found"
-    , p [ class "tw:pl-[8px]" ]
+    , p [ class "tw:pl-0 tw:lg:pl-[8px]" ]
         [ text <|
             "Sorry, we couldn't find the page your were looking for. "
                 ++ "If you got to this page from our site, please contact us so we can fix our links."
@@ -818,22 +806,8 @@ searchResultsView shared ({ query } as data) pagination addToCartForms products 
                 Nothing ->
                     "Search Results"
 
-                Just searchType ->
-                    case searchType of
-                        AllProducts ->
-                            "All Products"
-
-                        AttributeSearch SeedAttribute.Organic ->
-                            "Organic Products"
-
-                        AttributeSearch SeedAttribute.Heirloom ->
-                            "Heirloom Products"
-
-                        AttributeSearch SeedAttribute.Regional ->
-                            "South-Eastern Products"
-
-                        AttributeSearch SeedAttribute.SmallGrower ->
-                            "Products from Small Farms in our Grower Network"
+                Just AllProducts ->
+                    "All Products"
 
         searchDescription =
             if uniqueSearch == Nothing then

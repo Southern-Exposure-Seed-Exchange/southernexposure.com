@@ -23,9 +23,17 @@ import Components.Svg exposing (..)
 import Data.Api as Api
 import Data.Fields exposing (Cents(..), centsFromString, centsMap, centsMap2, imageToSrcSet, imgSrcFallback, lotSizeToString)
 import Data.Locations as Locations exposing (AddressLocations)
-import Data.PageData as PageData exposing
-    ( CartItemError(..), CartItemId(..), CartItemWarning(..), LineItemType(..)
-    , encodeCartItemError, encodeCartItemWarning, showCartItemError, showCartItemWarning)
+import Data.PageData as PageData
+    exposing
+        ( CartItemError(..)
+        , CartItemId(..)
+        , CartItemWarning(..)
+        , LineItemType(..)
+        , encodeCartItemError
+        , encodeCartItemWarning
+        , showCartItemError
+        , showCartItemWarning
+        )
 import Data.Product as Product exposing (productMainImage, variantPrice)
 import Data.Routing.Routing as Routing exposing (Route(..), reverse)
 import Data.User as User exposing (AuthStatus)
@@ -172,9 +180,10 @@ type Msg
 
 
 type alias CartInventoryNotifications =
-    { warnings : List (CartItemId, (List CartItemWarning))
-    , errors : List (CartItemId, (List CartItemError))
+    { warnings : List ( CartItemId, List CartItemWarning )
+    , errors : List ( CartItemId, List CartItemError )
     }
+
 
 emptyCartInventoryNotifications : CartInventoryNotifications
 emptyCartInventoryNotifications =
@@ -182,32 +191,42 @@ emptyCartInventoryNotifications =
     , errors = []
     }
 
+
 checkoutDetailsToCartInventoryNotifications : PageData.CheckoutDetails -> CartInventoryNotifications
 checkoutDetailsToCartInventoryNotifications details =
     { warnings = List.map (\cartItem -> ( cartItem.id, cartItem.warnings )) details.items
     , errors = List.map (\cartItem -> ( cartItem.id, cartItem.errors )) details.items
     }
 
+
 encodeCartInventoryNotifications : CartInventoryNotifications -> Value
 encodeCartInventoryNotifications notifications =
     Encode.object
         [ ( "warnings"
           , Encode.object
-            (List.map (\((CartItemId id), warnings) ->
-                ( String.fromInt id, Encode.list encodeCartItemWarning warnings )
-            ) notifications.warnings)
+                (List.map
+                    (\( CartItemId id, warnings ) ->
+                        ( String.fromInt id, Encode.list encodeCartItemWarning warnings )
+                    )
+                    notifications.warnings
+                )
           )
         , ( "errors"
           , Encode.object
-            (List.map (\((CartItemId id), errors) ->
-                ( String.fromInt id, Encode.list encodeCartItemError errors )
-            ) notifications.errors)
+                (List.map
+                    (\( CartItemId id, errors ) ->
+                        ( String.fromInt id, Encode.list encodeCartItemError errors )
+                    )
+                    notifications.errors
+                )
           )
         ]
+
 
 type CartInventoryCheckResult a
     = NoNewCartInventoryNotifications a
     | NewCartInventoryNotifications
+
 
 cartInventoryCheckResultDecoder : Decode.Decoder a -> Decode.Decoder (CartInventoryCheckResult a)
 cartInventoryCheckResultDecoder innerDecoder =
@@ -218,11 +237,13 @@ cartInventoryCheckResultDecoder innerDecoder =
                     "ok" ->
                         Decode.map NoNewCartInventoryNotifications (Decode.field "result" innerDecoder)
 
-                    "new-notifications" -> Decode.succeed NewCartInventoryNotifications
+                    "new-notifications" ->
+                        Decode.succeed NewCartInventoryNotifications
 
                     _ ->
                         Decode.fail ("Unexpected status: " ++ status)
             )
+
 
 type alias HelcimCheckoutTokenResponse =
     { checkoutToken : String }
@@ -512,10 +533,14 @@ update msg model authStatus maybeSessionToken checkoutDetails =
                             encodeAnalyticsPurchase orderId response.orderLines response.orderProducts
                     in
                     ( initial, Just outMsg, Ports.logPurchase analyticsData )
+
                 NewCartInventoryNotifications ->
                     { model
-                    | isPaymentProcessing = False, isProcessing = False, hasNewCartInventoryNotifications = True
-                    } |> refreshDetails authStatus maybeSessionToken True model
+                        | isPaymentProcessing = False
+                        , isProcessing = False
+                        , hasNewCartInventoryNotifications = True
+                    }
+                        |> refreshDetails authStatus maybeSessionToken True model
 
         SubmitResponse (RemoteData.Success (Err errors)) ->
             let
@@ -622,11 +647,14 @@ update msg model authStatus maybeSessionToken checkoutDetails =
                     , Nothing
                     , Cmd.batch [ Ports.appendHelcimPayIframe token.checkoutToken, Ports.subscribeToHelcimMessages () ]
                     )
+
                 NewCartInventoryNotifications ->
                     { model
-                    | isPaymentProcessing = False, isProcessing = False, hasNewCartInventoryNotifications = True
-                    } |> refreshDetails authStatus maybeSessionToken True model
-
+                        | isPaymentProcessing = False
+                        , isProcessing = False
+                        , hasNewCartInventoryNotifications = True
+                    }
+                        |> refreshDetails authStatus maybeSessionToken True model
 
         HelcimCheckoutTokenReceived (RemoteData.Success (Err errors)) ->
             { model | errors = errors, isPaymentProcessing = False } |> nothingAndNoCommand
@@ -959,8 +987,9 @@ getHelcimCheckoutToken authStatus maybeSessionToken cartInventoryNotifications =
     case authStatus of
         User.Authorized _ ->
             let
-                requestData = Encode.object
-                    [ ("cartInventoryNotifications", encodeCartInventoryNotifications cartInventoryNotifications) ]
+                requestData =
+                    Encode.object
+                        [ ( "cartInventoryNotifications", encodeCartInventoryNotifications cartInventoryNotifications ) ]
             in
             Api.post Api.CheckoutHelcimToken
                 |> Api.withJsonBody requestData
@@ -969,10 +998,11 @@ getHelcimCheckoutToken authStatus maybeSessionToken cartInventoryNotifications =
 
         User.Anonymous ->
             let
-                requestData = Encode.object
-                    [ ("cartInventoryNotifications", encodeCartInventoryNotifications cartInventoryNotifications)
-                    , ("sessionToken", encodeMaybe Encode.string maybeSessionToken)
-                    ]
+                requestData =
+                    Encode.object
+                        [ ( "cartInventoryNotifications", encodeCartInventoryNotifications cartInventoryNotifications )
+                        , ( "sessionToken", encodeMaybe Encode.string maybeSessionToken )
+                        ]
             in
             Api.post Api.CheckoutHelcimTokenAnonymous
                 |> Api.withJsonBody requestData
@@ -1340,14 +1370,7 @@ view model authStatus locations checkoutDetails =
                     text ""
 
                 User.Anonymous ->
-                    div [ class "mb-3" ]
-                        [ div [ class "" ]
-                            [ h4 [ class "d-flex flex-wrap align-items-baseline" ]
-                                [ span [ class "mr-4" ] [ text "Contact details" ]
-                                ]
-                            , guestForm model
-                            ]
-                        ]
+                    guestForm model
 
         billingCard =
             if model.billingSameAsShipping then
@@ -1526,33 +1549,6 @@ view model authStatus locations checkoutDetails =
                 |> Maybe.map .priorityEnabled
                 |> Maybe.withDefault False
 
-        mobileCouponCodeForm =
-            div [ class "col-12 d-sm-none" ]
-                [ h5 [] [ text "Coupon Code" ]
-                , div [ class "input-group" ]
-                    [ input
-                        [ class "form-control"
-                        , type_ "text"
-                        , placeholder "Coupon Code"
-                        , onInput CouponCode
-                        , value model.couponCode
-                        ]
-                        []
-                    , div
-                        [ class "input-group-append" ]
-                        [ button
-                            [ class "btn btn btn-secondary"
-                            , type_ "button"
-                            , onClick ApplyCoupon
-                            ]
-                            [ text "Apply" ]
-                        ]
-                    ]
-                , Dict.get "coupon" model.errors
-                    |> Maybe.map (\errs -> small [] [ Api.errorHtml errs ])
-                    |> Maybe.withDefault (text "")
-                ]
-
         (Cents finalTotal) =
             getFinalTotal checkoutDetails model.storeCredit
 
@@ -1592,9 +1588,9 @@ view model authStatus locations checkoutDetails =
             [ processingOverlay
             , paymentConfirmationOverlay
             , genericErrorText hasErrors
-            , div [ class "mb-3" ] [ generalErrors ]
             , guestCard
-            , div [ class "tw:grid tw:grid-cols-2 tw:gap-[16px]" ]
+            , div [ class "mb-3" ] [ generalErrors ]
+            , div [ class "tw:grid tw:grid-cols-1 tw:lg:grid-cols-2 tw:gap-[24px] tw:lg:gap-[16px]" ]
                 [ addressForm
                     { cardTitle = "Shipping Details"
                     , msg = ShippingMsg
@@ -1619,21 +1615,29 @@ view model authStatus locations checkoutDetails =
                         [ billingCard
                         ]
                 ]
-            , div [ class "tw:grid tw:grid-cols-2 tw:gap-[16px]" ]
+            , div [ class "tw:grid tw:grid-cols-1 tw:lg:grid-cols-2 tw:gap-0 tw:lg:gap-[16px]" ]
                 [ storeCreditForm
                 , viewIf priorityShipingEnabled priorityShippingForm
-                , mobileCouponCodeForm
+
+                -- , mobileCouponCodeForm
                 ]
             , div [ class "tw:pt-[60px]" ]
                 [ h4 [] [ text "Order Summary" ]
                 , viewIf model.hasNewCartInventoryNotifications
-                    (div [ class "tw:pt-[20px]" ] [ Alert.view
-                        { defaultAlert
-                            | content = text "Availability for some of the items in your cart has changed. Please review your order and proceed to the payment one more time."
-                            , style = Alert.Warning
-                        }
-                    ])
-                , summaryTable checkoutDetails
+                    (div [ class "tw:pt-[20px]" ]
+                        [ Alert.view
+                            { defaultAlert
+                                | content = text "Availability for some of the items in your cart has changed. Please review your order and proceed to the payment one more time."
+                                , style = Alert.Warning
+                            }
+                        ]
+                    )
+                , summaryTableDesktop checkoutDetails
+                    model.storeCredit
+                    model.couponCode
+                    (Dict.get "coupon" model.errors)
+                    model.errors
+                , summaryTableMobile checkoutDetails
                     model.storeCredit
                     model.couponCode
                     (Dict.get "coupon" model.errors)
@@ -1660,6 +1664,7 @@ view model authStatus locations checkoutDetails =
                     { defaultButton
                         | label = buttonContents.text
                         , iconEnd = buttonContents.icon
+                        , padding = Button.Width "tw:w-full tw:lg:w-auto tw:px-[16px]"
                         , type_ =
                             if model.isProcessing then
                                 Button.Disabled
@@ -1677,7 +1682,7 @@ guestForm model =
     let
         -- TODO: Use Components.Admin.Form when we pull it out of the Address module.
         fieldLabel inputId content =
-            label [ class "mb-0", for inputId ] [ text content ]
+            label [ class "mb-0 tw:py-[4px] tw:font-semibold", for inputId ] [ text content ]
 
         hasErrors =
             not (Dict.isEmpty model.errors)
@@ -1726,10 +1731,13 @@ guestForm model =
         autocomplete =
             attribute "autocomplete"
     in
-    div [ class "row" ]
-        [ div [ class "col-md-4" ]
-            [ wrapper
-                [ fieldLabel "emailInput" "Email"
+    div [ class "tw:p-[16px] tw:border tw:border-[rgba(77,170,154,1)] tw:bg-[rgba(77,170,154,0.03)] tw:rounded-[16px] tw:mb-[20px]" ]
+        [ div [ class "tw:max-w-[420px]" ]
+            [ p []
+                [ text "Please provide your email so we can send your order confirmation and tracking details."
+                ]
+            , div [ class "form-group mb-2" ]
+                [ fieldLabel "emailInput" "Email address"
                 , emailField
                 , errorHtml emailErrors
                 ]
@@ -1849,6 +1857,172 @@ addressCard contents fullWidth =
         contents
 
 
+summaryTableMobile : PageData.CheckoutDetails -> String -> String -> Maybe (List String) -> Api.FormErrors -> Html Msg
+summaryTableMobile ({ items, charges } as checkoutDetails) creditString couponCode couponErrors errors =
+    let
+        productRow p =
+            let
+                productImage =
+                    productMainImage p.product
+            in
+            div [ class "tw:py-[20px] tw:border-b tw:border-[rgba(30,12,3,0.06)]" ]
+                [ div [ class "tw:flex tw:gap-[16px] tw:w-full" ]
+                    [ img
+                        [ src <| imgSrcFallback productImage
+                        , class "tw:rounded-[8px]"
+                        , imageToSrcSet productImage
+                        , imageSizes
+                        , alt <| "Product Image for " ++ p.product.name
+                        ]
+                        []
+                    , div [ class "tw:grow" ]
+                        [ div []
+                            [ div [ class "font-weight-bold" ] [ Product.nameWithLotSize p.product p.variant ]
+                            , small [ class "text-muted" ]
+                                [ text <| "Item #" ++ p.product.baseSKU ++ p.variant.skuSuffix ]
+                            ]
+                        , div [ class "tw:pt-[6px] tw:flex tw:items-center" ]
+                            [ span [ class "tw:text-[18px] tw:leading-[28px] tw:font-semibold tw:grow" ]
+                                [ text <| Format.cents <| centsMap ((*) p.quantity) <| variantPrice p.variant ]
+                            , span [ class "tw:shrink-0 tw:opacity-80" ]
+                                [ text <|
+                                    (Format.cents <| variantPrice p.variant)
+                                        ++ " x "
+                                        ++ String.fromInt p.quantity
+                                ]
+                            ]
+                        ]
+                    ]
+                , viewIf (List.length p.errors > 0)
+                    (div []
+                        [ div [ class "tw:pt-[12px] text-danger" ]
+                            [ text <| String.join ", " (List.map showCartItemError p.errors) ]
+                        ]
+                    )
+                , viewIf (List.length p.warnings > 0)
+                    (div []
+                        [ div [ class "tw:pt-[12px] text-warning" ]
+                            [ text <| String.join ", " (List.map showCartItemWarning p.warnings) ]
+                        ]
+                    )
+                ]
+
+        imageSizes =
+            A.attribute "sizes" <|
+                String.join ", "
+                    [ "(max-width: 375px) 80px"
+                    , "100px"
+                    ]
+
+        tableFooterMobile =
+            div [ class "tw:py-[18px] tw:px-[16px] tw:rounded-[16px] tw:bg-[rgba(30,12,3,0.02)]" ] <|
+                [ subTotalRowMobile
+                , maybeChargeRow (Maybe.map .charge charges.shippingMethod)
+                , maybeChargeRow charges.priorityShipping
+                ]
+                    ++ List.map chargeRow charges.surcharges
+                    ++ [ taxRow
+                       , storeCreditRow
+                       , couponDiscountRow
+                       , totalRow
+                       ]
+
+        subTotalRowMobile =
+            if totals.subTotal /= totals.total then
+                footerRowMobile "Sub-Total" totals.subTotal "font-weight-bold"
+
+            else
+                text ""
+
+        taxRow =
+            if charges.tax.amount == Cents 0 then
+                text ""
+
+            else
+                chargeRow charges.tax
+
+        chargeRow { description, amount } =
+            footerRowMobile description amount ""
+
+        maybeChargeRow =
+            Maybe.map chargeRow >> Maybe.withDefault (text "")
+
+        storeCreditRow =
+            case maybeAppliedCredit of
+                Nothing ->
+                    text ""
+
+                Just (Cents 0) ->
+                    text ""
+
+                Just credit ->
+                    footerRowMobile "Store Credit" (centsMap negate credit) "tw:font-semibold tw:text-[rgba(77,170,154,1)]"
+
+        totalRow =
+            footerRowMobile "Total" finalTotal "font-weight-bold tw:text-[18px] tw:leading-[24px]"
+
+        maybeAppliedCredit =
+            centsFromString creditString
+                |> Maybe.map (limitStoreCredit checkoutDetails)
+
+        couponDiscountRow =
+            case charges.couponDiscount of
+                Nothing ->
+                    text ""
+
+                Just { description, amount } ->
+                    div [ class "checkout-coupon-line tw:flex tw:items-center tw:gap-[8px]" ]
+                        [ span [ class "tw:line-clamp-1" ] [ text <| description ++ "" ]
+                        , Button.view { defaultButton | label = "X", style = Button.Outline, type_ = Button.TriggerMsg RemoveCoupon }
+                        , div [ class "tw:grow" ] []
+                        , div [ class "tw:whitespace-nowrap text-right tw:font-semibold tw:text-[rgba(77,170,154,1)]" ]
+                            [ text <| Format.cents <| centsMap negate amount ]
+                        ]
+
+        footerRowMobile content amount rowClass =
+            div [ class <| "tw:flex tw:flex-gap-[16px] tw:py-[10px] " ++ rowClass ]
+                [ div [ class "" ] [ text <| content ++ ":" ]
+                , div [ class "tw:grow" ] []
+                , div [ class "" ] [ text <| Format.cents amount ]
+                ]
+
+        -- Similar to footerRow, but more customizable with the left cell split
+        -- in half.
+        splitFooterRow rowClass rightClass content amount splitContent =
+            tr [ class rowClass ]
+                [ td [ colspan 2 ]
+                    [ splitContent ]
+                , td [ colspan 2, class rightClass ]
+                    [ text <| content ++ ":" ]
+                , td [ class rightClass ]
+                    [ text <| Format.cents amount ]
+                ]
+
+        totals =
+            PageData.cartTotals checkoutDetails
+
+        finalTotal =
+            case maybeAppliedCredit of
+                Nothing ->
+                    totals.total
+
+                Just credit ->
+                    credit
+                        |> centsMap2 (\total c -> total - c) totals.total
+    in
+    div [ class "tw:block tw:lg:hidden tw:pt-[20px]" ]
+        [ div [] <| List.map productRow items
+        , if charges.couponDiscount == Nothing then
+            couponCodeForm couponCode couponErrors
+
+          else
+            text ""
+        , div [ class "tw:pt-[24px]" ]
+            [ tableFooterMobile
+            ]
+        ]
+
+
 sameAddressesCheckbox : Bool -> Html Msg
 sameAddressesCheckbox billingSameAsShipping =
     small [ class "d-inline-block form-check" ]
@@ -1865,8 +2039,32 @@ sameAddressesCheckbox billingSameAsShipping =
         ]
 
 
-summaryTable : PageData.CheckoutDetails -> String -> String -> Maybe (List String) -> Api.FormErrors -> Html Msg
-summaryTable ({ items, charges } as checkoutDetails) creditString couponCode couponErrors errors =
+couponCodeForm couponCode couponErrors =
+    div [ class "tw:flex tw:flex-col tw:pt-[20px]" ]
+        [ div [ class "tw:flex tw:gap-[10px]" ]
+            [ div [ class "tw:w-full tw:lg:w-[156px]" ]
+                [ input
+                    [ class "form-control tw:h-[42px]!"
+                    , type_ "text"
+                    , onInput CouponCode
+                    , value couponCode
+                    , A.placeholder "Coupon Code"
+                    , Aria.label "Coupon Code"
+                    ]
+                    []
+                ]
+            , div []
+                [ Button.view { defaultButton | label = "Apply", type_ = Button.TriggerMsg ApplyCoupon, style = Button.Outline }
+                ]
+            ]
+        , couponErrors
+            |> Maybe.map (\errs -> small [] [ Api.errorHtml errs ])
+            |> Maybe.withDefault (text "")
+        ]
+
+
+summaryTableDesktop : PageData.CheckoutDetails -> String -> String -> Maybe (List String) -> Api.FormErrors -> Html Msg
+summaryTableDesktop ({ items, charges } as checkoutDetails) creditString couponCode couponErrors errors =
     let
         tableHeader =
             thead [ class "font-weight-bold" ]
@@ -1918,48 +2116,6 @@ summaryTable ({ items, charges } as checkoutDetails) creditString couponCode cou
                     ]
                 )
             ]
-
-        mobileRow p =
-            let
-                productImage =
-                    productMainImage p.product
-            in
-            div [ class "row" ]
-                [ div [ class "col-auto pr-0" ]
-                    [ img
-                        [ src <| imgSrcFallback productImage
-                        , imageToSrcSet productImage
-                        , imageSizes
-                        ]
-                        []
-                    ]
-                , div [ class "col" ]
-                    [ div [ class "font-weight-bold" ] [ Product.nameWithLotSize p.product p.variant ]
-                    , small [ class "text-muted" ]
-                        [ text <| "Item #" ++ p.product.baseSKU ++ p.variant.skuSuffix ]
-                    ]
-                , div [ class "col-12 mt-1 d-flex justify-content-between" ]
-                    [ div []
-                        [ text <| Format.cents <| variantPrice p.variant
-                        , text " x "
-                        , text <| String.fromInt p.quantity
-                        ]
-                    , div [ class "font-weight-bold item-total" ]
-                        [ text <| Format.cents <| centsMap ((*) p.quantity) <| variantPrice p.variant ]
-                    ]
-                , viewIf (List.length p.errors > 0)
-                    (div [ class "col-12" ]
-                        [ small [ class "text-danger" ]
-                            [ text <| String.join ", " (List.map showCartItemError p.errors) ]
-                        ]
-                    )
-                , viewIf (List.length p.warnings > 0)
-                    (div [ class "col-12" ]
-                        [ small [ class "text-warning" ]
-                            [ text <| String.join ", " (List.map showCartItemWarning p.warnings) ]
-                        ]
-                    )
-                ]
 
         imageSizes =
             A.attribute "sizes" <|
@@ -2019,23 +2175,7 @@ summaryTable ({ items, charges } as checkoutDetails) creditString couponCode cou
                     finalTotal
                 <|
                     div [ class "tw:flex tw:gap-[10px] tw:items-center" ]
-                        [ div [ class "tw:w-[156px]" ]
-                            [ input
-                                [ class "form-control"
-                                , type_ "text"
-                                , onInput CouponCode
-                                , value couponCode
-                                , A.placeholder "Coupon Code"
-                                , Aria.label "Coupon Code"
-                                ]
-                                []
-                            ]
-                        , div []
-                            [ Button.view { defaultButton | label = "Apply", type_ = Button.TriggerMsg ApplyCoupon, style = Button.Outline }
-                            ]
-                        , couponErrors
-                            |> Maybe.map (\errs -> small [] [ Api.errorHtml errs ])
-                            |> Maybe.withDefault (text "")
+                        [ couponCodeForm couponCode couponErrors
                         ]
 
             else
@@ -2054,7 +2194,7 @@ summaryTable ({ items, charges } as checkoutDetails) creditString couponCode cou
                     tr [ class "checkout-coupon-line" ]
                         [ td [ colspan 4, class "text-right clearfix" ]
                             [ button
-                                [ class "btn btn-sm btn-link float-left py-0"
+                                [ class "btn btn-sm btn-link float-left py-0 tw:hover:underline"
                                 , type_ "button"
                                 , onClick RemoveCoupon
                                 ]
@@ -2095,19 +2235,12 @@ summaryTable ({ items, charges } as checkoutDetails) creditString couponCode cou
                     credit
                         |> centsMap2 (\total c -> total - c) totals.total
     in
-    div [ class "tw:pt-[20px]" ]
+    div [ class "tw:hidden tw:lg:block tw:pt-[20px]" ]
         [ table [ class "se-table" ]
             [ tableHeader
             , tbody [] <| List.concat (List.map productRow items)
             , tableFooter
             ]
-
-        -- TODO: enable this for mobile view
-        -- , div [ class "checkout-product-blocks d-sm-none" ]
-        --     [ div [] <| List.map mobileRow items
-        --     , table [ class "table table-striped table-sm checkout-products-table" ]
-        --         [ tableFooter ]
-        --     ]
         ]
 
 
@@ -2166,7 +2299,7 @@ successView zone orderId guest locations orderDetails =
         [ thankYouView
         ]
     , newAccountAlert
-    , div [ class "tw:grid tw:grid-cols-2 tw:gap-[20px] tw:pt-[20px]" ] <|
+    , div [ class "tw:grid tw:grid-cols-1 tw:lg:grid-cols-2 tw:gap-[20px] tw:pt-[20px]" ] <|
         case orderDetails.billingAddress of
             Just billingAddress ->
                 [ div [ class "" ]

@@ -171,7 +171,7 @@ view tagger model =
                     , signupInputs
                     , Form.genericErrorText (not <| Dict.isEmpty model.errors)
                     , Api.getErrorHtml "" model.errors
-                    , div [ class "tw:pb-[16px]" ] [ Button.view { defaultButton | label = "Register", type_ = Button.FormSubmit, padding = Button.Width "tw:w-[160px]" } ]
+                    , div [ class "tw:pb-[16px]" ] [ Button.view { defaultButton | label = "Register", type_ = Button.FormSubmit, padding = Button.Width "tw:w-full tw:lg:w-[160px]" } ]
                     ]
                 ]
 
@@ -191,7 +191,7 @@ view tagger model =
                         ]
                     ]
                 , div [ class "tw:flex" ]
-                    [ Button.view { defaultButton | label = "Log in", style = Button.Outline, type_ = Button.Link <| reverse <| Login Nothing False }
+                    [ Button.view { defaultButton | label = "Log in", style = Button.Outline, type_ = Button.Link <| reverse <| Login Nothing False, padding = Button.Width "tw:w-full tw:lg:px-[16px] tw:lg:w-auto" }
                     ]
                 ]
     in

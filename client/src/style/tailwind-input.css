@@ -94,13 +94,15 @@
 }
 
 .se-ul {
-  display: block;
-  list-style-type: disc; /* default bullet */
+  @apply tw:block tw:list-disc tw:pl-[16px] tw:lg:pl-[40px] tw:my-[16px];
+  /* display: block;
+  list-style-type: disc;
   padding-left: 40px;
-  margin: 1em 0;
+  margin: 1em 0; */
 }
 .se-ul li {
-  padding-bottom: 8px;
+  @apply tw:pt-[8px];
+  /* padding-bottom: 8px; */
 }
 
 /* 1192 + 32 = 1224 */

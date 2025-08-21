@@ -65,7 +65,7 @@ view zone locations { storeCredit, orderSummaries } =
 orderTable : Time.Zone -> AddressLocations -> List PageData.OrderSummary -> Html Msg
 orderTable zone locations orderSummaries =
     let
-        orderRow { id, shippingAddress, status, total, created } =
+        orderRowDesktop { id, shippingAddress, status, total, created } =
             tr []
                 [ td [ class "" ] [ text <| Format.date zone created ]
                 , td [ class "" ] [ text <| String.fromInt id ]
@@ -73,12 +73,27 @@ orderTable zone locations orderSummaries =
                 , td [ class "" ] [ text <| status ]
                 , td [ class "" ] [ text <| Format.cents total ]
                 , td [ class "" ]
-                    [ Button.view { defaultButton | label = "View", type_ = Button.Link <| reverse <| OrderDetails id Nothing, style = Button.Outline }
+                    [ Button.view { defaultButton | label = "View", type_ = Button.Link <| reverse <| OrderDetails id Nothing }
+                    ]
+                ]
+
+        orderRowMobile { id, shippingAddress, status, total, created } =
+            div [ class "tw:p-[20px] tw:rounded-[16px] tw:bg-[rgba(30,12,3,0.02)]" ]
+                [ p [ class "" ] [ text <| "Order from " ++ Format.date zone created ]
+                , p [ class "tw:pt-[4px] tw:opacity-60" ] [ text <| "#" ++ String.fromInt id ]
+                , div [ class "tw:pt-[12px]" ]
+                    [ span [ class "tw:font-semibold" ] [ text "Order status: " ]
+                    , span [] [ text status ]
+                    ]
+                , div [ class "tw:pt-[16px]" ] [ addressInfo shippingAddress ]
+                , div [ class "tw:pt-[16px] tw:font-semibold" ] [ text <| Format.cents total ]
+                , div [ class "tw:pt-[12px]" ]
+                    [ Button.view { defaultButton | label = "View", type_ = Button.Link <| reverse <| OrderDetails id Nothing }
                     ]
                 ]
 
         showAllButton =
-            Button.view { defaultButton | label = "Show All Orders", type_ = TriggerMsg ShowAllOrders }
+            Button.view { defaultButton | label = "Show All Orders", type_ = TriggerMsg ShowAllOrders, style = Button.Outline }
 
         addressInfo { firstName, lastName, street, city, state, zipCode } =
             address [ class "mb-0" ]
@@ -95,21 +110,29 @@ orderTable zone locations orderSummaries =
                 , text " "
                 , text zipCode
                 ]
+
+        desktopView =
+            table [ class "se-table tw:hidden tw:lg:block" ]
+                [ thead []
+                    [ tr []
+                        [ th [ class "" ] [ text "Date" ]
+                        , th [ class "" ] [ text "Order #" ]
+                        , th [] [ text "Shipping Address" ]
+                        , th [ class "" ] [ text "Order Status" ]
+                        , th [ class "" ] [ text "Total" ]
+                        , th [] []
+                        ]
+                    ]
+                , tbody [] <| List.map orderRowDesktop orderSummaries
+                ]
+
+        mobileView =
+            div [ class "tw:flex tw:lg:hidden tw:flex-col tw:gap-[12px]" ] <|
+                List.map orderRowMobile orderSummaries
     in
     div []
-        [ table [ class "se-table" ]
-            [ thead []
-                [ tr []
-                    [ th [ class "" ] [ text "Date" ]
-                    , th [ class "" ] [ text "Order #" ]
-                    , th [] [ text "Shipping Address" ]
-                    , th [ class "" ] [ text "Order Status" ]
-                    , th [ class "" ] [ text "Total" ]
-                    , th [] []
-                    ]
-                ]
-            , tbody [] <| List.map orderRow orderSummaries
-            ]
+        [ desktopView
+        , mobileView
 
         -- TODO: handle mobile view here
         , div [ class "tw:pt-[28px] tw:flex tw:justify-center" ]
