@@ -39,6 +39,7 @@ type alias Form =
     , forms : Dict Int Address.Form
     , changeToDefault : Bool
     , mobileTab : MobileTab
+    , selectedAddressShipping : Bool
     }
 
 
@@ -48,6 +49,7 @@ initial =
     , forms = Dict.empty
     , changeToDefault = False
     , mobileTab = ShippingAddressTab
+    , selectedAddressShipping = False
     }
 
 
@@ -67,29 +69,39 @@ type Msg
     | SetMobileTab MobileTab
 
 
-update : Routing.Key -> Msg -> Form -> AuthStatus -> WebData PageData.AddressDetails -> ( Form, Cmd Msg )
-update key msg model authStatus details =
+update : Routing.Key -> String -> Msg -> Form -> AuthStatus -> WebData PageData.AddressDetails -> ( Form, Cmd Msg )
+update key postgridApiKey msg model authStatus details =
     case msg of
         SelectShipping addressId ->
             details
-                |> RemoteData.map (.shippingAddresses >> selectAddress addressId model)
+                |> RemoteData.map (.shippingAddresses >> selectAddress addressId model True)
                 |> RemoteData.toMaybe
                 |> Maybe.withDefault model
                 |> noCommand
 
         SelectBilling addressId ->
             details
-                |> RemoteData.map (.billingAddresses >> selectAddress addressId model)
+                |> RemoteData.map (.billingAddresses >> selectAddress addressId model False)
                 |> RemoteData.toMaybe
                 |> Maybe.withDefault model
                 |> noCommand
 
         FormMsg (AddressId id) subMsg ->
-            { model
-                | forms =
-                    Dict.update id (Maybe.map <| Address.update subMsg) model.forms
-            }
-                |> noCommand
+            let
+                mbForm = Dict.get id model.forms
+                addressCompletionSetting =
+                    if model.selectedAddressShipping
+                    then Address.AddressCompletionEnabled postgridApiKey
+                    else Address.AddressCompletionDisabled
+
+                res = Maybe.map (Address.update addressCompletionSetting subMsg) mbForm
+
+                mbNewForm = Maybe.map Tuple.first res
+                mbCmd = Maybe.map (Cmd.map (FormMsg (AddressId id)) << Tuple.second) res
+
+                newModel = { model | forms = Dict.update id (always mbNewForm) model.forms }
+
+            in ( newModel, Maybe.withDefault Cmd.none mbCmd )
 
         IsDefault isDefault ->
             { model | changeToDefault = isDefault } |> noCommand
@@ -149,8 +161,8 @@ update key msg model authStatus details =
             { initial | mobileTab = value } |> noCommand
 
 
-selectAddress : AddressId -> Form -> List Address.Model -> Form
-selectAddress ((AddressId i) as id) model addresses =
+selectAddress : AddressId -> Form -> Bool -> List Address.Model -> Form
+selectAddress ((AddressId i) as id) model selectedAddressShipping addresses =
     let
         maybeAddress =
             findAddress id addresses
@@ -164,6 +176,7 @@ selectAddress ((AddressId i) as id) model addresses =
     else
         { model
             | selectedAddress = Just id
+            , selectedAddressShipping = selectedAddressShipping
             , forms = Maybe.map insertForm maybeAddress |> Maybe.withDefault model.forms
         }
 

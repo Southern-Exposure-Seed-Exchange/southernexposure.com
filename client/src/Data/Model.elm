@@ -88,6 +88,7 @@ type alias Model =
     , zone : Time.Zone
     , key : Routing.Key
     , helcimUrl : String
+    , postgridApiKey : String
 
     -- sub-component
     , profileNavbar : ProfileNavbar.Model
@@ -110,8 +111,8 @@ initShared =
     }
 
 
-initial : Routing.Key -> Route -> String -> Model
-initial key route helcimUrl =
+initial : Routing.Key -> Route -> String -> String -> Model
+initial key route helcimUrl postgridApiKey =
     { navigationData = RemoteData.Loading
     , categoryListData = RemoteData.Loading
     , route = route
@@ -155,6 +156,7 @@ initial key route helcimUrl =
     , zone = Time.utc
     , key = key
     , helcimUrl = helcimUrl
+    , postgridApiKey = postgridApiKey
 
     -- shared data
     , shared = initShared

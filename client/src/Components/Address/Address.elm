@@ -1,5 +1,6 @@
 module Components.Address.Address exposing
     ( AddressId(..)
+    , AddressCompletionSetting(..)
     , Form
     , Model
     , Msg
@@ -19,14 +20,21 @@ import Components.Aria as Aria
 import Components.HorizontalForm as Form
 import Data.Api as Api
 import Data.Locations as Locations exposing (AddressLocations, Location, Region(..), regionDecoder, regionEncoder)
-import Dict
+import Dict exposing (Dict)
 import Html exposing (..)
-import Html.Attributes exposing (class, classList, for, id, name, placeholder, required, selected, type_, value)
-import Html.Events exposing (on, onInput, targetValue)
+import Html.Attributes exposing (attribute, class, classList, for, id, list, name, placeholder, required, selected, type_, value)
+import Html.Events exposing (on, onClick, onInput, targetValue)
 import Html.Events.Extra exposing (onChange)
+import Http as Http
 import Json.Decode as Decode exposing (Decoder)
+import Json.Decode.Pipeline exposing (hardcoded)
 import Json.Encode as Encode exposing (Value)
+import Process
+import RemoteData exposing (WebData)
+import Task
+import Url exposing (percentEncode)
 import Utils.View exposing (autocomplete, labelView)
+import Utils.Update exposing (noCommand)
 
 
 
@@ -50,8 +58,11 @@ type alias Model =
     , country : String
     , phoneNumber : String
     , isDefault : Bool
+    , showSuggestions : Bool
+    , suggestions : List AutocompleteData
+    , debounceId : Int
+    , warnings : Dict String (List String)
     }
-
 
 initial : Model
 initial =
@@ -67,6 +78,10 @@ initial =
     , country = "US"
     , phoneNumber = ""
     , isDefault = True
+    , showSuggestions = False
+    , suggestions = []
+    , debounceId = 0
+    , warnings = Dict.empty
     }
 
 
@@ -88,6 +103,10 @@ decoder =
                     (Decode.field "country" Decode.string)
                     (Decode.field "phoneNumber" Decode.string)
                     (Decode.field "isDefault" Decode.bool)
+                |> hardcoded False
+                |> hardcoded []
+                |> hardcoded 0
+                |> hardcoded Dict.empty
             )
 
 
@@ -165,61 +184,267 @@ type Msg
     | ZipCode String
     | Country String
     | PhoneNumber String
+    | DebouncedRequest Int String
+    | AutocompleteSuggestions (WebData (Result Api.FormErrors AutocompletePreview))
+    | SuggestionSelected AutocompleteData
+    | AddressCompleted (WebData (Result Api.FormErrors AutocompleteResponse))
+
+type alias PostgridApiKey = String
+
+type AddressCompletionSetting
+    = AddressCompletionEnabled PostgridApiKey
+    | AddressCompletionDisabled
 
 
-update : Msg -> Form -> Form
-update msg ({ model } as f) =
-    { f | model = updateModel msg model }
+update : AddressCompletionSetting -> Msg -> Form -> (Form, Cmd Msg)
+update addressCompletionSetting msg ({ model } as f) =
+    let
+        (newModel, cmd) =
+            updateModel addressCompletionSetting msg model
+    in
+        ({ f | model = newModel }, cmd)
 
 
-updateModel : Msg -> Model -> Model
-updateModel msg model =
+updateModel : AddressCompletionSetting -> Msg -> Model -> ( Model, Cmd Msg )
+updateModel addressCompletionSetting msg model =
     case msg of
         FirstName str ->
-            { model | firstName = str }
+            { model | firstName = str } |> noCommand
 
         LastName str ->
-            { model | lastName = str }
+            ({ model | lastName = str }, Cmd.none)
 
         CompanyName str ->
-            { model | companyName = str }
+            { model | companyName = str } |> noCommand
 
         Street str ->
-            { model | street = str }
+            handleAutocompleteField addressCompletionSetting msg (\m -> { m | street = str }) model
 
         AddressTwo str ->
-            { model | addressTwo = str }
+            handleAutocompleteField addressCompletionSetting msg (\m -> { m | addressTwo = str }) model
 
         City str ->
-            { model | city = str }
+            handleAutocompleteField addressCompletionSetting msg (\m -> { m | city = str }) model
 
         State str ->
-            case model.country of
-                "US" ->
-                    if List.member str Locations.armedForcesCodes then
-                        { model | state = Just <| ArmedForces str }
+            handleAutocompleteField addressCompletionSetting msg
+                (\m ->
+                    case m.country of
+                        "US" ->
+                            if List.member str Locations.armedForcesCodes then
+                                { m | state = Just <| ArmedForces str }
+                            else
+                                { m | state = Just <| USState str }
 
-                    else
-                        { model | state = Just <| USState str }
+                        "CA" ->
+                            { m | state = Just <| CAProvince str }
 
-                "CA" ->
-                    { model | state = Just <| CAProvince str }
-
-                _ ->
-                    { model | state = Just <| Custom str }
+                        _ ->
+                            { m | state = Just <| Custom str }
+                )
+                model
 
         ZipCode str ->
-            { model | zipCode = str }
+            handleAutocompleteField addressCompletionSetting msg (\m -> { m | zipCode = str }) model
 
         Country str ->
             if model.country /= str then
-                { model | country = str, state = Nothing }
-
+                { model | country = str, state = Nothing, warnings = Dict.empty } |> noCommand
             else
-                model
+                { model | warnings = Dict.empty } |> noCommand
 
         PhoneNumber str ->
-            { model | phoneNumber = str }
+            { model | phoneNumber = str } |> noCommand
+
+        DebouncedRequest debounceId str ->
+            case addressCompletionSetting of
+                AddressCompletionEnabled postgridApiKey ->
+                    if model.debounceId == debounceId then
+                        if String.length str > 3 then
+                            ( model, fetchSuggestions str postgridApiKey )
+                        else
+                            ( { model | showSuggestions = False, suggestions = [] }, Cmd.none )
+                    else
+                        ( model, Cmd.none )
+                AddressCompletionDisabled ->
+                    ( model, Cmd.none )
+
+        AutocompleteSuggestions (RemoteData.Success (Ok results)) ->
+            { model | suggestions = results.data } |> noCommand
+
+        AutocompleteSuggestions _ -> model |> noCommand
+
+        SuggestionSelected suggestion ->
+            case addressCompletionSetting of
+                AddressCompletionEnabled postgridApiKey ->
+                    ( { model | showSuggestions = False }, completeAddress suggestion postgridApiKey )
+                AddressCompletionDisabled ->
+                    ( { model | showSuggestions = False }, Cmd.none )
+
+        AddressCompleted (RemoteData.Success (Ok response)) ->
+            case response.data of
+                Nothing -> ( model, Cmd.none )
+                Just addr ->
+                    let
+                        newModel =
+                            { model
+                                | street = addr.address
+                                , city = addr.city
+                                , state = Just <| USState (String.toUpper addr.prov)
+                                , zipCode = addr.pc
+                                , country = String.toUpper addr.country
+                                , warnings = addr.errors
+                            }
+                    in
+                    ( newModel, Cmd.none )
+
+        AddressCompleted _ ->
+            ( model, Cmd.none )
+
+type alias AutocompleteData =
+    { address : String
+    , city : String
+    , pc : String
+    }
+
+autocompleteDataDecoder : Decoder AutocompleteData
+autocompleteDataDecoder = Decode.field "preview" <|
+    Decode.map3 AutocompleteData
+        (Decode.field "address" Decode.string)
+        (Decode.field "city" Decode.string)
+        (Decode.field "pc" Decode.string)
+
+-- https://postgrid.readme.io/reference/get-autocomplete-previews
+type alias AutocompletePreview =
+    { status : String
+    , message : String
+    , data : List AutocompleteData
+    }
+
+autocompletePreviewDecoder : Decoder AutocompletePreview
+autocompletePreviewDecoder =
+    Decode.map3 AutocompletePreview
+        (Decode.field "status" Decode.string)
+        (Decode.field "message" Decode.string)
+        (Decode.field "data" (Decode.list autocompleteDataDecoder))
+
+
+fetchSuggestions : String -> String -> Cmd Msg
+fetchSuggestions str postgridApiKey =
+    let
+        request =
+            { method = "GET"
+            , headers = [Http.header "x-api-key" postgridApiKey]
+            , url = "https://api.postgrid.com/v1/addver/completions?partialStreet=" ++ (percentEncode str) ++ "&countryFilter=US&provInsteadOfPC=false"
+            , body = Http.emptyBody
+            , expect = Http.expectString Result.toMaybe
+            , timeout = Nothing
+            , tracker = Nothing
+            }
+    in
+        Api.sendRequest AutocompleteSuggestions (Api.withErrorHandler autocompletePreviewDecoder request)
+
+-- https://postgrid.readme.io/reference/autocomplete-an-address
+type alias AutocompleteResponse =
+    { status : String
+    , message : String
+    , data : Maybe AutocompleteResponseData
+    }
+
+autocompleteResponseDecoder : Decoder AutocompleteResponse
+autocompleteResponseDecoder =
+    let
+        dataDecoder = Decode.oneOf
+            [ Decode.list Decode.value
+                |> Decode.andThen (\_ -> Decode.succeed Nothing)
+            , autocompleteResponseDataDecoder |> Decode.map Just
+            ]
+    in
+    Decode.map3 AutocompleteResponse
+        (Decode.field "status" Decode.string)
+        (Decode.field "message" Decode.string)
+        (Decode.field "data" dataDecoder)
+
+type alias AutocompleteResponseData =
+    { address : String
+    , city : String
+    , prov : String
+    , pc : String
+    , country : String
+    , errors : Dict.Dict String (List String)
+    }
+
+autocompleteResponseDataDecoder : Decoder AutocompleteResponseData
+autocompleteResponseDataDecoder =
+    let
+        errorsDecoder : Decoder (Dict.Dict String (List String))
+        errorsDecoder = Decode.dict (Decode.list Decode.string)
+    in
+    Decode.map6 AutocompleteResponseData
+        (Decode.at ["address", "address"] Decode.string)
+        (Decode.at ["address", "city"] Decode.string)
+        (Decode.at ["address", "prov"] Decode.string)
+        (Decode.at ["address", "pc"] Decode.string)
+        (Decode.at ["address", "country"] Decode.string)
+        (Decode.field "errors" errorsDecoder)
+
+completeAddress : AutocompleteData -> String -> Cmd Msg
+completeAddress suggestion postgridApiKey =
+    let
+        request =
+            { method = "POST"
+            , headers = [Http.header "x-api-key" postgridApiKey]
+            , url = "https://api.postgrid.com/v1/addver/completions?index=0"
+            , body = Http.jsonBody (Encode.object
+                [ ("partialStreet", Encode.string suggestion.address)
+                , ("cityFilter", Encode.string suggestion.city)
+                , ("pcFilter", Encode.string suggestion.pc)
+                , ("countryFilter", Encode.string "US")
+                ]
+            )
+            , expect = Http.expectString Result.toMaybe
+            , timeout = Nothing
+            , tracker = Nothing
+            }
+    in
+        Api.sendRequest AddressCompleted (Api.withErrorHandler autocompleteResponseDecoder request)
+
+-- Helper for debounced autocomplete fields
+handleAutocompleteField : AddressCompletionSetting -> Msg -> (Model -> Model) -> Model -> (Model, Cmd Msg)
+handleAutocompleteField addressCompletionSetting msg updateField m =
+    let
+        updatedModel = updateField m
+        concatFields =
+            String.join " "
+                [ updatedModel.street
+                , updatedModel.city
+                , Maybe.withDefault "" (updatedModel.state |> Maybe.map Locations.fromRegion)
+                , updatedModel.zipCode
+                , updatedModel.country
+                ]
+        newDebounceId = updatedModel.debounceId + 1
+        cmd =
+            case addressCompletionSetting of
+                AddressCompletionEnabled _ ->
+                    if updatedModel.country == "US" && String.length concatFields > 3 then
+                        Task.perform identity
+                            (Process.sleep 300
+                                |> Task.andThen (always <| Task.succeed <| DebouncedRequest newDebounceId concatFields)
+                            )
+                    else
+                        Cmd.none
+                AddressCompletionDisabled ->
+                    Cmd.none
+        suggestions =
+            if String.length concatFields < 3 then
+                []
+            else
+                updatedModel.suggestions
+        showSuggestions = case msg of
+            Street _ -> String.length concatFields > 3
+            _ -> updatedModel.showSuggestions
+    in
+    ( { updatedModel | debounceId = newDebounceId, suggestions = suggestions, showSuggestions = showSuggestions, warnings = Dict.empty }, cmd )
 
 
 
@@ -355,13 +580,16 @@ form { model, errors } inputPrefix locations =
 
         stateCode =
             .state >> Maybe.map Locations.fromRegion >> Maybe.withDefault ""
+
     in
     div []
         [ generalErrors
+        , viewWarnings model
         , field .firstName (InputMsg FirstName) "First Name" "firstName" "given-name" True
         , field .lastName (InputMsg LastName) "Last Name" "lastName" "family-name" True
         , field .companyName (InputMsg CompanyName) "Company Name" "companyName" "organization" False
-        , field .street (ChangeMsg Street) "Street Address" "addressOne" "address-line1" True
+        , field .street (InputMsg Street) "Street Address" "addressOne" "address-line1" True
+        , viewSuggestions model
         , field .addressTwo (InputMsg AddressTwo) "Address Line 2" "addressTwo" "address-line2" False
         , field .city (InputMsg City) "City" "city" "address-level2" True
         , regionField
@@ -410,13 +638,16 @@ horizontalForm { model, errors } locations =
 
         stateCode =
             .state >> Maybe.map Locations.fromRegion
+
     in
     [ Api.getErrorHtml "" errors
+    , viewWarnings model
     , div [ class "tw:grid tw:grid-cols-1 tw:lg:grid-cols-2 tw:gap-[16px]" ]
         [ requiredField .firstName FirstName "First Name" "firstName" "text" "given-name"
         , requiredField .lastName LastName "Last Name" "lastName" "text" "family-name"
         ]
     , requiredField .street Street "Street Address" "addressOne" "text" "address-line1"
+    , viewSuggestions model
     , optionalField .addressTwo AddressTwo "Address Line 2" "addressTwo" "text" "address-line2"
     , div [ class "tw:grid tw:grid-cols-1 tw:lg:grid-cols-2 tw:gap-[16px]" ]
         [ countrySelect
@@ -552,3 +783,33 @@ locationSelect errors prefix selectedValue selectMsg locations labelText inputNa
                 ]
         , errorHtml
         ]
+
+viewSuggestions : Model -> Html Msg
+viewSuggestions model =
+    if model.showSuggestions then
+        div [ class "tw:relative" ]
+            [ div [ class "tw:absolute tw:z-[10]" ]
+                [ ul [ class "tw:flex tw:flex-col tw:bg-white tw:rounded-[16px] tw:shadow-md tw:max-h-[300px] tw:overflow-auto" ]
+                    (List.map viewSuggestion model.suggestions)
+                ]
+            ]
+
+    else
+        text ""
+
+viewSuggestion : AutocompleteData -> Html Msg
+viewSuggestion suggestion =
+    let
+        suggestionText =
+            suggestion.address ++ ", " ++ suggestion.city ++ " " ++ suggestion.pc
+    in
+    li [ class "tw:p-[8px] tw:hover:bg-gray-200 tw:cursor-pointer", onClick (SuggestionSelected suggestion) ]
+        [ text suggestionText ]
+
+
+viewWarnings : Model -> Html msg
+viewWarnings model =
+    List.concat (Dict.values model.warnings)
+        |> List.map Html.text
+        |> List.intersperse (Html.br [] [])
+        |> Html.div [ class "text-warning" ]

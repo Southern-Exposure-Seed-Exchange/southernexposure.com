@@ -18,7 +18,8 @@ var isHelcimProduction = process.env.HELCIM_ENV === 'production';
 var helcimUrl = isHelcimProduction ? "https://southern-exposure-seed-exchange.myhelcim.com" : "https://test-southern-exposure-seed-exchange.myhelcim.com";
 
 const GA_MEASUREMENT_ID = process.env.GA_MEASUREMENT_ID;
-
+// TODO: put actual keys here
+const POSTGRID_API_KEY = process.env.POSTGRID_API_KEY || (isProduction ? "<REPLACE ME WITH THE REAL KEY>" : "live_pk_apy2XeQfGkproRtzeNth6s");
 
 module.exports = {
   mode: isProduction ? 'production' : 'development',
@@ -167,6 +168,7 @@ module.exports = {
     new webpack.DefinePlugin({
       GA_MEASUREMENT_ID: JSON.stringify(GA_MEASUREMENT_ID),
       helcimUrl: JSON.stringify(helcimUrl),
+      POSTGRID_API_KEY: JSON.stringify(POSTGRID_API_KEY),
     }),
     new SriWebpackPlugin({
       hashFuncNames: ['sha512'],
@@ -193,7 +195,7 @@ module.exports = {
       'upgrade-insecure-requests': [],
       'default-src': ["'self'", "data:"],
       'object-src': "'none'",
-      'connect-src': ["'self'", "https://api.helcim.app", "https://www.google-analytics.com", "https://www.googletagmanager.com" ],
+      'connect-src': ["'self'", "https://api.helcim.app", "https://www.google-analytics.com", "https://www.googletagmanager.com", "https://api.postgrid.com"],
       'frame-src': ["'self'", "https://www.farmraiser.com", "https://secure.helcim.app"],
       'script-src': ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://www.googletagmanager.com", "https://www.google-analytics.com/"],
       'img-src': ["'self'", "data:", "https://www.googletagmanager.com", "https://www.google-analytics.com/", "https://stats.g.doubleclick.net/", "https://www.google.com"],
