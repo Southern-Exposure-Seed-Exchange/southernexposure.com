@@ -189,7 +189,7 @@ view tagger model redirectTo clearCart =
                     , loginInputs
                     , errorHtml
                     , rememberCheckbox
-                    , div [ class "tw:pb-[16px]" ] [ Button.view { defaultButton | label = "Login", type_ = Button.FormSubmit, padding = Button.Width "tw:w-[160px]" } ]
+                    , div [ class "tw:pb-[16px]" ] [ Button.view { defaultButton | label = "Login", type_ = Button.FormSubmit, padding = Button.Width "tw:w-full tw:lg:w-[160px]" } ]
                     , div []
                         [ a
                             ([ class "tw:text-[14px] tw:opacity-60" ] ++ (routeLinkAttributes <| ResetPassword <| Just ""))
@@ -269,7 +269,7 @@ view tagger model redirectTo clearCart =
                         ]
                     ]
                 , div [ class "tw:flex" ]
-                    [ Button.view { defaultButton | label = "Create an account", style = Button.Outline, type_ = Button.Link <| reverse CreateAccount }
+                    [ Button.view { defaultButton | label = "Create an account", style = Button.Outline, type_ = Button.Link <| reverse CreateAccount, padding = Button.Width "tw:w-full tw:lg:w-auto tw:lg:px-[16px]" }
                     ]
                 ]
 
@@ -282,7 +282,7 @@ view tagger model redirectTo clearCart =
                 ]
     in
     [ pageTitleView "Sign in"
-    , div [ class "tw:grid tw:grid-cols-1 tw:lg-grid-cols-2 tw:gap-[40px] tw:pb-[60px]" ]
+    , div [ class "tw:grid tw:grid-cols-1 tw:lg:grid-cols-2 tw:gap-[40px] tw:pb-[60px]" ]
         [ loginForm
         , createAccountSection
         ]

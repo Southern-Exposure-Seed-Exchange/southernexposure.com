@@ -118,22 +118,22 @@ selectImageFile =
 
 
 pageTitleView label =
-    h1 [ class "tw:pl-[8px] tw:text-[32px]! tw:pb-[20px]" ] [ text label ]
+    h1 [ class "tw:pl-0 tw:lg:pl-[8px] tw:text-[32px]! tw:pb-[20px]" ] [ text label ]
 
 
 pageTitleWithSubView label sub =
     div []
-        [ h1 [ class "tw:pl-[8px] tw:text-[32px]!" ]
+        [ h1 [ class "tw:pl-0 tw:lg:pl-[8px] tw:text-[32px]!" ]
             [ text label
             ]
-        , p [ class "tw:pl-[8px] tw:opacity-50" ]
+        , p [ class "tw:pl-0 tw:lg:pl-[8px] tw:opacity-50" ]
             [ text sub
             ]
         ]
 
 
 legendView label =
-    legend [ class "tw:pl-[16px]! tw:pb-[16px]! tw:text-[16px]! tw:leading-[24px]! tw:font-semibold" ] [ text label ]
+    legend [ class "tw:pl-0! tw:lg:pl-[16px]! tw:pb-[16px]! tw:text-[16px]! tw:leading-[24px]! tw:font-semibold" ] [ text label ]
 
 
 labelView : String -> String -> Bool -> Html msg

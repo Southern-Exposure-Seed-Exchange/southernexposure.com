@@ -79,7 +79,7 @@ view ({ route, pageData, navigationData, zone, helcimUrl } as model) =
 
         withSidebar content =
             div [ class "se-container", Aria.live "polite" ]
-                [ div [ class "tw:flex tw:flex-col-reverse tw:lg:flex-row tw:gap-[40px]" ]
+                [ div [ class "tw:flex tw:flex-col-reverse tw:lg:flex-row tw:gap-[100px] tw:lg:gap-[40px]" ]
                     [ SiteSidebar.view route
                     , div [ class "tw:w-full tw:grow tw:min-h-screen tw:lg:min-h-auto", id "main" ] content
                     ]

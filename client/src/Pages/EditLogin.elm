@@ -175,7 +175,7 @@ view tagger model authStatus =
                 , inputRow (.passwordConfirm >> Maybe.withDefault "") PasswordConfirm False "Confirm Password" "passwordConfirm" "password" "new-password"
                 ]
             , div []
-                [ Button.view { defaultButton | label = "Update", type_ = Button.FormSubmit, padding = Button.Width "tw:w-[160px]" }
+                [ Button.view { defaultButton | label = "Update", type_ = Button.FormSubmit, padding = Button.Width "tw:w-full tw:lg:w-[160px]" }
                 ]
             ]
 

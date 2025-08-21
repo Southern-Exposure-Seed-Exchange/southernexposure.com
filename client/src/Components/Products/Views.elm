@@ -461,7 +461,7 @@ productImageLinkView sizeClass product maybeVariantId =
                 -- , listImageSizes
                 , Microdata.image
                 , alt <| "Product Image for " ++ product.name
-                , class <| sizeClass ++ " tw:object-cover tw:rounded-[16px] clickable-image"
+                , class <| sizeClass ++ " tw:object-cover tw:rounded-[8px] tw:lg:rounded-[16px] clickable-image"
                 ]
                 []
           )

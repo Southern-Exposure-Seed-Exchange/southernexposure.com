@@ -211,10 +211,13 @@ view authStatus ({ quantities } as form_) ({ items, charges } as cartDetails) =
         -- TODO: Add commas to format
         cartTable =
             div [ class "tw:grow" ]
-                [ div [] <|
+                [ div [ class "tw:flex tw:flex-col" ] <|
                     List.map
                         (\i ->
-                            productRow i
+                            div []
+                                [ productRowMobile i
+                                , productRowDesktop i
+                                ]
                         )
                         items
                 ]
@@ -261,7 +264,7 @@ view authStatus ({ quantities } as form_) ({ items, charges } as cartDetails) =
                 ]
 
         buttons =
-            div [ class "tw:w-[283px] tw:shrink-0" ]
+            div [ class "tw:w-full tw:lg:w-[283px] tw:shrink-0" ]
                 [ totalView
                 , viewIf (authStatus == unauthorized) <|
                     div [ class "tw:py-[10px]" ]
@@ -273,9 +276,63 @@ view authStatus ({ quantities } as form_) ({ items, charges } as cartDetails) =
                         ]
                 ]
 
-        productRow { id, product, variant, quantity, errors, warnings } =
-            div []
-                [ div [ class "tw:flex tw:py-[20px]" ]
+        binButton id product =
+            button
+                [ class "tw:p-[6px] tw:cursor-pointer tw:group"
+                , onClick <| Remove id
+                , Aria.label <| "Remove " ++ product.name ++ " From Cart"
+                ]
+                [ binSvg "tw:fill-[rgba(30,12,3,0.4)] tw:group-hover:fill-[rgba(214,34,70,1)]" ]
+
+        productRowMobile { id, product, variant, quantity, errors, warnings } =
+            div [ class "tw:block tw:lg:hidden tw:border-b tw:border-[rgba(30,12,3,0.06)] tw:py-[20px]" ]
+                [ div [ class "tw:flex tw:gap-[16px]" ]
+                    [ div [ class "tw:shrink-0" ]
+                        [ ProductView.productImageLinkView "tw:w-[84px] tw:h-[65px]" product (Just variant.id)
+                        ]
+                    , div [ class "tw:grow tw:flex tw:flex-col" ]
+                        [ a ([ class "tw:font-semibold" ] ++ (routeLinkAttributes <| ProductDetails product.slug <| Just variant.id))
+                            [ Product.nameWithLotSize product variant ]
+                        , ProductView.renderItemNumber (ProductView.getItemNumber product (Just variant))
+                        , div [ class "tw:flex tw:items-center tw:gap-[8px] tw:pt-[6px]" ]
+                            [ p [ class "tw:text-[20px] tw:leading-[28px] tw:font-semibold" ]
+                                [ text <| Format.cents <| centsMap ((*) quantity) <| variantPrice variant
+                                ]
+                            , if quantity > 1 then
+                                p [ class "tw:text-[12px] tw:leading-[16px] tw:opacity-50 tw:pt-[4px]" ]
+                                    [ text <|
+                                        "("
+                                            ++ (Format.cents <| variantPrice variant)
+                                            ++ " / pc"
+                                            ++ ")"
+                                    ]
+
+                              else
+                                p [] []
+                            ]
+                        ]
+                    ]
+                , viewIf (List.length errors > 0) <|
+                    div [ class "tw:py-[8px] text-danger font-weight-bold small" ]
+                        [ text <| String.join ", " (List.map showCartItemError errors) ]
+                , viewIf (List.length warnings > 0) <|
+                    div [ class "tw:py-[8px] text-warning font-weight-bold small" ]
+                        [ text <| String.join ", " (List.map showCartItemWarning warnings) ]
+                , div [ class "tw:flex tw:justify-between tw:pt-[20px]" ]
+                    [ div [ class "tw:flex tw:flex-col tw:items-start" ]
+                        [ ProductView.customNumberView ProductView.Checkout
+                            (Maybe.withDefault 1 <| Dict.get (fromCartItemId id) quantities)
+                            (SetFormQuantity id)
+                            (IncreaseFormQuantity id)
+                            (DecreaseFormQuantity id)
+                        ]
+                    , binButton id product
+                    ]
+                ]
+
+        productRowDesktop { id, product, variant, quantity, errors, warnings } =
+            div [ class "tw:hidden tw:lg:block tw:border-b tw:border-[rgba(30,12,3,0.06)] tw:py-[20px]" ]
+                [ div [ class "tw:flex" ]
                     [ div [ class "tw:shrink-0" ]
                         [ ProductView.productImageLinkView "tw:w-[169px] tw:h-[130px]" product (Just variant.id)
                         ]
@@ -304,12 +361,7 @@ view authStatus ({ quantities } as form_) ({ items, charges } as cartDetails) =
                                   else
                                     p [] []
                                 ]
-                            , button
-                                [ class "tw:p-[6px] tw:cursor-pointer tw:group"
-                                , onClick <| Remove id
-                                , Aria.label <| "Remove " ++ product.name ++ " From Cart"
-                                ]
-                                [ binSvg "tw:fill-[rgba(30,12,3,0.4)] tw:group-hover:fill-[rgba(214,34,70,1)]" ]
+                            , binButton id product
                             ]
                         ]
                     ]
@@ -368,7 +420,7 @@ view authStatus ({ quantities } as form_) ({ items, charges } as cartDetails) =
         , viewIf cartDetails.isDisabled <|
             div [ class "alert alert-danger static-page" ]
                 [ rawHtml cartDetails.disabledMessage ]
-        , form [ class "tw:pl-[16px] tw:flex tw:gap-[20px] tw:flex-col tw:lg:flex-row", onSubmit Submit ]
+        , form [ class "tw:pl-0 tw:lg:pl-[16px] tw:flex tw:gap-[20px] tw:flex-col tw:lg:flex-row", onSubmit Submit ]
             [ cartTable
             , buttons
             ]
