@@ -288,18 +288,6 @@ reverse route =
                         AllProducts ->
                             specialSearchUrl "all-products"
 
-                        AttributeSearch SeedAttribute.Organic ->
-                            specialSearchUrl "organic"
-
-                        AttributeSearch SeedAttribute.Heirloom ->
-                            specialSearchUrl "heirloom"
-
-                        AttributeSearch SeedAttribute.Regional ->
-                            specialSearchUrl "south-east"
-
-                        AttributeSearch SeedAttribute.SmallGrower ->
-                            specialSearchUrl "small-grower"
-
         PageDetails slug fragment ->
             if slug == "home" then
                 "/" ++ reverseFragment fragment
