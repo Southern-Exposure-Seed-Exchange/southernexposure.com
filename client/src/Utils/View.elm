@@ -118,7 +118,7 @@ selectImageFile =
 
 
 pageTitleView label =
-    h1 [ class "tw:pl-0 tw:lg:pl-[8px] tw:text-[32px]! tw:pb-[20px]" ] [ text label ]
+    h1 [ class "tw:pl-0 tw:lg:pl-[8px] tw:text-[24px]! tw:lg:text-[32px]! tw:pb-[20px]" ] [ text label ]
 
 
 pageTitleWithSubView label sub =

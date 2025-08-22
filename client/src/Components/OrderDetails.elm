@@ -5,9 +5,10 @@ module Components.OrderDetails exposing
     )
 
 import Components.Address.Address as Address
+import Components.Shared exposing (receiptProductMobileView, receiptTotalMobileView)
 import Data.Fields exposing (Cents(..), centsMap)
 import Data.Locations exposing (AddressLocations)
-import Data.PageData as PageData
+import Data.PageData as PageData exposing (OrderLineItem)
 import Data.Product as Product
 import Html exposing (..)
 import Html.Attributes exposing (class, colspan)
@@ -16,13 +17,25 @@ import Utils.Format as Format
 import Utils.View exposing (pageTitleWithSubView)
 
 
+
+-- Type
+
+
+type Tuple8 a b c d e f g h
+    = Tuple8 a b c d e f g h
+
+
+
+-- View
+
+
 view : Time.Zone -> Int -> AddressLocations -> PageData.OrderDetails -> List (Html msg)
 view zone orderId locations orderDetails =
     [ pageTitleWithSubView ("Order #" ++ String.fromInt orderId) (Format.date zone orderDetails.order.createdAt)
     , h6 [ class "tw:pl-0 tw:lg:pl-[8px] tw:pt-[8px]" ]
         [ text <| "Status: " ++ orderDetails.order.status
         ]
-    , div [ class "tw:pt-[20px] tw:pb-[86px] " ]
+    , div [ class "tw:pt-[20px] tw:pb-[40px] " ]
         [ div [ class "tw:grid tw:grid-cols-1 tw:lg:grid-cols-2 tw:gap-[20px]" ] <|
             [ div []
                 [ addressCard locations "Shipping Details" orderDetails.shippingAddress ]
@@ -78,10 +91,6 @@ deliveryCard deliveryData =
         ]
 
 
-type Tuple8 a b c d e f g h
-    = Tuple8 a b c d e f g h
-
-
 orderTable : PageData.OrderDetails -> Html msg
 orderTable orderDetails =
     div []
@@ -93,158 +102,47 @@ orderTable orderDetails =
 orderTableMobile : PageData.OrderDetails -> Html msg
 orderTableMobile ({ lineItems, products } as details) =
     let
-        productBlock product =
-            div []
-                [ h5 [] [ Product.nameWithLotSize product product ]
-                , div [ class "d-flex" ]
-                    [ span []
-                        [ text <| Format.cents product.price
-                        , text " x "
-                        , text <| String.fromInt product.quantity
-                        ]
-                    , span [ class "ml-auto font-weight-bold item-total" ]
-                        [ text <| Format.cents <| productTotal product
-                        ]
-                    ]
+        productBlock p =
+            div [ class "tw:py-[20px] tw:border-b tw:border-[rgba(30,12,3,0.06)]" ]
+                [ receiptProductMobileView
+                    { nameView = Product.nameWithLotSize p p
+                    , sku = p.sku
+                    , quantity = p.quantity
+                    , price = p.price
+                    }
                 ]
-
-        productTotal product =
-            centsMap ((*) product.quantity) product.price
 
         orderTotals =
             PageData.orderTotals details
 
-        subTotal =
-            orderTotals.subTotal
-
         (Tuple8 maybeShippingCharge maybeStoreCredit maybeMemberDiscount maybePriorityShipping maybeCouponDiscount maybeTaxLine refunds surcharges) =
             List.foldl
-                (\lineItem (Tuple8 maybeShipping maybeCredit maybeMember maybePriority maybeCoupon maybeTax rs ss) ->
-                    case lineItem.itemType of
-                        PageData.Shipping ->
-                            Tuple8 (Just lineItem)
-                                maybeCredit
-                                maybeMember
-                                maybePriority
-                                maybeCoupon
-                                maybeTax
-                                rs
-                                ss
-
-                        PageData.StoreCredit ->
-                            Tuple8 maybeShipping
-                                (Just { lineItem | amount = centsMap negate lineItem.amount })
-                                maybeMember
-                                maybePriority
-                                maybeCoupon
-                                maybeTax
-                                rs
-                                ss
-
-                        PageData.MemberDiscount ->
-                            Tuple8 maybeShipping
-                                maybeCredit
-                                (Just { lineItem | amount = centsMap negate lineItem.amount })
-                                maybePriority
-                                maybeCoupon
-                                maybeTax
-                                rs
-                                ss
-
-                        PageData.PriorityShipping ->
-                            Tuple8 maybeShipping
-                                maybeCredit
-                                maybeMember
-                                (Just lineItem)
-                                maybeCoupon
-                                maybeTax
-                                rs
-                                ss
-
-                        PageData.CouponDiscount ->
-                            Tuple8 maybeShipping
-                                maybeCredit
-                                maybeMember
-                                maybePriority
-                                (Just { lineItem | amount = centsMap negate lineItem.amount })
-                                maybeTax
-                                rs
-                                ss
-
-                        PageData.Surcharge ->
-                            Tuple8 maybeShipping
-                                maybeCredit
-                                maybeMember
-                                maybePriority
-                                maybeCoupon
-                                maybeTax
-                                rs
-                                (lineItem :: ss)
-
-                        PageData.Refund ->
-                            Tuple8 maybeShipping
-                                maybeCredit
-                                maybeMember
-                                maybePriority
-                                maybeCoupon
-                                maybeTax
-                                ({ lineItem | amount = centsMap negate lineItem.amount } :: rs)
-                                ss
-
-                        PageData.Tax ->
-                            Tuple8 maybeShipping
-                                maybeCredit
-                                maybeMember
-                                maybePriority
-                                maybeCoupon
-                                (Just lineItem)
-                                rs
-                                ss
-                )
+                combineLineItem
                 (Tuple8 Nothing Nothing Nothing Nothing Nothing Nothing [] [])
                 lineItems
 
-        tableFooter =
-            tfoot [] <|
-                [ footerRow "font-weight-bold" "Sub-Total" subTotal
-                , htmlOrBlank chargeRow maybeShippingCharge
-                , htmlOrBlank chargeRow maybePriorityShipping
-                ]
-                    ++ List.map chargeRow surcharges
-                    ++ [ htmlOrBlank chargeRow maybeTaxLine
-                       , htmlOrBlank chargeRow maybeStoreCredit
-                       , htmlOrBlank chargeRow maybeMemberDiscount
-                       , htmlOrBlank chargeRow maybeCouponDiscount
-                       ]
-                    ++ List.map chargeRow refunds
-                    ++ [ footerRow "font-weight-bold tw:bg-[rgba(167,215,197,0.2)]" "Total" total
-                       ]
-
-        total =
-            orderTotals.total
-
-        chargeRow { description, amount } =
-            footerRow "" description amount
-
-        footerRow rowClass description amount =
-            tr [ class rowClass ]
-                [ td [ class "text-right", colspan 3 ] [ text <| description ++ ":" ]
-                , td [ class "text-right" ] [ text <| Format.cents amount ]
-                ]
-
-        htmlOrBlank : ({ a | description : String, amount : Cents } -> Html msg) -> Maybe { a | description : String, amount : Cents } -> Html msg
-        htmlOrBlank f maybe =
-            case maybe of
-                Nothing ->
-                    text ""
-
-                Just a ->
-                    f a
+        footerView =
+            receiptTotalMobileView
+                { subTotal = orderTotals.subTotal
+                , total = orderTotals.total
+                , tax = maybeTaxLine
+                , maybeAppliedCredit = Maybe.map .amount maybeStoreCredit
+                , memberDiscount = maybeMemberDiscount
+                , couponDiscount = maybeCouponDiscount
+                , shippingMethod = maybeShippingCharge
+                , priorityShipping = maybePriorityShipping
+                , surcharges = surcharges
+                }
+                Nothing
     in
     div [ class "tw:block tw:lg:hidden" ]
-        [ div [ class "order-details-blocks d-sm-none" ] <|
+        [ div [ class "" ] <|
             List.map productBlock products
-                ++ [ table [ class "table table-striped table-sm" ] [ tableFooter ] ]
+        , div [ class "tw:pt-[20px]" ]
+            [ div [ class "" ]
+                [ footerView
+                ]
+            ]
         ]
 
 
@@ -270,88 +168,7 @@ orderTableDesktop ({ lineItems, products } as details) =
 
         (Tuple8 maybeShippingCharge maybeStoreCredit maybeMemberDiscount maybePriorityShipping maybeCouponDiscount maybeTaxLine refunds surcharges) =
             List.foldl
-                (\lineItem (Tuple8 maybeShipping maybeCredit maybeMember maybePriority maybeCoupon maybeTax rs ss) ->
-                    case lineItem.itemType of
-                        PageData.Shipping ->
-                            Tuple8 (Just lineItem)
-                                maybeCredit
-                                maybeMember
-                                maybePriority
-                                maybeCoupon
-                                maybeTax
-                                rs
-                                ss
-
-                        PageData.StoreCredit ->
-                            Tuple8 maybeShipping
-                                (Just { lineItem | amount = centsMap negate lineItem.amount })
-                                maybeMember
-                                maybePriority
-                                maybeCoupon
-                                maybeTax
-                                rs
-                                ss
-
-                        PageData.MemberDiscount ->
-                            Tuple8 maybeShipping
-                                maybeCredit
-                                (Just { lineItem | amount = centsMap negate lineItem.amount })
-                                maybePriority
-                                maybeCoupon
-                                maybeTax
-                                rs
-                                ss
-
-                        PageData.PriorityShipping ->
-                            Tuple8 maybeShipping
-                                maybeCredit
-                                maybeMember
-                                (Just lineItem)
-                                maybeCoupon
-                                maybeTax
-                                rs
-                                ss
-
-                        PageData.CouponDiscount ->
-                            Tuple8 maybeShipping
-                                maybeCredit
-                                maybeMember
-                                maybePriority
-                                (Just { lineItem | amount = centsMap negate lineItem.amount })
-                                maybeTax
-                                rs
-                                ss
-
-                        PageData.Surcharge ->
-                            Tuple8 maybeShipping
-                                maybeCredit
-                                maybeMember
-                                maybePriority
-                                maybeCoupon
-                                maybeTax
-                                rs
-                                (lineItem :: ss)
-
-                        PageData.Refund ->
-                            Tuple8 maybeShipping
-                                maybeCredit
-                                maybeMember
-                                maybePriority
-                                maybeCoupon
-                                maybeTax
-                                ({ lineItem | amount = centsMap negate lineItem.amount } :: rs)
-                                ss
-
-                        PageData.Tax ->
-                            Tuple8 maybeShipping
-                                maybeCredit
-                                maybeMember
-                                maybePriority
-                                maybeCoupon
-                                (Just lineItem)
-                                rs
-                                ss
-                )
+                combineLineItem
                 (Tuple8 Nothing Nothing Nothing Nothing Nothing Nothing [] [])
                 lineItems
 
@@ -406,3 +223,90 @@ orderTableDesktop ({ lineItems, products } as details) =
             , tableFooter
             ]
         ]
+
+
+combineLineItem :
+    OrderLineItem
+    -> Tuple8 (Maybe OrderLineItem) (Maybe OrderLineItem) (Maybe OrderLineItem) (Maybe OrderLineItem) (Maybe OrderLineItem) (Maybe OrderLineItem) (List OrderLineItem) (List OrderLineItem)
+    -> Tuple8 (Maybe OrderLineItem) (Maybe OrderLineItem) (Maybe OrderLineItem) (Maybe OrderLineItem) (Maybe OrderLineItem) (Maybe OrderLineItem) (List OrderLineItem) (List OrderLineItem)
+combineLineItem lineItem (Tuple8 maybeShipping maybeCredit maybeMember maybePriority maybeCoupon maybeTax rs ss) =
+    case lineItem.itemType of
+        PageData.Shipping ->
+            Tuple8 (Just lineItem)
+                maybeCredit
+                maybeMember
+                maybePriority
+                maybeCoupon
+                maybeTax
+                rs
+                ss
+
+        PageData.StoreCredit ->
+            Tuple8 maybeShipping
+                (Just { lineItem | amount = centsMap negate lineItem.amount })
+                maybeMember
+                maybePriority
+                maybeCoupon
+                maybeTax
+                rs
+                ss
+
+        PageData.MemberDiscount ->
+            Tuple8 maybeShipping
+                maybeCredit
+                (Just { lineItem | amount = centsMap negate lineItem.amount })
+                maybePriority
+                maybeCoupon
+                maybeTax
+                rs
+                ss
+
+        PageData.PriorityShipping ->
+            Tuple8 maybeShipping
+                maybeCredit
+                maybeMember
+                (Just lineItem)
+                maybeCoupon
+                maybeTax
+                rs
+                ss
+
+        PageData.CouponDiscount ->
+            Tuple8 maybeShipping
+                maybeCredit
+                maybeMember
+                maybePriority
+                (Just { lineItem | amount = centsMap negate lineItem.amount })
+                maybeTax
+                rs
+                ss
+
+        PageData.Surcharge ->
+            Tuple8 maybeShipping
+                maybeCredit
+                maybeMember
+                maybePriority
+                maybeCoupon
+                maybeTax
+                rs
+                (lineItem :: ss)
+
+        PageData.Refund ->
+            Tuple8 maybeShipping
+                maybeCredit
+                maybeMember
+                maybePriority
+                maybeCoupon
+                maybeTax
+                ({ lineItem | amount = centsMap negate lineItem.amount } :: rs)
+                ss
+
+        PageData.Tax ->
+            Tuple8 maybeShipping
+                maybeCredit
+                maybeMember
+                maybePriority
+                maybeCoupon
+                (Just lineItem)
+                rs
+                ss

@@ -785,7 +785,7 @@ staticPageView { name, slug, content } =
                 text ""
 
             else
-                h1 [ class "tw:pl-[8px] tw:pb-[32px]" ] [ text name ]
+                pageTitleView name
 
         html =
             rawHtml content
@@ -811,7 +811,7 @@ searchResultsView shared ({ query } as data) pagination addToCartForms products 
 
         searchDescription =
             if uniqueSearch == Nothing then
-                p [ class "tw:px-[16px] tw:pt-[14px]" ]
+                p [ class "tw:hidden tw:lg:block tw:lg:px-[16px] tw:pt-[14px]" ]
                     [ queryDescription
                     , filterDescriptions
                     ]
@@ -878,8 +878,8 @@ searchResultsView shared ({ query } as data) pagination addToCartForms products 
                 |> List.map (\( _, name ) -> b [] [ text name ])
                 |> List.intersperse (text ", ")
     in
-    [ h1 [ class "font-semibold! tw:text-[40px]! tw:px-[16px]!" ] [ text header ]
+    [ pageTitleView header
     , searchDescription
-    , div [ class "tw:pb-[40px]" ] []
+    , div [ class "tw:pb-0 tw:lg:pb-[40px]" ] []
     ]
         ++ ProductViews.listView shared (SearchResults data) pagination addToCartForms products

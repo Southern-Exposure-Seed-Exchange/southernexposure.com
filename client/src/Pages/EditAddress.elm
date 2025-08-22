@@ -353,7 +353,7 @@ view model locations { shippingAddresses, billingAddresses } =
                             "Billing addresses"
             in
             button
-                [ class <| selectedClass ++ " tw:py-[6px] tw:px-[8px]"
+                [ class <| selectedClass ++ " tw:py-[6px] tw:px-[8px] tw:font-semibold"
                 , onClick <| SetMobileTab tab
                 ]
                 [ span [] [ text label ] ]

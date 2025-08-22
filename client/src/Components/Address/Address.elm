@@ -412,17 +412,17 @@ horizontalForm { model, errors } locations =
             .state >> Maybe.map Locations.fromRegion
     in
     [ Api.getErrorHtml "" errors
-    , div [ class "tw:grid tw:grid-cols-2 tw:gap-[16px]" ]
+    , div [ class "tw:grid tw:grid-cols-1 tw:lg:grid-cols-2 tw:gap-[16px]" ]
         [ requiredField .firstName FirstName "First Name" "firstName" "text" "given-name"
         , requiredField .lastName LastName "Last Name" "lastName" "text" "family-name"
         ]
     , requiredField .street Street "Street Address" "addressOne" "text" "address-line1"
     , optionalField .addressTwo AddressTwo "Address Line 2" "addressTwo" "text" "address-line2"
-    , div [ class "tw:grid tw:grid-cols-2 tw:gap-[16px]" ]
+    , div [ class "tw:grid tw:grid-cols-1 tw:lg:grid-cols-2 tw:gap-[16px]" ]
         [ countrySelect
         , regionField
         ]
-    , div [ class "tw:grid tw:grid-cols-2 tw:gap-[16px]" ]
+    , div [ class "tw:grid tw:grid-cols-1 tw:lg:grid-cols-2 tw:gap-[16px]" ]
         [ requiredField .city City "City" "city" "text" "address-level2"
         , requiredField .zipCode ZipCode "Zip Code" "zipCode" "text" "postal-code"
         ]
