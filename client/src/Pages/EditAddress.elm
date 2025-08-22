@@ -17,6 +17,7 @@ import Data.User as User exposing (AuthStatus)
 import Dict exposing (Dict)
 import Html exposing (..)
 import Html.Attributes exposing (..)
+import Html.Attributes.Autocomplete exposing (DetailedCompletion(..))
 import Html.Events exposing (onCheck, onClick, onSubmit)
 import Json.Decode as Decode
 import RemoteData exposing (WebData)
@@ -28,10 +29,16 @@ import Utils.View exposing (pageTitleView)
 -- Model
 
 
+type MobileTab
+    = ShippingAddressTab
+    | BillingAddressTab
+
+
 type alias Form =
     { selectedAddress : Maybe AddressId
     , forms : Dict Int Address.Form
     , changeToDefault : Bool
+    , mobileTab : MobileTab
     }
 
 
@@ -40,6 +47,7 @@ initial =
     { selectedAddress = Nothing
     , forms = Dict.empty
     , changeToDefault = False
+    , mobileTab = ShippingAddressTab
     }
 
 
@@ -56,6 +64,7 @@ type Msg
     | DeleteResponse (WebData ())
     | Update
     | UpdateResponse AddressId (WebData (Result Api.FormErrors ()))
+    | SetMobileTab MobileTab
 
 
 update : Routing.Key -> Msg -> Form -> AuthStatus -> WebData PageData.AddressDetails -> ( Form, Cmd Msg )
@@ -135,6 +144,9 @@ update key msg model authStatus details =
 
                 _ ->
                     ( model, Cmd.none )
+
+        SetMobileTab value ->
+            { initial | mobileTab = value } |> noCommand
 
 
 selectAddress : AddressId -> Form -> List Address.Model -> Form
@@ -312,13 +324,64 @@ view model locations { shippingAddresses, billingAddresses } =
 
                 _ ->
                     True
+
+        shippingAddressForm =
+            addressSelect "Shipping Addresses" SelectShipping shippingAddresses
+
+        billingAddressForm =
+            addressSelect "Billing Addresses" SelectBilling billingAddresses
+
+        mobileTabItemView : MobileTab -> Html Msg
+        mobileTabItemView tab =
+            let
+                isSelected =
+                    tab == model.mobileTab
+
+                selectedClass =
+                    if isSelected then
+                        "tw:bg-white tw:rounded-[7px]!"
+
+                    else
+                        ""
+
+                label =
+                    case tab of
+                        ShippingAddressTab ->
+                            "Shipping addresses"
+
+                        BillingAddressTab ->
+                            "Billing addresses"
+            in
+            button
+                [ class <| selectedClass ++ " tw:py-[6px] tw:px-[8px]"
+                , onClick <| SetMobileTab tab
+                ]
+                [ span [] [ text label ] ]
+
+        mobileTabView =
+            div [ class "tw:bg-[rgba(30,12,3,0.06)] tw:p-[2px] tw:text-[13px] tw:leading-[16px] tw:grid tw:grid-cols-2 tw:rounded-[8px]" ]
+                [ mobileTabItemView ShippingAddressTab
+                , mobileTabItemView BillingAddressTab
+                ]
     in
     [ pageTitleView "Edit Addresses"
+    , div [ class "tw:pb-[20px] tw:block tw:lg:hidden" ]
+        [ mobileTabView
+        ]
     , Html.form [ onSubmit Update ]
-        [ div [ class "tw:grid tw:grid-cols-1 tw:lg:grid-cols-2 tw:px-[16px] tw:gap-[16px] tw:pb-[20px]" ]
-            [ addressSelect "Shipping Addresses" SelectShipping shippingAddresses
-            , addressSelect "Billing Addresses" SelectBilling billingAddresses
-            ]
+        [ case model.mobileTab of
+            ShippingAddressTab ->
+                div [ class "tw:grid tw:grid-cols-1 tw:lg:grid-cols-2 tw:px-0 tw:lg:px-[16px] tw:gap-[16px] tw:pb-[20px]" ]
+                    [ shippingAddressForm
+                    , div [ class "tw:hidden tw:lg:block" ]
+                        [ billingAddressForm
+                        ]
+                    ]
+
+            BillingAddressTab ->
+                div [ class "tw:grid tw:grid-cols-1 tw:lg:grid-cols-2 tw:px-0 tw:lg:px-[16px] tw:gap-[16px] tw:pb-[20px]" ]
+                    [ billingAddressForm
+                    ]
         , addressForm
         , defaultCheckbox
         , buttons
