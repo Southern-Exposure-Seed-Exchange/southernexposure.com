@@ -19,6 +19,7 @@ import Components.Aria as Aria
 import Components.Button as Button exposing (defaultButton)
 import Components.HorizontalForm exposing (genericErrorText)
 import Components.OrderDetails as OrderDetails
+import Components.Shared exposing (receiptProductMobileView, receiptTotalMobileView)
 import Components.Svg exposing (..)
 import Data.Api as Api
 import Data.Fields exposing (Cents(..), centsFromString, centsMap, centsMap2, imageToSrcSet, imgSrcFallback, lotSizeToString)
@@ -1875,23 +1876,12 @@ summaryTableMobile ({ items, charges } as checkoutDetails) creditString couponCo
                         , alt <| "Product Image for " ++ p.product.name
                         ]
                         []
-                    , div [ class "tw:grow" ]
-                        [ div []
-                            [ div [ class "font-weight-bold" ] [ Product.nameWithLotSize p.product p.variant ]
-                            , small [ class "text-muted" ]
-                                [ text <| "Item #" ++ p.product.baseSKU ++ p.variant.skuSuffix ]
-                            ]
-                        , div [ class "tw:pt-[6px] tw:flex tw:items-center" ]
-                            [ span [ class "tw:text-[18px] tw:leading-[28px] tw:font-semibold tw:grow" ]
-                                [ text <| Format.cents <| centsMap ((*) p.quantity) <| variantPrice p.variant ]
-                            , span [ class "tw:shrink-0 tw:opacity-80" ]
-                                [ text <|
-                                    (Format.cents <| variantPrice p.variant)
-                                        ++ " x "
-                                        ++ String.fromInt p.quantity
-                                ]
-                            ]
-                        ]
+                    , receiptProductMobileView
+                        { nameView = Product.nameWithLotSize p.product p.variant
+                        , sku = p.product.baseSKU ++ p.variant.skuSuffix
+                        , quantity = p.quantity
+                        , price = variantPrice p.variant
+                        }
                     ]
                 , viewIf (List.length p.errors > 0)
                     (div []
@@ -1915,88 +1905,22 @@ summaryTableMobile ({ items, charges } as checkoutDetails) creditString couponCo
                     ]
 
         tableFooterMobile =
-            div [ class "tw:py-[18px] tw:px-[16px] tw:rounded-[16px] tw:bg-[rgba(30,12,3,0.02)]" ] <|
-                [ subTotalRowMobile
-                , maybeChargeRow (Maybe.map .charge charges.shippingMethod)
-                , maybeChargeRow charges.priorityShipping
-                ]
-                    ++ List.map chargeRow charges.surcharges
-                    ++ [ taxRow
-                       , storeCreditRow
-                       , couponDiscountRow
-                       , totalRow
-                       ]
-
-        subTotalRowMobile =
-            if totals.subTotal /= totals.total then
-                footerRowMobile "Sub-Total" totals.subTotal "font-weight-bold"
-
-            else
-                text ""
-
-        taxRow =
-            if charges.tax.amount == Cents 0 then
-                text ""
-
-            else
-                chargeRow charges.tax
-
-        chargeRow { description, amount } =
-            footerRowMobile description amount ""
-
-        maybeChargeRow =
-            Maybe.map chargeRow >> Maybe.withDefault (text "")
-
-        storeCreditRow =
-            case maybeAppliedCredit of
-                Nothing ->
-                    text ""
-
-                Just (Cents 0) ->
-                    text ""
-
-                Just credit ->
-                    footerRowMobile "Store Credit" (centsMap negate credit) "tw:font-semibold tw:text-[rgba(77,170,154,1)]"
-
-        totalRow =
-            footerRowMobile "Total" finalTotal "font-weight-bold tw:text-[18px] tw:leading-[24px]"
+            receiptTotalMobileView
+                { subTotal = totals.subTotal
+                , total = finalTotal
+                , tax = Just charges.tax
+                , maybeAppliedCredit = Maybe.map (\amount -> centsMap negate amount) maybeAppliedCredit
+                , memberDiscount = Nothing
+                , couponDiscount = Maybe.map (\item -> { item | amount = centsMap negate item.amount }) charges.couponDiscount
+                , shippingMethod = Maybe.map .charge charges.shippingMethod
+                , priorityShipping = charges.priorityShipping
+                , surcharges = charges.surcharges
+                }
+                (Just RemoveCoupon)
 
         maybeAppliedCredit =
             centsFromString creditString
                 |> Maybe.map (limitStoreCredit checkoutDetails)
-
-        couponDiscountRow =
-            case charges.couponDiscount of
-                Nothing ->
-                    text ""
-
-                Just { description, amount } ->
-                    div [ class "checkout-coupon-line tw:flex tw:items-center tw:gap-[8px]" ]
-                        [ span [ class "tw:line-clamp-1" ] [ text <| description ++ "" ]
-                        , Button.view { defaultButton | label = "X", style = Button.Outline, type_ = Button.TriggerMsg RemoveCoupon }
-                        , div [ class "tw:grow" ] []
-                        , div [ class "tw:whitespace-nowrap text-right tw:font-semibold tw:text-[rgba(77,170,154,1)]" ]
-                            [ text <| Format.cents <| centsMap negate amount ]
-                        ]
-
-        footerRowMobile content amount rowClass =
-            div [ class <| "tw:flex tw:flex-gap-[16px] tw:py-[10px] " ++ rowClass ]
-                [ div [ class "" ] [ text <| content ++ ":" ]
-                , div [ class "tw:grow" ] []
-                , div [ class "" ] [ text <| Format.cents amount ]
-                ]
-
-        -- Similar to footerRow, but more customizable with the left cell split
-        -- in half.
-        splitFooterRow rowClass rightClass content amount splitContent =
-            tr [ class rowClass ]
-                [ td [ colspan 2 ]
-                    [ splitContent ]
-                , td [ colspan 2, class rightClass ]
-                    [ text <| content ++ ":" ]
-                , td [ class rightClass ]
-                    [ text <| Format.cents amount ]
-                ]
 
         totals =
             PageData.cartTotals checkoutDetails
