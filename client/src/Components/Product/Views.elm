@@ -30,7 +30,6 @@ import Html.Extra exposing (viewIfLazy)
 import Html.Keyed as Keyed
 import Json.Decode as Decode
 import Paginate exposing (Paginated)
-import RemoteData
 import Utils.Format as Format
 import Utils.View exposing (htmlOrBlank, icon, numericInput, onIntInput, rawHtml, routeLinkAttributes)
 
@@ -303,7 +302,7 @@ detailFormView shared { maybeSelectedVariant, maybeSelectedVariantId, quantity, 
                             ]
                     )
     in
-    form formAttributes
+    div formAttributes
         [ div [ class "tw:pb-[16px]" ]
             [ productAttrView shared key selectedItemNumber maybeSeedAttribute
             ]
@@ -354,7 +353,7 @@ cardFormView shared key { maybeSelectedVariant, maybeSelectedVariantId, quantity
         formAttributes =
             (::) (class "add-to-cart-form tw:flex tw:flex-col tw:grow") <| []
     in
-    form formAttributes
+    div formAttributes
         [ div [ class "tw:pt-[12px] " ] [ productAttrView shared key selectedItemNumber maybeSeedAttribute ]
         , outOfStockView "tw:pt-[12px]" maybeSelectedVariant
         , limitedAvailabilityView shared key "tw:pt-[12px]" maybeSelectedVariant

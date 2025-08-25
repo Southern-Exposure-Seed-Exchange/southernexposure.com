@@ -59,7 +59,7 @@ type alias Model =
     , editAddressForm : EditAddress.Form
     , resetPasswordForm : ResetPassword.Form
     , productDetailsLightbox : Gallery.Model ImageData
-    , editCartForm : Cart.Form
+    , editCartForm : Cart.Model
     , quickOrderForms : QuickOrder.Forms
     , checkoutForm : Checkout.Form
     , newCategoryForm : CategoryAdmin.NewForm

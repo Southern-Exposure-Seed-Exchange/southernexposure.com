@@ -19,6 +19,8 @@ type alias Model =
     , requestStatus : WebData (Result Api.FormErrors ())
     , manualInput : Bool
     , originalAmount : Maybe Int
+    , detailErrors : List PageData.CartItemError
+    , detailWarnings : List PageData.CartItemWarning
     }
 
 
@@ -29,6 +31,8 @@ init =
     , requestStatus = RemoteData.NotAsked
     , manualInput = False
     , originalAmount = Nothing
+    , detailErrors = []
+    , detailWarnings = []
     }
 
 

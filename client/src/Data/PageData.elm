@@ -87,6 +87,8 @@ module Data.PageData exposing
     , encodeCartItemWarning
     , getAmountBaseOnVariant
     , getCartIdBaseOnVariant
+    , getErrorBaseOnVariant
+    , getWarningBaseOnVariant
     , initial
     , isFreeCheckout
     , lineItemDecoder
@@ -382,6 +384,24 @@ getAmountBaseOnVariant variantId cart =
         |> List.head
         |> Maybe.map .quantity
         |> Maybe.withDefault 0
+
+
+getWarningBaseOnVariant : ProductVariantId -> CartDetails -> List CartItemWarning
+getWarningBaseOnVariant variantId cart =
+    cart.items
+        |> List.filter (\i -> i.variant.id == variantId)
+        |> List.head
+        |> Maybe.map .warnings
+        |> Maybe.withDefault []
+
+
+getErrorBaseOnVariant : ProductVariantId -> CartDetails -> List CartItemError
+getErrorBaseOnVariant variantId cart =
+    cart.items
+        |> List.filter (\i -> i.variant.id == variantId)
+        |> List.head
+        |> Maybe.map .errors
+        |> Maybe.withDefault []
 
 
 getCartIdBaseOnVariant : ProductVariantId -> CartDetails -> Maybe CartItemId

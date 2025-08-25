@@ -56,7 +56,6 @@ view route =
                         ]
                     , staticPageLink "contact-us" "Contact Us"
                     , staticPageLink "fundraisers" "Fundraisers"
-                    , specialSearchLink identity "All Products"
                     ]
                 ]
 

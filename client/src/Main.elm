@@ -1021,27 +1021,32 @@ update msg ({ pageData, key } as model) =
 
         EditCartMsg subMsg ->
             let
-                updatedPageData =
-                    Maybe.map RemoteData.Success
-                        >> Maybe.withDefault pageData.cartDetails
-                        >> (\cd -> { pageData | cartDetails = cd })
+                modelPageData =
+                    model.pageData
 
-                updatedForm form =
-                    Maybe.map Cart.fromCartDetails
-                        >> Maybe.withDefault form
+                cartDetails =
+                    model.pageData.cartDetails
+                        |> RemoteData.withDefault PageData.blankCartDetails
+
+                ( form, maybeDetails, cmd ) =
+                    Cart.update model.shared subMsg model.editCartForm cartDetails
             in
-            model.pageData.cartDetails
-                |> RemoteData.withDefault PageData.blankCartDetails
-                |> Cart.update subMsg model.shared.currentUser model.shared.maybeSessionToken model.editCartForm
-                |> (\( form, maybeDetails, cmd ) ->
-                        ( { model
-                            | pageData = updatedPageData maybeDetails
-                            , editCartForm = updatedForm form maybeDetails
-                          }
-                        , Cmd.map EditCartMsg cmd
-                        )
-                            |> updateAndCommand (updateCartItemCountFromDetails maybeDetails)
-                   )
+            ( { model
+                | pageData =
+                    { modelPageData
+                        | cartDetails =
+                            case maybeDetails of
+                                Just c ->
+                                    RemoteData.Success c
+
+                                Nothing ->
+                                    model.pageData.cartDetails
+                    }
+                , editCartForm = form
+              }
+            , Cmd.map EditCartMsg cmd
+            )
+                |> updateAndCommand (updateCartItemCountFromDetails maybeDetails)
 
         QuickOrderMsg subMsg ->
             QuickOrder.update subMsg model.quickOrderForms model.shared.currentUser model.shared.maybeSessionToken

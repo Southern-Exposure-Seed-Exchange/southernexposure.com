@@ -9,7 +9,7 @@ import Components.Svg exposing (menuBurgerSvg)
 import Data.Category exposing (CategoryId(..))
 import Data.Msg exposing (Msg(..))
 import Data.Routing.Routing as Routing exposing (AdminRoute(..), Route(..), reverse)
-import Data.Search as Search
+import Data.Search as Search exposing (UniqueSearch(..))
 import Data.SiteUI exposing (NavigationData)
 import Data.User exposing (AuthStatus(..))
 import Dict
@@ -133,6 +133,24 @@ view route authStatus navigationData activeCategoryIds searchData cartItemCount 
                     [ text name ]
                 ]
 
+        allProductLink =
+            let
+                destination =
+                    SearchResults Search.initial Pagination.default
+
+                class_ =
+                    if route == destination then
+                        "nav-item active"
+
+                    else
+                        "nav-item"
+            in
+            li
+                [ class class_ ]
+                [ a (class "nav-link" :: routeLinkAttributes destination)
+                    [ text "All Products" ]
+                ]
+
         activeClass category =
             if List.member category.id activeCategoryIds then
                 " active "
@@ -173,7 +191,7 @@ view route authStatus navigationData activeCategoryIds searchData cartItemCount 
                         ]
                     ]
                 ]
-            , Navbar.view navigationData rootCategory mobileOnlyItems
+            , Navbar.view navigationData rootCategory mobileOnlyItems allProductLink
             ]
         ]
 

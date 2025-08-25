@@ -12,6 +12,7 @@ import Dict exposing (get)
 import Html exposing (..)
 import Html.Attributes exposing (..)
 import Html.Events exposing (onClick)
+import Html.Extra exposing (viewIf)
 import RemoteData
 import Utils.View exposing (icon)
 
@@ -46,7 +47,15 @@ update shared msg model =
                             )
 
                 _ ->
-                    ( { model | requestStatus = toUnitResponse response }, Cmd.none )
+                    ( { model | requestStatus = toUnitResponse response }
+                    , case shared.currentUser of
+                        User.Authorized _ ->
+                            getCartDetails (\res -> UpdateAmountBaseOnCartDetail vId 0 "" (RemoteData.map (\c -> Ok c) res))
+
+                        User.Anonymous ->
+                            getAnonymousCartDetails shared.maybeSessionToken
+                                (\res -> UpdateAmountBaseOnCartDetail vId 0 "" (RemoteData.map (\c -> Ok c) res))
+                    )
 
         TriggerMinus vId ->
             let
@@ -96,12 +105,36 @@ update shared msg model =
                     let
                         newAmount =
                             PageData.getAmountBaseOnVariant vId cartDetails
+
+                        errors =
+                            PageData.getErrorBaseOnVariant vId cartDetails
+
+                        warnings =
+                            PageData.getWarningBaseOnVariant vId cartDetails
+
+                        outOfStockError =
+                            errors
+                                |> List.filterMap
+                                    (\e ->
+                                        case e of
+                                            PageData.OutOfStockError i _ ->
+                                                Just i
+
+                                            _ ->
+                                                Nothing
+                                    )
+                                |> List.head
                     in
                     ( { model
                         | amount = newAmount
-                        , requestStatus = RemoteData.Success <| Ok ()
-                        , manualInput = False
-                        , originalAmount = Nothing
+                        , detailWarnings = warnings
+                        , detailErrors = errors
+                        , requestStatus =
+                            if model.requestStatus == RemoteData.Loading then
+                                RemoteData.Success <| Ok ()
+
+                            else
+                                model.requestStatus
                         , clickStatus =
                             if newAmount == 0 then
                                 False
@@ -109,6 +142,22 @@ update shared msg model =
                             else
                                 True
                       }
+                        |> (\m ->
+                                -- When there is an out of stock error, force the amt to the available amt
+                                case outOfStockError of
+                                    Just availableAmt ->
+                                        { m
+                                            | manualInput = True
+                                            , originalAmount = Just m.amount
+                                            , amount = availableAmt
+                                        }
+
+                                    Nothing ->
+                                        { m
+                                            | manualInput = False
+                                            , originalAmount = Nothing
+                                        }
+                           )
                     , Cmd.none
                     )
 
@@ -307,26 +356,19 @@ view _ vId model =
             ]
 
 
-statusView : Model -> Html Msg
-statusView model =
+getRequestError model =
     case model.requestStatus of
         RemoteData.NotAsked ->
-            text ""
+            ( text "", False )
 
         RemoteData.Loading ->
-            div [ class "tw:py-[8px] text-warning font-weight-bold small" ]
-                [ icon "spinner fa-spin mr-1"
-                , text "Adding to Cart"
-                ]
+            ( text "", False )
 
         RemoteData.Success (Ok _) ->
-            div [ class "tw:py-[8px] tw:text-[rgb(77,170,154)] font-weight-bold small" ]
-                [ icon "check-circle mr-1"
-                , text "Added to Cart!"
-                ]
+            ( text "", False )
 
         RemoteData.Success (Err errors) ->
-            div [ class "tw:py-[8px] text-danger font-weight-bold small" ]
+            ( div [ class "tw:py-[8px] text-danger font-weight-bold small" ]
                 [ icon "times mr-1"
                 , text "Error Adding To Cart: "
                 , br [] []
@@ -343,9 +385,33 @@ statusView model =
                     Nothing ->
                         text ""
                 ]
+            , True
+            )
 
         RemoteData.Failure _ ->
-            div [ class "tw:py-[8px] text-danger font-weight-bold small" ]
+            ( div [ class "tw:py-[8px] text-danger font-weight-bold small" ]
                 [ icon "times mr-1"
                 , text "Error Adding To Cart!"
                 ]
+            , True
+            )
+
+
+statusView : Model -> Html Msg
+statusView model =
+    let
+        ( requestErrorView, showRequestError ) =
+            getRequestError model
+    in
+    div []
+        [ if showRequestError then
+            requestErrorView
+
+          else
+            viewIf (List.length model.detailErrors > 0) <|
+                div [ class "tw:py-[8px] text-danger font-weight-bold small" ]
+                    [ text <| String.join ", " (List.map PageData.showCartItemError model.detailErrors) ]
+        , viewIf (List.length model.detailWarnings > 0) <|
+            div [ class "tw:py-[8px] text-warning font-weight-bold small" ]
+                [ text <| String.join ", " (List.map PageData.showCartItemWarning model.detailWarnings) ]
+        ]

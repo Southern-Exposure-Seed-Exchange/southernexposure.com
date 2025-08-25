@@ -11,6 +11,10 @@
   --breakpoint-2xl: 96rem;
 }
 
+textarea:focus, input:focus{
+    outline: none;
+}
+
 .static-page a {
   @apply tw:text-[rgba(52,195,171,1)] tw:hover:text-[rgba(52,195,171,1)] tw:hover:underline;
 }
