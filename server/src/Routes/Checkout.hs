@@ -48,9 +48,11 @@ import Helcim.API.Types.Payment (CardData(..), TransactionResponse(..), Purchase
 import Helcim.Utils (addressToHelcimAddress)
 import Models
 import Models.Fields
+import Postgrid (AddressVerificationResult(..), verifyAddressData)
+import Postgrid.API.Types (VerifyStructuredAddressErrors)
 import Server
 import Routes.CommonData
-    ( CartItemData(..), CartInventoryCheckResult(..), CartInventoryNotifications(..), checkNewCartInventoryNotifications
+    ( CartItemData(..), CartInventoryNotifications(..), getCartInventoryNotifications, getUnseenCartInventoryNotifications
     , CartCharges(..), CartCharge(..), getCartItems, getCharges, AddressData(..), toAddressData
     , fromAddressData, ShippingCharge(..), VariantData(..), getVariantPrice
     , OrderDetails(..), toCheckoutOrder, getCheckoutProducts, CheckoutProduct, toDeliveryData
@@ -445,6 +447,7 @@ data PlaceOrderError
     | HelcimError HelcimError
     | HelcimPaymentDeclined
     | ItemsOutOfStock
+    | AddressVerificationAPIFailed
     deriving (Show, Typeable)
 
 instance Exception PlaceOrderError
@@ -509,7 +512,8 @@ withPlaceOrderErrors shippingAddress =
             V.singleError "Your payment was declined. Please try again or contact us for help."
         ItemsOutOfStock ->
             V.singleError "Some items in your cart are out of stock. Please remove them and try again."
-
+        AddressVerificationAPIFailed ->
+            V.singleError "There was an error verifying your address, please try again later."
 
 
 data CustomerAddress
@@ -528,6 +532,84 @@ instance FromJSON CustomerAddress where
               parseNew =
                 fmap NewAddress . parseJSON
 
+verifyCustomerAddress :: CustomerAddress -> AddressType -> AppSQL AddressVerificationResult
+verifyCustomerAddress addr addrType = case addr of
+    NewAddress a -> lift $ verifyAddressData a addrType >>= \case
+        Left _ -> throwIO AddressVerificationAPIFailed
+        Right r -> return r
+    ExistingAddress addrId _ -> do
+        maybeAddr <- getEntity addrId
+        res <- case maybeAddr of
+            Just a -> if addressVerified (entityVal a)
+                then return $ Right AddressVerifiedSuccessfully
+                else lift $ verifyAddressData (toAddressData a) addrType
+            Nothing -> throwIO $ AddressNotFound addrType
+        case res of
+            Left _ -> throwIO AddressVerificationAPIFailed
+            Right r -> do
+                case r of
+                    AddressVerifiedSuccessfully -> do
+                        update addrId [AddressVerified =. True]
+                    _ -> return ()
+                return r
+
+
+data CheckoutResult a
+    = CheckoutSuccess a
+    | CheckoutValidationErrors [CheckoutValidationError]
+
+data CheckoutValidationError
+    = ShippingAddressVerificationFailed VerifyStructuredAddressErrors
+    | NewCartInventoryNotifications
+    deriving (Eq, Show)
+
+instance ToJSON CheckoutValidationError where
+    toJSON (ShippingAddressVerificationFailed errors) =
+        object
+            [ "type" .= ("shippingAddressVerificationFailed" :: T.Text)
+            , "errors" .= errors
+            ]
+    toJSON NewCartInventoryNotifications =
+        object
+            [ "type" .= ("newCartInventoryNotifications" :: T.Text)
+            ]
+
+instance ToJSON a => ToJSON (CheckoutResult a) where
+    toJSON (CheckoutSuccess a) = object
+        [ "status" .= ("ok" :: T.Text)
+        , "result" .= a
+        ]
+    toJSON (CheckoutValidationErrors errors) = object
+        [ "status" .= ("error" :: T.Text)
+        , "errors" .= errors
+        ]
+
+hasNewCartInventoryNotifications
+    :: CartInventoryNotifications -> CartId
+    -> AppSQL Bool
+hasNewCartInventoryNotifications seenWarnings cartId = do
+    currentWarnings <- getCartInventoryNotifications cartId
+    let unseenWarnings = getUnseenCartInventoryNotifications seenWarnings currentWarnings
+    if M.null (cinWarnings unseenWarnings) && M.null (cinErrors unseenWarnings)
+        then return False
+        else return True
+
+checkCartAndShippingAddress
+    :: CartInventoryNotifications -> CartId -> CustomerAddress -> AppSQL a
+    -> AppSQL (CheckoutResult a)
+checkCartAndShippingAddress cartNotifications cartId shippingAddress action = do
+    hasCartNotification <- hasNewCartInventoryNotifications cartNotifications cartId
+    shippingAddressVerification <- verifyCustomerAddress shippingAddress Shipping
+    case (hasCartNotification, shippingAddressVerification) of
+        (False, AddressVerifiedSuccessfully) ->
+            CheckoutSuccess <$> action
+        _ ->
+            let validationErrors = ([NewCartInventoryNotifications | hasCartNotification])
+                    ++ (case shippingAddressVerification of
+                        AddressVerifiedSuccessfully -> []
+                        AddressCorrected _ errs -> [ShippingAddressVerificationFailed errs]
+                        AddressVerificationFailed errs -> [ShippingAddressVerificationFailed errs])
+            in return $ CheckoutValidationErrors validationErrors
 
 data CustomerPlaceOrderParameters =
     CustomerPlaceOrderParameters
@@ -613,7 +695,7 @@ type CustomerPlaceOrderRoute =
     :> Header "X-Real-IP" T.Text
     :> AuthProtect "cookie-auth"
     :> ReqBody '[JSON] CustomerPlaceOrderParameters
-    :> Post '[JSON] (Cookied (CartInventoryCheckResult PlaceOrderData))
+    :> Post '[JSON] (Cookied (CheckoutResult PlaceOrderData))
 
 
 -- | Place an Order using a Customer's Cart.
@@ -623,7 +705,7 @@ type CustomerPlaceOrderRoute =
 -- the Stripe Customer.
 customerPlaceOrderRoute
     :: SockAddr -> Maybe T.Text -> Maybe T.Text -> WrappedAuthToken -> CustomerPlaceOrderParameters
-    -> App (Cookied (CartInventoryCheckResult PlaceOrderData))
+    -> App (Cookied (CheckoutResult PlaceOrderData))
 customerPlaceOrderRoute remoteHost forwardedFor realIP = validateCookieAndParameters $ \ce@(Entity customerId customer) parameters -> do
     let shippingParameter = cpopShippingAddress parameters
         maybeHelcimData = cpopHelcimData parameters
@@ -631,7 +713,7 @@ customerPlaceOrderRoute remoteHost forwardedFor realIP = validateCookieAndParame
     orderCreationRes <- runDB $ do
         (Entity cartId _) <- getBy (UniqueCustomerCart $ Just customerId)
             >>= maybe (throwIO CartNotFound) return
-        checkNewCartInventoryNotifications (cpopCartInventoryNotifications parameters) cartId $ withPlaceOrderErrors shippingParameter $ do
+        checkCartAndShippingAddress (cpopCartInventoryNotifications parameters) cartId shippingParameter $ withPlaceOrderErrors shippingParameter $ do
             (maybeBillingAddress, shippingAddress, order@(Entity orderId _), preTaxTotal, appliedCredit) <-
                 createAddressesAndOrder ce cartId shippingParameter (cpopBillingAddress parameters)
                     (cpopStoreCredit parameters) (cpopPriorityShipping parameters)
@@ -655,18 +737,18 @@ customerPlaceOrderRoute remoteHost forwardedFor realIP = validateCookieAndParame
             reduceQuantities orderId
             return orderId
     case orderCreationRes of
-        NoNewCartInventoryNotifications orderId -> do
+        CheckoutSuccess orderId -> do
             runDB $ enqueuePostOrderTasks orderId
             (orderLines, products) <- runDB $ (,)
                 <$> selectList [OrderLineItemOrderId ==. orderId] []
                 <*> getCheckoutProducts orderId
-            return $ NoNewCartInventoryNotifications $ PlaceOrderData
+            return $ CheckoutSuccess $ PlaceOrderData
                 { podOrderId = orderId
                 , podLines = orderLines
                 , podProducts = products
                 }
-        NewCartInventoryNotifications ->
-            return NewCartInventoryNotifications
+        CheckoutValidationErrors errs ->
+            return $ CheckoutValidationErrors errs
     where
           createAddressesAndOrder
             :: Entity Customer -> CartId -> CustomerAddress -> Maybe CustomerAddress
@@ -694,7 +776,7 @@ customerPlaceOrderRoute remoteHost forwardedFor realIP = validateCookieAndParame
                         insert_ (address { addressIsDefault = True, addressType = addrType })
                 return $ Entity addrId address
             NewAddress ca -> do
-                let newAddress = fromAddressData addrType customerId ca
+                let newAddress = (fromAddressData addrType customerId ca) { addressVerified = True }
                 when (addressIsDefault newAddress)
                     $ updateWhere
                         [ AddressType ==. addrType
@@ -778,12 +860,12 @@ type AnonymousPlaceOrderRoute =
     :> Header "X-Forwarded-For" T.Text
     :> Header "X-Real-IP" T.Text
     :> ReqBody '[JSON] AnonymousPlaceOrderParameters
-    :> Post '[JSON] (CartInventoryCheckResult AnonymousPlaceOrderData)
+    :> Post '[JSON] (CheckoutResult AnonymousPlaceOrderData)
 
 -- | Place an Order using an Anonymous Cart.
 --
 -- A new Customer & Order is created & the Customer is charged.
-anonymousPlaceOrderRoute :: SockAddr -> Maybe T.Text -> Maybe T.Text -> AnonymousPlaceOrderParameters -> App (CartInventoryCheckResult AnonymousPlaceOrderData)
+anonymousPlaceOrderRoute :: SockAddr -> Maybe T.Text -> Maybe T.Text -> AnonymousPlaceOrderParameters -> App (CheckoutResult AnonymousPlaceOrderData)
 anonymousPlaceOrderRoute remoteHost forwardedFor realIP = validate >=> \parameters -> do
     let shippingParam = apopShippingAddress parameters
         billingParam = apopBillingAddress parameters
@@ -791,10 +873,10 @@ anonymousPlaceOrderRoute remoteHost forwardedFor realIP = validate >=> \paramete
     orderCreationRes <- runDB $ do
         (Entity cartId _) <- getBy (UniqueAnonymousCart $ Just $ apopCartToken parameters)
             >>= maybe (throwIO CartNotFound) return
-        checkNewCartInventoryNotifications (apopCartInventoryNotifications parameters) cartId $ withPlaceOrderErrors (NewAddress shippingParam) $ do
+        checkCartAndShippingAddress (apopCartInventoryNotifications parameters) cartId (NewAddress shippingParam) $ withPlaceOrderErrors (NewAddress shippingParam) $ do
             Entity customerId customer <- createAnonymousCustomer parameters
-            let shippingAddress = fromAddressData Shipping customerId
-                    shippingParam
+            let shippingAddress = (fromAddressData Shipping customerId shippingParam)
+                    { addressVerified = True }
                 maybeBillingAddress = fromAddressData Billing customerId
                     <$> billingParam
 
@@ -838,11 +920,11 @@ anonymousPlaceOrderRoute remoteHost forwardedFor realIP = validate >=> \paramete
                     }
                 )
     case orderCreationRes of
-        NoNewCartInventoryNotifications (orderId, orderData) -> do
+        CheckoutSuccess (orderId, orderData) -> do
             runDB $ enqueuePostOrderTasks orderId
-            pure $ NoNewCartInventoryNotifications orderData
-        NewCartInventoryNotifications ->
-            pure NewCartInventoryNotifications
+            pure $ CheckoutSuccess orderData
+        CheckoutValidationErrors errs ->
+            return $ CheckoutValidationErrors errs
     where
         createAnonymousCustomer parameters = do
             let email = apopEmail parameters
@@ -1383,13 +1465,16 @@ getOrderAndAddress customerId orderId =
 
 -- CHECKOUT TOKEN
 
-newtype CheckoutTokenParameters = CheckoutTokenParameters
-    { ctpCartInventoryNotifications :: CartInventoryNotifications }
+data CheckoutTokenParameters = CheckoutTokenParameters
+    { ctpCartInventoryNotifications :: CartInventoryNotifications
+    , ctpShippingAddress :: CustomerAddress
+    }
 
 instance FromJSON CheckoutTokenParameters where
     parseJSON = withObject "CheckoutTokenParameters" $ \v ->
         CheckoutTokenParameters
             <$> v .: "cartInventoryNotifications"
+            <*> v .: "shippingAddress"
 
 newtype CheckoutTokenData = CheckoutTokenData
     { ctdToken :: CheckoutToken }
@@ -1403,20 +1488,21 @@ instance ToJSON CheckoutTokenData where
 type CheckoutTokenRoute =
     AuthProtect "cookie-auth" :>
     ReqBody '[JSON] CheckoutTokenParameters :>
-    Post '[JSON] (Cookied (CartInventoryCheckResult CheckoutTokenData))
+    Post '[JSON] (Cookied (CheckoutResult CheckoutTokenData))
 
 getCheckoutTokenRoute
     :: WrappedAuthToken -> CheckoutTokenParameters
-    -> App (Cookied (CartInventoryCheckResult CheckoutTokenData))
+    -> App (Cookied (CheckoutResult CheckoutTokenData))
 getCheckoutTokenRoute token CheckoutTokenParameters {..} = withValidatedCookie token $ \(Entity customerId customer) -> runDB $ do
     (Entity cartId _) <- getBy (UniqueCustomerCart $ Just customerId)
         >>= maybe (throwIO CartNotFound) return
-    checkNewCartInventoryNotifications ctpCartInventoryNotifications cartId $
+    checkCartAndShippingAddress ctpCartInventoryNotifications cartId ctpShippingAddress $
         lift $ getCheckoutToken (customerHelcimCustomerId customer)
 
 data AnonymousCheckoutTokenParameters = AnonymousCheckoutTokenParameters
     { actpCartToken :: T.Text
     , actpCartInventoryNotifications :: CartInventoryNotifications
+    , actpShippingAddress :: AddressData
     }
 
 instance FromJSON AnonymousCheckoutTokenParameters where
@@ -1424,17 +1510,17 @@ instance FromJSON AnonymousCheckoutTokenParameters where
         AnonymousCheckoutTokenParameters
             <$> v .: "sessionToken"
             <*> v .: "cartInventoryNotifications"
-
+            <*> v .: "shippingAddress"
 
 type AnonymousCheckoutTokenRoute =
     ReqBody '[JSON] AnonymousCheckoutTokenParameters :>
-    Post '[JSON] (CartInventoryCheckResult CheckoutTokenData)
+    Post '[JSON] (CheckoutResult CheckoutTokenData)
 
-anonymousGetCheckoutTokenRoute :: AnonymousCheckoutTokenParameters -> App (CartInventoryCheckResult CheckoutTokenData)
+anonymousGetCheckoutTokenRoute :: AnonymousCheckoutTokenParameters -> App (CheckoutResult CheckoutTokenData)
 anonymousGetCheckoutTokenRoute AnonymousCheckoutTokenParameters {..} = runDB $ do
     (Entity cartId _) <- getBy (UniqueAnonymousCart $ Just actpCartToken)
         >>= maybe (throwIO CartNotFound) return
-    checkNewCartInventoryNotifications actpCartInventoryNotifications cartId $
+    checkCartAndShippingAddress actpCartInventoryNotifications cartId (NewAddress actpShippingAddress) $
         lift $ getCheckoutToken Nothing
 
 getCheckoutToken :: Maybe Helcim.CustomerId -> App CheckoutTokenData

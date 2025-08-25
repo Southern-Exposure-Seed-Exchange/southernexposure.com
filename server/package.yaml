@@ -71,6 +71,7 @@ dependencies:
     - http-types
     - immortal-queue
     - iso3166-country-codes
+    - lrucaching
     - markdown
     - mime-mail
     - monad-logger
@@ -125,6 +126,8 @@ library:
         - Models
         - Models.Fields
         - Models.PersistJSON
+        - Postgrid.API
+        - Postgrid.Cache
         - Routes.Admin.ShippingMethods
         - Routes.CommonData
         - Routes.StoneEdge

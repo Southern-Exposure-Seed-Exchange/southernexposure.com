@@ -208,6 +208,7 @@ Address
     customerId CustomerId
     isActive Bool
     isDefault Bool
+    verified Bool default=false
     deriving Show
 
 
@@ -742,5 +743,9 @@ migrations =
     , 3 ~> 4 :=
         -- Add 'inventory_policy' to 'ProductVariant'
         [ AddColumn "product_variant" (Column "inventory_policy" SqlString [NotNull, Default $ toPersistValue AllowBackorder]) (Just $ toPersistValue AllowBackorder)
+        ]
+    , 4 ~> 5 :=
+        -- Add 'verified' to 'Address'
+        [ AddColumn "address" (Column "verified" SqlBool [NotNull, Default $ toPersistValue False]) (Just $ toPersistValue False)
         ]
     ]
