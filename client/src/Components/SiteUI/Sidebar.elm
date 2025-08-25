@@ -3,11 +3,10 @@ module Components.SiteUI.Sidebar exposing (view)
 import Components.Aria as Aria
 import Components.Button as Button exposing (defaultButton)
 import Components.Form as Form
-import Components.Products.Pagination as Pagination
+import Components.Pagination as Pagination
 import Data.Msg exposing (Msg)
-import Data.Routing.Routing as Routing exposing (Route(..))
+import Data.Routing.Routing exposing (Route(..))
 import Data.Search as Search
-import Data.SeedAttribute as SeedAttribute
 import Html exposing (..)
 import Html.Attributes as A exposing (alt, class, href, id, name, src, target, type_, value)
 import Utils.Images as Images

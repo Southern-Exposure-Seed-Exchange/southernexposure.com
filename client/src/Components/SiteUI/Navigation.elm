@@ -2,32 +2,27 @@ module Components.SiteUI.Navigation exposing (adminView, view)
 
 import Components.Aria as Aria
 import Components.Navbar as Navbar
-import Components.Products.Pagination as Pagination
+import Components.Pagination as Pagination
 import Components.Shared exposing (cartIcon, logoAndName, searchIcon)
 import Components.SiteUI.Search as SiteSearch
 import Components.Svg exposing (menuBurgerSvg)
-import Data.Category as Category exposing (CategoryId(..))
+import Data.Category exposing (CategoryId(..))
 import Data.Msg exposing (Msg(..))
 import Data.Routing.Routing as Routing exposing (AdminRoute(..), Route(..), reverse)
 import Data.Search as Search
-import Data.SiteUI as SiteUI exposing (NavigationData)
-import Data.User as User exposing (AuthStatus(..))
+import Data.SiteUI exposing (NavigationData)
+import Data.User exposing (AuthStatus(..))
 import Dict
-import Html exposing (Html, a, button, div, form, hr, li, node, span, text, ul)
+import Html exposing (Html, a, button, div, hr, li, node, span, text, ul)
 import Html.Attributes exposing (attribute, class, href, id, target, type_)
 import Html.Events.Extra exposing (onClickPreventDefault)
 import RemoteData exposing (WebData)
-import Utils.View exposing (icon, routeLinkAttributes)
+import Utils.View exposing (routeLinkAttributes)
 
 
 view : Route -> AuthStatus -> WebData NavigationData -> List CategoryId -> Search.Data -> Int -> Html Msg
 view route authStatus navigationData activeCategoryIds searchData cartItemCount =
     let
-        categoryNavigation =
-            RemoteData.toMaybe navigationData
-                |> Maybe.map (\data -> List.map (rootCategory data.children) data.roots)
-                |> Maybe.withDefault []
-
         rootCategory childMap category =
             let
                 (CategoryId categoryId) =

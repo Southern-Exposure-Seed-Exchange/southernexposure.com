@@ -102,12 +102,12 @@ module Data.PageData exposing
     )
 
 import Components.Address.Address as Address
-import Components.Products.Pagination as Pagination
-import Components.Products.Sorting as Sorting
+import Components.Pagination as Pagination
+import Components.Sorting as Sorting
 import Data.Api as Api
 import Data.Category as Category exposing (Category, CategoryId(..))
 import Data.Fields exposing (Cents(..), ImageData, LotSize, centsDecoder, centsEncoder, centsMap, centsMap2, imageDecoder, lotSizeDecoder)
-import Data.Locations as Locations exposing (AddressLocations, Region, regionDecoder)
+import Data.Locations exposing (AddressLocations, Region, regionDecoder)
 import Data.Product as Product exposing (Product, ProductId, ProductVariant, ProductVariantId(..), variantPrice)
 import Data.Search as Search
 import Data.SeedAttribute as SeedAttribute exposing (SeedAttribute)
@@ -1471,11 +1471,13 @@ encodeCartItemError error =
                 , ( "available", Encode.int available )
                 , ( "requested", Encode.int requested )
                 ]
+
         GenericError message ->
             Encode.object
                 [ ( "code", Encode.string "GENERIC" )
                 , ( "message", Encode.string message )
                 ]
+
 
 showCartItemError : CartItemError -> String
 showCartItemError error =
@@ -1522,11 +1524,13 @@ encodeCartItemWarning warning =
                 [ ( "code", Encode.string "LIMITED_AVAILABILITY" )
                 , ( "available", Encode.int available )
                 ]
+
         GenericWarning message ->
             Encode.object
                 [ ( "code", Encode.string "GENERIC" )
                 , ( "message", Encode.string message )
                 ]
+
 
 showCartItemWarning : CartItemWarning -> String
 showCartItemWarning warning =

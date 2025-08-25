@@ -7,7 +7,7 @@ module Components.SiteUI.Search exposing
 
 import Components.Aria as Aria
 import Components.Microdata as Microdata
-import Components.Products.Pagination as Pagination
+import Components.Pagination as Pagination
 import Data.Routing.Routing as Routing exposing (Route(..))
 import Data.Search as Search
 import Html exposing (Html, button, div, input, text)

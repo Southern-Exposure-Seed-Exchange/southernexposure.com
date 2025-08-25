@@ -7,7 +7,7 @@ module Pages.Cart.Cart exposing
 
 import Components.Aria as Aria
 import Components.Button as Button exposing (defaultButton)
-import Components.Products.Views as ProductView
+import Components.Product.Views as ProductView
 import Components.Svg exposing (..)
 import Data.Api as Api
 import Data.Fields exposing (Cents(..), centsMap)

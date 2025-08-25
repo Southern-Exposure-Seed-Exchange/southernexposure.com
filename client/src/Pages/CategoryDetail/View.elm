@@ -1,28 +1,29 @@
-module Components.Categories.Views exposing (details)
+module Pages.CategoryDetail.View exposing (view)
 
-import Components.Products.Pagination as Pagination
-import Components.Products.Sorting as Sorting
-import Components.Products.Views as ProductViews
+import Components.Pagination as Pagination
+import Components.Product.Type as Product
+import Components.Product.Views as ProductViews
+import Components.Sorting as Sorting
 import Data.Category as Category
 import Data.Fields exposing (imageToSrcSet, imgSrcFallback)
 import Data.Msg exposing (Msg)
 import Data.PageData as PageData exposing (ProductData)
 import Data.Routing.Routing exposing (Route(..))
 import Data.Shared exposing (Shared)
+import Dict exposing (Dict)
 import Html exposing (Html, a, div, h1, hr, img, text)
 import Html.Attributes exposing (alt, attribute, class, src)
-import Pages.Cart.Type exposing (CartForms)
 import Paginate exposing (Paginated)
 import Utils.View exposing (rawHtml, routeLinkAttributes)
 
 
-details :
-    Shared
+view :
+    Shared Msg
     -> Pagination.Data
-    -> CartForms
+    -> Dict Int Product.Model
     -> Paginated ProductData { slug : String, sorting : Sorting.Option } PageData.CategoryDetails
     -> List (Html Msg)
-details shared pagination addToCartForms products =
+view shared pagination productDict products =
     let
         { category, subCategories } =
             case Paginate.getResponseData products of
@@ -83,4 +84,4 @@ details shared pagination addToCartForms products =
         , subCategoryCards
         ]
     ]
-        ++ ProductViews.listView shared (CategoryDetails category.slug) pagination addToCartForms products
+        ++ ProductViews.listView shared (CategoryDetails category.slug) pagination productDict products

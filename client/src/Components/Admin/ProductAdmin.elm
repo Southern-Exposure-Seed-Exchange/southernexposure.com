@@ -1,4 +1,4 @@
-module Components.Products.AdminViews exposing
+module Components.Admin.ProductAdmin exposing
     ( EditForm
     , EditMsg
     , Form

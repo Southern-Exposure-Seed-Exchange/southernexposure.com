@@ -65,7 +65,7 @@ attributeToSvg attribute =
             smallFarmSvg
 
 
-icons : Shared -> ViewKey -> (Tooltip.Msg -> msg) -> SeedAttribute.SeedAttribute -> Html msg
+icons : Shared pmsg -> ViewKey -> (Tooltip.Msg -> pmsg) -> SeedAttribute.SeedAttribute -> Html pmsg
 icons shared parentKey mkParentMsg { isOrganic, isHeirloom, isRegional, isSmallGrower } =
     [ ( isOrganic, SeedAttribute.Organic )
     , ( isHeirloom, SeedAttribute.Heirloom )

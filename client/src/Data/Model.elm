@@ -5,27 +5,30 @@ module Data.Model exposing
 
 import BootstrapGallery as Gallery
 import Components.Admin.AdminDashboard as AdminDashboard
+import Components.Admin.CategoryAdmin as CategoryAdmin
 import Components.Admin.CategorySalesAdmin as CategorySalesAdmin
 import Components.Admin.CouponAdmin as CouponAdmin
 import Components.Admin.CustomerAdmin as CustomerAdmin
 import Components.Admin.OrderAdmin as OrderAdmin
+import Components.Admin.ProductAdmin as ProductAdmin
 import Components.Admin.ProductSalesAdmin as ProductSalesAdmin
 import Components.Admin.SettingsAdmin as SettingsAdmin
 import Components.Admin.ShippingAdmin as ShippingAdmin
 import Components.Admin.StaticPageAdmin as StaticPageAdmin
 import Components.Admin.SurchargesAdmin as SurchargesAdmin
-import Components.Categories.AdminViews as CategoryAdmin
-import Components.Products.AdminViews as ProductAdmin
+import Components.Product.Type as Product
 import Components.ProfileNavbar as ProfileNavbar
+import Components.Tooltip as Tooltip
 import Data.Api exposing (Endpoint(..))
 import Data.Fields exposing (ImageData)
+import Data.Msg exposing (Msg(..))
 import Data.PageData as PageData exposing (PageData)
 import Data.Routing.Routing as Routing exposing (Route)
 import Data.Search as Search
-import Data.Shared exposing (Shared, initShared)
+import Data.Shared exposing (Shared)
 import Data.SiteUI exposing (CategoryListData, NavigationData)
 import Data.User as User exposing (AuthStatus)
-import Dict
+import Dict exposing (Dict)
 import Pages.Cart.Cart as Cart
 import Pages.Cart.Type as Cart
 import Pages.Checkout as Checkout
@@ -55,7 +58,6 @@ type alias Model =
     , editLoginForm : EditLogin.Form
     , editAddressForm : EditAddress.Form
     , resetPasswordForm : ResetPassword.Form
-    , addToCartForms : Cart.CartForms
     , productDetailsLightbox : Gallery.Model ImageData
     , editCartForm : Cart.Form
     , quickOrderForms : QuickOrder.Forms
@@ -91,7 +93,20 @@ type alias Model =
 
     -- sub-component
     , profileNavbar : ProfileNavbar.Model
-    , shared : Shared
+    , shared : Shared Msg
+
+    -- product dict state used in category detail and search result state
+    , productDict : Dict Int Product.Model
+    }
+
+
+initShared : Shared Msg
+initShared =
+    { tooltips = Tooltip.init
+    , tooltipMsg = TooltipMsg
+    , navigateToMsg = NavigateTo
+    , lightboxMsg = ProductDetailsLightbox
+    , productMsg = ProductMsg
     }
 
 
@@ -110,7 +125,6 @@ initial key route helcimUrl =
     , editLoginForm = EditLogin.initial
     , editAddressForm = EditAddress.initial
     , resetPasswordForm = ResetPassword.initial
-    , addToCartForms = Dict.empty
     , productDetailsLightbox = Gallery.initial
     , editCartForm = Cart.initial
     , quickOrderForms = QuickOrder.initial
@@ -143,6 +157,11 @@ initial key route helcimUrl =
     , zone = Time.utc
     , key = key
     , helcimUrl = helcimUrl
-    , profileNavbar = ProfileNavbar.init
+
+    -- shared data
     , shared = initShared
+
+    -- sub components
+    , profileNavbar = ProfileNavbar.init
+    , productDict = Dict.empty
     }

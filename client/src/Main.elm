@@ -4,21 +4,24 @@ import BootstrapGallery as Gallery
 import Browser
 import Browser.Dom as Dom
 import Browser.Navigation
+import Components.AddToCart as AddToCart
 import Components.Address.Address as Address
 import Components.Admin.AdminDashboard as AdminDashboard
+import Components.Admin.CategoryAdmin as CategoryAdmin
 import Components.Admin.CategorySalesAdmin as CategorySalesAdmin
 import Components.Admin.CouponAdmin as CouponAdmin
 import Components.Admin.CustomerAdmin as CustomerAdmin
 import Components.Admin.OrderAdmin as OrderAdmin
+import Components.Admin.ProductAdmin as ProductAdmin
 import Components.Admin.ProductSalesAdmin as ProductSalesAdmin
 import Components.Admin.SettingsAdmin as SettingsAdmin
 import Components.Admin.ShippingAdmin as ShippingAdmin
 import Components.Admin.StaticPageAdmin as StaticPageAdmin
 import Components.Admin.SurchargesAdmin as SurchargesAdmin
 import Components.AdvancedSearch as AdvancedSearch
-import Components.Categories.AdminViews as CategoryAdmin
-import Components.Products.AdminViews as ProductAdmin
-import Components.Products.Pagination as Pagination
+import Components.Pagination as Pagination
+import Components.Product.Product as Product
+import Components.Product.Type as Product
 import Components.ProfileNavbar as ProfileNavbar
 import Components.SiteUI.Search as SiteSearch
 import Components.Tooltip as Tooltip
@@ -595,63 +598,6 @@ reAuthorize userId =
         |> Api.sendRequest ReAuthorize
 
 
-addToCustomerCart : Cart.CartForms -> ProductId -> Int -> ProductVariantId -> ( Cart.CartForms, Cmd Msg )
-addToCustomerCart forms pId quantity ((ProductVariantId variantId) as vId) =
-    let
-        body =
-            Encode.object
-                [ ( "variant", Encode.int variantId )
-                , ( "quantity", Encode.int quantity )
-                ]
-    in
-    Api.post Api.CartAddCustomer
-        |> Api.withJsonBody body
-        |> Api.withErrorHandler (Decode.succeed "")
-        |> Api.sendRequest (SubmitAddToCartResponse pId quantity)
-        |> setCartFormToLoading forms quantity pId vId
-
-
-addToAnonymousCart : Maybe String -> Cart.CartForms -> ProductId -> Int -> ProductVariantId -> ( Cart.CartForms, Cmd Msg )
-addToAnonymousCart maybeSessionToken forms pId quantity ((ProductVariantId variantId) as vId) =
-    let
-        body =
-            Encode.object
-                [ ( "variant", Encode.int variantId )
-                , ( "quantity", Encode.int quantity )
-                , ( "sessionToken", encodeMaybe Encode.string maybeSessionToken )
-                ]
-
-        encodeMaybe encoder =
-            Maybe.map encoder >> Maybe.withDefault Encode.null
-    in
-    Api.post Api.CartAddAnonymous
-        |> Api.withJsonBody body
-        |> Api.withStringErrorHandler
-        |> Api.sendRequest (SubmitAddToCartResponse pId quantity)
-        |> setCartFormToLoading forms quantity pId vId
-
-
-setCartFormToLoading : Cart.CartForms -> Int -> ProductId -> ProductVariantId -> Cmd Msg -> ( Cart.CartForms, Cmd Msg )
-setCartFormToLoading forms quantity (ProductId pId) (ProductVariantId vId) cmd =
-    let
-        newForms =
-            Dict.update pId updateForm forms
-
-        updateForm maybeForm =
-            case maybeForm of
-                Nothing ->
-                    Just
-                        { variant = Just <| ProductVariantId vId
-                        , quantity = quantity
-                        , requestStatus = RemoteData.Loading
-                        }
-
-                Just v ->
-                    Just { v | requestStatus = RemoteData.Loading }
-    in
-    ( newForms, cmd )
-
-
 getCustomerCartItemsCount : Cmd Msg
 getCustomerCartItemsCount =
     Api.get Api.CartCountCustomer
@@ -911,77 +857,29 @@ update msg ({ pageData, key } as model) =
                 |> Maybe.withDefault model
                 |> noCommand
 
-        ChangeCartFormVariantId productId variantId ->
-            model
-                |> updateCartVariant productId variantId
-                |> noCommand
-
-        ChangeCartFormQuantity productId quantity ->
-            model
-                |> updateCartFormQuantity productId (Exact quantity)
-                |> noCommand
-
-        IncreaseCartFormQuantity productId ->
-            model
-                |> updateCartFormQuantity productId Increase
-                |> noCommand
-
-        DecreaseCartFormQuantity productId ->
-            model
-                |> updateCartFormQuantity productId Decrease
-                |> noCommand
-
-        SubmitAddToCart ((ProductId productId) as pId) defaultVariant ->
+        ProductMsg ((ProductId productId) as pId) productMsg ->
             let
-                performRequest f =
-                    let
-                        ( newForms, cmd ) =
-                            f model.addToCartForms pId quantity variantId
-                    in
-                    ( { model | addToCartForms = newForms }, cmd )
+                product =
+                    Maybe.withDefault Product.initProductModel <| Dict.get productId model.productDict
 
-                ( variantId, quantity ) =
-                    Dict.get productId model.addToCartForms
-                        |> Maybe.withDefault { variant = Nothing, quantity = 1, requestStatus = RemoteData.NotAsked }
-                        |> (\v -> ( v.variant |> Maybe.withDefault defaultVariant, v.quantity ))
+                ( newProduct, productCmd ) =
+                    Product.update model.currentUser model.maybeSessionToken productMsg pId product
+
+                ( newModel, cmd ) =
+                    case productMsg of
+                        -- Update session and cart amount base on Product's addToCart response
+                        Product.SubmitAddToCartResponse quantity (RemoteData.Success (Ok sessionToken)) ->
+                            updateSessionTokenAndCartItemCount model quantity sessionToken
+
+                        _ ->
+                            ( model, Cmd.none )
             in
-            case model.currentUser of
-                User.Authorized _ ->
-                    performRequest addToCustomerCart
-
-                User.Anonymous ->
-                    performRequest (addToAnonymousCart model.maybeSessionToken)
-
-        SubmitAddToCartResponse productId quantity response ->
-            case response of
-                RemoteData.Success (Ok sessionToken) ->
-                    updateSessionTokenAndCartItemCount model quantity sessionToken
-                        |> updateCartFormRequestStatus productId response
-
-                _ ->
-                    model
-                        |> noCommand
-                        |> updateCartFormRequestStatus productId response
-
-        ResetCartFormStatus (ProductId productId) ->
-            let
-                updatedForms =
-                    Dict.update productId updateForm model.addToCartForms
-
-                updateForm maybeForm =
-                    case maybeForm of
-                        Nothing ->
-                            Just
-                                { variant = Nothing
-                                , quantity = 1
-                                , requestStatus = RemoteData.NotAsked
-                                }
-
-                        Just v ->
-                            Just { v | requestStatus = RemoteData.NotAsked }
-            in
-            { model | addToCartForms = updatedForms }
-                |> noCommand
+            ( { newModel | productDict = Dict.insert productId newProduct model.productDict }
+            , Cmd.batch
+                [ Cmd.map (ProductMsg pId) productCmd
+                , cmd
+                ]
+            )
 
         ShowAllOrders ->
             case model.currentUser of
@@ -1403,15 +1301,15 @@ update msg ({ pageData, key } as model) =
                                                 , quantity = 1
                                                 }
                                 )
-                                model.addToCartForms
+                                model.productDict
 
                         _ ->
-                            model.addToCartForms
+                            model.productDict
             in
             ( { model
                 | pageData = updatedPageData
                 , productDetailsLightbox = Gallery.initial
-                , addToCartForms = updatedCartForms
+                , productDict = updatedCartForms
               }
             , Cmd.none
             )
@@ -2226,123 +2124,6 @@ resetForm oldRoute model =
 
         NotFound ->
             model
-
-
-type UpdateCartFormParam
-    = Exact Int
-    | Increase
-    | Decrease
-
-
-
--- | Update the number value in form input of a product.
-
-
-updateCartFormQuantity : ProductId -> UpdateCartFormParam -> Model -> Model
-updateCartFormQuantity (ProductId productId) param model =
-    let
-        defaultQuantity =
-            1
-
-        addToCartForms =
-            Dict.update productId updateForm model.addToCartForms
-
-        updateForm maybeForm =
-            case maybeForm of
-                Nothing ->
-                    Just
-                        { variant = Nothing
-                        , quantity =
-                            case param of
-                                Exact quantity ->
-                                    quantity
-
-                                Increase ->
-                                    defaultQuantity + 1
-
-                                Decrease ->
-                                    defaultQuantity
-                        , requestStatus = RemoteData.NotAsked
-                        }
-
-                Just v ->
-                    Just
-                        { v
-                            | quantity =
-                                case param of
-                                    Exact quantity ->
-                                        quantity
-
-                                    Increase ->
-                                        v.quantity + 1
-
-                                    Decrease ->
-                                        if v.quantity == defaultQuantity then
-                                            v.quantity
-
-                                        else
-                                            v.quantity - 1
-                        }
-    in
-    { model | addToCartForms = addToCartForms }
-
-
-updateCartVariant : ProductId -> ProductVariantId -> Model -> Model
-updateCartVariant (ProductId productId) variantId model =
-    let
-        addToCartForms =
-            Dict.update productId updateForm model.addToCartForms
-
-        updateForm maybeForm =
-            case maybeForm of
-                Nothing ->
-                    Just
-                        { variant = Just variantId
-                        , quantity = 1
-                        , requestStatus = RemoteData.NotAsked
-                        }
-
-                Just v ->
-                    Just { v | variant = Just variantId }
-    in
-    { model | addToCartForms = addToCartForms }
-
-
-updateCartFormRequestStatus : ProductId -> WebData (Result Api.FormErrors a) -> ( Model, Cmd Msg ) -> ( Model, Cmd Msg )
-updateCartFormRequestStatus (ProductId productId) response ( { addToCartForms } as model, cmd ) =
-    let
-        unitResponse =
-            RemoteData.map (Result.map (always ())) response
-
-        updatedForms =
-            Dict.update productId updateForm addToCartForms
-
-        updateForm maybeForm =
-            case maybeForm of
-                Nothing ->
-                    Just
-                        { variant = Nothing
-                        , quantity = 1
-                        , requestStatus = unitResponse
-                        }
-
-                Just v ->
-                    Just { v | requestStatus = unitResponse }
-
-        resetStatusCmd =
-            case response of
-                RemoteData.Loading ->
-                    Cmd.none
-
-                RemoteData.NotAsked ->
-                    Cmd.none
-
-                _ ->
-                    Process.sleep (10 * 1000)
-                        |> Task.andThen (always <| Task.succeed <| ProductId productId)
-                        |> Task.perform ResetCartFormStatus
-    in
-    ( { model | addToCartForms = updatedForms }, Cmd.batch [ cmd, resetStatusCmd ] )
 
 
 resetEditCartForm : WebData PageData.CartDetails -> Model -> Model

@@ -3,10 +3,12 @@ module View exposing (pageDescription, pageImage, pageTitle, view)
 import BootstrapGallery as Gallery
 import Browser exposing (Document)
 import Components.Admin.AdminDashboard as AdminDashboard
+import Components.Admin.CategoryAdmin as CategoryAdminViews
 import Components.Admin.CategorySalesAdmin as CategorySalesAdmin
 import Components.Admin.CouponAdmin as CouponAdmin
 import Components.Admin.CustomerAdmin as CustomerAdmin
 import Components.Admin.OrderAdmin as OrderAdmin
+import Components.Admin.ProductAdmin as ProductAdmin
 import Components.Admin.ProductSalesAdmin as ProductSalesAdmin
 import Components.Admin.SettingsAdmin as SettingsAdmin
 import Components.Admin.ShippingAdmin as ShippingAdmin
@@ -14,12 +16,10 @@ import Components.Admin.StaticPageAdmin as StaticPageAdmin
 import Components.Admin.SurchargesAdmin as SurchargesAdmin
 import Components.AdvancedSearch as AdvancedSearch
 import Components.Aria as Aria
-import Components.Categories.AdminViews as CategoryAdminViews
-import Components.Categories.Views as CategoryViews
 import Components.OrderDetails as OrderDetails
-import Components.Products.AdminViews as ProductAdmin
-import Components.Products.Pagination as Pagination
-import Components.Products.Views as ProductViews
+import Components.Pagination as Pagination
+import Components.Product.Type as Product
+import Components.Product.Views as ProductViews
 import Components.SiteUI.Breadcrumbs as SiteBreadcrumbs
 import Components.SiteUI.Footer as SiteFooter
 import Components.SiteUI.Header as SiteHeader
@@ -35,12 +35,14 @@ import Data.SeedAttribute as SeedAttribute
 import Data.Shared exposing (Shared)
 import Data.StaticPage exposing (StaticPage)
 import Data.User as User exposing (unauthorized)
+import Dict exposing (Dict)
 import Html exposing (..)
 import Html.Attributes exposing (class, href, id, target)
 import Html.Events exposing (onClick)
 import Http
 import Pages.Cart.Cart as Cart
 import Pages.Cart.Type as Cart
+import Pages.CategoryDetail.View as CategoryDetail
 import Pages.Checkout as Checkout
 import Pages.CreateAccount as CreateAccount
 import Pages.EditAddress as EditAddress
@@ -111,7 +113,7 @@ view ({ route, pageData, navigationData, zone, helcimUrl } as model) =
         pageContent =
             case route of
                 ProductDetails _ _ ->
-                    withIntermediateText (ProductViews.detailView model.shared model.addToCartForms)
+                    withIntermediateText (ProductViews.detailView model.shared model.productDict)
                         pageData.productDetails
 
                 CategoryDetails _ pagination ->
@@ -123,9 +125,9 @@ view ({ route, pageData, navigationData, zone, helcimUrl } as model) =
 
                     else
                         loadingInterstitial False
-                            :: CategoryViews.details model.shared
+                            :: CategoryDetail.view model.shared
                                 pagination
-                                model.addToCartForms
+                                model.productDict
                                 pageData.categoryDetails
 
                 AdvancedSearch ->
@@ -137,7 +139,7 @@ view ({ route, pageData, navigationData, zone, helcimUrl } as model) =
 
                     else
                         loadingInterstitial False
-                            :: searchResultsView model.shared data pagination model.addToCartForms pageData.searchResults
+                            :: searchResultsView model.shared data pagination model.productDict pageData.searchResults
 
                 PageDetails _ _ ->
                     withIntermediateText staticPageView pageData.pageDetails
@@ -795,8 +797,8 @@ staticPageView { name, slug, content } =
     ]
 
 
-searchResultsView : Shared -> Search.Data -> Pagination.Data -> Cart.CartForms -> PageData.SearchResults -> List (Html Msg)
-searchResultsView shared ({ query } as data) pagination addToCartForms products =
+searchResultsView : Shared Msg -> Search.Data -> Pagination.Data -> Dict Int Product.Model -> PageData.SearchResults -> List (Html Msg)
+searchResultsView shared ({ query } as data) pagination productDict products =
     let
         uniqueSearch =
             Search.uniqueSearch data
@@ -882,4 +884,4 @@ searchResultsView shared ({ query } as data) pagination addToCartForms products 
     , searchDescription
     , div [ class "tw:pb-0 tw:lg:pb-[40px]" ] []
     ]
-        ++ ProductViews.listView shared (SearchResults data) pagination addToCartForms products
+        ++ ProductViews.listView shared (SearchResults data) pagination productDict products

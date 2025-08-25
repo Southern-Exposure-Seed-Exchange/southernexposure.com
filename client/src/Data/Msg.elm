@@ -5,18 +5,19 @@ module Data.Msg exposing (Msg(..))
 import BootstrapGallery as Gallery
 import Browser exposing (UrlRequest)
 import Components.Admin.AdminDashboard as AdminDashboard
+import Components.Admin.CategoryAdmin as CategoryAdmin
 import Components.Admin.CategorySalesAdmin as CategorySalesAdmin
 import Components.Admin.CouponAdmin as CouponAdmin
 import Components.Admin.CustomerAdmin as CustomerAdmin
 import Components.Admin.OrderAdmin as OrderAdmin
+import Components.Admin.ProductAdmin as ProductAdmin
 import Components.Admin.ProductSalesAdmin as ProductSalesAdmin
 import Components.Admin.SettingsAdmin as SettingsAdmin
 import Components.Admin.ShippingAdmin as ShippingAdmin
 import Components.Admin.StaticPageAdmin as StaticPageAdmin
 import Components.Admin.SurchargesAdmin as SurchargesAdmin
 import Components.AdvancedSearch as AdvancedSearch
-import Components.Categories.AdminViews as CategoryAdmin
-import Components.Products.AdminViews as ProductAdmin
+import Components.Product.Type as Product
 import Components.ProfileNavbar as ProfileNavbar
 import Components.SiteUI.Search as SiteSearch
 import Components.Tooltip as Tooltip
@@ -57,15 +58,8 @@ type Msg
     | OtherTabLoggedIn Int
     | OtherTabNewCartToken String
     | OtherTabCartItemCountChanged Int
-      -- Product List/Details Cart Forms
+    | ProductMsg ProductId Product.Msg
     | ProductDetailsLightbox (Gallery.Msg ImageData)
-    | ChangeCartFormVariantId ProductId ProductVariantId
-    | ChangeCartFormQuantity ProductId Int
-    | IncreaseCartFormQuantity ProductId
-    | DecreaseCartFormQuantity ProductId
-    | SubmitAddToCart ProductId ProductVariantId
-    | SubmitAddToCartResponse ProductId Int (WebData (Result Api.FormErrors String))
-    | ResetCartFormStatus ProductId
       -- My Account Page
     | ShowAllOrders
       -- Sub-Components

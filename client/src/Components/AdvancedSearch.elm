@@ -2,7 +2,7 @@ module Components.AdvancedSearch exposing (Msg(..), update, view)
 
 import Components.Aria as Aria
 import Components.Button as Button exposing (..)
-import Components.Products.Pagination as Pagination
+import Components.Pagination as Pagination
 import Components.Svg exposing (heirLoomSvg, organicSvg, searchSvg, smallFarmSvg, sunSvg)
 import Data.Category exposing (CategoryId(..))
 import Data.Routing.Routing exposing (Route(..))
