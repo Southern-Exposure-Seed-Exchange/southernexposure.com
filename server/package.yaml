@@ -125,6 +125,7 @@ library:
         - Models
         - Models.Fields
         - Models.PersistJSON
+        - Postgrid.API
         - Routes.Admin.ShippingMethods
         - Routes.CommonData
         - Routes.StoneEdge

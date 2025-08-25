@@ -23,6 +23,7 @@ import StoneEdge (StoneEdgeCredentials)
 
 import qualified Avalara
 import qualified Helcim.API as Helcim (ApiToken)
+import qualified Postgrid.API as Postgrid (ApiKey)
 
 
 data Environment
@@ -47,6 +48,7 @@ data Config
     , getSmtpPass :: String
     , getStripeConfig :: StripeConfig
     , getHelcimAuthKey :: Helcim.ApiToken
+    , getPostgridApiKey :: Maybe Postgrid.ApiKey
     , getStoneEdgeAuth :: StoneEdgeCredentials
     , getCookieSecret :: PersistentServerKey
     , getCookieEntropySource :: RandomSource
@@ -59,6 +61,7 @@ data Config
     , getStripeLogger :: TimedFastLogger
     , getServerLogger :: TimedFastLogger
     , getHelcimLogger :: TimedFastLogger
+    , getPostgridLogger :: TimedFastLogger
     , getDeveloperEmail :: Maybe Text
     , getBaseUrl :: Text
     }
@@ -75,6 +78,7 @@ defaultConfig =
         , getSmtpPass = undefined
         , getStripeConfig = undefined
         , getHelcimAuthKey = undefined
+        , getPostgridApiKey = undefined
         , getStoneEdgeAuth = undefined
         , getCookieSecret = undefined
         , getCookieEntropySource = undefined
@@ -87,6 +91,7 @@ defaultConfig =
         , getStripeLogger = undefined
         , getServerLogger = undefined
         , getHelcimLogger = undefined
+        , getPostgridLogger = undefined
         , getDeveloperEmail = Nothing
         , getBaseUrl = "http://localhost:7000"
         }
