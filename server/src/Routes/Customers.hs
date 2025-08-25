@@ -20,6 +20,7 @@ module Routes.Customers
 
 import UnliftIO.Exception (throwIO, Exception, try, handle)
 import Control.Monad.IO.Class (liftIO)
+import Control.Monad.Trans (lift)
 import Data.Aeson (ToJSON(..), FromJSON(..), (.=), (.:), (.:?), withObject, object)
 import Data.Int (Int64)
 import Data.List (partition)
@@ -40,6 +41,8 @@ import Auth
 import Models
 import Models.Fields
     (ArmedForcesRegionCode, armedForcesRegion, Cents(..), creditLineItemTypes, showOrderStatus)
+import Postgrid (AddressVerificationResult(..), verifyAddressData)
+import Postgrid.API.Types (VerifyStructuredAddressErrors)
 import Routes.CommonData
     ( AuthorizationData, toAuthorizationData, AddressData(..), toAddressData
     , fromAddressData, LoginParameters(..), validatePassword, handlePasswordValidationError
@@ -691,6 +694,7 @@ addressDetailsRoute token = withValidatedCookie token $ \(Entity customerId _) -
 
 data AddressEditError
     = AddressNotFound
+    | AddressVerificationAPIFailed
     deriving (Typeable, Show)
 
 instance Exception AddressEditError
@@ -699,15 +703,34 @@ handleAddressError :: AddressEditError -> App a
 handleAddressError = \case
     AddressNotFound ->
         serverError err404
+    AddressVerificationAPIFailed ->
+        V.singleError
+            "There was an error verifying your address, please try again later."
 
+data AddressEditResult
+    = AddressEditSuccess
+    | AddressEditCorrected AddressData
+    | AddressEditFailed VerifyStructuredAddressErrors
+
+instance ToJSON AddressEditResult where
+    toJSON AddressEditSuccess = object
+        [ "status" .= ("success" :: T.Text) ]
+    toJSON (AddressEditCorrected addr) = object
+        [ "status" .= ("corrected" :: T.Text)
+        , "address" .= addr
+        ]
+    toJSON (AddressEditFailed errors) = object
+        [ "status" .= ("failed" :: T.Text)
+        , "errors" .= errors
+        ]
 
 type AddressEditRoute =
        AuthProtect "cookie-auth"
     :> Capture "id" Int64
     :> ReqBody '[JSON] AddressData
-    :> Post '[JSON] (Cookied ())
+    :> Post '[JSON] (Cookied AddressEditResult)
 
-addressEditRoute :: WrappedAuthToken -> Int64 -> AddressData -> App (Cookied ())
+addressEditRoute :: WrappedAuthToken -> Int64 -> AddressData -> App (Cookied AddressEditResult)
 addressEditRoute token aId addressData = withValidatedCookie token $ \(Entity customerId _) -> do
     void $ validate addressData
     either handleAddressError return <=< try . runDB $ do
@@ -718,23 +741,36 @@ addressEditRoute token aId addressData = withValidatedCookie token $ \(Entity cu
             Just address
                 | addressCustomerId (entityVal address) /= customerId ->
                     throwIO AddressNotFound
-                | toAddressData address == addressData ->
-                    return ()
+                -- We may want to update existing non-verified shipping address to get
+                -- address verification feedback
+                | toAddressData address == addressData &&
+                    (addressVerified (entityVal address) || addressType (entityVal address) == Fields.Billing) ->
+                    return AddressEditSuccess
                 | otherwise -> do
                     let addrType = addressType $ entityVal address
-                    when (adIsDefault addressData) $
-                        updateWhere
-                            [ AddressCustomerId ==. customerId
-                            , AddressType ==. addrType
-                            ]
-                            [ AddressIsDefault =. False ]
-                    update addressId
-                        [ AddressIsActive =. False
-                        , AddressIsDefault =. False
-                        ]
-                    void . insertOrActivateAddress
-                        $ fromAddressData addrType customerId addressData
+                    verificationFeedback <- lift $ verifyAddressData addressData addrType
 
+                    let updateAddress = do
+                            when (adIsDefault addressData) $
+                                updateWhere
+                                    [ AddressCustomerId ==. customerId
+                                    , AddressType ==. addrType
+                                    ]
+                                    [ AddressIsDefault =. False ]
+                            update addressId
+                                [ AddressIsActive =. False
+                                , AddressIsDefault =. False
+                                , AddressVerified =. True
+                                ]
+                            void . insertOrActivateAddress
+                                $ fromAddressData addrType customerId addressData
+                            return AddressEditSuccess
+
+                    case verificationFeedback of
+                        Left _ -> throwIO AddressVerificationAPIFailed
+                        Right AddressVerifiedSuccessfully -> updateAddress
+                        Right (AddressCorrected correctedData _) -> return $ AddressEditCorrected correctedData
+                        Right (AddressVerificationFailed errors) -> return $ AddressEditFailed errors
 
 type AddressDeleteRoute =
        AuthProtect "cookie-auth"

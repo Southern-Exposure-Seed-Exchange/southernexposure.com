@@ -2,7 +2,7 @@ module Data.Api exposing
     ( Endpoint(..), get, post, put, patch, delete
     , withJsonBody, withStringResponse, withJsonResponse, withStringErrorHandler, withErrorHandler
     , sendRequest
-    , FormErrors, initialErrors, addError, prefixedArrayErrors
+    , FormErrors, initialErrors, addError, addErrors, prefixedArrayErrors
     , apiFailureToError, formErrorsDecoder
     , errorHtml, generalFormErrors, getErrorHtml
     )
@@ -580,14 +580,18 @@ formErrorsDecoder =
 
 addError : Field -> ErrorMessage -> FormErrors -> FormErrors
 addError field message errors =
+    addErrors field [ message ] errors
+
+addErrors : Field -> List ErrorMessage -> FormErrors -> FormErrors
+addErrors field messages errors =
     (\a -> Dict.update field a errors) <|
         \val ->
             case val of
                 Nothing ->
-                    Just [ message ]
+                    Just messages
 
                 Just es ->
-                    Just <| message :: es
+                    Just <| messages ++ es
 
 
 {-| Filter the FormErrors, keeping only errors for the given prefix & array

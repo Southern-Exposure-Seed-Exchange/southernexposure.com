@@ -35,7 +35,7 @@ module Routes.CommonData
     , CartItemWarning(..)
     , getCartItems
     , CartInventoryNotifications(..)
-    , CartInventoryCheckResult(..)
+    , CheckoutCheckResult(..)
     , checkNewCartInventoryNotifications
     , getUnseenCartInventoryNotifications
     , CartCharges(..)
@@ -1077,27 +1077,32 @@ getUnseenCartInventoryNotifications seenNotifications currentNotifications =
                 S.difference currentSet seenSet
             ) seen current
 
-data CartInventoryCheckResult a
-    = NoNewCartInventoryNotifications a
+data CheckoutCheckResult a
+    = CheckoutResult a
     | NewCartInventoryNotifications
+    | FailedToVerifyShippingAddress (M.Map T.Text [T.Text])
 
-instance ToJSON a => ToJSON (CartInventoryCheckResult a) where
-    toJSON (NoNewCartInventoryNotifications a) = object
+instance ToJSON a => ToJSON (CheckoutCheckResult a) where
+    toJSON (CheckoutResult a) = object
         [ "status" .= ("ok" :: T.Text)
         , "result" .= a
         ]
     toJSON NewCartInventoryNotifications = object
         [ "status" .= ("new-notifications" :: T.Text)
         ]
+    toJSON (FailedToVerifyShippingAddress errors) = object
+        [ "status" .= ("shipping-address-verification-failed" :: T.Text)
+        , "errors" .= errors
+        ]
 
 checkNewCartInventoryNotifications
     :: CartInventoryNotifications -> CartId -> AppSQL a
-    -> AppSQL (CartInventoryCheckResult a)
+    -> AppSQL (CheckoutCheckResult a)
 checkNewCartInventoryNotifications seenWarnings cartId action = do
     currentWarnings <- getCartInventoryNotifications cartId
     let unseenWarnings = getUnseenCartInventoryNotifications seenWarnings currentWarnings
     if M.null (cinWarnings unseenWarnings) && M.null (cinErrors unseenWarnings)
-        then NoNewCartInventoryNotifications <$> action
+        then CheckoutResult <$> action
         else return NewCartInventoryNotifications
 
 -- Addresses
@@ -1205,6 +1210,7 @@ fromAddressData type_ customerId address =
         , addressType = type_
         , addressCustomerId = customerId
         , addressIsActive = True
+        , addressVerified = False
         }
 
 toAddressData :: Entity Address -> AddressData
@@ -1240,6 +1246,18 @@ addressToAvalara AddressData {..} =
         , aiLongitude = Nothing
         }
 
+
+verifyAddressData :: AddressData -> AppSQL (Either (M.Map T.Text [T.Text]) ())
+verifyAddressData AddressData{..} = do
+    alreadyVerified <- case adAddressId of
+        Just addressId -> do
+            mAddress <- E.get addressId
+            return $ maybe False addressVerified mAddress
+        Nothing -> return False
+    if alreadyVerified then
+        return $ Right ()
+    else do
+        return $ Right ()
 
 -- Order Details
 
