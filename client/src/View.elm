@@ -64,7 +64,7 @@ view ({ route, pageData, navigationData, zone, helcimUrl } as model) =
         middleContent =
             case route of
                 Admin adminRoute ->
-                    if not <| User.isAdmin model.currentUser then
+                    if not <| User.isAdmin model.shared.currentUser then
                         withSidebar accessDeniedView
 
                     else
@@ -167,7 +167,7 @@ view ({ route, pageData, navigationData, zone, helcimUrl } as model) =
                         |> withIntermediateText (apply <| MyAccount.view zone)
 
                 EditLogin ->
-                    EditLogin.view EditLoginMsg model.editLoginForm model.currentUser
+                    EditLogin.view EditLoginMsg model.editLoginForm model.shared.currentUser
 
                 EditAddress ->
                     RemoteData.map2 Tuple.pair pageData.locations pageData.addressDetails
@@ -179,7 +179,7 @@ view ({ route, pageData, navigationData, zone, helcimUrl } as model) =
                         |> withIntermediateText (apply <| OrderDetails.view zone orderId)
 
                 Cart ->
-                    withIntermediateText (Cart.view model.currentUser model.editCartForm) pageData.cartDetails
+                    withIntermediateText (Cart.view model.shared.currentUser model.editCartForm) pageData.cartDetails
                         |> List.map (Html.map EditCartMsg)
 
                 QuickOrder ->
@@ -188,13 +188,13 @@ view ({ route, pageData, navigationData, zone, helcimUrl } as model) =
 
                 Checkout ->
                     RemoteData.map2 Tuple.pair pageData.locations pageData.checkoutDetails
-                        |> withIntermediateText (apply <| Checkout.view model.checkoutForm model.currentUser)
+                        |> withIntermediateText (apply <| Checkout.view model.checkoutForm model.shared.currentUser)
                         |> List.map (Html.map CheckoutMsg)
 
                 CheckoutSuccess orderId _ ->
                     RemoteData.map2 Tuple.pair pageData.locations pageData.orderDetails
                         |> withIntermediateText
-                            (apply <| Checkout.successView zone orderId (model.currentUser == unauthorized))
+                            (apply <| Checkout.successView zone orderId (model.shared.currentUser == unauthorized))
 
                 Admin Dashboard ->
                     withIntermediateText (AdminDashboard.view model.adminDashboard zone pageData.adminDashboard)
@@ -345,7 +345,7 @@ view ({ route, pageData, navigationData, zone, helcimUrl } as model) =
                 [ text "Skip to main content" ]
     in
     Document (pageTitle model) <|
-        if isAdminRoute route && User.isAdmin model.currentUser then
+        if isAdminRoute route && User.isAdmin model.shared.currentUser then
             [ SiteHeader.adminView
             , SiteNavigation.adminView route
             , middleContent
@@ -353,8 +353,8 @@ view ({ route, pageData, navigationData, zone, helcimUrl } as model) =
 
         else
             [ skipLink
-            , SiteHeader.view model SearchMsg model.searchData model.currentUser model.cartItemCount route navigationData activeCategoryIds
-            , SiteNavigation.view route model.currentUser navigationData activeCategoryIds model.searchData model.cartItemCount
+            , SiteHeader.view model SearchMsg model.searchData model.shared.currentUser model.cartItemCount route navigationData activeCategoryIds
+            , SiteNavigation.view route model.shared.currentUser navigationData activeCategoryIds model.searchData model.cartItemCount
             , SiteBreadcrumbs.view route pageData
             , middleContent
             , SiteFooter.view

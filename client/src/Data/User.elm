@@ -3,12 +3,14 @@ module Data.User exposing
     , User
     , UserId(..)
     , decoder
+    , encodedCartToken
     , isAdmin
     , storeDetails
     , unauthorized
     )
 
 import Json.Decode as Decode exposing (Decoder)
+import Json.Encode as Encode
 import Ports
 
 
@@ -71,3 +73,9 @@ storeDetails authStatus =
                     user.id
             in
             Ports.storeAuthDetails id
+
+
+encodedCartToken : Maybe String -> List ( String, Encode.Value )
+encodedCartToken =
+    Maybe.map (\token -> [ ( "sessionToken", Encode.string token ) ])
+        >> Maybe.withDefault []

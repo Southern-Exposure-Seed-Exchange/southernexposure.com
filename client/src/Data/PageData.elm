@@ -85,6 +85,8 @@ module Data.PageData exposing
     , customersConfig
     , encodeCartItemError
     , encodeCartItemWarning
+    , getAmountBaseOnVariant
+    , getCartIdBaseOnVariant
     , initial
     , isFreeCheckout
     , lineItemDecoder
@@ -371,6 +373,23 @@ type alias CartDetails =
     , isDisabled : Bool
     , disabledMessage : String
     }
+
+
+getAmountBaseOnVariant : ProductVariantId -> CartDetails -> Int
+getAmountBaseOnVariant variantId cart =
+    cart.items
+        |> List.filter (\i -> i.variant.id == variantId)
+        |> List.head
+        |> Maybe.map .quantity
+        |> Maybe.withDefault 0
+
+
+getCartIdBaseOnVariant : ProductVariantId -> CartDetails -> Maybe CartItemId
+getCartIdBaseOnVariant variantId cart =
+    cart.items
+        |> List.filter (\i -> i.variant.id == variantId)
+        |> List.head
+        |> Maybe.map .id
 
 
 blankCartDetails : CartDetails

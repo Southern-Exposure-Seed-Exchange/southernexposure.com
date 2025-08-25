@@ -4,7 +4,8 @@ import BootstrapGallery as Gallery
 import Browser
 import Browser.Dom as Dom
 import Browser.Navigation
-import Components.AddToCart as AddToCart
+import Components.AddToCart.AddToCart as AddToCart
+import Components.AddToCart.Type as AddToCart
 import Components.Address.Address as Address
 import Components.Admin.AdminDashboard as AdminDashboard
 import Components.Admin.CategoryAdmin as CategoryAdmin
@@ -112,8 +113,12 @@ init flags url key =
         ( model, cmd ) =
             Model.initial key route flags.helcimUrl
                 |> (\m ->
+                        let
+                            modelShared =
+                                m.shared
+                        in
                         { m
-                            | maybeSessionToken = flags.cartSessionToken
+                            | shared = { modelShared | maybeSessionToken = flags.cartSessionToken }
                             , cartItemCount = Maybe.withDefault 0 flags.cartItemCount
                         }
                    )
@@ -227,7 +232,7 @@ fetchDataForRoute ({ route, pageData, key } as model) =
                     doNothing
 
                 MyAccount ->
-                    case model.currentUser of
+                    case model.shared.currentUser of
                         User.Authorized _ ->
                             { pageData | myAccount = RemoteData.Loading }
                                 |> fetchLocationsOnce
@@ -240,10 +245,10 @@ fetchDataForRoute ({ route, pageData, key } as model) =
                     doNothing
 
                 EditAddress ->
-                    getAddressDetails model.currentUser pageData
+                    getAddressDetails model.shared.currentUser pageData
 
                 OrderDetails orderId token ->
-                    case model.currentUser of
+                    case model.shared.currentUser of
                         User.Authorized _ ->
                             { pageData | orderDetails = RemoteData.Loading }
                                 |> fetchLocationsOnce
@@ -261,13 +266,13 @@ fetchDataForRoute ({ route, pageData, key } as model) =
 
                 Cart ->
                     pageData
-                        |> fetchCartDetails model.currentUser model.maybeSessionToken
+                        |> fetchCartDetails model.shared.currentUser model.shared.maybeSessionToken
 
                 QuickOrder ->
                     doNothing
 
                 Checkout ->
-                    case model.currentUser of
+                    case model.shared.currentUser of
                         User.Authorized _ ->
                             { pageData | checkoutDetails = RemoteData.Loading }
                                 |> fetchLocationsOnce
@@ -282,7 +287,7 @@ fetchDataForRoute ({ route, pageData, key } as model) =
                         User.Anonymous ->
                             let
                                 getDetails =
-                                    case model.maybeSessionToken of
+                                    case model.shared.maybeSessionToken of
                                         Nothing ->
                                             Tuple.mapSecond (always <| Routing.newUrl key Cart)
 
@@ -300,7 +305,7 @@ fetchDataForRoute ({ route, pageData, key } as model) =
                                 |> getDetails
 
                 CheckoutSuccess orderId token ->
-                    case model.currentUser of
+                    case model.shared.currentUser of
                         User.Authorized _ ->
                             { pageData | orderDetails = RemoteData.Loading }
                                 |> fetchLocationsOnce
@@ -826,7 +831,11 @@ update msg ({ pageData, key } as model) =
             ( model, reAuthorize userId )
 
         OtherTabNewCartToken cartSessionToken ->
-            { model | maybeSessionToken = Just cartSessionToken }
+            let
+                modelShared =
+                    model.shared
+            in
+            { model | shared = { modelShared | maybeSessionToken = Just cartSessionToken } }
                 |> noCommand
 
         OtherTabCartItemCountChanged quantity ->
@@ -863,12 +872,14 @@ update msg ({ pageData, key } as model) =
                     Maybe.withDefault Product.initProductModel <| Dict.get productId model.productDict
 
                 ( newProduct, productCmd ) =
-                    Product.update model.currentUser model.maybeSessionToken productMsg pId product
+                    Product.update model.shared productMsg pId product
 
                 ( newModel, cmd ) =
                     case productMsg of
                         -- Update session and cart amount base on Product's addToCart response
-                        Product.SubmitAddToCartResponse quantity (RemoteData.Success (Ok sessionToken)) ->
+                        -- Product.SubmitAddToCartResponse quantity (RemoteData.Success (Ok sessionToken)) ->
+                        --     updateSessionTokenAndCartItemCount model quantity sessionToken
+                        Product.AddToCartMsg (AddToCart.UpdateAmountBaseOnCartDetail _ quantity sessionToken _) ->
                             updateSessionTokenAndCartItemCount model quantity sessionToken
 
                         _ ->
@@ -882,7 +893,7 @@ update msg ({ pageData, key } as model) =
             )
 
         ShowAllOrders ->
-            case model.currentUser of
+            case model.shared.currentUser of
                 User.Authorized _ ->
                     ( model, MyAccount.getDetails (Just 0) )
 
@@ -912,32 +923,41 @@ update msg ({ pageData, key } as model) =
 
         CreateAccountMsg subMsg ->
             let
+                modelShared =
+                    model.shared
+
                 ( updatedForm, maybeAuthStatus, cmd ) =
-                    CreateAccount.update key subMsg model.createAccountForm model.maybeSessionToken
+                    CreateAccount.update key subMsg model.createAccountForm model.shared.maybeSessionToken
             in
             ( { model
                 | createAccountForm = updatedForm
-                , currentUser = maybeAuthStatus |> Maybe.withDefault model.currentUser
+                , shared = { modelShared | currentUser = maybeAuthStatus |> Maybe.withDefault model.shared.currentUser }
               }
             , Cmd.map CreateAccountMsg cmd
             )
 
         VerifyEmailMsg subMsg ->
             let
+                modelShared =
+                    model.shared
+
                 ( updatedForm, maybeAuthStatus, cmd ) =
                     VerifyEmail.update subMsg model.verifyEmailForm
             in
             ( { model
                 | verifyEmailForm = updatedForm
-                , currentUser = maybeAuthStatus |> Maybe.withDefault model.currentUser
+                , shared = { modelShared | currentUser = maybeAuthStatus |> Maybe.withDefault model.shared.currentUser }
               }
             , Cmd.map VerifyEmailMsg cmd
             )
 
         LoginMsg subMsg ->
             let
+                modelShared =
+                    model.shared
+
                 ( updatedForm, maybeAuthStatus, cmd ) =
-                    Login.update key subMsg model.loginForm model.maybeSessionToken
+                    Login.update key subMsg model.loginForm model.shared.maybeSessionToken
 
                 cartItemsCommand =
                     case maybeAuthStatus of
@@ -949,7 +969,7 @@ update msg ({ pageData, key } as model) =
             in
             ( { model
                 | loginForm = updatedForm
-                , currentUser = maybeAuthStatus |> Maybe.withDefault model.currentUser
+                , shared = { modelShared | currentUser = maybeAuthStatus |> Maybe.withDefault model.shared.currentUser }
               }
             , Cmd.batch [ Cmd.map LoginMsg cmd, cartItemsCommand ]
             )
@@ -965,6 +985,9 @@ update msg ({ pageData, key } as model) =
 
         ResetPasswordMsg subMsg ->
             let
+                modelShared =
+                    model.shared
+
                 cartItemsCommand maybeAuthStatus =
                     case maybeAuthStatus of
                         Just (User.Authorized _) ->
@@ -973,11 +996,11 @@ update msg ({ pageData, key } as model) =
                         _ ->
                             Cmd.none
             in
-            ResetPassword.update key subMsg model.resetPasswordForm model.maybeSessionToken
+            ResetPassword.update key subMsg model.resetPasswordForm model.shared.maybeSessionToken
                 |> (\( form, maybeAuthStatus, cmd ) ->
                         ( { model
                             | resetPasswordForm = form
-                            , currentUser = maybeAuthStatus |> Maybe.withDefault model.currentUser
+                            , shared = { modelShared | currentUser = maybeAuthStatus |> Maybe.withDefault model.shared.currentUser }
                           }
                         , Cmd.batch
                             [ Cmd.map ResetPasswordMsg cmd
@@ -987,12 +1010,12 @@ update msg ({ pageData, key } as model) =
                    )
 
         EditLoginMsg subMsg ->
-            EditLogin.update key subMsg model.editLoginForm model.currentUser
+            EditLogin.update key subMsg model.editLoginForm model.shared.currentUser
                 |> Tuple.mapFirst (\form -> { model | editLoginForm = form })
                 |> Tuple.mapSecond (Cmd.map EditLoginMsg)
 
         EditAddressMsg subMsg ->
-            EditAddress.update key subMsg model.editAddressForm model.currentUser pageData.addressDetails
+            EditAddress.update key subMsg model.editAddressForm model.shared.currentUser pageData.addressDetails
                 |> Tuple.mapFirst (\form -> { model | editAddressForm = form })
                 |> Tuple.mapSecond (Cmd.map EditAddressMsg)
 
@@ -1009,7 +1032,7 @@ update msg ({ pageData, key } as model) =
             in
             model.pageData.cartDetails
                 |> RemoteData.withDefault PageData.blankCartDetails
-                |> Cart.update subMsg model.currentUser model.maybeSessionToken model.editCartForm
+                |> Cart.update subMsg model.shared.currentUser model.shared.maybeSessionToken model.editCartForm
                 |> (\( form, maybeDetails, cmd ) ->
                         ( { model
                             | pageData = updatedPageData maybeDetails
@@ -1021,7 +1044,7 @@ update msg ({ pageData, key } as model) =
                    )
 
         QuickOrderMsg subMsg ->
-            QuickOrder.update subMsg model.quickOrderForms model.currentUser model.maybeSessionToken
+            QuickOrder.update subMsg model.quickOrderForms model.shared.currentUser model.shared.maybeSessionToken
                 |> (\( forms, maybeQuantityAndToken, cmd ) ->
                         let
                             newQuantityAndToken m =
@@ -1077,10 +1100,16 @@ update msg ({ pageData, key } as model) =
 
                         Just (Checkout.LoggedIn newAuthStatus newDetails) ->
                             let
+                                modelShared =
+                                    model.shared
+
                                 updatedPageData =
                                     { pageData | checkoutDetails = RemoteData.Success newDetails }
                             in
-                            ( { model_ | pageData = updatedPageData, currentUser = newAuthStatus }
+                            ( { model_
+                                | pageData = updatedPageData
+                                , shared = { modelShared | currentUser = newAuthStatus }
+                              }
                             , Cmd.batch
                                 [ cmd
                                 , User.storeDetails newAuthStatus
@@ -1094,8 +1123,8 @@ update msg ({ pageData, key } as model) =
             Checkout.update
                 subMsg
                 model.checkoutForm
-                model.currentUser
-                model.maybeSessionToken
+                model.shared.currentUser
+                model.shared.maybeSessionToken
                 pageData.checkoutDetails
                 |> (\( form, maybeOutMsg, cmd ) ->
                         ( { model | checkoutForm = form }
@@ -1218,8 +1247,14 @@ update msg ({ pageData, key } as model) =
             case response of
                 RemoteData.Success authStatus ->
                     let
+                        modelShared =
+                            model.shared
+
+                        updatedShared =
+                            { modelShared | currentUser = authStatus, maybeSessionToken = Nothing }
+
                         updatedModel =
-                            { model | currentUser = authStatus, maybeSessionToken = Nothing }
+                            { model | shared = updatedShared }
 
                         baseUpdate =
                             if Routing.authRequired model.route || List.member model.route [ Cart, Checkout ] then
@@ -1245,7 +1280,11 @@ update msg ({ pageData, key } as model) =
                             baseUpdate
 
                 RemoteData.Failure _ ->
-                    ( { model | currentUser = User.Anonymous }
+                    let
+                        modelShared =
+                            model.shared
+                    in
+                    ( { model | shared = { modelShared | currentUser = User.Anonymous } }
                     , Cmd.batch
                         [ Ports.removeAuthDetails ()
                         , redirectIfAuthRequired key model.route
@@ -1259,8 +1298,11 @@ update msg ({ pageData, key } as model) =
             case response of
                 RemoteData.Success _ ->
                     let
+                        modelShared =
+                            model.shared
+
                         ( updatedModel, fetchCmd ) =
-                            { model | currentUser = User.unauthorized, cartItemCount = 0 }
+                            { model | shared = { modelShared | currentUser = User.unauthorized }, cartItemCount = 0 }
                                 |> fetchDataForRoute
                     in
                     ( updatedModel
@@ -1295,11 +1337,7 @@ update msg ({ pageData, key } as model) =
                                             Just { cartForm | variant = Just variantId }
 
                                         Nothing ->
-                                            Just
-                                                { variant = Just variantId
-                                                , requestStatus = RemoteData.NotAsked
-                                                , quantity = 1
-                                                }
+                                            Just Product.initProductModel
                                 )
                                 model.productDict
 
@@ -2154,13 +2192,17 @@ updateCartItemCountFromDetails maybeCartDetails model =
 
 updateSessionTokenAndCartItemCount : Model -> Int -> String -> ( Model, Cmd msg )
 updateSessionTokenAndCartItemCount model quantity sessionToken =
+    let
+        modelShared =
+            model.shared
+    in
     if String.isEmpty sessionToken then
         { model | cartItemCount = model.cartItemCount + quantity }
             |> withCommand (\m -> Ports.setCartItemCount m.cartItemCount)
 
-    else if Just sessionToken /= model.maybeSessionToken then
+    else if Just sessionToken /= model.shared.maybeSessionToken then
         ( { model
-            | maybeSessionToken = Just sessionToken
+            | shared = { modelShared | maybeSessionToken = Just sessionToken }
             , cartItemCount = quantity
           }
         , Cmd.batch
@@ -2184,9 +2226,9 @@ redirectIfAuthRequired key route =
         Cmd.none
 
 
-redirect403IfAnonymous : Routing.Key -> RemoteData.WebData a -> { m | currentUser : AuthStatus, route : Route } -> Cmd Msg
-redirect403IfAnonymous key response { currentUser, route } =
-    case ( response, currentUser ) of
+redirect403IfAnonymous : Routing.Key -> RemoteData.WebData a -> { m | shared : { n | currentUser : AuthStatus }, route : Route } -> Cmd Msg
+redirect403IfAnonymous key response { shared, route } =
+    case ( response, shared.currentUser ) of
         ( RemoteData.Failure (Http.BadStatus 403), User.Anonymous ) ->
             Routing.newUrl key <| Login (Just <| Routing.reverse route) False
 

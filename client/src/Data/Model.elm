@@ -85,8 +85,6 @@ type alias Model =
     , adminDashboard : AdminDashboard.Model
     , settingsForm : SettingsAdmin.Form
     , cartItemCount : Int
-    , maybeSessionToken : Maybe String
-    , currentUser : AuthStatus
     , zone : Time.Zone
     , key : Routing.Key
     , helcimUrl : String
@@ -102,7 +100,9 @@ type alias Model =
 
 initShared : Shared Msg
 initShared =
-    { tooltips = Tooltip.init
+    { maybeSessionToken = Nothing
+    , currentUser = User.unauthorized
+    , tooltips = Tooltip.init
     , tooltipMsg = TooltipMsg
     , navigateToMsg = NavigateTo
     , lightboxMsg = ProductDetailsLightbox
@@ -152,8 +152,6 @@ initial key route helcimUrl =
     , adminDashboard = AdminDashboard.initialModel
     , settingsForm = SettingsAdmin.initialForm
     , cartItemCount = 0
-    , maybeSessionToken = Nothing
-    , currentUser = User.unauthorized
     , zone = Time.utc
     , key = key
     , helcimUrl = helcimUrl

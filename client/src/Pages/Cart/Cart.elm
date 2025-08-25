@@ -138,7 +138,7 @@ updateCart authStatus maybeCartToken { quantities } mbCartDetails =
         encodedQuantities =
             Encode.object <|
                 ( "quantities", Encode.object changed )
-                    :: encodedCartToken maybeCartToken
+                    :: User.encodedCartToken maybeCartToken
     in
     if List.isEmpty changed then
         Cmd.none
@@ -161,7 +161,7 @@ removeItem authStatus maybeCartToken itemId =
                 , Encode.object
                     [ ( String.fromInt <| fromCartItemId itemId, Encode.int 0 ) ]
                 )
-                    :: encodedCartToken maybeCartToken
+                    :: User.encodedCartToken maybeCartToken
     in
     case authStatus of
         User.Anonymous ->
@@ -476,9 +476,3 @@ isFormUnchanged : Dict Int Int -> List PageData.CartItem -> Bool
 isFormUnchanged quantities items =
     changedQuantities quantities items
         |> List.isEmpty
-
-
-encodedCartToken : Maybe String -> List ( String, Encode.Value )
-encodedCartToken =
-    Maybe.map (\token -> [ ( "sessionToken", Encode.string token ) ])
-        >> Maybe.withDefault []
