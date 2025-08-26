@@ -2,7 +2,7 @@ module Components.AdvancedSearch exposing (Msg(..), update, view)
 
 import Components.Aria as Aria
 import Components.Button as Button exposing (..)
-import Components.Products.Pagination as Pagination
+import Components.Pagination as Pagination
 import Components.Svg exposing (heirLoomSvg, organicSvg, searchSvg, smallFarmSvg, sunSvg)
 import Data.Category exposing (CategoryId(..))
 import Data.Routing.Routing exposing (Route(..))
@@ -164,7 +164,7 @@ mainView routingMsg formMsg data categories =
                     , value data.query
                     , onInput <| formMsg << KeywordInput
                     , Aria.label "Search Terms"
-                    , placeholder "Search"
+                    , placeholder "Type product name..."
                     ]
                     []
                 , categorySelect False
@@ -207,7 +207,7 @@ mainView routingMsg formMsg data categories =
                     , value data.query
                     , onInput <| formMsg << KeywordInput
                     , Aria.label "Search Terms"
-                    , placeholder "Search"
+                    , placeholder "Type product name..."
                     ]
                     []
                 , div [ class "tw:pl-[10px]" ]
@@ -216,8 +216,8 @@ mainView routingMsg formMsg data categories =
                 ]
 
         mobileView =
-            form [ class "tw:pb-[28px] tw:flex tw:flex-col tw:gap-[16px]", onSubmit << routingMsg <| SearchResults data Pagination.default ] <|
-                [ div [ class "tw:flex tw:lg:hidden tw:gap-[16px]" ]
+            form [ class "tw:pb-[28px] tw:flex tw:lg:hidden tw:flex-col tw:gap-[16px]", onSubmit << routingMsg <| SearchResults data Pagination.default ] <|
+                [ div [ class "tw:flex tw:gap-[16px]" ]
                     [ mobileSearchBar
                     , mobileFilterIcon
                     ]

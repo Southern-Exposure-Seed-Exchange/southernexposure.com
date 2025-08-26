@@ -12,12 +12,11 @@ module Data.Routing.Routing exposing
     )
 
 import Browser.Navigation
-import Components.Products.Pagination as Pagination
-import Data.Category as Category exposing (CategoryId(..))
-import Data.Product as Product exposing (ProductId(..), ProductVariantId(..))
+import Components.Pagination as Pagination
+import Data.Category exposing (CategoryId(..))
+import Data.Product exposing (ProductId(..), ProductVariantId(..))
 import Data.Routing.Utils exposing (fromStringParam, joinPath, optionalIntParam, parseFlag, queryFlag, queryParameter, withQueryStrings)
 import Data.Search as Search exposing (UniqueSearch(..))
-import Data.SeedAttribute as SeedAttribute
 import Data.StaticPage as StaticPage exposing (StaticPageId)
 import Url exposing (Url)
 import Url.Parser as Url exposing ((</>), (<?>))

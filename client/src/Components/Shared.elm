@@ -35,7 +35,7 @@ logoAndName linkRoute =
             Routing.homePage
 
         titleLink =
-            a (class "d-block tw:text-[#1E0C03]! tw:text-[18px] tw:lg:text-[29px]" :: routeLinkAttributes linkRoute)
+            a (class "d-block tw:text-[#1E0C03]! tw:text-[18px] tw:lg:text-[29px] tw:hover:no-underline!" :: routeLinkAttributes linkRoute)
                 [ text "Southern Exposure"
                 , br [ class "d-block" ] []
                 , text " Seed Exchange"

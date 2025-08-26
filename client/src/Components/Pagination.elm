@@ -1,11 +1,11 @@
-module Components.Products.Pagination exposing
+module Components.Pagination exposing
     ( Data
     , default
     , fromQueryString
     , toQueryString
     )
 
-import Components.Products.Sorting as Sorting
+import Components.Sorting as Sorting
 import Data.Routing.Utils exposing (optionalIntParam)
 import Url.Parser as Url exposing ((<?>))
 

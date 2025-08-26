@@ -1,19 +1,21 @@
-module Components.Products.Views exposing (..)
+module Components.Product.Views exposing (..)
 
 import BootstrapGallery as Gallery
+import Components.AddToCart.AddToCart as AddToCart
+import Components.AddToCart.Type as AddToCart
 import Components.Aria as Aria
 import Components.Button as Button exposing (ButtonType(..), defaultButton)
 import Components.Form as Form
 import Components.Microdata as Microdata
 import Components.Pager as Pager
-import Components.Products.Pagination as Pagination
-import Components.Products.Sorting as Sorting
+import Components.Pagination as Pagination
+import Components.Product.Type exposing (Model, Msg(..), initProductModel)
 import Components.SeedAttribute as SeedAttribute
+import Components.Sorting as Sorting
 import Components.Svg exposing (minusSvg, plusSvg, shoppingCartSvgSmall)
 import Components.Tooltip as Tooltip
 import Data.Category exposing (Category)
 import Data.Fields exposing (Cents(..), centsToString, imageToSrcSet, imgSrcFallback, lotSizeToString)
-import Data.Msg exposing (Msg(..))
 import Data.PageData as PageData exposing (ProductData)
 import Data.Product as Product exposing (InventoryPolicy(..), Product, ProductId(..), ProductVariant, ProductVariantId(..), productMainImage, variantPrice)
 import Data.Routing.Routing as Routing exposing (Route(..))
@@ -27,9 +29,7 @@ import Html.Events exposing (on, onClick, onSubmit, targetValue)
 import Html.Extra exposing (viewIfLazy)
 import Html.Keyed as Keyed
 import Json.Decode as Decode
-import Pages.Cart.Type exposing (CartForms)
 import Paginate exposing (Paginated)
-import RemoteData
 import Utils.Format as Format
 import Utils.View exposing (htmlOrBlank, icon, numericInput, onIntInput, rawHtml, routeLinkAttributes)
 
@@ -46,24 +46,29 @@ type ProductFormStyle
     | Checkout
 
 
-type alias CartFormData =
+type alias CartFormData pmsg =
     { maybeSelectedVariant : Maybe ProductVariant
     , maybeSelectedVariantId : Maybe ProductVariantId
     , quantity : Int
-    , variantSelect : List (Html Msg)
+    , variantSelect : List (Html pmsg)
     , selectedItemNumber : String
     , offersMeta : Html Never
-    , requestFeedback : Html Never
+    , model : Model
     }
 
 
-cartFormData : CartForms -> ( Product, Dict Int ProductVariant ) -> CartFormData
-cartFormData addToCartForms ( product, variants ) =
+{-| Given the product dict, get necessary data to be passed into view function
+-}
+cartFormData : Shared pmsg -> Dict Int Model -> ( Product, Dict Int ProductVariant ) -> CartFormData pmsg
+cartFormData shared productDict ( product, variants ) =
     let
-        ( maybeSelectedVariantId, quantity, requestStatus ) =
-            Dict.get (fromProductId product.id) addToCartForms
-                |> Maybe.withDefault { variant = Nothing, quantity = 1, requestStatus = RemoteData.NotAsked }
-                |> (\v -> ( v.variant |> ifNothing maybeFirstVariantId, v.quantity, v.requestStatus ))
+        model =
+            Dict.get (fromProductId product.id) productDict
+                |> Maybe.withDefault initProductModel
+                |> (\v -> v)
+
+        ( maybeSelectedVariantId, quantity ) =
+            ( model.variant |> ifNothing maybeFirstVariantId, model.addToCart.amount )
 
         maybeSelectedVariant =
             maybeSelectedVariantId
@@ -94,14 +99,14 @@ cartFormData addToCartForms ( product, variants ) =
             Dict.size variants > 1
 
         variantSelect _ =
-            customSelectView product maybeSelectedVariant variantList
+            customSelectView shared product maybeSelectedVariant variantList
 
         -- TODO: removed this when no longer needed
         variantSelect2 _ =
             Form.selectView
                 { tagId = "inputVariant-" ++ String.fromInt (fromProductId product.id)
                 , ariaLabel = "Select a Lot Size Variant for " ++ product.name
-                , onSelectHandler = ChangeCartFormVariantId product.id
+                , onSelectHandler = shared.productMsg product.id << ChangeCartFormVariantId
                 , valueDecoder =
                     String.toInt
                         >> Maybe.map (ProductVariantId >> Decode.succeed)
@@ -180,48 +185,6 @@ cartFormData addToCartForms ( product, variants ) =
                     Routing.reverse <|
                         ProductDetails product.slug Nothing
                 ]
-
-        requestFeedback =
-            case requestStatus of
-                RemoteData.NotAsked ->
-                    text ""
-
-                RemoteData.Loading ->
-                    div [ class "tw:py-[8px] text-warning font-weight-bold small" ]
-                        [ icon "spinner fa-spin mr-1"
-                        , text "Adding to Cart"
-                        ]
-
-                RemoteData.Success (Ok _) ->
-                    div [ class "tw:py-[8px] tw:text-[rgb(77,170,154)] font-weight-bold small" ]
-                        [ icon "check-circle mr-1"
-                        , text "Added to Cart!"
-                        ]
-
-                RemoteData.Success (Err errors) ->
-                    div [ class "tw:py-[8px] text-danger font-weight-bold small" ]
-                        [ icon "times mr-1"
-                        , text "Error Adding To Cart: "
-                        , br [] []
-                        , case get "variant" errors of
-                            Just variantValidation ->
-                                text <| " " ++ String.join "\n" variantValidation
-
-                            Nothing ->
-                                text ""
-                        , case get "quantity" errors of
-                            Just quantityValidation ->
-                                text <| " " ++ String.join "\n" quantityValidation
-
-                            Nothing ->
-                                text ""
-                        ]
-
-                RemoteData.Failure _ ->
-                    div [ class "tw:py-[8px] text-danger font-weight-bold small" ]
-                        [ icon "times mr-1"
-                        , text "Error Adding To Cart!"
-                        ]
     in
     { maybeSelectedVariant = maybeSelectedVariant
     , maybeSelectedVariantId = maybeSelectedVariantId
@@ -235,7 +198,7 @@ cartFormData addToCartForms ( product, variants ) =
                 []
     , selectedItemNumber = getItemNumber product maybeSelectedVariant
     , offersMeta = offers
-    , requestFeedback = requestFeedback
+    , model = model
     }
 
 
@@ -245,12 +208,12 @@ cartFormData addToCartForms ( product, variants ) =
 --------------------------------------------------------------
 
 
-productAttrView : Shared -> ViewKey -> String -> Maybe SeedAttribute -> Html Msg
+productAttrView : Shared pmsg -> ViewKey -> String -> Maybe SeedAttribute -> Html pmsg
 productAttrView shared parentKey selectedItemNumber maybeSeedAttribute =
     div [ class "tw:flex tw:items-center" ]
         [ small [ class "text-muted d-block tw:grow" ]
             [ renderItemNumber selectedItemNumber ]
-        , htmlOrBlank (SeedAttribute.icons shared parentKey TooltipMsg) maybeSeedAttribute
+        , htmlOrBlank (SeedAttribute.icons shared parentKey shared.tooltipMsg) maybeSeedAttribute
         ]
 
 
@@ -267,7 +230,7 @@ outOfStockView paddingClass maybeSelectedVariant =
             )
 
 
-limitedAvailabilityView : Shared -> ViewKey -> String -> Maybe ProductVariant -> Html Msg
+limitedAvailabilityView : Shared pmsg -> ViewKey -> String -> Maybe ProductVariant -> Html pmsg
 limitedAvailabilityView shared parentKey paddingClass maybeSelectedVariant =
     maybeSelectedVariant
         |> htmlOrBlank
@@ -278,7 +241,7 @@ limitedAvailabilityView shared parentKey paddingClass maybeSelectedVariant =
                             { key = parentKey ++ "limitedAvailabilityBadge"
                             , triggerEl = limitedAvailabilityBadge
                             , text = "This product has limited availability. Expect delays in delivery."
-                            , mkParentMsg = TooltipMsg
+                            , mkParentMsg = shared.tooltipMsg
                             , widthClass = Just "tw:w-[264px]"
                             , align = Tooltip.Right
                             }
@@ -315,20 +278,14 @@ priceView style maybeSelectedVariant =
         |> htmlOrBlank (\v -> p [ class class_ ] [ renderPrice v ])
 
 
-detailFormView : Shared -> CartFormData -> Product -> Maybe SeedAttribute -> List Category -> Html Msg
-detailFormView shared { maybeSelectedVariant, maybeSelectedVariantId, quantity, variantSelect, selectedItemNumber, offersMeta, requestFeedback } product maybeSeedAttribute categories =
+detailFormView : Shared pmsg -> CartFormData pmsg -> Product -> Maybe SeedAttribute -> List Category -> Html pmsg
+detailFormView shared { maybeSelectedVariant, maybeSelectedVariantId, quantity, variantSelect, selectedItemNumber, offersMeta, model } product maybeSeedAttribute categories =
     let
         key =
             "product-detail"
 
         formAttributes =
-            (::) (class "add-to-cart-form tw:flex tw:flex-col tw:grow") <|
-                case maybeSelectedVariantId of
-                    Just variantId ->
-                        [ onSubmit <| SubmitAddToCart product.id variantId ]
-
-                    Nothing ->
-                        []
+            (::) (class "add-to-cart-form tw:flex tw:flex-col tw:grow") <| []
 
         categoryBlocks =
             List.filter (not << String.isEmpty << .description) categories
@@ -345,7 +302,7 @@ detailFormView shared { maybeSelectedVariant, maybeSelectedVariantId, quantity, 
                             ]
                     )
     in
-    form formAttributes
+    div formAttributes
         [ div [ class "tw:pb-[16px]" ]
             [ productAttrView shared key selectedItemNumber maybeSeedAttribute
             ]
@@ -353,9 +310,9 @@ detailFormView shared { maybeSelectedVariant, maybeSelectedVariantId, quantity, 
         , outOfStockView "tw:pb-[24px]" maybeSelectedVariant
         , limitedAvailabilityView shared key "tw:pb-[24px]" maybeSelectedVariant
         , variantSelectView "tw:pb-[24px]" variantSelect
-        , Html.map never requestFeedback
+        , Html.map (shared.productMsg product.id << AddToCartMsg) (AddToCart.statusView model.addToCart)
         , div [ class "tw:pb-[28px] tw:w-full tw:flex tw:flex-col" ]
-            [ addToCartInput Detail quantity product maybeSelectedVariant
+            [ addToCartInput shared model Detail quantity product maybeSelectedVariant
             ]
         , Html.map never offersMeta
         , div [ Microdata.description, class "tw:text-[16px] static-page" ] [ rawHtml product.longDescription ]
@@ -369,15 +326,15 @@ detailFormView shared { maybeSelectedVariant, maybeSelectedVariantId, quantity, 
         ]
 
 
-detailView : Shared -> CartForms -> PageData.ProductDetails -> List (Html Msg)
-detailView shared addToCartForms { product, variants, maybeSeedAttribute, categories } =
+detailView : Shared pmsg -> Dict Int Model -> PageData.ProductDetails -> List (Html pmsg)
+detailView shared productDict { product, variants, maybeSeedAttribute, categories } =
     let
         cartData =
-            cartFormData addToCartForms ( product, variants )
+            cartFormData shared productDict ( product, variants )
     in
     [ div (Microdata.product ++ [ class "tw:flex tw:gap-[40px] tw:flex-col tw:lg:flex-row tw:items-center tw:lg:items-start" ])
         [ div [ class "tw:shrink-0 tw:flex" ]
-            [ productImageGalleryView product
+            [ productImageGalleryView shared product
             ]
         , div []
             [ h6 [ class "tw:text-[32px]! tw:pb-[16px]" ]
@@ -390,19 +347,13 @@ detailView shared addToCartForms { product, variants, maybeSeedAttribute, catego
     ]
 
 
-cardFormView : Shared -> ViewKey -> CartFormData -> Product -> Maybe SeedAttribute -> Html Msg
-cardFormView shared key { maybeSelectedVariant, maybeSelectedVariantId, quantity, variantSelect, selectedItemNumber, offersMeta, requestFeedback } product maybeSeedAttribute =
+cardFormView : Shared pmsg -> ViewKey -> CartFormData pmsg -> Product -> Maybe SeedAttribute -> Html pmsg
+cardFormView shared key { maybeSelectedVariant, maybeSelectedVariantId, quantity, variantSelect, selectedItemNumber, offersMeta, model } product maybeSeedAttribute =
     let
         formAttributes =
-            (::) (class "add-to-cart-form tw:flex tw:flex-col tw:grow") <|
-                case maybeSelectedVariantId of
-                    Just variantId ->
-                        [ onSubmit <| SubmitAddToCart product.id variantId ]
-
-                    Nothing ->
-                        []
+            (::) (class "add-to-cart-form tw:flex tw:flex-col tw:grow") <| []
     in
-    form formAttributes
+    div formAttributes
         [ div [ class "tw:pt-[12px] " ] [ productAttrView shared key selectedItemNumber maybeSeedAttribute ]
         , outOfStockView "tw:pt-[12px]" maybeSelectedVariant
         , limitedAvailabilityView shared key "tw:pt-[12px]" maybeSelectedVariant
@@ -414,18 +365,18 @@ cardFormView shared key { maybeSelectedVariant, maybeSelectedVariantId, quantity
         , div [ class "tw:grow" ]
             []
         , div [ class "tw:pt-[24px]" ]
-            [ Html.map never requestFeedback
+            [ Html.map (shared.productMsg product.id << AddToCartMsg) (AddToCart.statusView model.addToCart)
             , div [ class "tw:flex tw:items-center" ]
                 [ priceView Card maybeSelectedVariant
                 , div [ class "tw:grow" ] []
-                , addToCartInput Card quantity product maybeSelectedVariant
+                , addToCartInput shared model Card quantity product maybeSelectedVariant
                 , Html.map never offersMeta
                 ]
             ]
         ]
 
 
-cardView : Shared -> ViewKey -> CartFormData -> ProductData -> Html Msg
+cardView : Shared pmsg -> ViewKey -> CartFormData pmsg -> ProductData -> Html pmsg
 cardView shared key cartData ( product, variants, maybeSeedAttribute ) =
     div (Microdata.product ++ [ class "tw:bg-[rgba(77,170,154,0.06)] tw:rounded-[16px] tw:p-[16px] tw:flex tw:flex-col" ])
         [ productImageLinkView "tw:w-full tw:h-[200px]" product Nothing
@@ -472,8 +423,8 @@ productImageLinkView sizeClass product maybeVariantId =
 -- | Product image view, clicking it will open the gallery view
 
 
-productImageGalleryView : Product -> Html Msg
-productImageGalleryView product =
+productImageGalleryView : Shared pmsg -> Product -> Html pmsg
+productImageGalleryView shared product =
     let
         productImage =
             productMainImage product
@@ -481,7 +432,7 @@ productImageGalleryView product =
     a
         [ href <| productImage.original
         , A.target "_self"
-        , Gallery.openOnClick ProductDetailsLightbox productImage
+        , Gallery.openOnClick shared.lightboxMsg productImage
         , Aria.label <| "View Product Image for " ++ product.name
         ]
         [ img
@@ -495,8 +446,8 @@ productImageGalleryView product =
         ]
 
 
-listView : Shared -> (Pagination.Data -> Route) -> Pagination.Data -> CartForms -> Paginated ProductData a c -> List (Html Msg)
-listView shared routeConstructor pagination addToCartForms products =
+listView : Shared pmsg -> (Pagination.Data -> Route) -> Pagination.Data -> Dict Int Model -> Paginated ProductData a c -> List (Html pmsg)
+listView shared routeConstructor pagination productDict products =
     let
         sortHtml =
             if productsCount > 1 then
@@ -511,13 +462,13 @@ listView shared routeConstructor pagination addToCartForms products =
         productsCount =
             Paginate.getTotalItems products
 
-        sortingInput : Html Msg
+        sortingInput : Html pmsg
         sortingInput =
             div [ class "form-inline products-sorting" ]
                 [ select
                     [ id "product-sort-select"
                     , class "form-control form-control-sm"
-                    , onProductsSortSelect (NavigateTo << routeConstructor)
+                    , onProductsSortSelect (shared.navigateToMsg << routeConstructor)
                     , Aria.label "Select Products Sorting Method"
                     ]
                   <|
@@ -559,7 +510,7 @@ listView shared routeConstructor pagination addToCartForms products =
                 (\i (( p, v, _ ) as productData) ->
                     let
                         cartData =
-                            cartFormData addToCartForms ( p, v )
+                            cartFormData shared productDict ( p, v )
                     in
                     cardView shared ("card" ++ String.fromInt i) cartData productData
                 )
@@ -644,15 +595,15 @@ addToCartInputDisabled =
         }
 
 
-limitedAvailabilityBadge : Html Msg
+limitedAvailabilityBadge : Html pmsg
 limitedAvailabilityBadge =
     div [ class "tw:text-[rgba(250,173,20,1)] tw:pt-[4px] tw:pb-[4px] tw:px-[12px] tw:rounded-[8px] tw:bg-[rgba(250,173,20,0.1)] tw:border tw:border-[rgba(250,173,20,0.4)]" ]
         [ span [ class "tw:block tw:font-semibold tw:text-[14px] tw:leading-[20px]" ] [ text "Limited Stock — expect delays" ]
         ]
 
 
-addToCartInput : ProductFormStyle -> Int -> Product -> Maybe ProductVariant -> Html Msg
-addToCartInput style quantity product maybeSelectedVariant =
+addToCartInput : Shared pmsg -> { a | addToCart : AddToCart.Model } -> ProductFormStyle -> Int -> Product -> Maybe ProductVariant -> Html pmsg
+addToCartInput shared model style quantity product maybeSelectedVariant =
     let
         ( class_, buttonView ) =
             case style of
@@ -678,13 +629,13 @@ addToCartInput style quantity product maybeSelectedVariant =
                     )
 
         view =
-            div [ class <| "tw:flex " ++ class_ ]
-                [ customNumberView style
-                    quantity
-                    (ChangeCartFormQuantity product.id)
-                    (IncreaseCartFormQuantity product.id)
-                    (DecreaseCartFormQuantity product.id)
-                , buttonView
+            div []
+                [ case maybeSelectedVariant of
+                    Nothing ->
+                        text ""
+
+                    Just variant ->
+                        Html.map (shared.productMsg product.id << AddToCartMsg) (AddToCart.view () variant.id model.addToCart)
                 ]
     in
     case maybeSelectedVariant of
@@ -749,14 +700,14 @@ customNumberView style currentVal onChangeHandler increaseHandler decreaseHandle
         ]
 
 
-customSelectView : Product -> Maybe ProductVariant -> List ProductVariant -> Html Msg
-customSelectView product maybeSelectedVariant variantList =
+customSelectView : Shared pmsg -> Product -> Maybe ProductVariant -> List ProductVariant -> Html pmsg
+customSelectView shared product maybeSelectedVariant variantList =
     let
         getLotSizeLabel variant =
             Maybe.map lotSizeToString variant.lotSize
                 |> Maybe.withDefault (product.baseSKU ++ variant.skuSuffix)
 
-        singleItemView : ProductVariant -> Html Msg
+        singleItemView : ProductVariant -> Html pmsg
         singleItemView variant =
             let
                 selectedColor =
@@ -780,7 +731,7 @@ customSelectView product maybeSelectedVariant variantList =
             button
                 [ type_ "button"
                 , class <| colorClass ++ " tw:py-[4px] tw:px-[12px] tw:border tw:rounded-[8px]! tw:cursor-pointer"
-                , onClick <| ChangeCartFormVariantId product.id variant.id
+                , onClick <| shared.productMsg product.id <| ChangeCartFormVariantId variant.id
                 ]
                 [ span [ class " tw:block tw:text-[14px] tw:leading-[20px] tw:font-semibold" ]
                     [ text <| getLotSizeLabel variant ]

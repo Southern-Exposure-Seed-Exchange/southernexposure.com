@@ -1,118 +1,72 @@
 module Pages.Cart.Cart exposing
     ( fromCartDetails
     , update
-    , updateCart
     , view
     )
 
+import Components.AddToCart.AddToCart as AddToCart
+import Components.AddToCart.Type as AddToCart
 import Components.Aria as Aria
 import Components.Button as Button exposing (defaultButton)
-import Components.Products.Views as ProductView
+import Components.Product.Views as ProductView
 import Components.Svg exposing (..)
 import Data.Api as Api
 import Data.Fields exposing (Cents(..), centsMap)
 import Data.PageData as PageData exposing (CartDetails, CartItemId(..), showCartItemError, showCartItemWarning)
 import Data.Product as Product exposing (InventoryPolicy(..), variantPrice)
-import Data.Routing.Routing as Routing exposing (Route(..), reverse)
+import Data.Routing.Routing exposing (Route(..), reverse)
+import Data.Shared exposing (Shared)
 import Data.User as User exposing (AuthStatus, unauthorized)
-import Dict exposing (Dict, get, size)
+import Dict
 import Html exposing (..)
 import Html.Attributes exposing (class)
-import Html.Events exposing (onClick, onSubmit)
+import Html.Events exposing (onClick)
 import Html.Extra exposing (viewIf)
 import Json.Encode as Encode
 import Pages.Cart.Type exposing (..)
 import RemoteData
 import Utils.Format as Format
-import Utils.View exposing (htmlOrBlank, icon, pageTitleView, rawHtml, routeLinkAttributes)
+import Utils.View exposing (htmlOrBlank, pageTitleView, rawHtml, routeLinkAttributes)
 
 
 
 -- MODEL
 
 
-fromCartDetails : CartDetails -> Form
+fromCartDetails : CartDetails -> Model
 fromCartDetails { items } =
     List.foldl
-        (\item acc -> Dict.insert ((\(CartItemId i) -> i) item.id) item.quantity acc)
+        (\item acc ->
+            Dict.insert ((\(CartItemId i) -> i) item.id)
+                { addToCart =
+                    let
+                        addToCart =
+                            AddToCart.init
+                    in
+                    { addToCart
+                        | amount = item.quantity
+                        , clickStatus = True
+                        , detailWarnings = item.warnings
+                        , detailErrors = item.errors
+                    }
+                }
+                acc
+        )
         Dict.empty
         items
-        |> Form
+        |> Model
 
 
 update :
-    Msg
-    -> AuthStatus
-    -> Maybe String
-    -> Form
+    Shared pmsg
+    -> Msg
+    -> Model
     -> CartDetails
-    -> ( Form, Maybe CartDetails, Cmd Msg )
-update msg authStatus maybeCartToken model details =
+    -> ( Model, Maybe CartDetails, Cmd Msg )
+update shared msg model _ =
     case msg of
-        SetFormQuantity itemId quantity ->
-            ( { model
-                | quantities =
-                    Dict.update (fromCartItemId itemId)
-                        (always <| Just quantity)
-                        model.quantities
-              }
-            , Nothing
-            , Cmd.none
-            )
-
-        IncreaseFormQuantity itemId ->
-            let
-                minQuantity =
-                    1
-            in
-            ( { model
-                | quantities =
-                    Dict.update (fromCartItemId itemId)
-                        (\current ->
-                            case current of
-                                Nothing ->
-                                    Just (minQuantity + 1)
-
-                                Just a ->
-                                    Just (a + 1)
-                        )
-                        model.quantities
-              }
-            , Nothing
-            , Cmd.none
-            )
-
-        DecreaseFormQuantity itemId ->
-            let
-                minQuantity =
-                    1
-            in
-            ( { model
-                | quantities =
-                    Dict.update (fromCartItemId itemId)
-                        (\current ->
-                            case current of
-                                Nothing ->
-                                    Just minQuantity
-
-                                Just a ->
-                                    if a - 1 == 0 then
-                                        Just minQuantity
-
-                                    else
-                                        Just <| a - 1
-                        )
-                        model.quantities
-              }
-            , Nothing
-            , Cmd.none
-            )
-
         Remove itemId ->
-            ( model, Nothing, removeItem authStatus maybeCartToken itemId )
-
-        Submit ->
-            ( model, Nothing, updateCart authStatus maybeCartToken model (Just details) )
+            ( model, Nothing, removeItem shared.currentUser shared.maybeSessionToken itemId )
 
         UpdateResponse response ->
             case response of
@@ -122,34 +76,29 @@ update msg authStatus maybeCartToken model details =
                 _ ->
                     ( model, Nothing, Cmd.none )
 
+        AddToCartMsg (CartItemId cartId) subMsg ->
+            let
+                formItem =
+                    Maybe.withDefault formItemInit <| Dict.get cartId model.formItems
 
-updateCart : AuthStatus -> Maybe String -> Form -> Maybe CartDetails -> Cmd Msg
-updateCart authStatus maybeCartToken { quantities } mbCartDetails =
-    let
-        changed =
-            case mbCartDetails of
-                Nothing ->
-                    List.map (\( id, quantity ) -> ( String.fromInt id, Encode.int quantity )) (Dict.toList quantities)
+                ( newAddToCart, addToCartCmd ) =
+                    AddToCart.update shared subMsg formItem.addToCart
 
-                Just { items } ->
-                    -- Get the changed quantities from the form and the current cart items
-                    changedQuantities quantities items
+                maybeCartDetails =
+                    case subMsg of
+                        AddToCart.UpdateAmountBaseOnCartDetail _ _ _ (RemoteData.Success (Ok cartDetails)) ->
+                            Just cartDetails
 
-        encodedQuantities =
-            Encode.object <|
-                ( "quantities", Encode.object changed )
-                    :: encodedCartToken maybeCartToken
-    in
-    if List.isEmpty changed then
-        Cmd.none
+                        _ ->
+                            Nothing
 
-    else
-        case authStatus of
-            User.Anonymous ->
-                anonymousUpdateRequest encodedQuantities
-
-            User.Authorized _ ->
-                customerUpdateRequest encodedQuantities
+                newFormItem =
+                    { formItem | addToCart = newAddToCart }
+            in
+            ( { model | formItems = Dict.insert cartId newFormItem model.formItems }
+            , maybeCartDetails
+            , Cmd.map (AddToCartMsg (CartItemId cartId)) addToCartCmd
+            )
 
 
 removeItem : AuthStatus -> Maybe String -> CartItemId -> Cmd Msg
@@ -161,7 +110,7 @@ removeItem authStatus maybeCartToken itemId =
                 , Encode.object
                     [ ( String.fromInt <| fromCartItemId itemId, Encode.int 0 ) ]
                 )
-                    :: encodedCartToken maybeCartToken
+                    :: User.encodedCartToken maybeCartToken
     in
     case authStatus of
         User.Anonymous ->
@@ -191,8 +140,8 @@ customerUpdateRequest body =
 -- VIEW
 
 
-view : AuthStatus -> Form -> CartDetails -> List (Html Msg)
-view authStatus ({ quantities } as form_) ({ items, charges } as cartDetails) =
+view : AuthStatus -> Model -> CartDetails -> List (Html Msg)
+view authStatus { formItems } ({ items, charges } as cartDetails) =
     let
         itemCount =
             List.foldl (.quantity >> (+)) 0 items
@@ -233,18 +182,6 @@ view authStatus ({ quantities } as form_) ({ items, charges } as cartDetails) =
                 , div
                     [ class "tw:pt-[12px] tw:flex tw:flex-col tw:gap-[12px]" ]
                     [ Button.view
-                        { defaultButton
-                            | label = "Update"
-                            , style = Button.Outline
-                            , type_ =
-                                if formIsUnchanged then
-                                    Button.Disabled
-
-                                else
-                                    Button.FormSubmit
-                            , iconEnd = Just (icon "refresh")
-                        }
-                    , Button.view
                         { defaultButton
                             | label =
                                 if authStatus == unauthorized then
@@ -312,19 +249,21 @@ view authStatus ({ quantities } as form_) ({ items, charges } as cartDetails) =
                             ]
                         ]
                     ]
-                , viewIf (List.length errors > 0) <|
-                    div [ class "tw:py-[8px] text-danger font-weight-bold small" ]
-                        [ text <| String.join ", " (List.map showCartItemError errors) ]
-                , viewIf (List.length warnings > 0) <|
-                    div [ class "tw:py-[8px] text-warning font-weight-bold small" ]
-                        [ text <| String.join ", " (List.map showCartItemWarning warnings) ]
+                , Html.map (AddToCartMsg id) <|
+                    AddToCart.statusView
+                        (Maybe.withDefault AddToCart.init <|
+                            Maybe.map .addToCart <|
+                                Dict.get (fromCartItemId id) formItems
+                        )
                 , div [ class "tw:flex tw:justify-between tw:pt-[20px]" ]
                     [ div [ class "tw:flex tw:flex-col tw:items-start" ]
-                        [ ProductView.customNumberView ProductView.Checkout
-                            (Maybe.withDefault 1 <| Dict.get (fromCartItemId id) quantities)
-                            (SetFormQuantity id)
-                            (IncreaseFormQuantity id)
-                            (DecreaseFormQuantity id)
+                        [ Html.map (AddToCartMsg id) <|
+                            AddToCart.view ()
+                                variant.id
+                                (Maybe.withDefault AddToCart.init <|
+                                    Maybe.map .addToCart <|
+                                        Dict.get (fromCartItemId id) formItems
+                                )
                         ]
                     , binButton id product
                     ]
@@ -342,11 +281,13 @@ view authStatus ({ quantities } as form_) ({ items, charges } as cartDetails) =
                         , ProductView.renderItemNumber (ProductView.getItemNumber product (Just variant))
                         , div [ class "tw:grow" ] []
                         , div [ class "tw:flex tw:flex-col tw:items-start" ]
-                            [ ProductView.customNumberView ProductView.Checkout
-                                (Maybe.withDefault 1 <| Dict.get (fromCartItemId id) quantities)
-                                (SetFormQuantity id)
-                                (IncreaseFormQuantity id)
-                                (DecreaseFormQuantity id)
+                            [ Html.map (AddToCartMsg id) <|
+                                AddToCart.view ()
+                                    variant.id
+                                    (Maybe.withDefault AddToCart.init <|
+                                        Maybe.map .addToCart <|
+                                            Dict.get (fromCartItemId id) formItems
+                                    )
                             ]
                         ]
                     , div [ class "tw:w-[155px] tw:shrink-0" ]
@@ -365,12 +306,12 @@ view authStatus ({ quantities } as form_) ({ items, charges } as cartDetails) =
                             ]
                         ]
                     ]
-                , viewIf (List.length errors > 0) <|
-                    div [ class "tw:py-[8px] text-danger font-weight-bold small" ]
-                        [ text <| String.join ", " (List.map showCartItemError errors) ]
-                , viewIf (List.length warnings > 0) <|
-                    div [ class "tw:py-[8px] text-warning font-weight-bold small" ]
-                        [ text <| String.join ", " (List.map showCartItemWarning warnings) ]
+                , Html.map (AddToCartMsg id) <|
+                    AddToCart.statusView
+                        (Maybe.withDefault AddToCart.init <|
+                            Maybe.map .addToCart <|
+                                Dict.get (fromCartItemId id) formItems
+                        )
                 ]
 
         tableFooter =
@@ -409,9 +350,6 @@ view authStatus ({ quantities } as form_) ({ items, charges } as cartDetails) =
             else
                 text ""
 
-        formIsUnchanged =
-            isFormUnchanged quantities items
-
         titleView =
             pageTitleView "Your cart"
     in
@@ -420,7 +358,7 @@ view authStatus ({ quantities } as form_) ({ items, charges } as cartDetails) =
         , viewIf cartDetails.isDisabled <|
             div [ class "alert alert-danger static-page" ]
                 [ rawHtml cartDetails.disabledMessage ]
-        , form [ class "tw:pl-0 tw:lg:pl-[16px] tw:flex tw:gap-[20px] tw:flex-col tw:lg:flex-row", onSubmit Submit ]
+        , div [ class "tw:pl-0 tw:lg:pl-[16px] tw:flex tw:gap-[20px] tw:flex-col tw:lg:flex-row" ]
             [ cartTable
             , buttons
             ]
@@ -451,34 +389,3 @@ view authStatus ({ quantities } as form_) ({ items, charges } as cartDetails) =
 fromCartItemId : CartItemId -> Int
 fromCartItemId (CartItemId i) =
     i
-
-
-changedQuantities : Dict Int Int -> List PageData.CartItem -> List ( String, Encode.Value )
-changedQuantities quantities =
-    List.foldl
-        (\{ id, quantity } acc ->
-            case Dict.get (fromCartItemId id) quantities of
-                Nothing ->
-                    acc
-
-                Just formQuantity ->
-                    if formQuantity /= quantity then
-                        ( String.fromInt <| fromCartItemId id, Encode.int formQuantity )
-                            :: acc
-
-                    else
-                        acc
-        )
-        []
-
-
-isFormUnchanged : Dict Int Int -> List PageData.CartItem -> Bool
-isFormUnchanged quantities items =
-    changedQuantities quantities items
-        |> List.isEmpty
-
-
-encodedCartToken : Maybe String -> List ( String, Encode.Value )
-encodedCartToken =
-    Maybe.map (\token -> [ ( "sessionToken", Encode.string token ) ])
-        >> Maybe.withDefault []

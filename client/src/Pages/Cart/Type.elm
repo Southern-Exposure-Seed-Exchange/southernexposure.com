@@ -1,30 +1,32 @@
 module Pages.Cart.Type exposing (..)
 
-import Data.Api as Api exposing (FormErrors)
+import Components.AddToCart.Type as AddToCart
+import Data.Api exposing (FormErrors)
 import Data.PageData as PageData exposing (CartItemId(..))
-import Data.Product as Product exposing (ProductVariantId)
 import Dict exposing (Dict)
 import Html exposing (..)
-import RemoteData exposing (WebData)
+import RemoteData
 
 
-type alias CartForms =
-    Dict
-        Int
-        { variant : Maybe ProductVariantId
-        , quantity : Int
-        , requestStatus : WebData (Result Api.FormErrors ())
-        }
-
-
-type alias Form =
-    { quantities : Dict Int Int
+type alias CartFormItem =
+    { addToCart : AddToCart.Model
     }
 
 
-initial : Form
+formItemInit : CartFormItem
+formItemInit =
+    { addToCart = AddToCart.init
+    }
+
+
+type alias Model =
+    { formItems : Dict Int CartFormItem
+    }
+
+
+initial : Model
 initial =
-    Form Dict.empty
+    Model Dict.empty
 
 
 
@@ -32,9 +34,6 @@ initial =
 
 
 type Msg
-    = SetFormQuantity PageData.CartItemId Int
-    | IncreaseFormQuantity PageData.CartItemId
-    | DecreaseFormQuantity PageData.CartItemId
-    | Remove PageData.CartItemId
-    | Submit
+    = Remove PageData.CartItemId
     | UpdateResponse (RemoteData.WebData (Result FormErrors PageData.CartDetails))
+    | AddToCartMsg PageData.CartItemId AddToCart.Msg

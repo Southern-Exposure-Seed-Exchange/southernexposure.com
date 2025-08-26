@@ -25,9 +25,9 @@ module Data.Api exposing
 
 -}
 
-import Components.Products.Pagination as Pagination
-import Data.Category as Category exposing (CategoryId(..))
-import Data.Product as Product exposing (ProductId(..))
+import Components.Pagination as Pagination
+import Data.Category exposing (CategoryId(..))
+import Data.Product exposing (ProductId(..))
 import Data.Routing.Utils exposing (joinPath, queryFlag, queryParameter, withQueryStrings)
 import Data.StaticPage as StaticPage exposing (StaticPageId)
 import Dict exposing (Dict)

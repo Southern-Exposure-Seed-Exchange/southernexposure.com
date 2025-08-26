@@ -2,9 +2,9 @@ module Components.SiteUI.Breadcrumbs exposing (view)
 
 import Components.Aria as Aria
 import Components.Microdata as Microdata
-import Components.Products.Pagination as Pagination
+import Components.Pagination as Pagination
 import Data.Msg exposing (Msg(..))
-import Data.PageData as PageData exposing (PageData)
+import Data.PageData exposing (PageData)
 import Data.Routing.Routing as Routing exposing (AdminRoute(..), Route(..))
 import Html exposing (Html, a, div, li, node, ol, span, text)
 import Html.Attributes exposing (class, id)

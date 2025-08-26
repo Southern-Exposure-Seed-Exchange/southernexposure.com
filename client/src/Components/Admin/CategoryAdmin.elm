@@ -1,4 +1,4 @@
-module Components.Categories.AdminViews exposing
+module Components.Admin.CategoryAdmin exposing
     ( EditForm
     , EditMsg
     , NewForm

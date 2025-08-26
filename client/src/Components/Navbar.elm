@@ -9,8 +9,8 @@ import Html.Attributes exposing (..)
 import RemoteData exposing (WebData)
 
 
-view : WebData NavigationData -> (Dict Int (List Category) -> Category -> Html Msg) -> List (Html Msg) -> Html Msg
-view navigationData rootCategory mobileOnlyItems =
+view : WebData NavigationData -> (Dict Int (List Category) -> Category -> Html Msg) -> List (Html Msg) -> Html Msg -> Html Msg
+view navigationData rootCategory mobileOnlyItems allProductLink =
     let
         categoryNavigation =
             RemoteData.toMaybe navigationData
@@ -19,6 +19,7 @@ view navigationData rootCategory mobileOnlyItems =
     in
     div [ id "category-navbar", class "collapse navbar-collapse tw:pt-[32px] tw:lg:pt-0" ]
         [ ul [ class "navbar-nav d-flex text-left tw:text-[16px] tw:leading-[24px]" ] <|
-            categoryNavigation
+            [ allProductLink ]
+                ++ categoryNavigation
                 ++ mobileOnlyItems
         ]

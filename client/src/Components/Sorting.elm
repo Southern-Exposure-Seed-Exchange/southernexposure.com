@@ -1,4 +1,4 @@
-module Components.Products.Sorting exposing
+module Components.Sorting exposing
     ( Option
     , all
     , default
