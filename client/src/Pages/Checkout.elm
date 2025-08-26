@@ -38,7 +38,7 @@ import Data.PageData as PageData
 import Data.Product as Product exposing (productMainImage, variantPrice)
 import Data.Routing.Routing as Routing exposing (Route(..), reverse)
 import Data.User as User exposing (AuthStatus)
-import Dict
+import Dict exposing (Dict)
 import Html exposing (..)
 import Html.Attributes as A exposing (alt, attribute, checked, class, colspan, for, href, id, name, placeholder, required, rows, src, step, type_, value)
 import Html.Events exposing (onCheck, onClick, onInput, onSubmit)
@@ -62,6 +62,27 @@ type CheckoutAddress
     = ExistingAddress AddressId
     | NewAddress Address.Form
 
+encodeAddress : CheckoutAddress -> Bool -> Value
+encodeAddress addr makeDefault =
+    case addr of
+        ExistingAddress (Address.AddressId id) ->
+            Encode.object
+                [ ( "id", Encode.int id )
+                , ( "makeDefault", Encode.bool makeDefault )
+                ]
+
+        NewAddress form ->
+            let
+                formModel =
+                    form.model
+
+                formModelWithDefault =
+                    { formModel | isDefault = makeDefault }
+
+                formWithDefault =
+                    { form | model = formModelWithDefault }
+            in
+            Address.encode formWithDefault
 
 type alias Form =
     { email : String
@@ -170,9 +191,9 @@ type Msg
     | ApplyCoupon
     | RemoveCoupon
     | Submit
-    | SubmitResponse (WebData (Result Api.FormErrors (CartInventoryCheckResult CheckoutResponse)))
+    | SubmitResponse (WebData (Result Api.FormErrors (CheckoutResult CheckoutResponse)))
     | RefreshDetails (WebData (Result Api.FormErrors PageData.CheckoutDetails))
-    | HelcimCheckoutTokenReceived (WebData (Result Api.FormErrors (CartInventoryCheckResult HelcimCheckoutTokenResponse)))
+    | HelcimCheckoutTokenReceived (WebData (Result Api.FormErrors (CheckoutResult HelcimCheckoutTokenResponse)))
     | HelcimEventReceived Decode.Value
     | ConfirmPayment
     | CancelPayment
@@ -223,28 +244,84 @@ encodeCartInventoryNotifications notifications =
           )
         ]
 
+type CheckoutResult a
+    = CheckoutSuccess a
+    | CheckoutValidationErrors (List CheckoutValidationError)
 
-type CartInventoryCheckResult a
-    = NoNewCartInventoryNotifications a
+type CheckoutValidationError
+    = ShippingAddressVerificationFailed (Dict String (List String))
     | NewCartInventoryNotifications
 
+checkoutValidationErrorDecoder : Decode.Decoder CheckoutValidationError
+checkoutValidationErrorDecoder =
+    Decode.field "type" Decode.string
+        |> Decode.andThen
+            (\errorType ->
+                case errorType of
+                    "newCartInventoryNotifications" ->
+                        Decode.succeed NewCartInventoryNotifications
 
-cartInventoryCheckResultDecoder : Decode.Decoder a -> Decode.Decoder (CartInventoryCheckResult a)
+                    "shippingAddressVerificationFailed" ->
+                        Decode.field "errors" (Decode.dict (Decode.list Decode.string))
+                            |> Decode.map ShippingAddressVerificationFailed
+                    _ -> Decode.fail ("Unexpected error type: " ++ errorType)
+            )
+
+cartInventoryCheckResultDecoder : Decode.Decoder a -> Decode.Decoder (CheckoutResult a)
 cartInventoryCheckResultDecoder innerDecoder =
     Decode.field "status" Decode.string
         |> Decode.andThen
             (\status ->
                 case status of
                     "ok" ->
-                        Decode.map NoNewCartInventoryNotifications (Decode.field "result" innerDecoder)
+                        Decode.map CheckoutSuccess (Decode.field "result" innerDecoder)
 
-                    "new-notifications" ->
-                        Decode.succeed NewCartInventoryNotifications
+                    "error" ->
+                        Decode.map CheckoutValidationErrors
+                            (Decode.field "errors" (Decode.list checkoutValidationErrorDecoder))
 
                     _ ->
                         Decode.fail ("Unexpected status: " ++ status)
             )
 
+processCheckoutValidationErrors :
+    Form
+    -> List CheckoutValidationError
+    -> AuthStatus
+    -> Maybe String
+    -> ( Form, Maybe OutMsg, Cmd Msg )
+processCheckoutValidationErrors model errs authStatus maybeSessionToken =
+    let
+        hasNewCartInventoryNotifications =
+            List.any
+                ( \e -> case e of
+                    NewCartInventoryNotifications -> True
+                    _ -> False
+                ) errs
+        validationErrorsDict =
+            List.foldl
+                (\e dict ->
+                    case e of
+                        ShippingAddressVerificationFailed fieldErrors ->
+                            Dict.union fieldErrors dict
+
+                        NewCartInventoryNotifications ->
+                            dict
+                )
+                Api.initialErrors
+                errs
+        errors = Dict.insert "shipping-address-verification" (List.concat (Dict.values validationErrorsDict)) model.errors
+
+        refreshAction =
+            if hasNewCartInventoryNotifications then
+                refreshDetails authStatus maybeSessionToken True model
+            else
+                nothingAndNoCommand
+    in
+        { model
+        | isPaymentProcessing = False, isProcessing = False, hasNewCartInventoryNotifications = hasNewCartInventoryNotifications
+        , errors = errors
+        } |> refreshAction
 
 type alias HelcimCheckoutTokenResponse =
     { checkoutToken : String }
@@ -521,7 +598,10 @@ update msg postgridApiKey model authStatus maybeSessionToken checkoutDetails =
                         else
                             ( { model | isPaymentProcessing = True }
                             , Nothing
-                            , getHelcimCheckoutToken authStatus maybeSessionToken (checkoutDetailsToCartInventoryNotifications details)
+                            , getHelcimCheckoutToken
+                                authStatus maybeSessionToken
+                                (checkoutDetailsToCartInventoryNotifications details)
+                                model.shippingAddress
                             )
 
                 _ ->
@@ -529,7 +609,7 @@ update msg postgridApiKey model authStatus maybeSessionToken checkoutDetails =
 
         SubmitResponse (RemoteData.Success (Ok res)) ->
             case res of
-                NoNewCartInventoryNotifications response ->
+                CheckoutSuccess response ->
                     let
                         orderId =
                             response.orderId
@@ -545,14 +625,7 @@ update msg postgridApiKey model authStatus maybeSessionToken checkoutDetails =
                             encodeAnalyticsPurchase orderId response.orderLines response.orderProducts
                     in
                     ( initial, Just outMsg, Ports.logPurchase analyticsData )
-
-                NewCartInventoryNotifications ->
-                    { model
-                        | isPaymentProcessing = False
-                        , isProcessing = False
-                        , hasNewCartInventoryNotifications = True
-                    }
-                        |> refreshDetails authStatus maybeSessionToken True model
+                CheckoutValidationErrors errs -> processCheckoutValidationErrors model errs authStatus maybeSessionToken
 
         SubmitResponse (RemoteData.Success (Err errors)) ->
             let
@@ -654,19 +727,13 @@ update msg postgridApiKey model authStatus maybeSessionToken checkoutDetails =
 
         HelcimCheckoutTokenReceived (RemoteData.Success (Ok res)) ->
             case res of
-                NoNewCartInventoryNotifications token ->
+                CheckoutSuccess token ->
                     ( { model | checkoutToken = Just token.checkoutToken }
                     , Nothing
                     , Cmd.batch [ Ports.appendHelcimPayIframe token.checkoutToken, Ports.subscribeToHelcimMessages () ]
                     )
+                CheckoutValidationErrors errs -> processCheckoutValidationErrors model errs authStatus maybeSessionToken
 
-                NewCartInventoryNotifications ->
-                    { model
-                        | isPaymentProcessing = False
-                        , isProcessing = False
-                        , hasNewCartInventoryNotifications = True
-                    }
-                        |> refreshDetails authStatus maybeSessionToken True model
 
         HelcimCheckoutTokenReceived (RemoteData.Success (Err errors)) ->
             { model | errors = errors, isPaymentProcessing = False } |> nothingAndNoCommand
@@ -994,14 +1061,15 @@ encodeStringAsMaybe str =
         Encode.string str
 
 
-getHelcimCheckoutToken : AuthStatus -> Maybe String -> CartInventoryNotifications -> Cmd Msg
-getHelcimCheckoutToken authStatus maybeSessionToken cartInventoryNotifications =
+getHelcimCheckoutToken : AuthStatus -> Maybe String -> CartInventoryNotifications -> CheckoutAddress -> Cmd Msg
+getHelcimCheckoutToken authStatus maybeSessionToken cartInventoryNotifications shippingAddress =
     case authStatus of
         User.Authorized _ ->
             let
-                requestData =
-                    Encode.object
-                        [ ( "cartInventoryNotifications", encodeCartInventoryNotifications cartInventoryNotifications ) ]
+                requestData = Encode.object
+                    [ ("cartInventoryNotifications", encodeCartInventoryNotifications cartInventoryNotifications)
+                    , ("shippingAddress", encodeAddress shippingAddress False)
+                    ]
             in
             Api.post Api.CheckoutHelcimToken
                 |> Api.withJsonBody requestData
@@ -1106,26 +1174,6 @@ placeOrder model authStatus maybeSessionToken helcimData checkoutDetails =
                 |> Maybe.map (\details -> getFinalTotal details model.storeCredit == Cents 0)
                 |> Maybe.withDefault False
 
-        encodeAddress addr makeDefault =
-            case addr of
-                ExistingAddress (Address.AddressId id) ->
-                    Encode.object
-                        [ ( "id", Encode.int id )
-                        , ( "makeDefault", Encode.bool makeDefault )
-                        ]
-
-                NewAddress form ->
-                    let
-                        formModel =
-                            form.model
-
-                        formModelWithDefault =
-                            { formModel | isDefault = makeDefault }
-
-                        formWithDefault =
-                            { form | model = formModelWithDefault }
-                    in
-                    Address.encode formWithDefault
 
         isDefaultAddress address { shippingAddresses, billingAddresses } =
             case address of
@@ -1368,6 +1416,24 @@ view model authStatus locations checkoutDetails =
                     && Dict.isEmpty (addrErrors model.billingAddress)
                     && Dict.isEmpty (addrErrors model.shippingAddress)
 
+        hasShippingAddressVerificationErrors = case Dict.get "shipping-address-verification" model.errors of
+            Just errs -> not (List.isEmpty errs)
+            Nothing -> False
+
+        shippingAddressVerificationErrorsView = viewIf hasShippingAddressVerificationErrors
+            (div [ class "mb-3" ]
+                [ p [class "text-danger"] [ text "We failed to verify your shipping address:" ]
+                , (Dict.get "shipping-address-verification" model.errors
+                    |> Maybe.map (\errs -> p [] [ small [] [ Api.errorHtml errs ] ])
+                    |> Maybe.withDefault (text ""))
+                , case model.shippingAddress of
+                    ExistingAddress _ ->
+                        p [ class "text-danger" ] [ text "Please update your shipping address in your account settings." ]
+                    NewAddress _ ->
+                        p [ class "text-danger" ] [ text "Please update your shipping details." ]
+                ]
+            )
+
         addrErrors addr =
             case addr of
                 ExistingAddress _ ->
@@ -1596,12 +1662,13 @@ view model authStatus locations checkoutDetails =
             [ rawHtml checkoutDetails.disabledMessage ]
 
       else
-        form [ onSubmit Submit, A.attribute "data-pg-verify" "" ]
+        form [ onSubmit Submit ]
             [ processingOverlay
             , paymentConfirmationOverlay
             , genericErrorText hasErrors
             , guestCard
             , div [ class "mb-3" ] [ generalErrors ]
+            , shippingAddressVerificationErrorsView
             , div [ class "tw:grid tw:grid-cols-1 tw:lg:grid-cols-2 tw:gap-[24px] tw:lg:gap-[16px]" ]
                 [ addressForm
                     { cardTitle = "Shipping Details"
