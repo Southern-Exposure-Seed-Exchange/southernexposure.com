@@ -106,6 +106,17 @@ autocomplete =
 Note: Must be used in a response to some user action(e.g., an onClick message handler).
 
 -}
+selectImageFiles : (File -> List File -> msg) -> Cmd msg
+selectImageFiles =
+    Select.files
+        [ "image/bmp"
+        , "image/gif"
+        , "image/png"
+        , "image/jpeg"
+        , "image/jpg"
+        ]
+
+
 selectImageFile : (File -> msg) -> Cmd msg
 selectImageFile =
     Select.file

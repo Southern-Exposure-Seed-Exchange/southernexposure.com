@@ -12,6 +12,7 @@ module Components.Admin.ProductAdmin exposing
     , initialListForm
     , initialNewForm
     , list
+    , mockImageData
     , new
     , updateEditForm
     , updateListForm
@@ -19,6 +20,7 @@ module Components.Admin.ProductAdmin exposing
     )
 
 import Array exposing (Array)
+import Array.Extra as Array
 import Components.Admin.Admin as Admin
 import Components.HorizontalForm as Form
 import Data.Api as Api
@@ -38,12 +40,13 @@ import Html.Extra exposing (viewIf)
 import Json.Decode as Decode exposing (Decoder)
 import Json.Decode.Pipeline as Decode
 import Json.Encode as Encode exposing (Value)
+import List.Extra as List
 import Ports
 import RemoteData exposing (WebData)
 import Utils.Images exposing (media)
 import Utils.Update exposing (noCommand, removeIndex, updateArray)
 import Utils.Utils exposing (slugify)
-import Utils.View exposing (htmlOrBlank, routeLinkAttributes, selectImageFile)
+import Utils.View exposing (htmlOrBlank, routeLinkAttributes, selectImageFile, selectImageFiles)
 
 
 
@@ -364,6 +367,12 @@ editForm model productData locations =
 -- FORM
 
 
+type alias ImageUrlState =
+    { imageUrl : String
+    , deleteStatus : Bool
+    }
+
+
 type alias Form =
     { name : String
     , slug : String
@@ -371,19 +380,22 @@ type alias Form =
     , baseSku : String
     , description : String
     , variants : Array Variant
-    , imageData : Maybe ImageData
     , isOrganic : Bool
     , isHeirloom : Bool
     , isSmallGrower : Bool
     , isRegional : Bool
     , keywords : String
     , shippingRestrictions : Array Region
-    , errors : Api.FormErrors
-    , isSaving : Bool
-    , showDeleteConfirm : Bool
 
     -- ImageUrls is used for the Edit Form
     , imageUrls : Array String
+
+    -- FE State
+    , errors : Api.FormErrors
+    , isSaving : Bool
+    , showDeleteConfirm : Bool
+    , imageDatas : List ImageData
+    , imageUrlsState : Array ImageUrlState
     }
 
 
@@ -395,7 +407,6 @@ initialForm =
     , baseSku = ""
     , description = ""
     , variants = Array.repeat 1 initialVariant
-    , imageData = Nothing
     , isOrganic = False
     , isHeirloom = False
     , isSmallGrower = False
@@ -406,6 +417,10 @@ initialForm =
     , isSaving = False
     , showDeleteConfirm = False
     , imageUrls = Array.empty
+
+    -- FE state
+    , imageDatas = []
+    , imageUrlsState = Array.empty
     }
 
 
@@ -436,8 +451,21 @@ encodeForm model validVariants maybeProductId =
 
         -- TODO: consider multiple image updates when editing products
         , ( "imageUpdates"
-          , Maybe.withDefault (Encode.object []) <|
-                Maybe.map (\d -> Encode.object [ ( "0", encodeImageDataOperation (ImageDataUpdate d) ) ]) model.imageData
+          , Encode.object <|
+                (model.imageUrlsState
+                    -- encode deleted image
+                    |> Array.toList
+                    |> List.indexedMap (\i m -> ( i, m ))
+                    |> List.filter (\( _, m ) -> m.deleteStatus == True)
+                    |> List.map (\( i, _ ) -> ( String.fromInt i, encodeImageDataOperation ImageDataDelete ))
+                )
+                    ++ (model.imageDatas
+                            -- encode newly added image
+                            |> List.indexedMap
+                                (\i m ->
+                                    ( String.fromInt (1000 + i), encodeImageDataOperation (ImageDataUpdate m) )
+                                )
+                       )
           )
         , ( "keywords", Encode.string model.keywords )
         , ( "shippingRestrictions", Encode.array regionEncoder model.shippingRestrictions )
@@ -463,17 +491,28 @@ formDecoder =
         |> Decode.required "baseSku" Decode.string
         |> Decode.required "longDescription" Decode.string
         |> Decode.required "variants" (Decode.array variantDecoder)
-        |> Decode.hardcoded Nothing
         |> fromAttribute "organic"
         |> fromAttribute "heirloom"
         |> fromAttribute "smallGrower"
         |> fromAttribute "regional"
         |> Decode.required "keywords" Decode.string
         |> Decode.required "shippingRestrictions" (Decode.array regionDecoder)
+        |> Decode.required "imageUrls" (Decode.array Decode.string)
+        -- FE state
         |> Decode.hardcoded Api.initialErrors
         |> Decode.hardcoded False
         |> Decode.hardcoded False
-        |> Decode.required "imageUrls" (Decode.array Decode.string)
+        |> Decode.hardcoded []
+        |> Decode.hardcoded Array.empty
+        -- Populate state needed by FE
+        |> Decode.map
+            (\r ->
+                { r
+                    | imageUrlsState =
+                        r.imageUrls
+                            |> Array.map (\url -> { imageUrl = url, deleteStatus = False })
+                }
+            )
 
 
 type InventoryPolicy
@@ -536,6 +575,11 @@ type alias ImageData =
     { fileName : String
     , base64Image : String
     }
+
+
+mockImageData : ImageData
+mockImageData =
+    { fileName = "", base64Image = "" }
 
 
 encodeImageData : ImageData -> Value
@@ -652,9 +696,10 @@ type FormMsg
     | SelectState Int Region
     | RemoveState Int
       -- Images
-    | SelectImage
-    | ImageUploaded File
-    | ImageEncoded String
+    | SelectImages
+    | DeleteAddedImage String
+    | ImageUploaded File (List File)
+    | ImageEncodeds (List String)
       -- Variant Forms
     | UpdateVariant Int VariantMsg
     | AddVariant
@@ -662,6 +707,7 @@ type FormMsg
     | Delete ProductId
     | DeleteConfirmed ProductId
     | DeleteResponse (WebData ())
+    | SetDeleteImage Int Bool
 
 
 updateForm : Routing.Key -> FormMsg -> Form -> ( Form, Cmd FormMsg )
@@ -730,17 +776,35 @@ updateForm key msg model =
             { model | shippingRestrictions = removeIndex index model.shippingRestrictions }
                 |> noCommand
 
-        SelectImage ->
-            ( model, selectImageFile ImageUploaded )
+        SelectImages ->
+            ( model, selectImageFiles ImageUploaded )
 
-        ImageUploaded imageFile ->
-            ( { model | imageData = Just (ImageData (File.name imageFile) "") }
-            , Admin.encodeImageData ImageEncoded imageFile
+        DeleteAddedImage fileName ->
+            ( { model
+                | imageDatas =
+                    model.imageDatas
+                        |> List.filter (\i -> i.fileName /= fileName)
+              }
+            , Cmd.none
             )
 
-        ImageEncoded imageData ->
-            noCommand { model | imageData = Maybe.map (\d -> { d | base64Image = imageData }) model.imageData }
+        ImageUploaded x xs ->
+            ( { model | imageDatas = List.map (\f -> ImageData (File.name f) "") (x :: xs) }
+            , Admin.encodeImageDatas ImageEncodeds (x :: xs)
+            )
 
+        ImageEncodeds imageDatas ->
+            let
+                result =
+                    List.zip model.imageDatas imageDatas
+                        |> List.map (\( obj, encoded ) -> { obj | base64Image = encoded })
+            in
+            ( { model | imageDatas = result }, Cmd.none )
+
+        SetDeleteImage i status ->
+            ( { model | imageUrlsState = Array.update i (\m -> { m | deleteStatus = status }) model.imageUrlsState }, Cmd.none )
+
+        -- noCommand { model | imageData = Maybe.map (\d -> { d | base64Image = imageData }) model.imageData }
         UpdateVariant index subMsg ->
             noCommand
                 { model
@@ -916,23 +980,37 @@ formView buttonText submitMsg msgWrapper model { categories } locations id =
         inputRow s =
             Form.inputRow model.errors (s model)
 
-        imageUrl =
-            List.head (Array.toList model.imageUrls) |> Maybe.withDefault ""
+        -- imageUrl =
+        --     List.head (Array.toList model.imageUrls) |> Maybe.withDefault ""
+        existingImages =
+            Array.toList model.imageUrlsState
+                |> List.indexedMap
+                    (\i { imageUrl, deleteStatus } ->
+                        div [ class "image-preview mb-3 tw:flex tw:gap-[16px] tw:items-start" ]
+                            [ img
+                                [ class <|
+                                    (if deleteStatus then
+                                        "tw:opacity-30"
 
-        existingImage =
-            if not <| String.isEmpty imageUrl then
-                Form.withLabel "Current Image" True <|
-                    [ div [ class "image-preview mb-3" ]
-                        [ img
-                            [ class "img-fluid"
-                            , src <| media <| "products/originals/" ++ imageUrl
+                                     else
+                                        ""
+                                    )
+                                        ++ " img-fluid"
+                                , src <| media <| "products/originals/" ++ imageUrl
+                                ]
+                                []
+                            , if deleteStatus then
+                                button [ class "", type_ "button", onClick <| SetDeleteImage i False ]
+                                    [ text "Undo"
+                                    ]
+
+                              else
+                                button [ class " tw:text-red-400", type_ "button", onClick <| SetDeleteImage i True ]
+                                    [ text "Delete"
+                                    ]
                             ]
-                            []
-                        ]
-                    ]
-
-            else
-                text ""
+                    )
+                |> Form.withLabelStart "Current Images" True
 
         deleteAction i =
             if model.showDeleteConfirm then
@@ -949,13 +1027,12 @@ formView buttonText submitMsg msgWrapper model { categories } locations id =
                     , text "Click 'Delete Product' again to confirm."
                     ]
 
-        ( imageName, imageData ) =
-            case model.imageData of
-                Just { fileName, base64Image } ->
-                    ( fileName, base64Image )
-
-                Nothing ->
-                    ( "", "" )
+        -- ( imageName, imageData ) =
+        --     case List.head <| model.imageDatas of
+        --         Just { fileName, base64Image } ->
+        --             ( fileName, base64Image )
+        --         Nothing ->
+        --             ( "", "" )
     in
     form [ class <| Admin.formSavingClass model, onSubmit submitMsg ] <|
         List.map (Html.map msgWrapper)
@@ -973,8 +1050,10 @@ formView buttonText submitMsg msgWrapper model { categories } locations id =
             , Form.checkboxRow model.isHeirloom ToggleHeirloom "Is Heirloom" "isHeirloom"
             , Form.checkboxRow model.isSmallGrower ToggleSmallGrower "Is Small Grower" "isSmallGrower"
             , Form.checkboxRow model.isRegional ToggleRegional "Is SouthEast" "isSouthEast"
-            , existingImage
-            , Admin.imageSelectRow imageName imageData SelectImage "Image"
+            , existingImages
+
+            -- , Admin.imageSelectRow imageName imageData SelectImages "Image"
+            , Admin.imageSelectRows model.imageDatas SelectImages DeleteAddedImage "New Images"
             , h3 [] [ text "Variants" ]
             , div [] <|
                 List.intersperse (hr [] []) <|
