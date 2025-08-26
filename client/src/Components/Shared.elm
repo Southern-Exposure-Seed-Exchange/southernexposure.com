@@ -36,9 +36,8 @@ logoAndName linkRoute =
 
         titleLink =
             a (class "d-block tw:text-[#1E0C03]! tw:text-[18px] tw:lg:text-[29px] tw:hover:no-underline!" :: routeLinkAttributes linkRoute)
-                [ text "Southern Exposure"
-                , br [ class "d-block" ] []
-                , text " Seed Exchange"
+                [ span [ class "tw:line-clamp-1" ] [ text "Southern Exposure" ]
+                , span [ class "tw:line-clamp-1" ] [ text " Seed Exchange" ]
                 ]
     in
     div [ class "tw:flex tw:gap-[16px] tw:items-center" ]

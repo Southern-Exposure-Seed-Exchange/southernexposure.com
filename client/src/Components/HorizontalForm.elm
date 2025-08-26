@@ -8,6 +8,7 @@ module Components.HorizontalForm exposing
     , selectRow
     , textareaRow
     , withLabel
+    , withLabelStart
     )
 
 import Components.Alert as Alert exposing (defaultAlert)
@@ -255,6 +256,30 @@ withLabel labelText isRequired input =
                 text ""
     in
     div [ class "form-group form-row align-items-center" ]
+        [ label
+            [ class "col-sm-3 col-form-label text-sm-right font-weight-bold"
+            , for <| "input" ++ inputId
+            ]
+            [ text <| labelText ++ ":", optionalHtml ]
+        , div [ class "col" ] input
+        ]
+
+
+withLabelStart : String -> Bool -> List (Html msg) -> Html msg
+withLabelStart labelText isRequired input =
+    let
+        inputId =
+            String.filter (\c -> c /= ' ') labelText
+
+        optionalHtml =
+            if not isRequired then
+                small [ class "horizontal-optional-text d-block text-muted mr-1" ]
+                    [ text "(optional)" ]
+
+            else
+                text ""
+    in
+    div [ class "form-group form-row" ]
         [ label
             [ class "col-sm-3 col-form-label text-sm-right font-weight-bold"
             , for <| "input" ++ inputId

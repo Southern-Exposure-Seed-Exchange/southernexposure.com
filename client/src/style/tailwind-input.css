@@ -11,6 +11,12 @@
   --breakpoint-2xl: 96rem;
 }
 
+:root {
+  --mobile-navbar-height: 71px;
+  --mobile-navbar-dropdown-height: calc(100vh - (var(--mobile-navbar-height) + 80px));
+  --mobile-navbar-padding: calc(var(--mobile-navbar-height) - 10px);
+}
+
 textarea:focus, input:focus{
     outline: none;
 }

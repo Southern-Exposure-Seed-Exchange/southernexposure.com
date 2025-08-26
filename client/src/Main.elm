@@ -468,7 +468,7 @@ fetchDataForRoute ({ route, pageData, key } as model) =
                     doNothing
 
         doNothing =
-            ( pageData, Cmd.none )
+            ( pageData, Ports.scrollToTop )
 
         -- For routes whose data fetching escapes the scope of `pageData`.
         updatedModel =
@@ -1398,6 +1398,7 @@ update msg ({ pageData, key } as model) =
             in
             { model | pageData = updatedPageData }
                 |> withCommand (redirect403IfAnonymous key response)
+                |> extraCommand (always Ports.scrollToTop)
 
         GetAddressDetails response ->
             let
@@ -1406,6 +1407,7 @@ update msg ({ pageData, key } as model) =
             in
             { model | pageData = updatedPageData }
                 |> withCommand (redirect403IfAnonymous key response)
+                |> extraCommand (always Ports.scrollToTop)
 
         GetCartDetails response ->
             let
@@ -1416,6 +1418,7 @@ update msg ({ pageData, key } as model) =
                 |> resetEditCartForm response
                 |> updateCartItemCountFromDetails (RemoteData.toMaybe response)
                 |> extraCommand (redirect403IfAnonymous key response)
+                |> extraCommand (always Ports.scrollToTop)
 
         GetCartItemCount response ->
             { model | cartItemCount = response |> RemoteData.toMaybe |> Maybe.withDefault 0 }
@@ -1461,6 +1464,7 @@ update msg ({ pageData, key } as model) =
                     _ ->
                         { model | pageData = updatedPageData }
             )
+                |> extraCommand (always Ports.scrollToTop)
                 |> extraCommand (redirect403IfAnonymous key response)
 
         GetCheckoutSuccessDetails response ->
@@ -1470,6 +1474,7 @@ update msg ({ pageData, key } as model) =
             in
             { model | pageData = updatedPageData }
                 |> withCommand (redirect403IfAnonymous key response)
+                |> extraCommand (always Ports.scrollToTop)
 
         CategoryPaginationMsg subMsg ->
             pageData.categoryDetails

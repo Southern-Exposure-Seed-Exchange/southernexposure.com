@@ -440,7 +440,7 @@ productImageGalleryView shared product =
             , imageToSrcSet productImage
             , Microdata.image
             , alt <| "Product Image for " ++ product.name
-            , class "tw:w-[360px] tw:aspect-square tw:object-cover tw:rounded-[16px] clickable-image"
+            , class "tw:w-full tw:lg:w-[360px] tw:aspect-square tw:object-cover tw:rounded-[16px] clickable-image"
             ]
             []
         ]
