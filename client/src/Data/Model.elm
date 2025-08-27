@@ -36,6 +36,7 @@ import Pages.CreateAccount as CreateAccount
 import Pages.EditAddress as EditAddress
 import Pages.EditLogin as EditLogin
 import Pages.Login as Login
+import Pages.ProductList.Type as ProductListPage
 import Pages.QuickOrder as QuickOrder
 import Pages.ResetPassword as ResetPassword
 import Pages.VerificationRequired as VerificationRequired
@@ -94,8 +95,8 @@ type alias Model =
     , profileNavbar : ProfileNavbar.Model
     , shared : Shared Msg
 
-    -- product dict state used in category detail and search result state
-    , productDict : Dict Int Product.Model
+    -- page state
+    , productListPage : ProductListPage.Model
     }
 
 
@@ -163,5 +164,7 @@ initial key route helcimUrl postgridApiKey =
 
     -- sub components
     , profileNavbar = ProfileNavbar.init
-    , productDict = Dict.empty
+
+    -- page state
+    , productListPage = ProductListPage.init
     }
