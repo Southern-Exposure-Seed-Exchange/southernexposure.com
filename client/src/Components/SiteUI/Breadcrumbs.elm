@@ -8,13 +8,14 @@ import Data.PageData exposing (PageData)
 import Data.Routing.Routing as Routing exposing (AdminRoute(..), Route(..))
 import Html exposing (Html, a, div, li, node, ol, span, text)
 import Html.Attributes exposing (class, id)
+import Pages.ProductList.Type as ProductListPage
 import Paginate
 import RemoteData
 import Utils.View exposing (routeLinkAttributes)
 
 
-view : Route -> PageData -> Html Msg
-view route pageData =
+view : Route -> ProductListPage.Model -> PageData -> Html Msg
+view route productListPage pageData =
     let
         items =
             List.indexedMap (\i f -> f <| i + 1) <|
@@ -46,7 +47,7 @@ view route pageData =
                         |> maybeToList (.name >> activeItem >> List.singleton)
 
                 CategoryDetails _ _ ->
-                    Paginate.getResponseData pageData.categoryDetails
+                    Paginate.getResponseData productListPage.categoryDetails
                         |> maybeToList categoryDetailsToBreadcrumbs
 
                 ProductDetails _ _ ->

@@ -130,9 +130,10 @@ import Time exposing (Posix)
 
 
 type alias PageData =
-    { categoryDetails : Paginated ProductData { slug : String, sorting : Sorting.Option } CategoryDetails
-    , productDetails : WebData ProductDetails
-    , searchResults : Paginated ProductData { data : Search.Data, sorting : Sorting.Option } String
+    { productDetails : WebData ProductDetails
+
+    -- , categoryDetails : Paginated ProductData { slug : String, sorting : Sorting.Option } CategoryDetails
+    -- , searchResults : Paginated ProductData { data : Search.Data, sorting : Sorting.Option } String
     , pageDetails : WebData StaticPage
     , locations : WebData AddressLocations
     , myAccount : WebData MyAccount
@@ -166,20 +167,18 @@ type alias PageData =
 initial : PageData
 initial =
     let
-        categoryPaginate =
-            Paginate.initial categoryConfig
-                { slug = "", sorting = Sorting.default }
-                (.page Pagination.default)
-                (.perPage Pagination.default)
-                |> Tuple.first
-
-        searchPaginate =
-            Paginate.initial searchConfig
-                { data = Search.initial, sorting = Sorting.default }
-                (.page Pagination.default)
-                (.perPage Pagination.default)
-                |> Tuple.first
-
+        -- categoryPaginate =
+        --     Paginate.initial categoryConfig
+        --         { slug = "", sorting = Sorting.default }
+        --         (.page Pagination.default)
+        --         (.perPage Pagination.default)
+        --         |> Tuple.first
+        -- searchPaginate =
+        --     Paginate.initial searchConfig
+        --         { data = Search.initial, sorting = Sorting.default }
+        --         (.page Pagination.default)
+        --         (.perPage Pagination.default)
+        --         |> Tuple.first
         ordersPaginate =
             Paginate.initial ordersConfig "" 1 50
                 |> Tuple.first
@@ -188,9 +187,10 @@ initial =
             Paginate.initial customersConfig "" 1 50
                 |> Tuple.first
     in
-    { categoryDetails = categoryPaginate
-    , productDetails = RemoteData.NotAsked
-    , searchResults = searchPaginate
+    { productDetails = RemoteData.NotAsked
+
+    -- , categoryDetails = categoryPaginate
+    -- , searchResults = searchPaginate
     , pageDetails = RemoteData.NotAsked
     , locations = RemoteData.NotAsked
     , myAccount = RemoteData.NotAsked

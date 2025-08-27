@@ -168,7 +168,7 @@ init flags url key =
 {-| TODO: Move to PageData module?
 -}
 fetchDataForRoute : Model -> ( Model, Cmd Msg )
-fetchDataForRoute ({ route, pageData, key } as model) =
+fetchDataForRoute ({ route, pageData, key, productListPage } as model) =
     let
         updateCategoryDetails slug pagination products =
             let
@@ -185,6 +185,25 @@ fetchDataForRoute ({ route, pageData, key } as model) =
                 |> discardCommand (Paginate.updatePerPage PageData.categoryConfig pagination.perPage)
                 |> discardCommand (Paginate.jumpTo PageData.categoryConfig pagination.page)
 
+        ( productListData, productListCmd ) =
+            case route of
+                CategoryDetails slug pagination ->
+                    updateCategoryDetails slug pagination productListPage.categoryDetails
+                        |> Tuple.mapFirst (\cd -> { productListPage | categoryDetails = cd })
+                        |> Tuple.mapSecond (Cmd.map CategoryPaginationMsg)
+
+                SearchResults searchData pagination ->
+                    productListPage.searchResults
+                        |> Paginate.updateData PageData.searchConfig
+                            { data = searchData, sorting = pagination.sorting }
+                        |> discardCommand (Paginate.updatePerPage PageData.searchConfig pagination.perPage)
+                        |> discardCommand (Paginate.jumpTo PageData.searchConfig pagination.page)
+                        |> Tuple.mapFirst (\sr -> { productListPage | searchResults = sr })
+                        |> Tuple.mapSecond (Cmd.map SearchPaginationMsg)
+
+                _ ->
+                    ( productListPage, Cmd.none )
+
         ( data, cmd ) =
             case route of
                 ProductDetails slug vId ->
@@ -192,22 +211,8 @@ fetchDataForRoute ({ route, pageData, key } as model) =
                     , getProductDetailsData slug vId
                     )
 
-                CategoryDetails slug pagination ->
-                    updateCategoryDetails slug pagination pageData.categoryDetails
-                        |> Tuple.mapFirst (\cd -> { pageData | categoryDetails = cd })
-                        |> Tuple.mapSecond (Cmd.map CategoryPaginationMsg)
-
                 AdvancedSearch ->
                     doNothing
-
-                SearchResults searchData pagination ->
-                    pageData.searchResults
-                        |> Paginate.updateData PageData.searchConfig
-                            { data = searchData, sorting = pagination.sorting }
-                        |> discardCommand (Paginate.updatePerPage PageData.searchConfig pagination.perPage)
-                        |> discardCommand (Paginate.jumpTo PageData.searchConfig pagination.page)
-                        |> Tuple.mapFirst (\sr -> { pageData | searchResults = sr })
-                        |> Tuple.mapSecond (Cmd.map SearchPaginationMsg)
 
                 PageDetails slug _ ->
                     ( { pageData | pageDetails = RemoteData.Loading }
@@ -469,6 +474,9 @@ fetchDataForRoute ({ route, pageData, key } as model) =
                 NotFound ->
                     doNothing
 
+                _ ->
+                    ( pageData, Cmd.none )
+
         doNothing =
             ( pageData, Ports.scrollToTop )
 
@@ -485,7 +493,7 @@ fetchDataForRoute ({ route, pageData, key } as model) =
                 _ ->
                     model
     in
-    ( { updatedModel | pageData = data }, cmd )
+    ( { updatedModel | pageData = data, productListPage = productListData }, Cmd.batch [ cmd, productListCmd ] )
 
 
 fetchLocationsOnce : PageData -> ( PageData, Cmd Msg )
@@ -791,7 +799,7 @@ getAdminDashboardData =
 {-| TODO: Refactor pagedata messages into separate msg & update
 -}
 update : Msg -> Model -> ( Model, Cmd Msg )
-update msg ({ pageData, key } as model) =
+update msg ({ pageData, key, productListPage } as model) =
     case msg of
         UrlUpdate route ->
             { model | route = route }
@@ -872,7 +880,7 @@ update msg ({ pageData, key } as model) =
         ProductMsg ((ProductId productId) as pId) productMsg ->
             let
                 product =
-                    Maybe.withDefault Product.initProductModel <| Dict.get productId model.productDict
+                    Maybe.withDefault Product.initProductModel <| Dict.get productId model.productListPage.productDict
 
                 ( newProduct, productCmd ) =
                     Product.update model.shared productMsg pId product
@@ -887,8 +895,11 @@ update msg ({ pageData, key } as model) =
 
                         _ ->
                             ( model, Cmd.none )
+
+                modelProductListPage =
+                    newModel.productListPage
             in
-            ( { newModel | productDict = Dict.insert productId newProduct model.productDict }
+            ( { newModel | productListPage = { modelProductListPage | productDict = Dict.insert productId newProduct modelProductListPage.productDict } }
             , Cmd.batch
                 [ Cmd.map (ProductMsg pId) productCmd
                 , cmd
@@ -1332,6 +1343,9 @@ update msg ({ pageData, key } as model) =
                 initProductModel =
                     Product.initProductModel
 
+                modelProductListPage =
+                    model.productListPage
+
                 updatedPageData =
                     { pageData | productDetails = response }
 
@@ -1365,15 +1379,15 @@ update msg ({ pageData, key } as model) =
                                                             (Array.fromList resp.product.images)
                                                 }
                                 )
-                                model.productDict
+                                model.productListPage.productDict
 
                         _ ->
-                            model.productDict
+                            model.productListPage.productDict
             in
             ( { model
                 | pageData = updatedPageData
                 , productDetailsLightbox = Gallery.initial
-                , productDict = updatedProductDict
+                , productListPage = { modelProductListPage | productDict = updatedProductDict }
               }
             , Cmd.none
             )
@@ -1496,24 +1510,24 @@ update msg ({ pageData, key } as model) =
                 |> extraCommand (always Ports.scrollToTop)
 
         CategoryPaginationMsg subMsg ->
-            pageData.categoryDetails
+            productListPage.categoryDetails
                 |> Paginate.update PageData.categoryConfig subMsg
                 |> Tuple.mapSecond (Cmd.map CategoryPaginationMsg)
                 |> (\( ps, cmd ) ->
                         ( ps, Cmd.batch [ cmd, updatePageFromPagination key model.route ps ] )
                    )
-                |> Tuple.mapFirst (\cd -> { pageData | categoryDetails = cd })
-                |> Tuple.mapFirst (\pd -> { model | pageData = pd })
+                |> Tuple.mapFirst (\cd -> { productListPage | categoryDetails = cd })
+                |> Tuple.mapFirst (\pd -> { model | productListPage = pd })
                 |> extraCommand (always Ports.scrollToTop)
 
         SearchPaginationMsg subMsg ->
-            Paginate.update PageData.searchConfig subMsg pageData.searchResults
+            Paginate.update PageData.searchConfig subMsg productListPage.searchResults
                 |> Tuple.mapSecond (Cmd.map SearchPaginationMsg)
                 |> (\( sr, cmd ) ->
                         ( sr, Cmd.batch [ cmd, updatePageFromPagination key model.route sr ] )
                    )
-                |> Tuple.mapFirst (\sr -> { pageData | searchResults = sr })
-                |> Tuple.mapFirst (\pd -> { model | pageData = pd })
+                |> Tuple.mapFirst (\sr -> { productListPage | searchResults = sr })
+                |> Tuple.mapFirst (\pd -> { model | productListPage = pd })
                 |> extraCommand (always Ports.scrollToTop)
 
         GetAdminCategoryList response ->
@@ -1822,7 +1836,7 @@ getStatusCode =
 {-| Run some generic transforming function on the current route's page data.
 -}
 runOnCurrentWebData : (Maybe (WebData ()) -> b) -> Model -> b
-runOnCurrentWebData runner { pageData, route, categoryListData } =
+runOnCurrentWebData runner ({ pageData, route, categoryListData } as model) =
     let
         paginateRunner =
             Paginate.getRemoteData >> RemoteData.map (always ()) >> Just >> runner
@@ -1838,13 +1852,13 @@ runOnCurrentWebData runner { pageData, route, categoryListData } =
             justRunner pageData.productDetails
 
         CategoryDetails _ _ ->
-            paginateRunner pageData.categoryDetails
+            paginateRunner model.productListPage.categoryDetails
 
         AdvancedSearch ->
             justRunner categoryListData
 
         SearchResults _ _ ->
-            paginateRunner pageData.searchResults
+            paginateRunner model.productListPage.searchResults
 
         PageDetails _ _ ->
             justRunner pageData.pageDetails
