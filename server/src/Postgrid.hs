@@ -11,6 +11,7 @@ import Data.ISO3166_CountryCodes (CountryCode(..))
 import Servant.Client (ClientM)
 
 import Postgrid.API.Types
+import Postgrid.Cache (CachedApiEndpoint(..), cached)
 import Postgrid.Utils (addressDataToVerifyStructuredAddressRequest, correctAddressData)
 import qualified Postgrid.API as API
 
@@ -21,13 +22,18 @@ import Server (App)
 
 runPostgrid
     :: (PostgridResponse res, ToJSON req, ToJSON res)
-    => (Maybe API.ApiKey -> req -> ClientM res) -> req -> App (Maybe (Either API.PostgridError res))
-runPostgrid clientFunc req = do
+    => (Maybe API.ApiKey -> req -> ClientM res) -> req -> Maybe (CachedApiEndpoint req res)
+    -> App (Maybe (Either API.PostgridError res))
+runPostgrid clientFunc req mbCachedApiEndpoint = do
     apiKey <- asks getPostgridApiKey
     forM apiKey $ \key -> do
         logger <- asks getHelcimLogger
         log_ logger encode req
-        res <- liftIO $ API.runPostgridClient (clientFunc (Just key) req)
+        res <- case mbCachedApiEndpoint of
+            Nothing ->
+                liftIO $ API.runPostgridClient (clientFunc (Just key) req)
+            Just cachedApiEndpoint ->
+                queryWithCache (clientFunc (Just key)) req cachedApiEndpoint
         case res of
             Left err -> do
                 log_ logger displayException err
@@ -38,6 +44,15 @@ runPostgrid clientFunc req = do
     where
         log_ logger encoding logee =
             liftIO $ logger $ timedLogStr $ encoding logee
+
+        queryWithCache
+            :: (PostgridResponse res)
+            => (req -> ClientM res) -> req -> CachedApiEndpoint req res
+            -> App (Either API.PostgridError res)
+        queryWithCache action request cachedApiEndpoint' = do
+            cache <- asks getPostgridQueryCache
+            let requestAction = API.runPostgridClient (action request)
+            liftIO $ cached cache request cachedApiEndpoint' requestAction
 
 data AddressVerificationResult
     = AddressVerifiedSuccessfully
@@ -58,6 +73,7 @@ verifyAddressData addrData addrType = do
             res <- runPostgrid
                 (\apiKey r -> API.verifyStructuredAddress apiKey Nothing (Just $ API.BoolFlag True) Nothing r)
                     (addressDataToVerifyStructuredAddressRequest addrData)
+                    (Just CachedVerifyStructuredAddress)
             case res of
                 Just (Left err) -> return $ Left err
                 Just (Right resp) ->

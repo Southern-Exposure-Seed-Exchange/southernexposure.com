@@ -36,3 +36,4 @@ correctAddressData addrData vsaData = addrData
     , adZipCode = vsadPostalOrZip vsaData
     , adCountry = maybe (adCountry addrData) (Country . unCountryCodeLowercase) (vsadCountry vsaData)
     }
+
