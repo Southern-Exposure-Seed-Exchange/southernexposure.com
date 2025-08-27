@@ -41,6 +41,7 @@ import Models
 import Models.PersistJSON (JSONValue(..))
 import Paths_sese_website (version)
 import qualified Postgrid.API as Postgrid (ApiKey(..))
+import qualified Postgrid.Cache as Postgrid (newPostgridQueryCache)
 import StoneEdge (StoneEdgeCredentials(..))
 import Utils (lookupSettingWith, makeSqlPool)
 import Workers (Task(CleanDatabase, AddSalesReportDay), taskQueueConfig, enqueueTask)
@@ -83,6 +84,7 @@ main = do
     initializeJobs dbPool
     log "Initialized database pool."
     cache <- newTVarIO emptyCache
+    postgridQueryCache <- Postgrid.newPostgridQueryCache 10 100
     void . async
         $ runSqlPool initializeCaches dbPool >>= atomically . writeTVar cache
     log "Started initialization of database cache."
@@ -90,6 +92,7 @@ main = do
             { getPool = dbPool
             , getEnv = env
             , getCaches = cache
+            , getPostgridQueryCache = postgridQueryCache
             , getMediaDirectory = mediaDir
             , getSmtpPool = emailPool
             , getSmtpUser = smtpUser

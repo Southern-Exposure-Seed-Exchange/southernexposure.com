@@ -24,7 +24,7 @@ import StoneEdge (StoneEdgeCredentials)
 import qualified Avalara
 import qualified Helcim.API as Helcim (ApiToken)
 import qualified Postgrid.API as Postgrid (ApiKey)
-
+import qualified Postgrid.Cache as Postgrid (QueryCache)
 
 data Environment
     = Production
@@ -42,6 +42,7 @@ data Config
     { getPool :: ConnectionPool
     , getEnv :: Environment
     , getCaches :: TVar Caches
+    , getPostgridQueryCache :: Postgrid.QueryCache
     , getMediaDirectory :: FilePath
     , getSmtpPool :: Pool SMTPConnection
     , getSmtpUser :: String
@@ -72,6 +73,7 @@ defaultConfig =
         { getPool = undefined
         , getEnv = Development
         , getCaches = undefined
+        , getPostgridQueryCache = undefined
         , getMediaDirectory = undefined
         , getSmtpPool = undefined
         , getSmtpUser = undefined
