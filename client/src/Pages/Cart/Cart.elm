@@ -41,7 +41,7 @@ fromCartDetails { items } =
                 { addToCart =
                     let
                         addToCart =
-                            AddToCart.init
+                            AddToCart.initAddToCart
                     in
                     { addToCart
                         | amount = item.quantity
@@ -251,7 +251,7 @@ view authStatus { formItems } ({ items, charges } as cartDetails) =
                     ]
                 , Html.map (AddToCartMsg id) <|
                     AddToCart.statusView
-                        (Maybe.withDefault AddToCart.init <|
+                        (Maybe.withDefault AddToCart.initAddToCart <|
                             Maybe.map .addToCart <|
                                 Dict.get (fromCartItemId id) formItems
                         )
@@ -260,7 +260,7 @@ view authStatus { formItems } ({ items, charges } as cartDetails) =
                         [ Html.map (AddToCartMsg id) <|
                             AddToCart.view ()
                                 variant.id
-                                (Maybe.withDefault AddToCart.init <|
+                                (Maybe.withDefault AddToCart.initAddToCart <|
                                     Maybe.map .addToCart <|
                                         Dict.get (fromCartItemId id) formItems
                                 )
@@ -284,7 +284,7 @@ view authStatus { formItems } ({ items, charges } as cartDetails) =
                             [ Html.map (AddToCartMsg id) <|
                                 AddToCart.view ()
                                     variant.id
-                                    (Maybe.withDefault AddToCart.init <|
+                                    (Maybe.withDefault AddToCart.initAddToCart <|
                                         Maybe.map .addToCart <|
                                             Dict.get (fromCartItemId id) formItems
                                     )
@@ -308,7 +308,7 @@ view authStatus { formItems } ({ items, charges } as cartDetails) =
                     ]
                 , Html.map (AddToCartMsg id) <|
                     AddToCart.statusView
-                        (Maybe.withDefault AddToCart.init <|
+                        (Maybe.withDefault AddToCart.initAddToCart <|
                             Maybe.map .addToCart <|
                                 Dict.get (fromCartItemId id) formItems
                         )

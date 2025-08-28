@@ -19,7 +19,7 @@ type alias Model =
 initProductModel : Model
 initProductModel =
     { variant = Nothing
-    , addToCart = AddToCart.init
+    , addToCart = AddToCart.initAddToCart
     , imageSlider = ImageSlider.mkModel "" Array.empty
     }
 

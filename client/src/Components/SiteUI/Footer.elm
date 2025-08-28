@@ -62,9 +62,6 @@ view =
                 , break
                 , abbr [ title "Phone" ] [ text "P:" ]
                 , span [ Microdata.telephone ] [ text " (540) 894-9480" ]
-                , break
-                , abbr [ title "Fax" ] [ text "F:" ]
-                , span [ Microdata.faxNumber ] [ text " (540) 266-1021" ]
                 ]
 
         contactBlock =

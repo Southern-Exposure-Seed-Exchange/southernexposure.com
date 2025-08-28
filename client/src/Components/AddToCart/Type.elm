@@ -24,8 +24,8 @@ type alias Model =
     }
 
 
-init : Model
-init =
+initAddToCart : Model
+initAddToCart =
     { clickStatus = False
     , amount = 0
     , requestStatus = RemoteData.NotAsked

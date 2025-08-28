@@ -66,7 +66,6 @@ type Msg
     | ProfileNavbarMsg ProfileNavbar.Msg
     | TooltipMsg Tooltip.Msg
       -- Sub-Messages
-    | SearchMsg SiteSearch.Msg
     | AdvancedSearchMsg AdvancedSearch.Msg
     | CreateAccountMsg CreateAccount.Msg
     | VerifyEmailMsg VerifyEmail.Msg
