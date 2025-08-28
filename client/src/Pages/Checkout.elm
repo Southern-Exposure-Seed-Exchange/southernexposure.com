@@ -418,12 +418,13 @@ subscriptions =
 
 update :
     Msg
+    -> String
     -> Form
     -> AuthStatus
     -> Maybe String
     -> WebData PageData.CheckoutDetails
     -> ( Form, Maybe OutMsg, Cmd Msg )
-update msg model authStatus maybeSessionToken checkoutDetails =
+update msg postgridApiKey model authStatus maybeSessionToken checkoutDetails =
     case msg of
         Email email ->
             { model | email = email } |> nothingAndNoCommand
@@ -440,11 +441,17 @@ update msg model authStatus maybeSessionToken checkoutDetails =
                 |> nothingAndNoCommand
 
         ShippingMsg subMsg ->
-            updateAddressForm model.shippingAddress
-                subMsg
-                model
-                (\f -> { model | shippingAddress = f })
-                |> refreshDetails authStatus maybeSessionToken False model
+            let
+                ( updatedModel, addrCmd ) =
+                    updateAddressForm (Address.AddressCompletionEnabled postgridApiKey) model.shippingAddress subMsg model (\f -> { model | shippingAddress = f })
+
+                ( refreshedModel, mbOutMsg, refreshCmd ) =
+                    refreshDetails authStatus maybeSessionToken False model updatedModel
+
+                addrCmdLifted =
+                    Cmd.map ShippingMsg addrCmd
+            in
+            ( refreshedModel, mbOutMsg, Cmd.batch [ refreshCmd, addrCmdLifted ] )
 
         SelectBilling addressId ->
             { model
@@ -458,11 +465,15 @@ update msg model authStatus maybeSessionToken checkoutDetails =
                 |> nothingAndNoCommand
 
         BillingMsg subMsg ->
-            updateAddressForm model.billingAddress
-                subMsg
-                model
-                (\f -> { model | billingAddress = f })
-                |> nothingAndNoCommand
+            let
+                -- We don't provide auto-completion for billing addresses, only for shipping.
+                ( updatedModel, addrCmd ) =
+                    updateAddressForm Address.AddressCompletionDisabled model.billingAddress subMsg model (\f -> { model | billingAddress = f })
+
+                addrCmdLifted =
+                    Cmd.map BillingMsg addrCmd
+            in
+            ( updatedModel, Nothing, addrCmdLifted )
 
         BillingSameAsShipping isSame ->
             { model | billingSameAsShipping = isSame }
@@ -720,15 +731,15 @@ selectAddress addressId =
         ExistingAddress (Address.AddressId addressId)
 
 
-updateAddressForm : CheckoutAddress -> Address.Msg -> Form -> (CheckoutAddress -> Form) -> Form
-updateAddressForm addr msg model updater =
+updateAddressForm : Address.AddressCompletionSetting -> CheckoutAddress -> Address.Msg -> Form -> (CheckoutAddress -> Form) -> (Form, Cmd Address.Msg)
+updateAddressForm addressCompletionSetting addr msg model updater =
     case addr of
         ExistingAddress _ ->
-            model
+            (model, Cmd.none)
 
         NewAddress form ->
-            Address.update msg form
-                |> (NewAddress >> updater)
+            let (address, cmd) = Address.update addressCompletionSetting msg form
+            in (updater (NewAddress address), cmd)
 
 
 refreshDetails : AuthStatus -> Maybe String -> Bool -> Form -> Form -> ( Form, Maybe a, Cmd Msg )
@@ -1585,7 +1596,7 @@ view model authStatus locations checkoutDetails =
             [ rawHtml checkoutDetails.disabledMessage ]
 
       else
-        form [ onSubmit Submit ]
+        form [ onSubmit Submit, A.attribute "data-pg-verify" "" ]
             [ processingOverlay
             , paymentConfirmationOverlay
             , genericErrorText hasErrors

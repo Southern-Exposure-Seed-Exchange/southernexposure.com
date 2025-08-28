@@ -94,6 +94,7 @@ type alias Flags =
     , cartSessionToken : Maybe String
     , cartItemCount : Maybe Int
     , helcimUrl : String
+    , postgridApiKey : String
     }
 
 
@@ -111,7 +112,7 @@ init flags url key =
             Routing.authRequired route || (route == Checkout && flags.authUserId /= Nothing)
 
         ( model, cmd ) =
-            Model.initial key route flags.helcimUrl
+            Model.initial key route flags.helcimUrl flags.postgridApiKey
                 |> (\m ->
                         let
                             modelShared =
@@ -1015,7 +1016,7 @@ update msg ({ pageData, key } as model) =
                 |> Tuple.mapSecond (Cmd.map EditLoginMsg)
 
         EditAddressMsg subMsg ->
-            EditAddress.update key subMsg model.editAddressForm model.shared.currentUser pageData.addressDetails
+            EditAddress.update key model.postgridApiKey subMsg model.editAddressForm model.shared.currentUser pageData.addressDetails
                 |> Tuple.mapFirst (\form -> { model | editAddressForm = form })
                 |> Tuple.mapSecond (Cmd.map EditAddressMsg)
 
@@ -1127,6 +1128,7 @@ update msg ({ pageData, key } as model) =
             in
             Checkout.update
                 subMsg
+                model.postgridApiKey
                 model.checkoutForm
                 model.shared.currentUser
                 model.shared.maybeSessionToken

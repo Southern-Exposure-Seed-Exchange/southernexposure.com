@@ -18,6 +18,7 @@ var app = Elm.Main.init({
       cartSessionToken: cartToken,
       cartItemCount: intOrNull(cartItemCount),
       helcimUrl: helcimUrl,
+      postgridApiKey: POSTGRID_API_KEY,
     },
   },
 );
