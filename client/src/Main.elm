@@ -1,5 +1,6 @@
 module Main exposing (main)
 
+import Array
 import BootstrapGallery as Gallery
 import Browser
 import Browser.Dom as Dom
@@ -20,6 +21,7 @@ import Components.Admin.ShippingAdmin as ShippingAdmin
 import Components.Admin.StaticPageAdmin as StaticPageAdmin
 import Components.Admin.SurchargesAdmin as SurchargesAdmin
 import Components.AdvancedSearch as AdvancedSearch
+import Components.ImageSlider.Type as ImageSlider
 import Components.Pagination as Pagination
 import Components.Product.Product as Product
 import Components.Product.Type as Product
@@ -28,7 +30,7 @@ import Components.SiteUI.Search as SiteSearch
 import Components.Tooltip as Tooltip
 import Data.Api as Api
 import Data.Category exposing (CategoryId)
-import Data.Fields exposing (imageDataLightboxConfig)
+import Data.Fields exposing (blankImage, imageDataLightboxConfig)
 import Data.Locations as Locations
 import Data.Model as Model exposing (Model)
 import Data.Msg exposing (Msg(..))
@@ -1327,12 +1329,15 @@ update msg ({ pageData, key } as model) =
 
         GetProductDetailsData selectedSku response ->
             let
+                initProductModel =
+                    Product.initProductModel
+
                 updatedPageData =
                     { pageData | productDetails = response }
 
-                updatedCartForms =
-                    case ( selectedSku, response ) of
-                        ( Just variantId, RemoteData.Success resp ) ->
+                updatedProductDict =
+                    case response of
+                        RemoteData.Success resp ->
                             let
                                 productId =
                                     resp.product.id |> (\(ProductId i) -> i)
@@ -1340,11 +1345,25 @@ update msg ({ pageData, key } as model) =
                             Dict.update productId
                                 (\f ->
                                     case f of
-                                        Just cartForm ->
-                                            Just { cartForm | variant = Just variantId }
+                                        Just product ->
+                                            Just
+                                                { product
+                                                    | variant = selectedSku
+                                                    , imageSlider =
+                                                        ImageSlider.mkModel
+                                                            resp.product.name
+                                                            (Array.fromList resp.product.images)
+                                                }
 
                                         Nothing ->
-                                            Just Product.initProductModel
+                                            Just
+                                                { initProductModel
+                                                    | variant = selectedSku
+                                                    , imageSlider =
+                                                        ImageSlider.mkModel
+                                                            resp.product.name
+                                                            (Array.fromList resp.product.images)
+                                                }
                                 )
                                 model.productDict
 
@@ -1354,7 +1373,7 @@ update msg ({ pageData, key } as model) =
             ( { model
                 | pageData = updatedPageData
                 , productDetailsLightbox = Gallery.initial
-                , productDict = updatedCartForms
+                , productDict = updatedProductDict
               }
             , Cmd.none
             )

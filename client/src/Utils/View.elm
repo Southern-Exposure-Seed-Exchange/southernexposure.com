@@ -101,31 +101,31 @@ autocomplete =
     attribute "autocomplete"
 
 
-{-| Run a command to show the User a file selector. Limits files to the image mimetypes supported by the backend.
+{-| image mimetypes supported by the backend.
+-}
+supportedImageMimeTypes : List String
+supportedImageMimeTypes =
+    [ "image/bmp"
+    , "image/gif"
+    , "image/png"
+    , "image/jpeg"
+    , "image/jpg"
+    ]
 
-Note: Must be used in a response to some user action(e.g., an onClick message handler).
 
+{-| Multiple images version of `selectImageFile`.
 -}
 selectImageFiles : (File -> List File -> msg) -> Cmd msg
 selectImageFiles =
-    Select.files
-        [ "image/bmp"
-        , "image/gif"
-        , "image/png"
-        , "image/jpeg"
-        , "image/jpg"
-        ]
+    Select.files supportedImageMimeTypes
 
 
+{-| Run a command to show the User a file selector. Limits files to the image mimetypes supported by the backend.
+Note: Must be used in a response to some user action(e.g., an onClick message handler).
+-}
 selectImageFile : (File -> msg) -> Cmd msg
 selectImageFile =
-    Select.file
-        [ "image/bmp"
-        , "image/gif"
-        , "image/png"
-        , "image/jpeg"
-        , "image/jpg"
-        ]
+    Select.file supportedImageMimeTypes
 
 
 pageTitleView label =

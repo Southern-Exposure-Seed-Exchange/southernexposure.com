@@ -37,7 +37,7 @@ $navbar-padding-x: 10px
 
 // $navbar-light-color: lighten($light-pale-tan, 10%)
 $navbar-light-color: $black-2
-$navbar-light-active-color: $black-2
+$navbar-light-active-color: rgba(10, 89, 75, 1)
 $navbar-light-active-bg: darken($pink-2, 7.5%)
 $navbar-light-hover-color: black
 $navbar-light-hover-bg: $pink-2
@@ -105,6 +105,9 @@ address
 hr
   margin: 0px
 
+a, a:hover
+  text-decoration: none
+
 .poor-richard
   font-family: 'Poor Richard', 'Glass Antiqua', Helvetica, Arial, sans-serif
 
@@ -117,7 +120,6 @@ body
   // background-image: linear-gradient(rgba(0,0,0,0.25), rgba(0,0,0,0.25)), url('./static/img/sese_background.jpg')
   // background-attachment: fixed
   // background-size: contain
-
 
 /* Set the background color of the body content */
 body > div.container, body > nav.container
@@ -178,7 +180,9 @@ body > div.container, body > nav.container
       /* De-emphasize */
       font-weight: normal
     .nav-link:hover
-      text-decoration: underline
+      color: rgba(29, 127, 110, 1)
+    .nav-link:active
+      color: rgba(10, 89, 75, 1)
     /* Space Out Navbar Links */
     .nav-link
       padding: 12px 16px
@@ -187,7 +191,7 @@ body > div.container, body > nav.container
     /* Darken the Background of Active Nav Items */
     .active
       // background-color: $navbar-light-active-bg
-      text-decoration: underline
+      // text-decoration: underline
     .dropdown-menu
       border-radius: 0px
       border: 0
@@ -206,7 +210,7 @@ body > div.container, body > nav.container
         background-color: $navbar-light-hover-bg
       /* Highlight an active item */
       a.active
-        color: $black-2
+        color: rgba(10, 89, 75, 1)
         background-color: $pale-tan-accent
 
   .dropdown-item

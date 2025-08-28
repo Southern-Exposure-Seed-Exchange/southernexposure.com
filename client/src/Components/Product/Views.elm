@@ -1,11 +1,14 @@
 module Components.Product.Views exposing (..)
 
+import Array
 import BootstrapGallery as Gallery
 import Components.AddToCart.AddToCart as AddToCart
 import Components.AddToCart.Type as AddToCart
 import Components.Aria as Aria
 import Components.Button as Button exposing (ButtonType(..), defaultButton)
 import Components.Form as Form
+import Components.ImageSlider.ImageSlider as ImageSlider
+import Components.ImageSlider.Type as ImageSlider
 import Components.Microdata as Microdata
 import Components.Pager as Pager
 import Components.Pagination as Pagination
@@ -15,7 +18,7 @@ import Components.Sorting as Sorting
 import Components.Svg exposing (minusSvg, plusSvg, shoppingCartSvgSmall)
 import Components.Tooltip as Tooltip
 import Data.Category exposing (Category)
-import Data.Fields exposing (Cents(..), centsToString, imageToSrcSet, imgSrcFallback, lotSizeToString)
+import Data.Fields exposing (Cents(..), blankImage, centsToString, imageToSrcSet, imgSrcFallback, lotSizeToString)
 import Data.PageData as PageData exposing (ProductData)
 import Data.Product as Product exposing (InventoryPolicy(..), Product, ProductId(..), ProductVariant, ProductVariantId(..), productMainImage, variantPrice)
 import Data.Routing.Routing as Routing exposing (Route(..))
@@ -62,9 +65,18 @@ type alias CartFormData pmsg =
 cartFormData : Shared pmsg -> Dict Int Model -> ( Product, Dict Int ProductVariant ) -> CartFormData pmsg
 cartFormData shared productDict ( product, variants ) =
     let
+        productImage =
+            List.head product.images |> Maybe.withDefault blankImage
+
         model =
             Dict.get (fromProductId product.id) productDict
-                |> Maybe.withDefault initProductModel
+                |> Maybe.withDefault
+                    { initProductModel
+                        | imageSlider =
+                            ImageSlider.mkModel
+                                product.name
+                                (Array.fromList product.images)
+                    }
                 |> (\v -> v)
 
         ( maybeSelectedVariantId, quantity ) =
@@ -315,7 +327,7 @@ detailFormView shared { maybeSelectedVariant, maybeSelectedVariantId, quantity, 
             [ addToCartInput shared model Detail quantity product maybeSelectedVariant
             ]
         , Html.map never offersMeta
-        , div [ Microdata.description, class "tw:text-[16px] static-page" ] [ rawHtml product.longDescription ]
+        , div [ Microdata.description, class "tw:text-[16px] static-page tw:text-[#4A2604]" ] [ rawHtml product.longDescription ]
         , div [] categoryBlocks
         , Microdata.mpnMeta product.baseSKU
         , Microdata.skuMeta product.baseSKU
@@ -333,13 +345,13 @@ detailView shared productDict { product, variants, maybeSeedAttribute, categorie
             cartFormData shared productDict ( product, variants )
     in
     [ div (Microdata.product ++ [ class "tw:flex tw:gap-[40px] tw:flex-col tw:lg:flex-row tw:items-center tw:lg:items-start" ])
-        [ div [ class "tw:shrink-0 tw:flex" ]
-            [ productImageGalleryView shared product
-            ]
+        [ ImageSlider.view
+            (Gallery.openOnClick shared.lightboxMsg)
+            (shared.productMsg product.id << ImageSliderMsg)
+            cartData.model.imageSlider
         , div []
             [ h6 [ class "tw:text-[32px]! tw:pb-[16px]" ]
-                [ a (Microdata.url :: routeLinkAttributes (ProductDetails product.slug Nothing) ++ [ class "" ])
-                    [ Product.singleVariantName product variants ]
+                [ Product.singleVariantName product variants
                 ]
             , detailFormView shared cartData product maybeSeedAttribute categories
             ]
@@ -358,7 +370,7 @@ cardFormView shared key { maybeSelectedVariant, maybeSelectedVariantId, quantity
         , outOfStockView "tw:pt-[12px]" maybeSelectedVariant
         , limitedAvailabilityView shared key "tw:pt-[12px]" maybeSelectedVariant
         , variantSelectView "tw:pt-[12px]" variantSelect
-        , div [ Microdata.description, class "tw:pt-[16px] tw:line-clamp-4 tw:text-[14px] static-page" ] [ rawHtml product.longDescription ]
+        , div [ Microdata.description, class "tw:pt-[16px] tw:line-clamp-4 tw:text-[14px] static-page tw:text-[#4A2604]" ] [ rawHtml product.longDescription ]
         , Microdata.mpnMeta product.baseSKU
         , Microdata.skuMeta product.baseSKU
         , Microdata.brandMeta "Southern Exposure Seed Exchange"
@@ -378,11 +390,11 @@ cardFormView shared key { maybeSelectedVariant, maybeSelectedVariantId, quantity
 
 cardView : Shared pmsg -> ViewKey -> CartFormData pmsg -> ProductData -> Html pmsg
 cardView shared key cartData ( product, variants, maybeSeedAttribute ) =
-    div (Microdata.product ++ [ class "tw:bg-[rgba(77,170,154,0.06)] tw:rounded-[16px] tw:p-[16px] tw:flex tw:flex-col" ])
+    div (Microdata.product ++ [ class "tw:bg-[rgba(77,170,154,0.06)] tw:transition-colors tw:hover:bg-[rgba(77,170,154,0.1)] tw:rounded-[16px] tw:p-[16px] tw:flex tw:flex-col" ])
         [ productImageLinkView "tw:w-full tw:h-[200px]" product Nothing
         , div [ class "tw:pt-[16px]" ]
             [ h6 [ class "mb-0 d-flex justify-content-between" ]
-                [ a (Microdata.url :: routeLinkAttributes (ProductDetails product.slug Nothing) ++ [ class "tw:line-clamp-2 tw:h-[39px]" ])
+                [ a (Microdata.url :: routeLinkAttributes (ProductDetails product.slug Nothing) ++ [ class "tw:line-clamp-2 tw:text-[18px] tw:leading-[28px]" ])
                     [ Product.singleVariantName product variants ]
                 ]
             ]

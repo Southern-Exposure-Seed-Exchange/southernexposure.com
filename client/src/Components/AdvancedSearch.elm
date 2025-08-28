@@ -132,7 +132,7 @@ mainView routingMsg formMsg data categories =
                         "tw:w-full"
 
                      else
-                        ""
+                        "tw:w-[140px]"
                     )
                         ++ " tw:cursor-pointer tw:opacity-60"
                 ]
@@ -168,6 +168,7 @@ mainView routingMsg formMsg data categories =
                     ]
                     []
                 , categorySelect False
+                , div [ class "tw:w-[1px] tw:h-[12px] tw:bg-[rgba(30,12,3,0.2)]" ] []
                 , div [ class "tw:pl-[10px]" ]
                     [ Button.view { defaultButton | label = "", icon = Just <| searchSvg "tw:fill-white", type_ = Button.FormSubmit, size = Button.Custom "tw:py-[10px] tw:px-[20px]" }
                     ]

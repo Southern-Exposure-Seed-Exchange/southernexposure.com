@@ -181,7 +181,7 @@ elements cfg items =
 
             else
                 node "nav"
-                    [ Aria.label cfg.pagerAriaLabel, class <| cfg.pagerCssClass ++ " tw:max-w-screen tw:overflow-auto no-scrollbar" ]
+                    [ Aria.label cfg.pagerAriaLabel, class <| cfg.pagerCssClass ++ " tw:max-w-screen tw:overflow-auto custom-scrollbar tw:pb-[8px]!" ]
                     [ div [ class "tw:flex tw:gap-[16px] tw:items-center" ] <|
                         previousLink ()
                             :: renderSections ()
