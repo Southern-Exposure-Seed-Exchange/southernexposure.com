@@ -44,62 +44,24 @@ update shared msg model =
 
         NextImage ->
             let
-                i =
-                    model.currentImage
-
-                ( newCurrentImage, cmd ) =
-                    if i + 1 >= Array.length model.images then
-                        let
-                            newI =
-                                0
-                        in
-                        ( newI
-                        , getContainerDomCmd newI
-                        )
-
-                    else
-                        let
-                            newI =
-                                i + 1
-                        in
-                        ( newI
-                        , getContainerDomCmd newI
-                        )
+                newI =
+                    modBy (Array.length model.images) (model.currentImage + 1)
             in
             ( { model
-                | currentImage = newCurrentImage
+                | currentImage = newI
               }
-            , cmd
+            , getContainerDomCmd newI
             )
 
         PrevImage ->
             let
-                i =
-                    model.currentImage
-
-                ( newCurrentImage, cmd ) =
-                    if i - 1 < 0 then
-                        let
-                            newI =
-                                Array.length model.images - 1
-                        in
-                        ( newI
-                        , getContainerDomCmd newI
-                        )
-
-                    else
-                        let
-                            newI =
-                                i - 1
-                        in
-                        ( newI
-                        , getContainerDomCmd newI
-                        )
+                newI =
+                    modBy (Array.length model.images) (model.currentImage - 1)
             in
             ( { model
-                | currentImage = newCurrentImage
+                | currentImage = newI
               }
-            , cmd
+            , getContainerDomCmd newI
             )
 
         SetCurrentImage i ->
