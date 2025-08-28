@@ -24,26 +24,24 @@ import Utils.View exposing (routeLinkAttributes)
 
 view :
     Model
-    -> (SiteSearch.Msg -> Msg)
-    -> SiteSearch.Data
     -> AuthStatus
     -> Int
     -> Route
     -> WebData NavigationData
     -> List CategoryId
     -> Html Msg
-view model searchTagger searchData authStatus cartItemCount route navigationData activeCategoryIds =
+view model authStatus cartItemCount route navigationData activeCategoryIds =
     div [ class "se-container tw:hidden tw:lg:block" ]
         [ div [ id "site-header", class "tw:pt-[20px] tw:lg:pt-[30px] tw:pb-0 tw:lg:pb-[30px] tw:flex tw:items-center tw:w-full" ]
             [ logoAndName Routing.homePage
             , div [ class "tw:grow" ] []
-            , linksAndSearch model authStatus cartItemCount route navigationData activeCategoryIds model.searchData
+            , linksAndSearch model authStatus cartItemCount route navigationData activeCategoryIds
             ]
         ]
 
 
-linksAndSearch : Model -> AuthStatus -> Int -> Route -> WebData NavigationData -> List CategoryId -> Search.Data -> Html Msg
-linksAndSearch model authStatus cartItemCount route navigationData activeCategoryIds searchData =
+linksAndSearch : Model -> AuthStatus -> Int -> Route -> WebData NavigationData -> List CategoryId -> Html Msg
+linksAndSearch model authStatus cartItemCount route navigationData activeCategoryIds =
     let
         linkItem attrs content =
             li [ class "d-inline-block ml-1" ]

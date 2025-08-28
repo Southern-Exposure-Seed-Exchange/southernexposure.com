@@ -47,4 +47,4 @@ update shared msg _ model =
 
 updateCartVariant : ProductVariantId -> Model -> Model
 updateCartVariant variantId model =
-    { model | variant = Just variantId, addToCart = AddToCart.init }
+    { model | variant = Just variantId, addToCart = AddToCart.initAddToCart }

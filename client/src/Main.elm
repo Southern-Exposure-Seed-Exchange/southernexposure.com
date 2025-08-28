@@ -6,7 +6,7 @@ import Browser
 import Browser.Dom as Dom
 import Browser.Navigation
 import Components.AddToCart.AddToCart as AddToCart
-import Components.AddToCart.Type as AddToCart
+import Components.AddToCart.Type as AddToCart exposing (initAddToCart)
 import Components.Address.Address as Address
 import Components.Admin.AdminDashboard as AdminDashboard
 import Components.Admin.CategoryAdmin as CategoryAdmin
@@ -24,9 +24,8 @@ import Components.AdvancedSearch as AdvancedSearch
 import Components.ImageSlider.Type as ImageSlider
 import Components.Pagination as Pagination
 import Components.Product.Product as Product
-import Components.Product.Type as Product
+import Components.Product.Type as Product exposing (initProductModel)
 import Components.ProfileNavbar as ProfileNavbar
-import Components.SiteUI.Search as SiteSearch
 import Components.Tooltip as Tooltip
 import Data.Api as Api
 import Data.Category exposing (CategoryId)
@@ -34,14 +33,14 @@ import Data.Fields exposing (blankImage, imageDataLightboxConfig)
 import Data.Locations as Locations
 import Data.Model as Model exposing (Model)
 import Data.Msg exposing (Msg(..))
-import Data.PageData as PageData exposing (CartItemId(..), PageData)
+import Data.PageData as PageData exposing (CartDetails, CartItemId(..), PageData)
 import Data.Product as Product exposing (ProductId(..), ProductVariantId(..), productMainImage)
 import Data.Routing.Routing as Routing exposing (AdminRoute(..), Route(..), parseRoute)
 import Data.Search as Search exposing (UniqueSearch(..))
 import Data.SiteUI as SiteUI
 import Data.StaticPage as StaticPage exposing (StaticPageId)
 import Data.User as User exposing (AuthStatus)
-import Dict
+import Dict exposing (Dict)
 import Http
 import Json.Decode as Decode
 import Json.Encode as Encode
@@ -148,6 +147,10 @@ init flags url key =
 
             else
                 Cmd.none
+
+        -- Get cart data mostly for anonymous, the auth user will be handle in `ReAuthorize` msg
+        getCartData =
+            fetchCartDetails model.shared.currentUser model.shared.maybeSessionToken
     in
     ( model
     , Cmd.batch
@@ -157,6 +160,7 @@ init flags url key =
         , authorizationCmd
         , Task.perform NewZone Time.here
         , metadataCmd
+        , getCartData
         ]
     )
 
@@ -203,6 +207,14 @@ fetchDataForRoute ({ route, pageData, key, productListPage } as model) =
 
                 _ ->
                     ( productListPage, Cmd.none )
+
+        ( updatedCartDetails, cartDetailsCmd ) =
+            case route of
+                Cart ->
+                    ( RemoteData.Loading, fetchCartDetails model.shared.currentUser model.shared.maybeSessionToken )
+
+                _ ->
+                    ( model.cartDetails, Cmd.none )
 
         ( data, cmd ) =
             case route of
@@ -271,10 +283,6 @@ fetchDataForRoute ({ route, pageData, key, productListPage } as model) =
                                     { pageData | orderDetails = RemoteData.Loading }
                                         |> fetchLocationsOnce
                                         |> batchCommand (getGuestCheckoutSuccessDetails orderId tok)
-
-                Cart ->
-                    pageData
-                        |> fetchCartDetails model.shared.currentUser model.shared.maybeSessionToken
 
                 QuickOrder ->
                     doNothing
@@ -493,7 +501,17 @@ fetchDataForRoute ({ route, pageData, key, productListPage } as model) =
                 _ ->
                     model
     in
-    ( { updatedModel | pageData = data, productListPage = productListData }, Cmd.batch [ cmd, productListCmd ] )
+    ( { updatedModel
+        | pageData = data
+        , productListPage = productListData
+        , cartDetails = updatedCartDetails
+      }
+    , Cmd.batch
+        [ cmd
+        , productListCmd
+        , cartDetailsCmd
+        ]
+    )
 
 
 fetchLocationsOnce : PageData -> ( PageData, Cmd Msg )
@@ -511,18 +529,14 @@ fetchLocationsOnce pageData =
             )
 
 
-fetchCartDetails : AuthStatus -> Maybe String -> PageData -> ( PageData, Cmd Msg )
-fetchCartDetails authStatus maybeSessionToken pageData =
+fetchCartDetails : AuthStatus -> Maybe String -> Cmd Msg
+fetchCartDetails authStatus maybeSessionToken =
     case authStatus of
         User.Anonymous ->
-            ( { pageData | cartDetails = RemoteData.Loading }
-            , getAnonymousCartDetails maybeSessionToken
-            )
+            getAnonymousCartDetails maybeSessionToken
 
         User.Authorized _ ->
-            ( { pageData | cartDetails = RemoteData.Loading }
-            , getCartDetails
-            )
+            getCartDetails
 
 
 getProductDetailsData : String -> Maybe ProductVariantId -> Cmd Msg
@@ -914,13 +928,6 @@ update msg ({ pageData, key, productListPage } as model) =
                 User.Anonymous ->
                     ( model, Cmd.none )
 
-        SearchMsg subMsg ->
-            let
-                ( searchData, cmd ) =
-                    SiteSearch.update key subMsg model.searchData
-            in
-            ( { model | searchData = searchData }, cmd )
-
         AdvancedSearchMsg subMsg ->
             let
                 ( advancedSearchData, formActionType ) =
@@ -1035,27 +1042,21 @@ update msg ({ pageData, key, productListPage } as model) =
 
         EditCartMsg subMsg ->
             let
-                modelPageData =
-                    model.pageData
-
                 cartDetails =
-                    model.pageData.cartDetails
+                    model.cartDetails
                         |> RemoteData.withDefault PageData.blankCartDetails
 
                 ( form, maybeDetails, cmd ) =
                     Cart.update model.shared subMsg model.editCartForm cartDetails
             in
             ( { model
-                | pageData =
-                    { modelPageData
-                        | cartDetails =
-                            case maybeDetails of
-                                Just c ->
-                                    RemoteData.Success c
+                | cartDetails =
+                    case maybeDetails of
+                        Just c ->
+                            RemoteData.Success c
 
-                                Nothing ->
-                                    model.pageData.cartDetails
-                    }
+                        Nothing ->
+                            model.cartDetails
                 , editCartForm = form
               }
             , Cmd.map EditCartMsg cmd
@@ -1276,12 +1277,16 @@ update msg ({ pageData, key, productListPage } as model) =
                         updatedModel =
                             { model | shared = updatedShared }
 
+                        -- Get cart data for auth user
+                        getCartData =
+                            fetchCartDetails updatedModel.shared.currentUser updatedModel.shared.maybeSessionToken
+
                         baseUpdate =
                             if Routing.authRequired model.route || List.member model.route [ Cart, Checkout ] then
                                 fetchDataForRoute updatedModel
 
                             else
-                                ( updatedModel, Cmd.none )
+                                ( updatedModel, getCartData )
                     in
                     case model.route of
                         Login (Just "") _ ->
@@ -1443,11 +1448,7 @@ update msg ({ pageData, key, productListPage } as model) =
                 |> extraCommand (always Ports.scrollToTop)
 
         GetCartDetails response ->
-            let
-                updatedPageData =
-                    { pageData | cartDetails = response }
-            in
-            { model | pageData = updatedPageData }
+            { model | cartDetails = response }
                 |> resetEditCartForm response
                 |> updateCartItemCountFromDetails (RemoteData.toMaybe response)
                 |> extraCommand (redirect403IfAnonymous key response)
@@ -1510,15 +1511,47 @@ update msg ({ pageData, key, productListPage } as model) =
                 |> extraCommand (always Ports.scrollToTop)
 
         CategoryPaginationMsg subMsg ->
-            productListPage.categoryDetails
-                |> Paginate.update PageData.categoryConfig subMsg
-                |> Tuple.mapSecond (Cmd.map CategoryPaginationMsg)
-                |> (\( ps, cmd ) ->
-                        ( ps, Cmd.batch [ cmd, updatePageFromPagination key model.route ps ] )
-                   )
-                |> Tuple.mapFirst (\cd -> { productListPage | categoryDetails = cd })
-                |> Tuple.mapFirst (\pd -> { model | productListPage = pd })
-                |> extraCommand (always Ports.scrollToTop)
+            let
+                ( newModel, categoryCmd ) =
+                    productListPage.categoryDetails
+                        |> Paginate.update PageData.categoryConfig subMsg
+                        |> Tuple.mapSecond (Cmd.map CategoryPaginationMsg)
+                        |> (\( ps, cmd ) ->
+                                ( ps, Cmd.batch [ cmd, updatePageFromPagination key model.route ps ] )
+                           )
+                        |> Tuple.mapFirst (\cd -> { productListPage | categoryDetails = cd })
+                        |> Tuple.mapFirst (\pd -> { model | productListPage = pd })
+                        |> extraCommand (always Ports.scrollToTop)
+
+                productDict : Dict Int Product.Model
+                productDict =
+                    Paginate.getCurrent newModel.productListPage.categoryDetails
+                        |> List.foldl
+                            (\p acc ->
+                                let
+                                    ( product, _, _ ) =
+                                        p
+
+                                    pId =
+                                        (\(ProductId id) -> id) product.id
+
+                                    -- TODO:
+                                    -- - use the function on how to get the first variant of a product
+                                    -- - using that variant access the cart amount and assign to addToCart
+                                    -- - (when changing the variant, access the cart detail and assign the proper amount to the addToCart again, with this
+                                    -- we avoid having multiple addToCart state)
+                                    -- - do the same for SearchPaginationMsg
+                                    productModel =
+                                        { initProductModel | addToCart = { initAddToCart | amount = 2, clickStatus = True } }
+                                in
+                                Dict.insert pId productModel acc
+                            )
+                            Dict.empty
+
+                modelProductListPage =
+                    newModel.productListPage
+            in
+            ( { newModel | productListPage = { modelProductListPage | productDict = productDict } }, categoryCmd )
 
         SearchPaginationMsg subMsg ->
             Paginate.update PageData.searchConfig subMsg productListPage.searchResults
@@ -1897,7 +1930,7 @@ runOnCurrentWebData runner ({ pageData, route, categoryListData } as model) =
                 |> justRunner
 
         Cart ->
-            justRunner pageData.cartDetails
+            justRunner model.cartDetails
 
         QuickOrder ->
             nothingRunner
@@ -2044,15 +2077,14 @@ clearSearchForm ( model, cmd ) =
     (\a -> Tuple.pair a cmd) <|
         case model.route of
             AdvancedSearch ->
-                { model | searchData = Search.initial }
+                model
 
             SearchResults _ _ ->
                 model
 
             _ ->
                 { model
-                    | searchData = Search.initial
-                    , advancedSearchData = Search.initial
+                    | advancedSearchData = Search.initial
                 }
 
 

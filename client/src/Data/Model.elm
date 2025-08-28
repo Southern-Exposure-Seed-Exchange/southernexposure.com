@@ -16,13 +16,12 @@ import Components.Admin.SettingsAdmin as SettingsAdmin
 import Components.Admin.ShippingAdmin as ShippingAdmin
 import Components.Admin.StaticPageAdmin as StaticPageAdmin
 import Components.Admin.SurchargesAdmin as SurchargesAdmin
-import Components.Product.Type as Product
 import Components.ProfileNavbar as ProfileNavbar
 import Components.Tooltip as Tooltip
 import Data.Api exposing (Endpoint(..))
 import Data.Fields exposing (ImageData)
 import Data.Msg exposing (Msg(..))
-import Data.PageData as PageData exposing (PageData)
+import Data.PageData as PageData exposing (CartDetails, PageData)
 import Data.Routing.Routing as Routing exposing (Route)
 import Data.Search as Search
 import Data.Shared exposing (Shared)
@@ -50,8 +49,6 @@ type alias Model =
     , categoryListData : WebData CategoryListData
     , route : Route
     , pageData : PageData
-    , searchData : Search.Data
-    , advancedSearchData : Search.Data
     , createAccountForm : CreateAccount.Form
     , verifyEmailForm : VerifyEmail.Form
     , verificationRequiredForm : VerificationRequired.Form
@@ -92,8 +89,12 @@ type alias Model =
     , postgridApiKey : String
 
     -- sub-component
-    , profileNavbar : ProfileNavbar.Model
     , shared : Shared Msg
+    , profileNavbar : ProfileNavbar.Model
+
+    -- , searchData : Search.Data
+    , advancedSearchData : Search.Data
+    , cartDetails : WebData CartDetails
 
     -- page state
     , productListPage : ProductListPage.Model
@@ -118,8 +119,6 @@ initial key route helcimUrl postgridApiKey =
     , categoryListData = RemoteData.Loading
     , route = route
     , pageData = PageData.initial
-    , searchData = Search.initial
-    , advancedSearchData = Search.initial
     , createAccountForm = CreateAccount.initial
     , verifyEmailForm = VerifyEmail.initial
     , verificationRequiredForm = VerificationRequired.initial
@@ -159,11 +158,13 @@ initial key route helcimUrl postgridApiKey =
     , helcimUrl = helcimUrl
     , postgridApiKey = postgridApiKey
 
-    -- shared data
+    -- sub components
     , shared = initShared
 
-    -- sub components
+    -- , searchData = Search.initial
+    , advancedSearchData = Search.initial
     , profileNavbar = ProfileNavbar.init
+    , cartDetails = RemoteData.NotAsked
 
     -- page state
     , productListPage = ProductListPage.init

@@ -138,7 +138,6 @@ type alias PageData =
     , locations : WebData AddressLocations
     , myAccount : WebData MyAccount
     , addressDetails : WebData AddressDetails
-    , cartDetails : WebData CartDetails
     , checkoutDetails : WebData CheckoutDetails
     , orderDetails : WebData OrderDetails
     , adminCategoryList : WebData AdminCategoryListData
@@ -195,7 +194,6 @@ initial =
     , locations = RemoteData.NotAsked
     , myAccount = RemoteData.NotAsked
     , addressDetails = RemoteData.NotAsked
-    , cartDetails = RemoteData.NotAsked
     , checkoutDetails = RemoteData.NotAsked
     , orderDetails = RemoteData.NotAsked
     , adminCategoryList = RemoteData.NotAsked

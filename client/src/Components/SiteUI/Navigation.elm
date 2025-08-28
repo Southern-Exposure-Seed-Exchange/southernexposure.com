@@ -20,8 +20,8 @@ import RemoteData exposing (WebData)
 import Utils.View exposing (routeLinkAttributes)
 
 
-view : Route -> AuthStatus -> WebData NavigationData -> List CategoryId -> Search.Data -> Int -> Html Msg
-view route authStatus navigationData activeCategoryIds searchData cartItemCount =
+view : Route -> AuthStatus -> WebData NavigationData -> List CategoryId -> Int -> Html Msg
+view route authStatus navigationData activeCategoryIds cartItemCount =
     let
         rootCategory childMap category =
             let
@@ -180,15 +180,6 @@ view route authStatus navigationData activeCategoryIds searchData cartItemCount 
                     , Aria.label "Toggle navigation"
                     ]
                     [ menuBurgerSvg ""
-                    ]
-                ]
-            , div [ id "search-navbar", class "collapse navbar-collapse" ]
-                [ div [ class "mt-2" ] [ SiteSearch.form SearchMsg "light" searchData ]
-                , ul [ class "nav navbar-nav" ]
-                    [ li [ class "nav-item" ]
-                        [ a (class "nav-link" :: routeLinkAttributes AdvancedSearch)
-                            [ text "Advanced Search" ]
-                        ]
                     ]
                 ]
             , Navbar.view navigationData rootCategory mobileOnlyItems allProductLink

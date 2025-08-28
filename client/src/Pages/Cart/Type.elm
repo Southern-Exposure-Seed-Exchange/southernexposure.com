@@ -15,7 +15,7 @@ type alias CartFormItem =
 
 formItemInit : CartFormItem
 formItemInit =
-    { addToCart = AddToCart.init
+    { addToCart = AddToCart.initAddToCart
     }
 
 

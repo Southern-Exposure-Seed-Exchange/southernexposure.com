@@ -179,7 +179,7 @@ view ({ route, pageData, navigationData, zone, helcimUrl } as model) =
                         |> withIntermediateText (apply <| OrderDetails.view zone orderId)
 
                 Cart ->
-                    withIntermediateText (Cart.view model.shared.currentUser model.editCartForm) pageData.cartDetails
+                    withIntermediateText (Cart.view model.shared.currentUser model.editCartForm) model.cartDetails
                         |> List.map (Html.map EditCartMsg)
 
                 QuickOrder ->
@@ -353,8 +353,8 @@ view ({ route, pageData, navigationData, zone, helcimUrl } as model) =
 
         else
             [ skipLink
-            , SiteHeader.view model SearchMsg model.searchData model.shared.currentUser model.cartItemCount route navigationData activeCategoryIds
-            , SiteNavigation.view route model.shared.currentUser navigationData activeCategoryIds model.searchData model.cartItemCount
+            , SiteHeader.view model model.shared.currentUser model.cartItemCount route navigationData activeCategoryIds
+            , SiteNavigation.view route model.shared.currentUser navigationData activeCategoryIds model.cartItemCount
             , div [ class "tw:pt-(--mobile-navbar-padding) tw:lg:pt-0" ] []
             , SiteBreadcrumbs.view route model.productListPage pageData
             , middleContent
