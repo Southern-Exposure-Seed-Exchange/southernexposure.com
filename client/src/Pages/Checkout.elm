@@ -1671,7 +1671,7 @@ view model authStatus locations checkoutDetails =
                         []
                     ]
                 ]
-            , div [ class "tw:flex tw:justify-end tw:pt-[20px]" ]
+            , div [ class "tw:flex tw:justify-end tw:pt-[20px] tw:pb-[500px] tw:lg:pb-0" ]
                 [ Button.view
                     { defaultButton
                         | label = buttonContents.text

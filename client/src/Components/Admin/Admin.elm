@@ -7,9 +7,11 @@ module Components.Admin.Admin exposing
     , base64ImagePreview
     , categorySelects
     , encodeImageData
+    , encodeImageDatas
     , equalsOriginal
     , formSavingClass
     , imageSelectRow
+    , imageSelectRows
     , multiSelect
     , searchInput
     , searchableTable
@@ -446,18 +448,45 @@ encodeImageData msg imageFile =
         |> Task.perform msg
 
 
+encodeImageDatas : (List String -> msg) -> List File -> Cmd msg
+encodeImageDatas msg imageFiles =
+    let
+        exec =
+            imageFiles
+                |> List.map
+                    (\f ->
+                        File.toBytes f
+                            |> Task.map Base64.fromBytes
+                            |> Task.map (Maybe.withDefault "")
+                    )
+                |> Task.sequence
+                |> Task.perform msg
+    in
+    exec
+
+
 {-| Build a height-limited image preview showing the image name & the image,
 using the Base64 encoded image data.
 -}
-base64ImagePreview : String -> String -> Html msg
-base64ImagePreview imageName imageData =
+base64ImagePreview : String -> String -> Maybe (String -> msg) -> Html msg
+base64ImagePreview imageName imageData maybeDeleteAddedImgMsg =
     if String.isEmpty imageData then
         text ""
 
     else
-        div [ class "image-preview mb-4" ]
+        div [ class "mb-4" ]
             [ div [] [ text imageName ]
-            , img [ class "img-fluid", src <| "data:*/*;base64," ++ imageData ] []
+            , div [ class "image-preview tw:flex tw:gap-[16px] tw:items-start" ]
+                [ img [ class "img-fluid", src <| "data:*/*;base64," ++ imageData ] []
+                , case maybeDeleteAddedImgMsg of
+                    Just deleteMsg ->
+                        button [ class " tw:text-red-400", type_ "button", onClick <| deleteMsg imageName ]
+                            [ text "Delete"
+                            ]
+
+                    Nothing ->
+                        text ""
+                ]
             ]
 
 
@@ -466,11 +495,36 @@ base64ImagePreview imageName imageData =
 imageSelectRow : String -> String -> msg -> String -> Html msg
 imageSelectRow imageName imageData msg label =
     Form.withLabel label False <|
-        [ base64ImagePreview imageName imageData
+        [ base64ImagePreview imageName imageData Nothing
         , button
             [ class "btn btn-sm btn-secondary"
             , type_ "button"
             , onClick msg
             ]
-            [ text "Upload Image..." ]
+            [ text "Upload Image" ]
+        ]
+
+
+{-| Show an "Upload Image" button with multiple preview
+-}
+imageSelectRows : List { fileName : String, base64Image : String } -> msg -> (String -> msg) -> String -> Html msg
+imageSelectRows xs addNewImgMsg deleteAddedImgMsg label =
+    -- let
+    --     ( imageName, imageData ) =
+    --         x
+    -- in
+    Form.withLabelStart label False <|
+        [ div []
+            (List.map
+                (\{ fileName, base64Image } ->
+                    base64ImagePreview fileName base64Image (Just deleteAddedImgMsg)
+                )
+                xs
+            )
+        , button
+            [ class "btn btn-sm btn-secondary"
+            , type_ "button"
+            , onClick addNewImgMsg
+            ]
+            [ text "Add images" ]
         ]

@@ -42,7 +42,7 @@ update shared msg model =
 
                         User.Anonymous ->
                             ( model
-                            , getAnonymousCartDetails shared.maybeSessionToken
+                            , getAnonymousCartDetails (Just sessionToken)
                                 (\res -> UpdateAmountBaseOnCartDetail vId amountChange sessionToken (RemoteData.map (\c -> Ok c) res))
                             )
 
@@ -337,7 +337,7 @@ view _ vId model =
     if not model.clickStatus then
         button
             [ type_ "button"
-            , class "tw:w-[160px] tw:bg-[rgba(77,170,154,1)] tw:text-white tw:flex tw:px-[16px] tw:py-[8px] tw:rounded-[8px]! tw:gap-[8px] tw:items-center tw:justify-center tw:leading-[24px]"
+            , class "tw:w-[150px] tw:bg-[rgba(77,170,154,1)] tw:text-white tw:flex tw:px-[16px] tw:py-[8px] tw:rounded-[8px]! tw:gap-[8px] tw:items-center tw:justify-center tw:leading-[24px]"
             , onClick (TriggerAdd vId)
             ]
         <|
@@ -351,7 +351,7 @@ view _ vId model =
                     ]
 
     else
-        div [ class "tw:w-[160px]" ]
+        div [ class "tw:w-[150px]" ]
             [ customNumberView Card model vId
             ]
 

@@ -60,7 +60,7 @@ nameWithLotSize { name } { lotSize } =
         lotSizeString =
             lotSize |> Maybe.map (\s -> ", " ++ lotSizeToString s) |> Maybe.withDefault ""
     in
-    span [ class "product-name-lotsize", Microdata.name ]
+    span [ class "product-name-lotsize tw:text-[#4A2604]", Microdata.name ]
         [ Markdown.toHtmlWith
             { defaultOptions | sanitize = False, smartypants = True }
             []

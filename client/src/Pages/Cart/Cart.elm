@@ -201,12 +201,12 @@ view authStatus { formItems } ({ items, charges } as cartDetails) =
                 ]
 
         buttons =
-            div [ class "tw:w-full tw:lg:w-[283px] tw:shrink-0" ]
+            div [ class "tw:w-full tw:lg:w-[283px] tw:shrink-0 tw:pb-[500px] tw:lg:pb-0" ]
                 [ totalView
                 , viewIf (authStatus == unauthorized) <|
-                    div [ class "tw:py-[10px]" ]
+                    div [ class "tw:py-[20px]" ]
                         [ a
-                            (class "btn-link btn tw:font-semibold! p-0 text-right col ml"
+                            (class "btn-link btn p-0 tw:text-center col ml"
                                 :: routeLinkAttributes (Login (Just <| reverse <| Checkout) True)
                             )
                             [ text "Already have an Account?" ]
@@ -366,7 +366,7 @@ view authStatus { formItems } ({ items, charges } as cartDetails) =
 
     else
         [ titleView
-        , p [ class "tw:px-[16px]" ] [ text "You haven't added anything to your Shopping Cart yet!" ]
+        , p [ class "tw:px-0 tw:lg:px-[16px]" ] [ text "You haven't added anything to your Shopping Cart yet!" ]
         ]
 
 

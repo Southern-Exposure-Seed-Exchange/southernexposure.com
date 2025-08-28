@@ -13,6 +13,7 @@ port module Ports exposing
     , removeAuthDetails
     , removeCartSessionToken
     , removeHelcimPayIframe
+    , scrollLeftSmooth
     , scrollToErrorMessage
     , scrollToID
     , scrollToName
@@ -39,6 +40,9 @@ port scrollToSelector : String -> Cmd msg
 
 
 port collapseMobileMenus : () -> Cmd msg
+
+
+port scrollLeftSmooth : { id : String, amount : Float } -> Cmd msg
 
 
 scrollToTop : Cmd msg

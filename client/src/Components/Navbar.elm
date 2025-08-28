@@ -17,7 +17,10 @@ view navigationData rootCategory mobileOnlyItems allProductLink =
                 |> Maybe.map (\data -> List.map (rootCategory data.children) data.roots)
                 |> Maybe.withDefault []
     in
-    div [ id "category-navbar", class "collapse navbar-collapse tw:pt-[32px] tw:lg:pt-0" ]
+    div
+        [ id "category-navbar"
+        , class "collapse navbar-collapse tw:max-h-(--mobile-navbar-dropdown-height) tw:lg:max-h-auto! tw:overflow-auto tw:lg:overflow-visible"
+        ]
         [ ul [ class "navbar-nav d-flex text-left tw:text-[16px] tw:leading-[24px]" ] <|
             [ allProductLink ]
                 ++ categoryNavigation

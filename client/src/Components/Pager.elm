@@ -58,7 +58,9 @@ customBootstrapPager : (Int -> List (Html.Attribute msg)) -> Int -> Int -> Pagin
 customBootstrapPager linkAttributes endPagesToShow middlePagesToShow pagination =
     let
         class_ =
-            "tw:block tw:flex tw:items-center tw:justify-center tw:w-[36px] tw:h-[36px] tw:rounded-[8px] tw:hover:no-underline! tw:hover:bg-[#4DAA9A]! tw:hover:text-white!"
+            "tw:flex tw:shrink-0 tw:items-center tw:justify-center tw:w-[36px] tw:h-[36px] tw:rounded-[8px]"
+                ++ " "
+                ++ "tw:hover:no-underline! tw:hover:bg-[#4DAA9A]! tw:hover:text-white!"
 
         itemClass isCurrent =
             if isCurrent then
@@ -179,7 +181,7 @@ elements cfg items =
 
             else
                 node "nav"
-                    [ Aria.label cfg.pagerAriaLabel, class cfg.pagerCssClass ]
+                    [ Aria.label cfg.pagerAriaLabel, class <| cfg.pagerCssClass ++ " tw:max-w-screen tw:overflow-auto custom-scrollbar tw:pb-[8px]!" ]
                     [ div [ class "tw:flex tw:gap-[16px] tw:items-center" ] <|
                         previousLink ()
                             :: renderSections ()

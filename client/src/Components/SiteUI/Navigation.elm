@@ -160,8 +160,8 @@ view route authStatus navigationData activeCategoryIds searchData cartItemCount 
     in
     div [ id "navigation", class "se-container" ]
         [ node "nav"
-            [ class "navbar navbar-expand-md navbar-light tw:lg:bg-[#f6eee4] tw:lg:rounded-[16px]!" ]
-            [ div [ class "tw:flex tw:lg:hidden tw:w-full tw:pt-[20px] tw:pb-[12px] tw:px-[16px] tw:items-center tw:gap-[16px]" ]
+            [ class "navbar navbar-expand-md navbar-light tw:fixed! tw:w-full tw:z-3 tw:lg:static! tw:bg-white tw:lg:bg-[#f6eee4] tw:lg:rounded-[16px]!" ]
+            [ div [ class "tw:flex tw:lg:hidden tw:w-full tw:py-[12px] tw:px-[16px] tw:items-center tw:gap-[16px]" ]
                 [ logoAndName Routing.homePage
                 , div [ class "tw:grow" ] []
                 , if Routing.showSearchbar route then

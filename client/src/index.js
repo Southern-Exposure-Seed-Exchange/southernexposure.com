@@ -189,6 +189,18 @@ app.ports.subscribeToHelcimMessages.subscribe(function() {
 
   window.addEventListener('message', helcimMessageListener);
 })
+
+
+// Scroll horizontally
+app.ports.scrollLeftSmooth.subscribe(function({id, amount}) {
+    var el = document.getElementById(id);
+    if (el) {
+        el.scrollBy({
+            left: amount,
+            behavior: "smooth" // ensures smooth scrolling
+        });
+    }
+});
 /** UTILITIES **/
 
 /* Parse an Int or return null */

@@ -5,6 +5,7 @@ module Components.Product.Product exposing (..)
 
 import Components.AddToCart.AddToCart as AddToCart
 import Components.AddToCart.Type as AddToCart
+import Components.ImageSlider.ImageSlider as ImageSlider
 import Components.Product.Type exposing (Model, Msg(..))
 import Data.Product exposing (ProductId(..), ProductVariantId(..))
 import Data.Shared exposing (Shared)
@@ -26,6 +27,15 @@ update shared msg _ model =
             in
             ( { model | addToCart = newAddToCart }
             , Cmd.map AddToCartMsg cmd
+            )
+
+        ImageSliderMsg subMsg ->
+            let
+                ( newImageSlider, cmd ) =
+                    ImageSlider.update shared subMsg model.imageSlider
+            in
+            ( { model | imageSlider = newImageSlider }
+            , Cmd.map ImageSliderMsg cmd
             )
 
 

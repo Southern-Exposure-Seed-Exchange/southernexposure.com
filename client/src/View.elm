@@ -81,7 +81,7 @@ view ({ route, pageData, navigationData, zone, helcimUrl } as model) =
 
         withSidebar content =
             div [ class "se-container", Aria.live "polite" ]
-                [ div [ class "tw:flex tw:flex-col-reverse tw:lg:flex-row tw:gap-[100px] tw:lg:gap-[40px]" ]
+                [ div [ class "tw:flex tw:flex-col-reverse tw:lg:flex-row tw:gap-[500px] tw:lg:gap-[40px]" ]
                     [ SiteSidebar.view route
                     , div [ class "tw:w-full tw:grow tw:min-h-screen tw:lg:min-h-auto", id "main" ] content
                     ]
@@ -355,6 +355,7 @@ view ({ route, pageData, navigationData, zone, helcimUrl } as model) =
             [ skipLink
             , SiteHeader.view model SearchMsg model.searchData model.shared.currentUser model.cartItemCount route navigationData activeCategoryIds
             , SiteNavigation.view route model.shared.currentUser navigationData activeCategoryIds model.searchData model.cartItemCount
+            , div [ class "tw:pt-(--mobile-navbar-padding) tw:lg:pt-0" ] []
             , SiteBreadcrumbs.view route pageData
             , middleContent
             , SiteFooter.view

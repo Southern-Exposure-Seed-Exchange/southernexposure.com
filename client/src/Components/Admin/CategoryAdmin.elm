@@ -426,7 +426,7 @@ edit categoryId model categories originalCategory =
                         ]
 
                 Just ( imageData, imageName ) ->
-                    Admin.base64ImagePreview imageName imageData
+                    Admin.base64ImagePreview imageName imageData Nothing
     in
     [ form [ class (formSavingClass model), onSubmit SubmitEdit ]
         [ Form.genericErrorText <| not <| Dict.isEmpty model.errors
