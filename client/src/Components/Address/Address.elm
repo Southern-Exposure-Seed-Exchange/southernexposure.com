@@ -30,7 +30,7 @@ import Json.Decode as Decode exposing (Decoder)
 import Json.Decode.Pipeline exposing (hardcoded)
 import Json.Encode as Encode exposing (Value)
 import Process
-import RemoteData exposing (WebData)
+import RemoteData exposing (RemoteData(..), WebData)
 import Task
 import Url exposing (percentEncode)
 import Utils.View exposing (autocomplete, labelView)
@@ -62,6 +62,7 @@ type alias Model =
     , suggestions : List AutocompleteData
     , debounceId : Int
     , warnings : Dict String (List String)
+    , selectSuggestionRd : WebData ()
     }
 
 initial : Model
@@ -82,6 +83,7 @@ initial =
     , suggestions = []
     , debounceId = 0
     , warnings = Dict.empty
+    , selectSuggestionRd = NotAsked
     }
 
 
@@ -103,10 +105,11 @@ decoder =
                     (Decode.field "country" Decode.string)
                     (Decode.field "phoneNumber" Decode.string)
                     (Decode.field "isDefault" Decode.bool)
-                |> hardcoded False
-                |> hardcoded []
-                |> hardcoded 0
-                |> hardcoded Dict.empty
+                    |> hardcoded False
+                    |> hardcoded []
+                    |> hardcoded 0
+                    |> hardcoded Dict.empty
+                    |> hardcoded NotAsked
             )
 
 
@@ -277,13 +280,16 @@ updateModel addressCompletionSetting msg model =
         SuggestionSelected suggestion ->
             case addressCompletionSetting of
                 AddressCompletionEnabled postgridApiKey ->
-                    ( { model | showSuggestions = False }, completeAddress suggestion postgridApiKey )
+                    ( { model | showSuggestions = False, selectSuggestionRd = Loading }, completeAddress suggestion postgridApiKey )
+
                 AddressCompletionDisabled ->
-                    ( { model | showSuggestions = False }, Cmd.none )
+                    ( { model | showSuggestions = False, selectSuggestionRd = Loading }, Cmd.none )
 
         AddressCompleted (RemoteData.Success (Ok response)) ->
             case response.data of
-                Nothing -> ( model, Cmd.none )
+                Nothing ->
+                    ( { model | selectSuggestionRd = Success () }, Cmd.none )
+
                 Just addr ->
                     let
                         newModel =
@@ -293,6 +299,7 @@ updateModel addressCompletionSetting msg model =
                                 , state = Just <| USState (String.toUpper addr.prov)
                                 , zipCode = addr.pc
                                 , country = String.toUpper addr.country
+                                , selectSuggestionRd = Success ()
                             }
                     in
                     ( newModel, Cmd.none )
@@ -587,15 +594,26 @@ form { model, errors } inputPrefix locations =
         , field .firstName (InputMsg FirstName) "First Name" "firstName" "given-name" True
         , field .lastName (InputMsg LastName) "Last Name" "lastName" "family-name" True
         , field .companyName (InputMsg CompanyName) "Company Name" "companyName" "organization" False
-        , field .street (InputMsg Street) "Street Address" "addressOne" "address-line1" True
+        , disableWhenLoading model <| field .street (InputMsg Street) "Street Address" "addressOne" "address-line1" True
         , viewSuggestions model
         , field .addressTwo (InputMsg AddressTwo) "Address Line 2" "addressTwo" "address-line2" False
-        , field .city (InputMsg City) "City" "city" "address-level2" True
-        , regionField
-        , field .zipCode (ChangeMsg ZipCode) "Zip Code" "zipCode" "postal-code" True
-        , selectField .country Country locations.countries "Country" "country"
+        , disableWhenLoading model <| field .city (InputMsg City) "City" "city" "address-level2" True
+        , disableWhenLoading model <| regionField
+        , disableWhenLoading model <| field .zipCode (ChangeMsg ZipCode) "Zip Code" "zipCode" "postal-code" True
+        , disableWhenLoading model <| selectField .country Country locations.countries "Country" "country"
         , field .phoneNumber (InputMsg PhoneNumber) "Phone Number" "phoneNumber" "tel" True
         ]
+
+
+{-| Make the form less visible and unclickable when it is loading.
+-}
+disableWhenLoading model view =
+    case model.selectSuggestionRd of
+        Loading ->
+            div [ class "tw:opacity-50 tw:pointer-events-none" ] [ view ]
+
+        _ ->
+            div [] [ view ]
 
 
 horizontalForm : Form -> AddressLocations -> List (Html Msg)
@@ -645,17 +663,19 @@ horizontalForm { model, errors } locations =
         [ requiredField .firstName FirstName "First Name" "firstName" "text" "given-name"
         , requiredField .lastName LastName "Last Name" "lastName" "text" "family-name"
         ]
-    , requiredField .street Street "Street Address" "addressOne" "text" "address-line1"
+    , disableWhenLoading model <| requiredField .street Street "Street Address" "addressOne" "text" "address-line1"
     , viewSuggestions model
     , optionalField .addressTwo AddressTwo "Address Line 2" "addressTwo" "text" "address-line2"
-    , div [ class "tw:grid tw:grid-cols-1 tw:lg:grid-cols-2 tw:gap-[16px]" ]
-        [ countrySelect
-        , regionField
-        ]
-    , div [ class "tw:grid tw:grid-cols-1 tw:lg:grid-cols-2 tw:gap-[16px]" ]
-        [ requiredField .city City "City" "city" "text" "address-level2"
-        , requiredField .zipCode ZipCode "Zip Code" "zipCode" "text" "postal-code"
-        ]
+    , disableWhenLoading model <|
+        div [ class "tw:grid tw:grid-cols-1 tw:lg:grid-cols-2 tw:gap-[16px]" ]
+            [ countrySelect
+            , regionField
+            ]
+    , disableWhenLoading model <|
+        div [ class "tw:grid tw:grid-cols-1 tw:lg:grid-cols-2 tw:gap-[16px]" ]
+            [ requiredField .city City "City" "city" "text" "address-level2"
+            , requiredField .zipCode ZipCode "Zip Code" "zipCode" "text" "postal-code"
+            ]
     , requiredField .phoneNumber PhoneNumber "Phone Number" "phoneNumber" "tel" "tel"
     ]
 
