@@ -65,8 +65,28 @@ type Msg
     | Delete
     | DeleteResponse (WebData ())
     | Update
-    | UpdateResponse AddressId (WebData (Result Api.FormErrors ()))
+    | UpdateResponse AddressId (WebData (Result Api.FormErrors AddressEditResult))
     | SetMobileTab MobileTab
+
+
+type AddressEditResult
+    = AddressEditSuccess
+    | AddressEditCorrected Address.Model
+    | AddressEditFailed (Dict String (List String))
+
+addressEditResultDecoder : Decode.Decoder AddressEditResult
+addressEditResultDecoder = Decode.field "status" Decode.string |> Decode.andThen
+    (\status ->
+        case status of
+            "success" ->
+                Decode.succeed AddressEditSuccess
+            "corrected" ->
+                Decode.map AddressEditCorrected (Decode.field "address" Address.decoder)
+            "failed" ->
+                Decode.map AddressEditFailed (Decode.field "errors" (Decode.dict (Decode.list Decode.string)))
+            _ ->
+                Decode.fail ("Unknown status: " ++ status)
+    )
 
 
 update : Routing.Key -> String -> Msg -> Form -> AuthStatus -> WebData PageData.AddressDetails -> ( Form, Cmd Msg )
@@ -133,8 +153,43 @@ update key postgridApiKey msg model authStatus details =
 
         UpdateResponse (AddressId addressId) response ->
             case response of
-                RemoteData.Success (Ok _) ->
-                    ( initial, Routing.newUrl key MyAccount )
+                RemoteData.Success (Ok resp) ->
+                    case resp of
+                        AddressEditSuccess ->
+                            ( initial, Routing.newUrl key MyAccount )
+
+                        AddressEditCorrected correctedAddress ->
+                            let
+                                correctionMessage =
+                                    "We've made some corrections to your address. Please review and save."
+                                newAddrModel =
+                                    { correctedAddress
+                                    | warnings = Api.addError "" correctionMessage correctedAddress.warnings
+                                    }
+                            in
+                            { model
+                                | forms =
+                                    Dict.update addressId
+                                        (Maybe.map <| \form ->
+                                            { form
+                                            | model = newAddrModel
+                                            }
+                                        )
+                                        model.forms
+                            }
+                                |> noCommand
+
+                        AddressEditFailed addrValidationErrors ->
+                            let
+                                formErrors = Dict.values addrValidationErrors |> List.concat
+                            in
+                            { model
+                                | forms =
+                                    Dict.update addressId
+                                        (Maybe.map <| \form -> { form | errors = Api.addErrors "" formErrors form.errors })
+                                        model.forms
+                            }
+                                |> noCommand
 
                 RemoteData.Success (Err errors) ->
                     { model
@@ -224,7 +279,7 @@ updateAddress authStatus isDefault ({ model } as addressForm) =
         ( User.Authorized _, Just (AddressId addressId) ) ->
             Api.post (Api.CustomerEditAddress addressId)
                 |> Api.withJsonBody (Address.encode withNewDefault)
-                |> Api.withErrorHandler (Decode.succeed ())
+                |> Api.withErrorHandler addressEditResultDecoder
                 |> Api.sendRequest (UpdateResponse <| AddressId addressId)
 
         _ ->

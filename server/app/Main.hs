@@ -40,6 +40,8 @@ import qualified Helcim.API as Helcim (ApiToken(..))
 import Models
 import Models.PersistJSON (JSONValue(..))
 import Paths_sese_website (version)
+import qualified Postgrid.API as Postgrid (ApiKey(..))
+import qualified Postgrid.Cache as Postgrid (newPostgridQueryCache)
 import StoneEdge (StoneEdgeCredentials(..))
 import Utils (lookupSettingWith, makeSqlPool)
 import Workers (Task(CleanDatabase, AddSalesReportDay), taskQueueConfig, enqueueTask)
@@ -51,14 +53,13 @@ import qualified Network.Wai.Handler.Warp as Warp
 
 import Prelude hiding (log)
 
-
 -- | Connect to the database, configure the application, & start the server.
 --
 -- TODO: Document enviornmental variables in README.
 main :: IO ()
 main = do
     env <- lookupSetting "ENV" Development
-    (avalaraLogger, stripeLogger, serverLogger, helcimLogger, cleanupLoggers) <- makeLoggers env
+    (avalaraLogger, stripeLogger, serverLogger, helcimLogger, postgridLogger, cleanupLoggers) <- makeLoggers env
     let log = logMsg serverLogger
     log "SESE API Server starting up."
     port <- lookupSetting "PORT" 3000
@@ -68,6 +69,7 @@ main = do
     devMail <- makeDevMail log env
     stripeToken <- fromMaybe "" <$> lookupEnv "STRIPE_TOKEN"
     helcimToken <- requireSetting "HELCIM_TOKEN"
+    postgridApiKey <- lookupEnv "POSTGRID_API_KEY"
     cookieSecret <- mkPersistentServerKey . C.pack . fromMaybe ""
         <$> lookupEnv "COOKIE_SECRET"
     entropySource <- sessionEntropy
@@ -82,6 +84,7 @@ main = do
     initializeJobs dbPool
     log "Initialized database pool."
     cache <- newTVarIO emptyCache
+    postgridQueryCache <- Postgrid.newPostgridQueryCache 10 100
     void . async
         $ runSqlPool initializeCaches dbPool >>= atomically . writeTVar cache
     log "Started initialization of database cache."
@@ -89,12 +92,14 @@ main = do
             { getPool = dbPool
             , getEnv = env
             , getCaches = cache
+            , getPostgridQueryCache = postgridQueryCache
             , getMediaDirectory = mediaDir
             , getSmtpPool = emailPool
             , getSmtpUser = smtpUser
             , getSmtpPass = smtpPass
             , getStripeConfig = StripeConfig (StripeKey $ C.pack stripeToken) Nothing
             , getHelcimAuthKey = Helcim.ApiToken $ T.pack helcimToken
+            , getPostgridApiKey = Postgrid.ApiKey . T.pack <$> postgridApiKey
             , getStoneEdgeAuth = stoneEdgeAuth
             , getCookieSecret = cookieSecret
             , getCookieEntropySource = entropySource
@@ -107,6 +112,7 @@ main = do
             , getStripeLogger = stripeLogger
             , getServerLogger = serverLogger
             , getHelcimLogger = helcimLogger
+            , getPostgridLogger = postgridLogger
             , getDeveloperEmail = devMail
             , getBaseUrl = baseUrl
             }
@@ -246,7 +252,7 @@ main = do
                         ++ "\n\n\tValid value are `Production` or `Sandbox`"
             return Avalara.Config {..}
 
-        makeLoggers :: Environment -> IO (TimedFastLogger, TimedFastLogger, TimedFastLogger, TimedFastLogger, IO ())
+        makeLoggers :: Environment -> IO (TimedFastLogger, TimedFastLogger, TimedFastLogger, TimedFastLogger, TimedFastLogger, IO ())
         makeLoggers env = do
             timeCache <- newTimeCache "%Y-%m-%dT%T"
             case env of
@@ -256,7 +262,8 @@ main = do
                     (stripe, stripeClean) <- makeLogger (LogStdout defaultBufSize)
                     (server, servClean) <- makeLogger (LogStdout defaultBufSize)
                     (helcim, helcimClean) <- makeLogger (LogStdout defaultBufSize)
-                    return (avalara, stripe, server, helcim, aClean >> stripeClean >> servClean >> helcimClean)
+                    (postgrid, postgridClean) <- makeLogger (LogStdout defaultBufSize)
+                    return (avalara, stripe, server, helcim, postgrid, aClean >> stripeClean >> servClean >> helcimClean >> postgridClean)
                 Production -> do
                     logDir <- lookupDirectory "LOGS" "/logs/"
                     let makeLogger fp = newTimedFastLogger timeCache
@@ -266,7 +273,8 @@ main = do
                     (stripe, stripeClean) <- makeLogger $ logDir ++ "/stripe.log"
                     (server, servClean) <- makeLogger $ logDir ++ "/server.log"
                     (helcim, helcimClean) <- makeLogger $ logDir ++ "/helcim.log"
-                    return (avalara, stripe, server, helcim, aClean >> stripeClean >> servClean >> helcimClean)
+                    (postgrid, postgridClean) <- makeLogger $ logDir ++ "/postgrid.log"
+                    return (avalara, stripe, server, helcim, postgrid, aClean >> stripeClean >> servClean >> helcimClean >> postgridClean)
 
         lookupDirectory :: String -> FilePath -> IO FilePath
         lookupDirectory envName defaultPath = do

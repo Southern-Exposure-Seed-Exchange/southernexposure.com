@@ -35,8 +35,7 @@ module Routes.CommonData
     , CartItemWarning(..)
     , getCartItems
     , CartInventoryNotifications(..)
-    , CartInventoryCheckResult(..)
-    , checkNewCartInventoryNotifications
+    , getCartInventoryNotifications
     , getUnseenCartInventoryNotifications
     , CartCharges(..)
     , getCharges
@@ -1077,29 +1076,6 @@ getUnseenCartInventoryNotifications seenNotifications currentNotifications =
                 S.difference currentSet seenSet
             ) seen current
 
-data CartInventoryCheckResult a
-    = NoNewCartInventoryNotifications a
-    | NewCartInventoryNotifications
-
-instance ToJSON a => ToJSON (CartInventoryCheckResult a) where
-    toJSON (NoNewCartInventoryNotifications a) = object
-        [ "status" .= ("ok" :: T.Text)
-        , "result" .= a
-        ]
-    toJSON NewCartInventoryNotifications = object
-        [ "status" .= ("new-notifications" :: T.Text)
-        ]
-
-checkNewCartInventoryNotifications
-    :: CartInventoryNotifications -> CartId -> AppSQL a
-    -> AppSQL (CartInventoryCheckResult a)
-checkNewCartInventoryNotifications seenWarnings cartId action = do
-    currentWarnings <- getCartInventoryNotifications cartId
-    let unseenWarnings = getUnseenCartInventoryNotifications seenWarnings currentWarnings
-    if M.null (cinWarnings unseenWarnings) && M.null (cinErrors unseenWarnings)
-        then NoNewCartInventoryNotifications <$> action
-        else return NewCartInventoryNotifications
-
 -- Addresses
 
 
@@ -1205,6 +1181,7 @@ fromAddressData type_ customerId address =
         , addressType = type_
         , addressCustomerId = customerId
         , addressIsActive = True
+        , addressVerified = False
         }
 
 toAddressData :: Entity Address -> AddressData
@@ -1239,7 +1216,6 @@ addressToAvalara AddressData {..} =
         , aiLatitude = Nothing
         , aiLongitude = Nothing
         }
-
 
 -- Order Details
 

@@ -23,7 +23,8 @@ import StoneEdge (StoneEdgeCredentials)
 
 import qualified Avalara
 import qualified Helcim.API as Helcim (ApiToken)
-
+import qualified Postgrid.API as Postgrid (ApiKey)
+import qualified Postgrid.Cache as Postgrid (QueryCache)
 
 data Environment
     = Production
@@ -41,12 +42,14 @@ data Config
     { getPool :: ConnectionPool
     , getEnv :: Environment
     , getCaches :: TVar Caches
+    , getPostgridQueryCache :: Postgrid.QueryCache
     , getMediaDirectory :: FilePath
     , getSmtpPool :: Pool SMTPConnection
     , getSmtpUser :: String
     , getSmtpPass :: String
     , getStripeConfig :: StripeConfig
     , getHelcimAuthKey :: Helcim.ApiToken
+    , getPostgridApiKey :: Maybe Postgrid.ApiKey
     , getStoneEdgeAuth :: StoneEdgeCredentials
     , getCookieSecret :: PersistentServerKey
     , getCookieEntropySource :: RandomSource
@@ -59,6 +62,7 @@ data Config
     , getStripeLogger :: TimedFastLogger
     , getServerLogger :: TimedFastLogger
     , getHelcimLogger :: TimedFastLogger
+    , getPostgridLogger :: TimedFastLogger
     , getDeveloperEmail :: Maybe Text
     , getBaseUrl :: Text
     }
@@ -69,12 +73,14 @@ defaultConfig =
         { getPool = undefined
         , getEnv = Development
         , getCaches = undefined
+        , getPostgridQueryCache = undefined
         , getMediaDirectory = undefined
         , getSmtpPool = undefined
         , getSmtpUser = undefined
         , getSmtpPass = undefined
         , getStripeConfig = undefined
         , getHelcimAuthKey = undefined
+        , getPostgridApiKey = undefined
         , getStoneEdgeAuth = undefined
         , getCookieSecret = undefined
         , getCookieEntropySource = undefined
@@ -87,6 +93,7 @@ defaultConfig =
         , getStripeLogger = undefined
         , getServerLogger = undefined
         , getHelcimLogger = undefined
+        , getPostgridLogger = undefined
         , getDeveloperEmail = Nothing
         , getBaseUrl = "http://localhost:7000"
         }
