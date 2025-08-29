@@ -102,10 +102,10 @@ view config =
         sizeClass =
             case config.size of
                 Small ->
-                    "tw:py-[8px] "
+                    "tw:h-[40px]"
 
                 Large ->
-                    "tw:py-[12px]"
+                    "tw:h-[44px]"
 
                 Custom class_ ->
                     class_
@@ -119,7 +119,7 @@ view config =
                     r
 
         allClass =
-            "tw:block tw:text-[16px] tw:leading-[24px] tw:rounded-[8px]! tw:no-underline! tw:flex tw:gap-[8px] tw:items-center tw:justify-center"
+            "tw:flex tw:text-[16px] tw:leading-[24px] tw:rounded-[8px]! tw:no-underline! tw:flex tw:gap-[8px] tw:items-center tw:justify-center"
                 ++ " "
                 ++ styleClass
                 ++ " "
@@ -149,8 +149,13 @@ view config =
 
         buttonContent =
             iconContent
-                ++ [ text config.label
-                   ]
+                ++ (if config.label /= "" then
+                        [ span [] [ text config.label ]
+                        ]
+
+                    else
+                        []
+                   )
                 ++ iconEndContent
     in
     case config.type_ of

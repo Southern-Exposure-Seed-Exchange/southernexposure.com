@@ -43,12 +43,6 @@ import Utils.View exposing (htmlOrBlank, icon, numericInput, onIntInput, rawHtml
 --------------------------------------------------------------
 
 
-type ProductFormStyle
-    = Card
-    | Detail
-    | Checkout
-
-
 type alias CartFormData pmsg =
     { maybeSelectedVariant : Maybe ProductVariant
     , maybeSelectedVariantId : Maybe ProductVariantId
@@ -275,12 +269,12 @@ variantSelectView paddingClass variantSelect =
             variantSelect
 
 
-priceView : ProductFormStyle -> Maybe ProductVariant -> Html msg
+priceView : AddToCart.ProductFormStyle -> Maybe ProductVariant -> Html msg
 priceView style maybeSelectedVariant =
     let
         class_ =
             case style of
-                Card ->
+                AddToCart.Card ->
                     "tw:text-[28px] tw:font-bold"
 
                 _ ->
@@ -318,13 +312,13 @@ detailFormView shared { maybeSelectedVariant, maybeSelectedVariantId, quantity, 
         [ div [ class "tw:pb-[16px]" ]
             [ productAttrView shared key selectedItemNumber maybeSeedAttribute
             ]
-        , div [ class "tw:pt-[12px] tw:pb-[24px]" ] [ priceView Detail maybeSelectedVariant ]
+        , div [ class "tw:pt-[12px] tw:pb-[24px]" ] [ priceView AddToCart.Detail maybeSelectedVariant ]
         , outOfStockView "tw:pb-[24px]" maybeSelectedVariant
         , limitedAvailabilityView shared key "tw:pb-[24px]" maybeSelectedVariant
         , variantSelectView "tw:pb-[24px]" variantSelect
         , Html.map (shared.productMsg product.id << AddToCartMsg) (AddToCart.statusView model.addToCart)
         , div [ class "tw:pb-[28px] tw:w-full tw:flex tw:flex-col" ]
-            [ addToCartInput shared model Detail quantity product maybeSelectedVariant
+            [ addToCartInput shared model AddToCart.Detail quantity product maybeSelectedVariant
             ]
         , Html.map never offersMeta
         , div [ Microdata.description, class "tw:text-[16px] static-page tw:text-[#4A2604]" ] [ rawHtml product.longDescription ]
@@ -379,9 +373,9 @@ cardFormView shared key { maybeSelectedVariant, maybeSelectedVariantId, quantity
         , div [ class "tw:pt-[24px]" ]
             [ Html.map (shared.productMsg product.id << AddToCartMsg) (AddToCart.statusView model.addToCart)
             , div [ class "tw:flex tw:items-center" ]
-                [ priceView Card maybeSelectedVariant
+                [ priceView AddToCart.Card maybeSelectedVariant
                 , div [ class "tw:grow" ] []
-                , addToCartInput shared model Card quantity product maybeSelectedVariant
+                , addToCartInput shared model AddToCart.Card quantity product maybeSelectedVariant
                 , Html.map never offersMeta
                 ]
             ]
@@ -614,32 +608,9 @@ limitedAvailabilityBadge =
         ]
 
 
-addToCartInput : Shared pmsg -> { a | addToCart : AddToCart.Model } -> ProductFormStyle -> Int -> Product -> Maybe ProductVariant -> Html pmsg
+addToCartInput : Shared pmsg -> { a | addToCart : AddToCart.Model } -> AddToCart.ProductFormStyle -> Int -> Product -> Maybe ProductVariant -> Html pmsg
 addToCartInput shared model style quantity product maybeSelectedVariant =
     let
-        ( class_, buttonView ) =
-            case style of
-                Card ->
-                    ( "tw:gap-[4px]"
-                    , div [ class "tw:flex" ]
-                        [ Button.view { defaultButton | type_ = Button.FormSubmit, icon = Just <| shoppingCartSvgSmall }
-                        ]
-                    )
-
-                _ ->
-                    ( "tw:gap-[20px]"
-                    , div [ class "tw:w-full" ]
-                        [ Button.view
-                            { defaultButton
-                                | label = "Add to cart"
-                                , type_ = Button.FormSubmit
-                                , icon = Just <| shoppingCartSvgSmall
-                                , padding = Button.Expand
-                                , size = Button.Large
-                            }
-                        ]
-                    )
-
         view =
             div []
                 [ case maybeSelectedVariant of
@@ -647,7 +618,7 @@ addToCartInput shared model style quantity product maybeSelectedVariant =
                         text ""
 
                     Just variant ->
-                        Html.map (shared.productMsg product.id << AddToCartMsg) (AddToCart.view () variant.id model.addToCart)
+                        Html.map (shared.productMsg product.id << AddToCartMsg) (AddToCart.view style variant.id model.addToCart)
                 ]
     in
     case maybeSelectedVariant of
@@ -660,56 +631,6 @@ addToCartInput shared model style quantity product maybeSelectedVariant =
 
         Nothing ->
             view
-
-
-customNumberView : ProductFormStyle -> Int -> (Int -> msg) -> msg -> msg -> Html msg
-customNumberView style currentVal onChangeHandler increaseHandler decreaseHandler =
-    let
-        { class_, fillClass, buttonSizeClass, formClass } =
-            case style of
-                Card ->
-                    { class_ = "tw:bg-[rgba(29,127,110,1)] tw:text-white"
-                    , fillClass = "tw:fill-white"
-                    , buttonSizeClass = "tw:h-[40px] tw:w-[30px] tw:hover:bg-[rgb(17,75,65)]"
-                    , formClass = "tw:w-[30px] text-center tw:border-white"
-                    }
-
-                Detail ->
-                    { class_ = "tw:bg-white tw:border tw:border-[rgba(29,127,110,1)]"
-                    , fillClass = "tw:fill-black"
-                    , buttonSizeClass = "tw:w-[48px] tw:h-[48px] tw:hover:bg-[rgb(219,219,219)]"
-                    , formClass = "tw:w-[46px] tw:text-center tw:border-[rgba(29,127,110,1)]"
-                    }
-
-                Checkout ->
-                    { class_ = "tw:bg-white tw:border tw:border-[rgba(29,127,110,1)]"
-                    , fillClass = "tw:fill-black"
-                    , buttonSizeClass = "tw:w-[48px] tw:h-[40px] tw:hover:bg-[rgb(219,219,219)]"
-                    , formClass = "tw:w-[46px] tw:text-center tw:border-[rgba(29,127,110,1)]"
-                    }
-    in
-    div [ class <| class_ ++ " tw:flex tw:shrink-0 tw:rounded-[8px] tw:overflow-hidden" ]
-        [ button
-            [ type_ "button"
-            , class <| buttonSizeClass ++ " tw:cursor-pointer tw:flex tw:items-center tw:justify-center"
-            , onClick decreaseHandler
-            ]
-            [ minusSvg fillClass
-            ]
-        , div [ class "tw:flex tw:items-center tw:justify-center tw:px-[4px]" ]
-            [ Form.numberView
-                (formClass ++ " tw:block no-arrow tw:py-[2px] tw:pl-[6px] tw:hover:border tw:focus:border tw:rounded-[4px]")
-                currentVal
-                onChangeHandler
-            ]
-        , button
-            [ type_ "button"
-            , class <| buttonSizeClass ++ " tw:cursor-pointer tw:flex tw:items-center tw:justify-center"
-            , onClick increaseHandler
-            ]
-            [ plusSvg fillClass
-            ]
-        ]
 
 
 customSelectView : Shared pmsg -> Product -> Maybe ProductVariant -> List ProductVariant -> Html pmsg

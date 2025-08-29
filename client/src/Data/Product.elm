@@ -5,6 +5,8 @@ module Data.Product exposing
     , ProductVariant
     , ProductVariantId(..)
     , decoder
+    , getFirstValidVariantId
+    , getFirstValidVariantIdFromDict
     , idDecoder
     , idEncoder
     , isLimitedAvailability
@@ -174,3 +176,31 @@ variantDecoder =
                 Decode.map (\isActive -> partialData isActive)
                     (Decode.field "isActive" Decode.bool)
             )
+
+
+getFirstValidVariantId : List ProductVariant -> Maybe ProductVariantId
+getFirstValidVariantId variantList =
+    variantList
+        |> (\vs ->
+                let
+                    purchasableVs =
+                        List.filter
+                            (\v -> isPurchaseable v)
+                            vs
+                in
+                if List.length purchasableVs > 0 then
+                    purchasableVs
+
+                else
+                    vs
+           )
+        |> List.sortBy .skuSuffix
+        |> List.head
+        |> Maybe.map .id
+
+
+getFirstValidVariantIdFromDict : Dict Int ProductVariant -> Maybe ProductVariantId
+getFirstValidVariantIdFromDict variantDict =
+    Dict.toList variantDict
+        |> List.map (\( _, v ) -> v)
+        |> getFirstValidVariantId

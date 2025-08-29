@@ -132,6 +132,13 @@ pageTitleView label =
     h1 [ class "tw:pl-0 tw:lg:pl-[8px] tw:text-[24px]! tw:lg:text-[32px]! tw:pb-[20px]" ] [ text label ]
 
 
+pageTitleViewWithIcon label iconSvg =
+    div [ class "tw:pl-0 tw:lg:pl-[8px]  tw:pb-[20px] tw:flex tw:items-center tw:gap-[10px]" ]
+        [ iconSvg
+        , h1 [ class "tw:text-[24px]! tw:lg:text-[32px]!" ] [ text label ]
+        ]
+
+
 pageTitleWithSubView label sub =
     div []
         [ h1 [ class "tw:pl-0 tw:lg:pl-[8px] tw:text-[32px]!" ]

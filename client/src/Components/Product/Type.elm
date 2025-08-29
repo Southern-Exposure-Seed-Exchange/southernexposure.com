@@ -4,7 +4,7 @@ import Array
 import Components.AddToCart.Type as AddToCart
 import Components.ImageSlider.Type as ImageSlider
 import Data.Fields exposing (blankImage)
-import Data.PageData exposing (CartItemId(..))
+import Data.PageData as PageData
 import Data.Product exposing (ProductVariantId)
 import Html exposing (..)
 
