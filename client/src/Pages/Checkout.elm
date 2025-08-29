@@ -1987,7 +1987,7 @@ summaryTableMobile ({ items, charges } as checkoutDetails) creditString couponCo
                 [ div [ class "tw:flex tw:gap-[16px] tw:w-full" ]
                     [ img
                         [ src <| imgSrcFallback productImage
-                        , class "tw:rounded-[8px]"
+                        , class "tw:rounded-[8px] tw:w-[100px] tw:h-[85px] tw:object-cover"
                         , imageToSrcSet productImage
                         , imageSizes
                         , alt <| "Product Image for " ++ p.product.name
@@ -2127,7 +2127,7 @@ summaryTableDesktop ({ items, charges } as checkoutDetails) creditString couponC
                 [ td [ class "align-middle text-center" ]
                     [ img
                         [ src <| imgSrcFallback productImage
-                        , class "tw:rounded-[8px]"
+                        , class "tw:rounded-[8px] tw:w-[100px] tw:h-[85px] tw:object-cover"
                         , imageToSrcSet productImage
                         , imageSizes
                         , alt <| "Product Image for " ++ p.product.name

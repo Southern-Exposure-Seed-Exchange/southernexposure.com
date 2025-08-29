@@ -9,6 +9,10 @@ import Data.Product exposing (ProductVariantId)
 import Html exposing (..)
 
 
+{-| A state/model to be used in product UI (cardView or detailView).
+Mainly to be used in Product list Page (category detail, search result)
+or Product detail page.
+-}
 type alias Model =
     { variant : Maybe ProductVariantId
     , addToCart : AddToCart.Model

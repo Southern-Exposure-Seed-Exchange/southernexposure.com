@@ -358,7 +358,7 @@ view ({ route, pageData, navigationData, zone, helcimUrl } as model) =
             , div [ class "tw:pt-(--mobile-navbar-padding) tw:lg:pt-0" ] []
             , SiteBreadcrumbs.view route model.productListPage pageData
             , middleContent
-            , SiteFooter.view
+            , SiteFooter.view model.year
             , Gallery.modal model.productDetailsLightbox
                 |> Html.map ProductDetailsLightbox
             ]

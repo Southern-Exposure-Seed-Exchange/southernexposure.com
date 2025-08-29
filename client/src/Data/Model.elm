@@ -89,10 +89,9 @@ type alias Model =
     , postgridApiKey : String
 
     -- sub-component
+    , year : Int
     , shared : Shared Msg
     , profileNavbar : ProfileNavbar.Model
-
-    -- , searchData : Search.Data
     , advancedSearchData : Search.Data
     , cartDetails : WebData CartDetails
 
@@ -159,9 +158,8 @@ initial key route helcimUrl postgridApiKey =
     , postgridApiKey = postgridApiKey
 
     -- sub components
+    , year = 2024
     , shared = initShared
-
-    -- , searchData = Search.initial
     , advancedSearchData = Search.initial
     , profileNavbar = ProfileNavbar.init
     , cartDetails = RemoteData.NotAsked

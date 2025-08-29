@@ -41,6 +41,7 @@ services:
       - helcim_token
       - stripe_token
       - cookie_secret
+      - postgrid_api_key
     # At the moment logs and media are stored in the container. They need to be exposed
     # to the host machine for persistence and access from nginx and logrotate.
     volumes:

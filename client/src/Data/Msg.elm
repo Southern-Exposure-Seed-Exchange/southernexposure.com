@@ -60,6 +60,8 @@ type Msg
     | OtherTabCartItemCountChanged Int
     | ProductMsg ProductId Product.Msg
     | ProductDetailsLightbox (Gallery.Msg ImageData)
+      -- Shared
+    | SetYear Time.Zone Time.Posix
       -- My Account Page
     | ShowAllOrders
       -- Sub-Components
