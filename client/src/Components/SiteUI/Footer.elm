@@ -101,9 +101,9 @@ view =
                 , contactBlock
                 ]
     in
-    div [ id "footer", class "tw:mt-[80px] tw:lg:mt-[136px] tw:px-[16px] tw:lg:px-[124px] tw:pt-[40px] tw:lg:pt-[60px] tw:pb-[40px] tw:bg-[rgba(30,12,3,0.03)]" ]
+    div [ id "footer", class "tw:mt-[80px] tw:lg:mt-[136px] tw:pt-[40px] tw:lg:pt-[60px] tw:bg-[rgba(30,12,3,0.03)]" ]
         [ node "footer"
-            [ class "" ]
+            [ class "se-container" ]
             [ div [ class "tw:flex tw:flex-col" ]
                 [ div [ class "tw:flex tw:flex-col tw:lg:flex-row tw:gap-[40px]" ]
                     [ contactUsBlock
@@ -114,7 +114,7 @@ view =
                     ]
                 , div [ class "tw:pt-[40px]" ]
                     [ hr [] []
-                    , div [ class "tw:pt-[32px] tw:flex tw:flex-col tw:lg:flex-row tw:gap-[24px]" ]
+                    , div [ class "tw:py-[32px] tw:flex tw:flex-col tw:lg:flex-row tw:gap-[24px]" ]
                         [ div [ class "tw:grow" ] [ text "Copyright © 2020 Southern Exposure Seed Exchange" ]
                         , div [ class "tw:flex tw:gap-[24px]" ]
                             [ staticPageLink "privacy" "Privacy Notice"
