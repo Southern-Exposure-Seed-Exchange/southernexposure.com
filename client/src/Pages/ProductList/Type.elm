@@ -98,11 +98,6 @@ productDatasToProductDict cartDetailsRd productData =
                     firstVariantId =
                         getFirstValidVariantIdFromDict variantDict
 
-                    -- TODO:
-                    -- - use the function on how to get the first variant of a product
-                    -- - using that variant access the cart amount and assign to addToCart
-                    -- - (when changing the variant, access the cart detail and assign the proper amount to the addToCart again, with this
-                    -- we avoid having multiple addToCart state)
                     productModel =
                         { initProductModel
                             | variant = firstVariantId

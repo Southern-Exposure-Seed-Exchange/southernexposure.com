@@ -14,6 +14,7 @@ module Data.Product exposing
     , nameWithLotSize
     , productMainImage
     , singleVariantName
+    , unProductId
     , variantDecoder
     , variantPrice
     )
@@ -30,6 +31,11 @@ import Markdown exposing (defaultOptions)
 
 type ProductId
     = ProductId Int
+
+
+unProductId : ProductId -> Int
+unProductId (ProductId i) =
+    i
 
 
 idDecoder : Decoder ProductId
