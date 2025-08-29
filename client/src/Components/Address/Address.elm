@@ -293,7 +293,6 @@ updateModel addressCompletionSetting msg model =
                                 , state = Just <| USState (String.toUpper addr.prov)
                                 , zipCode = addr.pc
                                 , country = String.toUpper addr.country
-                                , warnings = addr.errors
                             }
                     in
                     ( newModel, Cmd.none )
@@ -805,7 +804,6 @@ viewSuggestion suggestion =
     in
     li [ class "tw:p-[8px] tw:hover:bg-gray-200 tw:cursor-pointer", onClick (SuggestionSelected suggestion) ]
         [ text suggestionText ]
-
 
 viewWarnings : Model -> Html msg
 viewWarnings model =
