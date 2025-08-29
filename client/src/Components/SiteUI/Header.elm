@@ -56,11 +56,11 @@ linksAndSearch model authStatus cartItemCount route navigationData activeCategor
         , cartIcon cartItemCount
 
         -- , MobileNav.view route authStatus navigationData activeCategoryIds searchData
-        , Button.view { defaultButton | label = "Quick order", type_ = Button.Link <| reverse QuickOrder, style = Button.Outline, responsiveClass = "tw:hidden tw:lg:block" }
+        , Button.view { defaultButton | label = "Quick order", type_ = Button.Link <| reverse QuickOrder, style = Button.Outline, responsiveClass = "tw:hidden tw:lg:flex" }
         ]
             ++ (case authStatus of
                     Anonymous ->
-                        [ Button.view { defaultButton | label = "Log in", type_ = Button.Link <| reverse <| Login Nothing False, responsiveClass = "tw:hidden tw:lg:block" }
+                        [ Button.view { defaultButton | label = "Log in", type_ = Button.Link <| reverse <| Login Nothing False, responsiveClass = "tw:hidden tw:lg:flex" }
                         ]
 
                     Authorized _ ->

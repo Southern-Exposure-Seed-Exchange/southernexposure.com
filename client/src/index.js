@@ -191,6 +191,12 @@ app.ports.subscribeToHelcimMessages.subscribe(function() {
 })
 
 
+// Go back in history
+app.ports.historyBack.subscribe(() => {
+  window.history.back();
+});
+
+
 // Scroll horizontally
 app.ports.scrollLeftSmooth.subscribe(function({id, amount}) {
     var el = document.getElementById(id);

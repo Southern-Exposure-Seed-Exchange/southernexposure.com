@@ -246,14 +246,14 @@ customNumberView style model vId =
                     }
 
                 Detail ->
-                    { class_ = "tw:bg-white tw:border tw:border-[rgba(29,127,110,1)]"
-                    , fillClass = "tw:fill-black"
-                    , buttonSizeClass = "tw:w-[48px] tw:h-[48px] tw:hover:bg-[rgb(219,219,219)]"
-                    , formClass = "tw:w-[46px] tw:text-center tw:border-[rgba(29,127,110,1)]"
+                    { class_ = "tw:bg-[rgba(29,127,110,1)] tw:text-white"
+                    , fillClass = "tw:fill-white"
+                    , buttonSizeClass = "tw:w-[48px] tw:h-[48px] tw:hover:bg-[rgb(17,75,65)]"
+                    , formClass = "tw:w-[46px] text-center tw:border-white"
                     }
 
                 Checkout ->
-                    { class_ = "tw:bg-white tw:border tw:border-[rgba(29,127,110,1)]"
+                    { class_ = "tw:bg-white tw:border tw:border-[rgba(29,127,110,1)] tw:box-border"
                     , fillClass = "tw:fill-black"
                     , buttonSizeClass = "tw:w-[48px] tw:h-[40px] tw:hover:bg-[rgb(219,219,219)]"
                     , formClass = "tw:w-[46px] tw:text-center tw:border-[rgba(29,127,110,1)]"
@@ -332,12 +332,25 @@ customNumberView style model vId =
         ]
 
 
-view : Config -> ProductVariantId -> Model -> Html Msg
-view _ vId model =
+view : ProductFormStyle -> ProductVariantId -> Model -> Html Msg
+view style vId model =
+    let
+        ( paddingClass, widthClass ) =
+            case style of
+                Card ->
+                    ( "tw:px-[16px] tw:py-[8px]", "tw:w-[142px]" )
+
+                _ ->
+                    ( "tw:px-[16px] tw:py-[12px]", "tw:w-[152px]" )
+    in
     if not model.clickStatus then
         button
             [ type_ "button"
-            , class "tw:w-[150px] tw:bg-[rgba(77,170,154,1)] tw:text-white tw:flex tw:px-[16px] tw:py-[8px] tw:rounded-[8px]! tw:gap-[8px] tw:items-center tw:justify-center tw:leading-[24px]"
+            , class <|
+                paddingClass
+                    ++ " "
+                    ++ widthClass
+                    ++ " tw:bg-[rgba(77,170,154,1)] tw:text-white tw:flex tw:rounded-[8px]! tw:gap-[8px] tw:items-center tw:justify-center tw:leading-[24px]"
             , onClick (TriggerAdd vId)
             ]
         <|
@@ -351,8 +364,8 @@ view _ vId model =
                     ]
 
     else
-        div [ class "tw:w-[150px]" ]
-            [ customNumberView Card model vId
+        div [ class widthClass ]
+            [ customNumberView style model vId
             ]
 
 

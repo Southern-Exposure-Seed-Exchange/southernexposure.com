@@ -52,6 +52,7 @@ import Pages.EditAddress as EditAddress
 import Pages.EditLogin as EditLogin
 import Pages.Login as Login
 import Pages.MyAccount as MyAccount
+import Pages.ProductList.Type exposing (insertProductDetailToProductDict, productDatasToProductDict)
 import Pages.QuickOrder as QuickOrder
 import Pages.ResetPassword as ResetPassword
 import Pages.VerificationRequired as VerificationRequired
@@ -59,7 +60,7 @@ import Pages.VerifyEmail as VerifyEmail
 import Paginate exposing (Paginated)
 import Ports
 import Process
-import RemoteData exposing (WebData)
+import RemoteData exposing (RemoteData(..), WebData)
 import Task
 import Time
 import Url exposing (Url)
@@ -190,20 +191,44 @@ fetchDataForRoute ({ route, pageData, key, productListPage } as model) =
                 |> discardCommand (Paginate.jumpTo PageData.categoryConfig pagination.page)
 
         ( productListData, productListCmd ) =
+            let
+                _ =
+                    Debug.log ("what parse url:" ++ Debug.toString route) ()
+            in
             case route of
                 CategoryDetails slug pagination ->
-                    updateCategoryDetails slug pagination productListPage.categoryDetails
-                        |> Tuple.mapFirst (\cd -> { productListPage | categoryDetails = cd })
-                        |> Tuple.mapSecond (Cmd.map CategoryPaginationMsg)
+                    let
+                        ( newProductListPage, newCmd ) =
+                            updateCategoryDetails slug pagination productListPage.categoryDetails
+                                |> Tuple.mapFirst (\cd -> { productListPage | categoryDetails = cd })
+                                |> Tuple.mapSecond (Cmd.map CategoryPaginationMsg)
+                    in
+                    ( { newProductListPage
+                        -- Paginate can either used old data or call fetch if the data is not fetching yet
+                        -- We modify productDict here in case it uses old data. If it call fetch, the fetch handler will also modify productDict
+                        | productDict = productDatasToProductDict model.cartDetails <| Paginate.getCurrent newProductListPage.categoryDetails
+                      }
+                    , newCmd
+                    )
 
                 SearchResults searchData pagination ->
-                    productListPage.searchResults
-                        |> Paginate.updateData PageData.searchConfig
-                            { data = searchData, sorting = pagination.sorting }
-                        |> discardCommand (Paginate.updatePerPage PageData.searchConfig pagination.perPage)
-                        |> discardCommand (Paginate.jumpTo PageData.searchConfig pagination.page)
-                        |> Tuple.mapFirst (\sr -> { productListPage | searchResults = sr })
-                        |> Tuple.mapSecond (Cmd.map SearchPaginationMsg)
+                    let
+                        ( newProductListPage, newCmd ) =
+                            productListPage.searchResults
+                                |> Paginate.updateData PageData.searchConfig
+                                    { data = searchData, sorting = pagination.sorting }
+                                |> discardCommand (Paginate.updatePerPage PageData.searchConfig pagination.perPage)
+                                |> discardCommand (Paginate.jumpTo PageData.searchConfig pagination.page)
+                                |> Tuple.mapFirst (\sr -> { productListPage | searchResults = sr })
+                                |> Tuple.mapSecond (Cmd.map SearchPaginationMsg)
+                    in
+                    ( { newProductListPage
+                        -- Paginate can either used old data or call fetch if the data is not fetching yet
+                        -- We modify productDict here in case it uses old data. If it call fetch, the fetch handler will also modify productDict
+                        | productDict = productDatasToProductDict model.cartDetails <| Paginate.getCurrent newProductListPage.searchResults
+                      }
+                    , newCmd
+                    )
 
                 _ ->
                     ( productListPage, Cmd.none )
@@ -897,15 +922,14 @@ update msg ({ pageData, key, productListPage } as model) =
                     Maybe.withDefault Product.initProductModel <| Dict.get productId model.productListPage.productDict
 
                 ( newProduct, productCmd ) =
-                    Product.update model.shared productMsg pId product
+                    Product.update model.shared model.cartDetails productMsg pId product
 
                 ( newModel, cmd ) =
                     case productMsg of
                         -- Update session and cart amount base on Product's addToCart response
-                        -- Product.SubmitAddToCartResponse quantity (RemoteData.Success (Ok sessionToken)) ->
-                        --     updateSessionTokenAndCartItemCount model quantity sessionToken
-                        Product.AddToCartMsg (AddToCart.UpdateAmountBaseOnCartDetail _ quantity sessionToken _) ->
+                        Product.AddToCartMsg (AddToCart.UpdateAmountBaseOnCartDetail _ quantity sessionToken (Success (Ok cartDetails))) ->
                             updateSessionTokenAndCartItemCount model quantity sessionToken
+                                |> (\( m, c ) -> ( { m | cartDetails = Success cartDetails }, c ))
 
                         _ ->
                             ( model, Cmd.none )
@@ -913,7 +937,12 @@ update msg ({ pageData, key, productListPage } as model) =
                 modelProductListPage =
                     newModel.productListPage
             in
-            ( { newModel | productListPage = { modelProductListPage | productDict = Dict.insert productId newProduct modelProductListPage.productDict } }
+            ( { newModel
+                | productListPage =
+                    { modelProductListPage
+                        | productDict = Dict.insert productId newProduct modelProductListPage.productDict
+                    }
+              }
             , Cmd.batch
                 [ Cmd.map (ProductMsg pId) productCmd
                 , cmd
@@ -1354,40 +1383,19 @@ update msg ({ pageData, key, productListPage } as model) =
                 updatedPageData =
                     { pageData | productDetails = response }
 
+                _ =
+                    Debug.log "what variant id: " <| Debug.toString selectedSku
+
                 updatedProductDict =
                     case response of
                         RemoteData.Success resp ->
-                            let
-                                productId =
-                                    resp.product.id |> (\(ProductId i) -> i)
-                            in
-                            Dict.update productId
-                                (\f ->
-                                    case f of
-                                        Just product ->
-                                            Just
-                                                { product
-                                                    | variant = selectedSku
-                                                    , imageSlider =
-                                                        ImageSlider.mkModel
-                                                            resp.product.name
-                                                            (Array.fromList resp.product.images)
-                                                }
-
-                                        Nothing ->
-                                            Just
-                                                { initProductModel
-                                                    | variant = selectedSku
-                                                    , imageSlider =
-                                                        ImageSlider.mkModel
-                                                            resp.product.name
-                                                            (Array.fromList resp.product.images)
-                                                }
-                                )
-                                model.productListPage.productDict
+                            insertProductDetailToProductDict model.cartDetails resp selectedSku model.productListPage.productDict
 
                         _ ->
                             model.productListPage.productDict
+
+                _ =
+                    Debug.log "what product dict: " <| Debug.toString updatedProductDict
             in
             ( { model
                 | pageData = updatedPageData
@@ -1448,7 +1456,29 @@ update msg ({ pageData, key, productListPage } as model) =
                 |> extraCommand (always Ports.scrollToTop)
 
         GetCartDetails response ->
-            { model | cartDetails = response }
+            let
+                modelProductListPage =
+                    model.productListPage
+
+                -- Update product list page state after getting cart results
+                currentProductList =
+                    case model.route of
+                        CategoryDetails _ _ ->
+                            Paginate.getCurrent model.productListPage.categoryDetails
+
+                        SearchResults _ _ ->
+                            Paginate.getCurrent model.productListPage.searchResults
+
+                        _ ->
+                            []
+            in
+            { model
+                | cartDetails = response
+                , productListPage =
+                    { modelProductListPage
+                        | productDict = productDatasToProductDict response <| currentProductList
+                    }
+            }
                 |> resetEditCartForm response
                 |> updateCartItemCountFromDetails (RemoteData.toMaybe response)
                 |> extraCommand (redirect403IfAnonymous key response)
@@ -1512,7 +1542,7 @@ update msg ({ pageData, key, productListPage } as model) =
 
         CategoryPaginationMsg subMsg ->
             let
-                ( newModel, categoryCmd ) =
+                ( newModel, newCmd ) =
                     productListPage.categoryDetails
                         |> Paginate.update PageData.categoryConfig subMsg
                         |> Tuple.mapSecond (Cmd.map CategoryPaginationMsg)
@@ -1523,45 +1553,49 @@ update msg ({ pageData, key, productListPage } as model) =
                         |> Tuple.mapFirst (\pd -> { model | productListPage = pd })
                         |> extraCommand (always Ports.scrollToTop)
 
-                productDict : Dict Int Product.Model
-                productDict =
-                    Paginate.getCurrent newModel.productListPage.categoryDetails
-                        |> List.foldl
-                            (\p acc ->
-                                let
-                                    ( product, _, _ ) =
-                                        p
-
-                                    pId =
-                                        (\(ProductId id) -> id) product.id
-
-                                    -- TODO:
-                                    -- - use the function on how to get the first variant of a product
-                                    -- - using that variant access the cart amount and assign to addToCart
-                                    -- - (when changing the variant, access the cart detail and assign the proper amount to the addToCart again, with this
-                                    -- we avoid having multiple addToCart state)
-                                    -- - do the same for SearchPaginationMsg
-                                    productModel =
-                                        { initProductModel | addToCart = { initAddToCart | amount = 2, clickStatus = True } }
-                                in
-                                Dict.insert pId productModel acc
-                            )
-                            Dict.empty
-
                 modelProductListPage =
                     newModel.productListPage
             in
-            ( { newModel | productListPage = { modelProductListPage | productDict = productDict } }, categoryCmd )
+            ( { newModel
+                | productListPage =
+                    { modelProductListPage
+                      -- Update product list page's component state state after successful fetch
+                        | productDict = productDatasToProductDict newModel.cartDetails <| Paginate.getCurrent newModel.productListPage.categoryDetails
+                    }
+              }
+            , newCmd
+            )
 
         SearchPaginationMsg subMsg ->
-            Paginate.update PageData.searchConfig subMsg productListPage.searchResults
-                |> Tuple.mapSecond (Cmd.map SearchPaginationMsg)
-                |> (\( sr, cmd ) ->
-                        ( sr, Cmd.batch [ cmd, updatePageFromPagination key model.route sr ] )
-                   )
-                |> Tuple.mapFirst (\sr -> { productListPage | searchResults = sr })
-                |> Tuple.mapFirst (\pd -> { model | productListPage = pd })
-                |> extraCommand (always Ports.scrollToTop)
+            let
+                ( newModel, newCmd ) =
+                    Paginate.update PageData.searchConfig subMsg productListPage.searchResults
+                        |> Tuple.mapSecond (Cmd.map SearchPaginationMsg)
+                        |> (\( sr, cmd ) ->
+                                ( sr, Cmd.batch [ cmd, updatePageFromPagination key model.route sr ] )
+                           )
+                        |> Tuple.mapFirst (\sr -> { productListPage | searchResults = sr })
+                        |> Tuple.mapFirst (\pd -> { model | productListPage = pd })
+                        |> extraCommand (always Ports.scrollToTop)
+
+                modelProductListPage =
+                    newModel.productListPage
+
+                _ =
+                    Debug.log ("what current: " ++ (Debug.toString <| Paginate.getCurrent newModel.productListPage.searchResults)) ()
+
+                _ =
+                    Debug.log ("what 3: " ++ (Debug.toString <| subMsg)) ()
+            in
+            ( { newModel
+                | productListPage =
+                    { modelProductListPage
+                      -- Update product list page's component state state after successful fetch
+                        | productDict = productDatasToProductDict newModel.cartDetails <| Paginate.getCurrent newModel.productListPage.searchResults
+                    }
+              }
+            , newCmd
+            )
 
         GetAdminCategoryList response ->
             let
@@ -2268,29 +2302,29 @@ updateCartItemCountFromDetails maybeCartDetails model =
 
 
 updateSessionTokenAndCartItemCount : Model -> Int -> String -> ( Model, Cmd msg )
-updateSessionTokenAndCartItemCount model quantity sessionToken =
+updateSessionTokenAndCartItemCount model cartQuantity sessionToken =
     let
         modelShared =
             model.shared
     in
     if String.isEmpty sessionToken then
-        { model | cartItemCount = model.cartItemCount + quantity }
+        { model | cartItemCount = model.cartItemCount + cartQuantity }
             |> withCommand (\m -> Ports.setCartItemCount m.cartItemCount)
 
     else if Just sessionToken /= model.shared.maybeSessionToken then
         ( { model
             | shared = { modelShared | maybeSessionToken = Just sessionToken }
-            , cartItemCount = quantity
+            , cartItemCount = cartQuantity
           }
         , Cmd.batch
             [ Ports.storeCartSessionToken sessionToken
-            , Ports.setCartItemCount quantity
+            , Ports.setCartItemCount cartQuantity
             ]
         )
 
     else
-        ( { model | cartItemCount = model.cartItemCount + quantity }
-        , Ports.setCartItemCount (model.cartItemCount + quantity)
+        ( { model | cartItemCount = model.cartItemCount + cartQuantity }
+        , Ports.setCartItemCount (model.cartItemCount + cartQuantity)
         )
 
 

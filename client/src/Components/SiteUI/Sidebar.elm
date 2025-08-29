@@ -43,19 +43,21 @@ view route =
         pageLinks =
             div [ class "tw:hidden tw:lg:block", Aria.role "navigation" ]
                 [ div [ class "tw:text-[16px] tw:leading-[20px] tw:py-[20px] tw:rounded-[16px] tw:bg-[rgba(254,245,233,0.6)]" ]
-                    [ pageLink QuickOrder "Quick Order"
-                    , staticPageLink "about-us" "About Us"
-                    , staticPageLink "growing-guides" "Growing Guides"
+                    [ staticPageLink "about-us" "About Us"
                     , staticPageLink "retail-stores" "Retail Stores"
+                    , staticPageLink "growing-guides" "Growing Guides"
                     , staticPageLink "events" "Events"
-                    , staticPageLink "faq" "FAQ"
-                    , staticPageLink "links" "Links"
+                    , staticPageLink "fundraisers" "Fundraisers"
                     , div [ class "tw:py-[12px] tw:px-[32px]" ]
                         [ a [ href "/blog/", target "_blank", class "" ]
                             [ text "Blog" ]
                         ]
+                    , staticPageLink "links" "Links"
+                    , div [ class "tw:py-[16px] tw:px-[32px]" ]
+                        [ hr [] []
+                        ]
+                    , staticPageLink "faq" "FAQ"
                     , staticPageLink "contact-us" "Contact Us"
-                    , staticPageLink "fundraisers" "Fundraisers"
                     ]
                 ]
 
