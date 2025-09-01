@@ -14,12 +14,13 @@ var RobotsTxtPlugin = require('robotstxt-webpack-plugin');
 
 var isProduction = process.env.NODE_ENV === 'production';
 var isHelcimProduction = process.env.HELCIM_ENV === 'production';
+var isPostgridProduction = process.env.POSTGRID_ENV === 'production';
 
 var helcimUrl = isHelcimProduction ? "https://southern-exposure-seed-exchange.myhelcim.com" : "https://test-southern-exposure-seed-exchange.myhelcim.com";
 
 const GA_MEASUREMENT_ID = process.env.GA_MEASUREMENT_ID;
 // TODO: put actual keys here
-const POSTGRID_API_KEY = process.env.POSTGRID_API_KEY || (isProduction ? "<REPLACE ME WITH THE REAL KEY>" : "live_pk_apy2XeQfGkproRtzeNth6s");
+const POSTGRID_API_KEY = process.env.POSTGRID_API_KEY || (isPostgridProduction ? "<REPLACE ME WITH THE REAL KEY>" : "live_pk_apy2XeQfGkproRtzeNth6s");
 
 module.exports = {
   mode: isProduction ? 'production' : 'development',
