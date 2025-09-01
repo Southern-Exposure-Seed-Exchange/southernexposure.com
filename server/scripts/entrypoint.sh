@@ -36,6 +36,7 @@ file_env "STONE_EDGE_CODE"
 
 file_env "STRIPE_TOKEN"
 file_env "HELCIM_TOKEN"
+file_env "POSTGRID_API_KEY"
 
 file_env "DB_PASS"
 file_env "SMTP_PASS"

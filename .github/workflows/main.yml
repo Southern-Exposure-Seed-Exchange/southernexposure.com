@@ -122,6 +122,7 @@ jobs:
       - name: Prepare env
         run: |
           echo "HELCIM_ENV=${{ github.ref == 'refs/heads/master' && 'production' || 'staging' }}" >> $GITHUB_ENV
+          echo "POSTGRID_ENV=${{ github.ref == 'refs/heads/master' && 'production' || 'staging' }}" >> $GITHUB_ENV
           echo "GA_MEASUREMENT_ID='UA-5070189-1'" >> $GITHUB_ENV
 
       - name: Login to GitHub Container Registry
@@ -148,3 +149,4 @@ jobs:
           build-args: |
             HELCIM_ENV
             GA_MEASUREMENT_ID
+            POSTGRID_ENV

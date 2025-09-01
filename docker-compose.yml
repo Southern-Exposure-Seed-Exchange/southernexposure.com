@@ -29,6 +29,7 @@ services:
       - HELCIM_TOKEN_FILE=/run/secrets/helcim_token
       - STRIPE_TOKEN_FILE=/run/secrets/stripe_token
       - COOKIE_SECRET_FILE=/run/secrets/cookie_secret
+      - POSTGRID_API_KEY_FILE=/run/secrets/postgrid_api_key
     secrets:
       - avatax_account_id
       - avatax_company_id
@@ -73,3 +74,5 @@ secrets:
     environment: STRIPE_TOKEN
   cookie_secret:
     environment: COOKIE_SECRET
+  postgrid_api_key:
+    environment: POSTGRID_API_KEY
