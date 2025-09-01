@@ -152,6 +152,30 @@ update key postgridApiKey msg model authStatus details =
                     ( model, Cmd.none )
 
         UpdateResponse (AddressId addressId) response ->
+            let
+                skipAddressVerification form =
+                    { form
+                        | model =
+                            let
+                                addrModel =
+                                    form.model
+                            in
+                            { addrModel | skipVerification = True }
+                    }
+
+                verificationFailureMsg =
+                    "We failed to verify your address. Please double-check details, update if needed and save."
+
+                addressVerificationFailureMsg form =
+                    { form
+                        | model =
+                            let
+                                addrModel =
+                                    form.model
+                            in
+                            { addrModel | warnings = Api.addError "" verificationFailureMsg addrModel.warnings }
+                    }
+            in
             case response of
                 RemoteData.Success (Ok resp) ->
                     case resp of
@@ -179,32 +203,35 @@ update key postgridApiKey msg model authStatus details =
                             }
                                 |> noCommand
 
-                        AddressEditFailed addrValidationErrors ->
-                            let
-                                formErrors = Dict.values addrValidationErrors |> List.concat
-                            in
+                        AddressEditFailed _ ->
                             { model
                                 | forms =
                                     Dict.update addressId
-                                        (Maybe.map <| \form -> { form | errors = Api.addErrors "" formErrors form.errors })
+                                        (Maybe.map <|
+                                                addressVerificationFailureMsg >> skipAddressVerification
+                                        )
                                         model.forms
                             }
                                 |> noCommand
 
-                RemoteData.Success (Err errors) ->
+                RemoteData.Success (Err _) ->
                     { model
                         | forms =
                             Dict.update addressId
-                                (Maybe.map <| \form -> { form | errors = errors })
+                                (Maybe.map <|
+                                    addressVerificationFailureMsg >> skipAddressVerification
+                                )
                                 model.forms
                     }
                         |> noCommand
 
-                RemoteData.Failure error ->
+                RemoteData.Failure _ ->
                     { model
                         | forms =
                             Dict.update addressId
-                                (Maybe.map <| \form -> { form | errors = Api.apiFailureToError error })
+                                (Maybe.map <|
+                                    addressVerificationFailureMsg >> skipAddressVerification
+                                )
                                 model.forms
                     }
                         |> noCommand

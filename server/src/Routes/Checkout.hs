@@ -595,11 +595,15 @@ hasNewCartInventoryNotifications seenWarnings cartId = do
         else return True
 
 checkCartAndShippingAddress
-    :: CartInventoryNotifications -> CartId -> CustomerAddress -> AppSQL a
+    :: CartInventoryNotifications -> CartId -> CustomerAddress -> Bool -> AppSQL a
     -> AppSQL (CheckoutResult a)
-checkCartAndShippingAddress cartNotifications cartId shippingAddress action = do
+checkCartAndShippingAddress cartNotifications cartId shippingAddress skipAddressVerification action = do
     hasCartNotification <- hasNewCartInventoryNotifications cartNotifications cartId
-    shippingAddressVerification <- verifyCustomerAddress shippingAddress Shipping
+    shippingAddressVerification <-
+        if skipAddressVerification then
+            return AddressVerifiedSuccessfully
+        else
+            verifyCustomerAddress shippingAddress Shipping
     case (hasCartNotification, shippingAddressVerification) of
         (False, AddressVerifiedSuccessfully) ->
             CheckoutSuccess <$> action
@@ -621,6 +625,7 @@ data CustomerPlaceOrderParameters =
         , cpopComment :: T.Text
         , cpopHelcimData :: Maybe (CardToken, Helcim.CustomerCode)
         , cpopCartInventoryNotifications :: CartInventoryNotifications
+        , cpopSkipShippingAddressVerification :: Bool
         }
 
 instance FromJSON CustomerPlaceOrderParameters where
@@ -639,6 +644,7 @@ instance FromJSON CustomerPlaceOrderParameters where
                         customerCode <- v .: "helcimCustomerCode"
                         return $ Just (cardToken, customerCode))
             <*> v .: "cartInventoryNotifications"
+            <*> v .: "skipAddressVerification"
 
 instance Validation CustomerPlaceOrderParameters where
     validators parameters = do
@@ -713,7 +719,8 @@ customerPlaceOrderRoute remoteHost forwardedFor realIP = validateCookieAndParame
     orderCreationRes <- runDB $ do
         (Entity cartId _) <- getBy (UniqueCustomerCart $ Just customerId)
             >>= maybe (throwIO CartNotFound) return
-        checkCartAndShippingAddress (cpopCartInventoryNotifications parameters) cartId shippingParameter $ withPlaceOrderErrors shippingParameter $ do
+        checkCartAndShippingAddress (cpopCartInventoryNotifications parameters) cartId shippingParameter
+            (cpopSkipShippingAddressVerification parameters) $ withPlaceOrderErrors shippingParameter $ do
             (maybeBillingAddress, shippingAddress, order@(Entity orderId _), preTaxTotal, appliedCredit) <-
                 createAddressesAndOrder ce cartId shippingParameter (cpopBillingAddress parameters)
                     (cpopStoreCredit parameters) (cpopPriorityShipping parameters)
@@ -796,6 +803,7 @@ data AnonymousPlaceOrderParameters =
         , apopCartToken :: T.Text
         , apopHelcimData :: Maybe (CardToken, Helcim.CustomerCode)
         , apopCartInventoryNotifications :: CartInventoryNotifications
+        , apopSkipShippingAddressVerification :: Bool
         }
 
 instance FromJSON AnonymousPlaceOrderParameters where
@@ -815,6 +823,7 @@ instance FromJSON AnonymousPlaceOrderParameters where
                         customerCode <- v .: "helcimCustomerCode"
                         return $ Just (cardToken, customerCode))
             <*> v .: "cartInventoryNotifications"
+            <*> v .: "skipAddressVerification"
 
 instance Validation AnonymousPlaceOrderParameters where
     validators parameters = do
@@ -873,7 +882,8 @@ anonymousPlaceOrderRoute remoteHost forwardedFor realIP = validate >=> \paramete
     orderCreationRes <- runDB $ do
         (Entity cartId _) <- getBy (UniqueAnonymousCart $ Just $ apopCartToken parameters)
             >>= maybe (throwIO CartNotFound) return
-        checkCartAndShippingAddress (apopCartInventoryNotifications parameters) cartId (NewAddress shippingParam) $ withPlaceOrderErrors (NewAddress shippingParam) $ do
+        checkCartAndShippingAddress (apopCartInventoryNotifications parameters) cartId (NewAddress shippingParam)
+            (apopSkipShippingAddressVerification parameters) $ withPlaceOrderErrors (NewAddress shippingParam) $ do
             Entity customerId customer <- createAnonymousCustomer parameters
             let shippingAddress = (fromAddressData Shipping customerId shippingParam)
                     { addressVerified = True }
@@ -1468,6 +1478,7 @@ getOrderAndAddress customerId orderId =
 data CheckoutTokenParameters = CheckoutTokenParameters
     { ctpCartInventoryNotifications :: CartInventoryNotifications
     , ctpShippingAddress :: CustomerAddress
+    , ctpSkipShippingAddressVerification :: Bool
     }
 
 instance FromJSON CheckoutTokenParameters where
@@ -1475,6 +1486,7 @@ instance FromJSON CheckoutTokenParameters where
         CheckoutTokenParameters
             <$> v .: "cartInventoryNotifications"
             <*> v .: "shippingAddress"
+            <*> v .: "skipAddressVerification"
 
 newtype CheckoutTokenData = CheckoutTokenData
     { ctdToken :: CheckoutToken }
@@ -1496,13 +1508,14 @@ getCheckoutTokenRoute
 getCheckoutTokenRoute token CheckoutTokenParameters {..} = withValidatedCookie token $ \(Entity customerId customer) -> runDB $ do
     (Entity cartId _) <- getBy (UniqueCustomerCart $ Just customerId)
         >>= maybe (throwIO CartNotFound) return
-    checkCartAndShippingAddress ctpCartInventoryNotifications cartId ctpShippingAddress $
+    checkCartAndShippingAddress ctpCartInventoryNotifications cartId ctpShippingAddress ctpSkipShippingAddressVerification $
         lift $ getCheckoutToken (customerHelcimCustomerId customer)
 
 data AnonymousCheckoutTokenParameters = AnonymousCheckoutTokenParameters
     { actpCartToken :: T.Text
     , actpCartInventoryNotifications :: CartInventoryNotifications
     , actpShippingAddress :: AddressData
+    , actpSkipShippingAddressVerification :: Bool
     }
 
 instance FromJSON AnonymousCheckoutTokenParameters where
@@ -1511,6 +1524,7 @@ instance FromJSON AnonymousCheckoutTokenParameters where
             <$> v .: "sessionToken"
             <*> v .: "cartInventoryNotifications"
             <*> v .: "shippingAddress"
+            <*> v .: "skipAddressVerification"
 
 type AnonymousCheckoutTokenRoute =
     ReqBody '[JSON] AnonymousCheckoutTokenParameters :>
@@ -1520,7 +1534,7 @@ anonymousGetCheckoutTokenRoute :: AnonymousCheckoutTokenParameters -> App (Check
 anonymousGetCheckoutTokenRoute AnonymousCheckoutTokenParameters {..} = runDB $ do
     (Entity cartId _) <- getBy (UniqueAnonymousCart $ Just actpCartToken)
         >>= maybe (throwIO CartNotFound) return
-    checkCartAndShippingAddress actpCartInventoryNotifications cartId (NewAddress actpShippingAddress) $
+    checkCartAndShippingAddress actpCartInventoryNotifications cartId (NewAddress actpShippingAddress) actpSkipShippingAddressVerification $
         lift $ getCheckoutToken Nothing
 
 getCheckoutToken :: Maybe Helcim.CustomerId -> App CheckoutTokenData
