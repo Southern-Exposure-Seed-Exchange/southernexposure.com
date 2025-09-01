@@ -4,6 +4,7 @@ port module Ports exposing
     , cartItemCountChanged
     , collapseMobileMenus
     , helcimMessageReceived
+    , historyBack
     , initializeOrDestroyHomepageCarousel
     , logPurchase
     , logStatusCode
@@ -27,6 +28,13 @@ port module Ports exposing
     )
 
 import Json.Encode exposing (Value)
+
+
+
+-- Window
+
+
+port historyBack : () -> Cmd msg
 
 
 

@@ -45,13 +45,13 @@ import Html.Events exposing (onCheck, onClick, onInput, onSubmit)
 import Html.Extra exposing (viewIf)
 import Json.Decode as Decode
 import Json.Encode as Encode exposing (Value)
-import Ports
+import Ports exposing (historyBack)
 import RemoteData exposing (WebData)
 import String.Extra exposing (toSentenceCase)
 import Time
 import Utils.Format as Format
 import Utils.Update exposing (nothingAndNoCommand)
-import Utils.View exposing (decimalInput, disableGrammarly, emailInput, icon, labelView, pageOverlay, pageTitleView, pageTitleWithSubView, rawHtml)
+import Utils.View exposing (decimalInput, disableGrammarly, emailInput, icon, labelView, pageOverlay, pageTitleView, pageTitleViewWithIcon, pageTitleWithSubView, rawHtml)
 
 
 
@@ -61,6 +61,7 @@ import Utils.View exposing (decimalInput, disableGrammarly, emailInput, icon, la
 type CheckoutAddress
     = ExistingAddress AddressId
     | NewAddress Address.Form
+
 
 encodeAddress : CheckoutAddress -> Bool -> Value
 encodeAddress addr makeDefault =
@@ -83,6 +84,7 @@ encodeAddress addr makeDefault =
                     { form | model = formModelWithDefault }
             in
             Address.encode formWithDefault
+
 
 type alias Form =
     { email : String
@@ -199,6 +201,7 @@ type Msg
     | CancelPayment
     | ValidateCart
     | ValidateCartResponse (WebData (Result Api.FormErrors PageData.CartDetails))
+    | GoBack
 
 
 type alias CartInventoryNotifications =
@@ -244,13 +247,16 @@ encodeCartInventoryNotifications notifications =
           )
         ]
 
+
 type CheckoutResult a
     = CheckoutSuccess a
     | CheckoutValidationErrors (List CheckoutValidationError)
 
+
 type CheckoutValidationError
     = ShippingAddressVerificationFailed (Dict String (List String))
     | NewCartInventoryNotifications
+
 
 checkoutValidationErrorDecoder : Decode.Decoder CheckoutValidationError
 checkoutValidationErrorDecoder =
@@ -264,8 +270,11 @@ checkoutValidationErrorDecoder =
                     "shippingAddressVerificationFailed" ->
                         Decode.field "errors" (Decode.dict (Decode.list Decode.string))
                             |> Decode.map ShippingAddressVerificationFailed
-                    _ -> Decode.fail ("Unexpected error type: " ++ errorType)
+
+                    _ ->
+                        Decode.fail ("Unexpected error type: " ++ errorType)
             )
+
 
 cartInventoryCheckResultDecoder : Decode.Decoder a -> Decode.Decoder (CheckoutResult a)
 cartInventoryCheckResultDecoder innerDecoder =
@@ -284,6 +293,7 @@ cartInventoryCheckResultDecoder innerDecoder =
                         Decode.fail ("Unexpected status: " ++ status)
             )
 
+
 processCheckoutValidationErrors :
     Form
     -> List CheckoutValidationError
@@ -294,10 +304,16 @@ processCheckoutValidationErrors model errs authStatus maybeSessionToken =
     let
         hasNewCartInventoryNotifications =
             List.any
-                ( \e -> case e of
-                    NewCartInventoryNotifications -> True
-                    _ -> False
-                ) errs
+                (\e ->
+                    case e of
+                        NewCartInventoryNotifications ->
+                            True
+
+                        _ ->
+                            False
+                )
+                errs
+
         validationErrorsDict =
             List.foldl
                 (\e dict ->
@@ -310,18 +326,25 @@ processCheckoutValidationErrors model errs authStatus maybeSessionToken =
                 )
                 Api.initialErrors
                 errs
-        errors = Dict.insert "shipping-address-verification" (List.concat (Dict.values validationErrorsDict)) model.errors
+
+        errors =
+            Dict.insert "shipping-address-verification" (List.concat (Dict.values validationErrorsDict)) model.errors
 
         refreshAction =
             if hasNewCartInventoryNotifications then
                 refreshDetails authStatus maybeSessionToken True model
+
             else
                 nothingAndNoCommand
     in
-        { model
-        | isPaymentProcessing = False, isProcessing = False, hasNewCartInventoryNotifications = hasNewCartInventoryNotifications
+    { model
+        | isPaymentProcessing = False
+        , isProcessing = False
+        , hasNewCartInventoryNotifications = hasNewCartInventoryNotifications
         , errors = errors
-        } |> refreshAction
+    }
+        |> refreshAction
+
 
 type alias HelcimCheckoutTokenResponse =
     { checkoutToken : String }
@@ -599,7 +622,8 @@ update msg postgridApiKey model authStatus maybeSessionToken checkoutDetails =
                             ( { model | isPaymentProcessing = True }
                             , Nothing
                             , getHelcimCheckoutToken
-                                authStatus maybeSessionToken
+                                authStatus
+                                maybeSessionToken
                                 (checkoutDetailsToCartInventoryNotifications details)
                                 model.shippingAddress
                             )
@@ -625,7 +649,9 @@ update msg postgridApiKey model authStatus maybeSessionToken checkoutDetails =
                             encodeAnalyticsPurchase orderId response.orderLines response.orderProducts
                     in
                     ( initial, Just outMsg, Ports.logPurchase analyticsData )
-                CheckoutValidationErrors errs -> processCheckoutValidationErrors model errs authStatus maybeSessionToken
+
+                CheckoutValidationErrors errs ->
+                    processCheckoutValidationErrors model errs authStatus maybeSessionToken
 
         SubmitResponse (RemoteData.Success (Err errors)) ->
             let
@@ -732,8 +758,9 @@ update msg postgridApiKey model authStatus maybeSessionToken checkoutDetails =
                     , Nothing
                     , Cmd.batch [ Ports.appendHelcimPayIframe token.checkoutToken, Ports.subscribeToHelcimMessages () ]
                     )
-                CheckoutValidationErrors errs -> processCheckoutValidationErrors model errs authStatus maybeSessionToken
 
+                CheckoutValidationErrors errs ->
+                    processCheckoutValidationErrors model errs authStatus maybeSessionToken
 
         HelcimCheckoutTokenReceived (RemoteData.Success (Err errors)) ->
             { model | errors = errors, isPaymentProcessing = False } |> nothingAndNoCommand
@@ -788,6 +815,9 @@ update msg postgridApiKey model authStatus maybeSessionToken checkoutDetails =
                 _ ->
                     ( model, Nothing, Cmd.none )
 
+        GoBack ->
+            ( model, Nothing, historyBack () )
+
 
 selectAddress : Int -> CheckoutAddress
 selectAddress addressId =
@@ -798,15 +828,18 @@ selectAddress addressId =
         ExistingAddress (Address.AddressId addressId)
 
 
-updateAddressForm : Address.AddressCompletionSetting -> CheckoutAddress -> Address.Msg -> Form -> (CheckoutAddress -> Form) -> (Form, Cmd Address.Msg)
+updateAddressForm : Address.AddressCompletionSetting -> CheckoutAddress -> Address.Msg -> Form -> (CheckoutAddress -> Form) -> ( Form, Cmd Address.Msg )
 updateAddressForm addressCompletionSetting addr msg model updater =
     case addr of
         ExistingAddress _ ->
-            (model, Cmd.none)
+            ( model, Cmd.none )
 
         NewAddress form ->
-            let (address, cmd) = Address.update addressCompletionSetting msg form
-            in (updater (NewAddress address), cmd)
+            let
+                ( address, cmd ) =
+                    Address.update addressCompletionSetting msg form
+            in
+            ( updater (NewAddress address), cmd )
 
 
 refreshDetails : AuthStatus -> Maybe String -> Bool -> Form -> Form -> ( Form, Maybe a, Cmd Msg )
@@ -1066,10 +1099,11 @@ getHelcimCheckoutToken authStatus maybeSessionToken cartInventoryNotifications s
     case authStatus of
         User.Authorized _ ->
             let
-                requestData = Encode.object
-                    [ ("cartInventoryNotifications", encodeCartInventoryNotifications cartInventoryNotifications)
-                    , ("shippingAddress", encodeAddress shippingAddress False)
-                    ]
+                requestData =
+                    Encode.object
+                        [ ( "cartInventoryNotifications", encodeCartInventoryNotifications cartInventoryNotifications )
+                        , ( "shippingAddress", encodeAddress shippingAddress False )
+                        ]
             in
             Api.post Api.CheckoutHelcimToken
                 |> Api.withJsonBody requestData
@@ -1173,7 +1207,6 @@ placeOrder model authStatus maybeSessionToken helcimData checkoutDetails =
             RemoteData.toMaybe checkoutDetails
                 |> Maybe.map (\details -> getFinalTotal details model.storeCredit == Cents 0)
                 |> Maybe.withDefault False
-
 
         isDefaultAddress address { shippingAddresses, billingAddresses } =
             case address of
@@ -1416,23 +1449,29 @@ view model authStatus locations checkoutDetails =
                     && Dict.isEmpty (addrErrors model.billingAddress)
                     && Dict.isEmpty (addrErrors model.shippingAddress)
 
-        hasShippingAddressVerificationErrors = case Dict.get "shipping-address-verification" model.errors of
-            Just errs -> not (List.isEmpty errs)
-            Nothing -> False
+        hasShippingAddressVerificationErrors =
+            case Dict.get "shipping-address-verification" model.errors of
+                Just errs ->
+                    not (List.isEmpty errs)
 
-        shippingAddressVerificationErrorsView = viewIf hasShippingAddressVerificationErrors
-            (div [ class "mb-3" ]
-                [ p [class "text-danger"] [ text "We failed to verify your shipping address:" ]
-                , (Dict.get "shipping-address-verification" model.errors
-                    |> Maybe.map (\errs -> p [] [ small [] [ Api.errorHtml errs ] ])
-                    |> Maybe.withDefault (text ""))
-                , case model.shippingAddress of
-                    ExistingAddress _ ->
-                        p [ class "text-danger" ] [ text "Please update your shipping address in your account settings." ]
-                    NewAddress _ ->
-                        p [ class "text-danger" ] [ text "Please update your shipping details." ]
-                ]
-            )
+                Nothing ->
+                    False
+
+        shippingAddressVerificationErrorsView =
+            viewIf hasShippingAddressVerificationErrors
+                (div [ class "mb-3" ]
+                    [ p [ class "text-danger" ] [ text "We failed to verify your shipping address:" ]
+                    , Dict.get "shipping-address-verification" model.errors
+                        |> Maybe.map (\errs -> p [] [ small [] [ Api.errorHtml errs ] ])
+                        |> Maybe.withDefault (text "")
+                    , case model.shippingAddress of
+                        ExistingAddress _ ->
+                            p [ class "text-danger" ] [ text "Please update your shipping address in your account settings." ]
+
+                        NewAddress _ ->
+                            p [ class "text-danger" ] [ text "Please update your shipping details." ]
+                    ]
+                )
 
         addrErrors addr =
             case addr of
@@ -1656,7 +1695,7 @@ view model authStatus locations checkoutDetails =
                 Just confirmationModel ->
                     viewConfirmationOverlay confirmationModel
     in
-    [ pageTitleView "Checkout"
+    [ pageTitleViewWithIcon "Checkout" (button [ onClick GoBack ] [ arrowLeftSvg ])
     , if checkoutDetails.isDisabled then
         div [ class "alert alert-danger static-page" ]
             [ rawHtml checkoutDetails.disabledMessage ]
@@ -1761,7 +1800,7 @@ guestForm model =
     let
         -- TODO: Use Components.Admin.Form when we pull it out of the Address module.
         fieldLabel inputId content =
-            label [ class "mb-0 tw:py-[4px] tw:font-semibold", for inputId ] [ text content ]
+            label [ class "mb-0 tw:pb-[6px] tw:font-semibold", for inputId ] [ text content ]
 
         hasErrors =
             not (Dict.isEmpty model.errors)
@@ -1812,7 +1851,7 @@ guestForm model =
     in
     div [ class "tw:p-[16px] tw:border tw:border-[rgba(77,170,154,1)] tw:bg-[rgba(77,170,154,0.03)] tw:rounded-[16px] tw:mb-[20px]" ]
         [ div [ class "tw:max-w-[420px]" ]
-            [ p []
+            [ p [ class "tw:pb-[12px]" ]
                 [ text "Please provide your email so we can send your order confirmation and tracking details."
                 ]
             , div [ class "form-group mb-2" ]
@@ -1948,7 +1987,7 @@ summaryTableMobile ({ items, charges } as checkoutDetails) creditString couponCo
                 [ div [ class "tw:flex tw:gap-[16px] tw:w-full" ]
                     [ img
                         [ src <| imgSrcFallback productImage
-                        , class "tw:rounded-[8px]"
+                        , class "tw:rounded-[8px] tw:w-[100px] tw:h-[85px] tw:object-cover"
                         , imageToSrcSet productImage
                         , imageSizes
                         , alt <| "Product Image for " ++ p.product.name
@@ -2046,7 +2085,7 @@ couponCodeForm couponCode couponErrors =
         [ div [ class "tw:flex tw:gap-[10px]" ]
             [ div [ class "tw:w-full tw:lg:w-[156px]" ]
                 [ input
-                    [ class "form-control tw:h-[42px]!"
+                    [ class "form-control tw:h-[40px]!"
                     , type_ "text"
                     , onInput CouponCode
                     , value couponCode
@@ -2088,7 +2127,7 @@ summaryTableDesktop ({ items, charges } as checkoutDetails) creditString couponC
                 [ td [ class "align-middle text-center" ]
                     [ img
                         [ src <| imgSrcFallback productImage
-                        , class "tw:rounded-[8px]"
+                        , class "tw:rounded-[8px] tw:w-[100px] tw:h-[85px] tw:object-cover"
                         , imageToSrcSet productImage
                         , imageSizes
                         , alt <| "Product Image for " ++ p.product.name

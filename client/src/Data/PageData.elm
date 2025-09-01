@@ -130,14 +130,11 @@ import Time exposing (Posix)
 
 
 type alias PageData =
-    { categoryDetails : Paginated ProductData { slug : String, sorting : Sorting.Option } CategoryDetails
-    , productDetails : WebData ProductDetails
-    , searchResults : Paginated ProductData { data : Search.Data, sorting : Sorting.Option } String
+    { productDetails : WebData ProductDetails
     , pageDetails : WebData StaticPage
     , locations : WebData AddressLocations
     , myAccount : WebData MyAccount
     , addressDetails : WebData AddressDetails
-    , cartDetails : WebData CartDetails
     , checkoutDetails : WebData CheckoutDetails
     , orderDetails : WebData OrderDetails
     , adminCategoryList : WebData AdminCategoryListData
@@ -166,20 +163,6 @@ type alias PageData =
 initial : PageData
 initial =
     let
-        categoryPaginate =
-            Paginate.initial categoryConfig
-                { slug = "", sorting = Sorting.default }
-                (.page Pagination.default)
-                (.perPage Pagination.default)
-                |> Tuple.first
-
-        searchPaginate =
-            Paginate.initial searchConfig
-                { data = Search.initial, sorting = Sorting.default }
-                (.page Pagination.default)
-                (.perPage Pagination.default)
-                |> Tuple.first
-
         ordersPaginate =
             Paginate.initial ordersConfig "" 1 50
                 |> Tuple.first
@@ -188,14 +171,11 @@ initial =
             Paginate.initial customersConfig "" 1 50
                 |> Tuple.first
     in
-    { categoryDetails = categoryPaginate
-    , productDetails = RemoteData.NotAsked
-    , searchResults = searchPaginate
+    { productDetails = RemoteData.NotAsked
     , pageDetails = RemoteData.NotAsked
     , locations = RemoteData.NotAsked
     , myAccount = RemoteData.NotAsked
     , addressDetails = RemoteData.NotAsked
-    , cartDetails = RemoteData.NotAsked
     , checkoutDetails = RemoteData.NotAsked
     , orderDetails = RemoteData.NotAsked
     , adminCategoryList = RemoteData.NotAsked

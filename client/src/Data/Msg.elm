@@ -60,13 +60,14 @@ type Msg
     | OtherTabCartItemCountChanged Int
     | ProductMsg ProductId Product.Msg
     | ProductDetailsLightbox (Gallery.Msg ImageData)
+      -- Shared
+    | SetYear Time.Zone Time.Posix
       -- My Account Page
     | ShowAllOrders
       -- Sub-Components
     | ProfileNavbarMsg ProfileNavbar.Msg
     | TooltipMsg Tooltip.Msg
       -- Sub-Messages
-    | SearchMsg SiteSearch.Msg
     | AdvancedSearchMsg AdvancedSearch.Msg
     | CreateAccountMsg CreateAccount.Msg
     | VerifyEmailMsg VerifyEmail.Msg

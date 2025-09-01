@@ -42,13 +42,13 @@ import Html.Events exposing (onClick)
 import Http
 import Pages.Cart.Cart as Cart
 import Pages.Cart.Type as Cart
-import Pages.CategoryDetail.View as CategoryDetail
 import Pages.Checkout as Checkout
 import Pages.CreateAccount as CreateAccount
 import Pages.EditAddress as EditAddress
 import Pages.EditLogin as EditLogin
 import Pages.Login as Login
 import Pages.MyAccount as MyAccount
+import Pages.ProductList.CategoryDetail.View as CategoryDetail
 import Pages.QuickOrder as QuickOrder
 import Pages.ResetPassword as ResetPassword
 import Pages.VerificationRequired as VerificationRequired
@@ -113,33 +113,33 @@ view ({ route, pageData, navigationData, zone, helcimUrl } as model) =
         pageContent =
             case route of
                 ProductDetails _ _ ->
-                    withIntermediateText (ProductViews.detailView model.shared model.productDict)
+                    withIntermediateText (ProductViews.detailView model.shared model.productListPage.productDict)
                         pageData.productDetails
 
                 CategoryDetails _ pagination ->
-                    if Paginate.getResponseData pageData.categoryDetails == Nothing then
+                    if Paginate.getResponseData model.productListPage.categoryDetails == Nothing then
                         [ loadingInterstitial True ]
 
-                    else if Paginate.getError pageData.categoryDetails /= Nothing then
+                    else if Paginate.getError model.productListPage.categoryDetails /= Nothing then
                         notFoundView
 
                     else
                         loadingInterstitial False
                             :: CategoryDetail.view model.shared
                                 pagination
-                                model.productDict
-                                pageData.categoryDetails
+                                model.productListPage.productDict
+                                model.productListPage.categoryDetails
 
                 AdvancedSearch ->
                     []
 
                 SearchResults data pagination ->
-                    if Paginate.isLoading pageData.searchResults then
+                    if Paginate.isLoading model.productListPage.searchResults then
                         [ loadingInterstitial True ]
 
                     else
                         loadingInterstitial False
-                            :: searchResultsView model.shared data pagination model.productDict pageData.searchResults
+                            :: searchResultsView model.shared data pagination model.productListPage.productDict model.productListPage.searchResults
 
                 PageDetails _ _ ->
                     withIntermediateText staticPageView pageData.pageDetails
@@ -179,7 +179,7 @@ view ({ route, pageData, navigationData, zone, helcimUrl } as model) =
                         |> withIntermediateText (apply <| OrderDetails.view zone orderId)
 
                 Cart ->
-                    withIntermediateText (Cart.view model.shared.currentUser model.editCartForm) pageData.cartDetails
+                    withIntermediateText (Cart.view model.shared.currentUser model.editCartForm) model.cartDetails
                         |> List.map (Html.map EditCartMsg)
 
                 QuickOrder ->
@@ -320,7 +320,7 @@ view ({ route, pageData, navigationData, zone, helcimUrl } as model) =
         activeCategoryIds =
             case route of
                 CategoryDetails _ _ ->
-                    Paginate.getResponseData pageData.categoryDetails
+                    Paginate.getResponseData model.productListPage.categoryDetails
                         |> Maybe.map
                             (\cd ->
                                 cd.category.id :: List.map .id cd.predecessors
@@ -353,12 +353,12 @@ view ({ route, pageData, navigationData, zone, helcimUrl } as model) =
 
         else
             [ skipLink
-            , SiteHeader.view model SearchMsg model.searchData model.shared.currentUser model.cartItemCount route navigationData activeCategoryIds
-            , SiteNavigation.view route model.shared.currentUser navigationData activeCategoryIds model.searchData model.cartItemCount
+            , SiteHeader.view model model.shared.currentUser model.cartItemCount route navigationData activeCategoryIds
+            , SiteNavigation.view route model.shared.currentUser navigationData activeCategoryIds model.cartItemCount
             , div [ class "tw:pt-(--mobile-navbar-padding) tw:lg:pt-0" ] []
-            , SiteBreadcrumbs.view route pageData
+            , SiteBreadcrumbs.view route model.productListPage pageData
             , middleContent
-            , SiteFooter.view
+            , SiteFooter.view model.year
             , Gallery.modal model.productDetailsLightbox
                 |> Html.map ProductDetailsLightbox
             ]
@@ -382,7 +382,7 @@ pageTitle ({ route, pageData } as model) =
             getFromPageData .productDetails (.product >> .name)
 
         CategoryDetails _ _ ->
-            pageData.categoryDetails
+            model.productListPage.categoryDetails
                 |> Paginate.getResponseData
                 |> Maybe.map (.category >> .name)
                 |> Maybe.withDefault ""
@@ -561,14 +561,14 @@ adminTitle ({ pageData } as model) adminRoute =
 
 
 pageImage : Model -> Maybe String
-pageImage { route, pageData } =
+pageImage ({ route, pageData } as model) =
     case route of
         ProductDetails _ _ ->
             RemoteData.toMaybe pageData.productDetails
                 |> Maybe.map (.product >> productMainImage >> .original)
 
         CategoryDetails _ _ ->
-            Paginate.getResponseData pageData.categoryDetails
+            Paginate.getResponseData model.productListPage.categoryDetails
                 |> Maybe.map (.category >> .image >> .original)
 
         _ ->
@@ -578,7 +578,7 @@ pageImage { route, pageData } =
 {-| Get the meta description for a page.
 -}
 pageDescription : Model -> String
-pageDescription { route, pageData } =
+pageDescription ({ route, pageData } as model) =
     case route of
         ProductDetails _ _ ->
             RemoteData.toMaybe pageData.productDetails
@@ -586,7 +586,7 @@ pageDescription { route, pageData } =
                 |> Maybe.withDefault ""
 
         CategoryDetails _ _ ->
-            Paginate.getResponseData pageData.categoryDetails
+            Paginate.getResponseData model.productListPage.categoryDetails
                 |> Maybe.map (.category >> .description)
                 |> Maybe.withDefault ""
 

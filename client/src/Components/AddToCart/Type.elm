@@ -2,15 +2,11 @@ module Components.AddToCart.Type exposing (..)
 
 import Components.Svg exposing (..)
 import Data.Api as Api
-import Data.PageData as PageData
+import Data.PageData as PageData exposing (getAmountBaseOnVariant)
 import Data.Product exposing (ProductVariantId(..))
 import Html exposing (..)
 import Html.Attributes exposing (..)
-import RemoteData exposing (WebData)
-
-
-type alias Config =
-    ()
+import RemoteData exposing (RemoteData(..), WebData)
 
 
 type alias Model =
@@ -24,8 +20,8 @@ type alias Model =
     }
 
 
-init : Model
-init =
+initAddToCart : Model
+initAddToCart =
     { clickStatus = False
     , amount = 0
     , requestStatus = RemoteData.NotAsked
@@ -34,6 +30,35 @@ init =
     , detailErrors = []
     , detailWarnings = []
     }
+
+
+{-| Construct initial state base on the initial amount
+-}
+addToCartFromAmount : Int -> Model
+addToCartFromAmount initialAmount =
+    { initAddToCart
+        | amount = initialAmount
+        , clickStatus =
+            if initialAmount == 0 then
+                False
+
+            else
+                True
+    }
+
+
+addToCartFromVariantId : WebData PageData.CartDetails -> Maybe ProductVariantId -> Model
+addToCartFromVariantId cartDetailRd variantIdMb =
+    let
+        firstVariantAmount =
+            case ( cartDetailRd, variantIdMb ) of
+                ( Success cartDetails, Just vId ) ->
+                    getAmountBaseOnVariant vId cartDetails
+
+                _ ->
+                    0
+    in
+    addToCartFromAmount firstVariantAmount
 
 
 {-| Amount change and session token meant to pass data to Main

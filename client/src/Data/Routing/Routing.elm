@@ -688,8 +688,5 @@ showSearchbar route =
         ResetPassword _ ->
             False
 
-        Cart ->
-            False
-
         _ ->
             True

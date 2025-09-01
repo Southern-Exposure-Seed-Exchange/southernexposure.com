@@ -16,13 +16,12 @@ import Components.Admin.SettingsAdmin as SettingsAdmin
 import Components.Admin.ShippingAdmin as ShippingAdmin
 import Components.Admin.StaticPageAdmin as StaticPageAdmin
 import Components.Admin.SurchargesAdmin as SurchargesAdmin
-import Components.Product.Type as Product
 import Components.ProfileNavbar as ProfileNavbar
 import Components.Tooltip as Tooltip
 import Data.Api exposing (Endpoint(..))
 import Data.Fields exposing (ImageData)
 import Data.Msg exposing (Msg(..))
-import Data.PageData as PageData exposing (PageData)
+import Data.PageData as PageData exposing (CartDetails, PageData)
 import Data.Routing.Routing as Routing exposing (Route)
 import Data.Search as Search
 import Data.Shared exposing (Shared)
@@ -36,6 +35,7 @@ import Pages.CreateAccount as CreateAccount
 import Pages.EditAddress as EditAddress
 import Pages.EditLogin as EditLogin
 import Pages.Login as Login
+import Pages.ProductList.Type as ProductListPage
 import Pages.QuickOrder as QuickOrder
 import Pages.ResetPassword as ResetPassword
 import Pages.VerificationRequired as VerificationRequired
@@ -49,8 +49,6 @@ type alias Model =
     , categoryListData : WebData CategoryListData
     , route : Route
     , pageData : PageData
-    , searchData : Search.Data
-    , advancedSearchData : Search.Data
     , createAccountForm : CreateAccount.Form
     , verifyEmailForm : VerifyEmail.Form
     , verificationRequiredForm : VerificationRequired.Form
@@ -91,11 +89,14 @@ type alias Model =
     , postgridApiKey : String
 
     -- sub-component
-    , profileNavbar : ProfileNavbar.Model
+    , year : Int
     , shared : Shared Msg
+    , profileNavbar : ProfileNavbar.Model
+    , advancedSearchData : Search.Data
+    , cartDetails : WebData CartDetails
 
-    -- product dict state used in category detail and search result state
-    , productDict : Dict Int Product.Model
+    -- page state
+    , productListPage : ProductListPage.Model
     }
 
 
@@ -117,8 +118,6 @@ initial key route helcimUrl postgridApiKey =
     , categoryListData = RemoteData.Loading
     , route = route
     , pageData = PageData.initial
-    , searchData = Search.initial
-    , advancedSearchData = Search.initial
     , createAccountForm = CreateAccount.initial
     , verifyEmailForm = VerifyEmail.initial
     , verificationRequiredForm = VerificationRequired.initial
@@ -158,10 +157,13 @@ initial key route helcimUrl postgridApiKey =
     , helcimUrl = helcimUrl
     , postgridApiKey = postgridApiKey
 
-    -- shared data
-    , shared = initShared
-
     -- sub components
+    , year = 2024
+    , shared = initShared
+    , advancedSearchData = Search.initial
     , profileNavbar = ProfileNavbar.init
-    , productDict = Dict.empty
+    , cartDetails = RemoteData.NotAsked
+
+    -- page state
+    , productListPage = ProductListPage.init
     }

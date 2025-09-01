@@ -1,4 +1,4 @@
-module Pages.CategoryDetail.View exposing (view)
+module Pages.ProductList.CategoryDetail.View exposing (view)
 
 import Components.Pagination as Pagination
 import Components.Product.Type as Product

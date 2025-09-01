@@ -4,11 +4,15 @@ import Array
 import Components.AddToCart.Type as AddToCart
 import Components.ImageSlider.Type as ImageSlider
 import Data.Fields exposing (blankImage)
-import Data.PageData exposing (CartItemId(..))
+import Data.PageData as PageData
 import Data.Product exposing (ProductVariantId)
 import Html exposing (..)
 
 
+{-| A state/model to be used in product UI (cardView or detailView).
+Mainly to be used in Product list Page (category detail, search result)
+or Product detail page.
+-}
 type alias Model =
     { variant : Maybe ProductVariantId
     , addToCart : AddToCart.Model
@@ -19,7 +23,7 @@ type alias Model =
 initProductModel : Model
 initProductModel =
     { variant = Nothing
-    , addToCart = AddToCart.init
+    , addToCart = AddToCart.initAddToCart
     , imageSlider = ImageSlider.mkModel "" Array.empty
     }
 

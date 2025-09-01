@@ -41,7 +41,7 @@ fromCartDetails { items } =
                 { addToCart =
                     let
                         addToCart =
-                            AddToCart.init
+                            AddToCart.initAddToCart
                     in
                     { addToCart
                         | amount = item.quantity
@@ -71,7 +71,7 @@ update shared msg model _ =
         UpdateResponse response ->
             case response of
                 RemoteData.Success (Ok cartDetails) ->
-                    ( initial, Just cartDetails, Cmd.none )
+                    ( model, Just cartDetails, Cmd.none )
 
                 _ ->
                     ( model, Nothing, Cmd.none )
@@ -251,16 +251,16 @@ view authStatus { formItems } ({ items, charges } as cartDetails) =
                     ]
                 , Html.map (AddToCartMsg id) <|
                     AddToCart.statusView
-                        (Maybe.withDefault AddToCart.init <|
+                        (Maybe.withDefault AddToCart.initAddToCart <|
                             Maybe.map .addToCart <|
                                 Dict.get (fromCartItemId id) formItems
                         )
                 , div [ class "tw:flex tw:justify-between tw:pt-[20px]" ]
                     [ div [ class "tw:flex tw:flex-col tw:items-start" ]
                         [ Html.map (AddToCartMsg id) <|
-                            AddToCart.view ()
+                            AddToCart.view AddToCart.Checkout
                                 variant.id
-                                (Maybe.withDefault AddToCart.init <|
+                                (Maybe.withDefault AddToCart.initAddToCart <|
                                     Maybe.map .addToCart <|
                                         Dict.get (fromCartItemId id) formItems
                                 )
@@ -282,16 +282,16 @@ view authStatus { formItems } ({ items, charges } as cartDetails) =
                         , div [ class "tw:grow" ] []
                         , div [ class "tw:flex tw:flex-col tw:items-start" ]
                             [ Html.map (AddToCartMsg id) <|
-                                AddToCart.view ()
+                                AddToCart.view AddToCart.Checkout
                                     variant.id
-                                    (Maybe.withDefault AddToCart.init <|
+                                    (Maybe.withDefault AddToCart.initAddToCart <|
                                         Maybe.map .addToCart <|
                                             Dict.get (fromCartItemId id) formItems
                                     )
                             ]
                         ]
                     , div [ class "tw:w-[155px] tw:shrink-0" ]
-                        [ div [ class "tw:flex" ]
+                        [ div [ class "tw:flex tw:items-start" ]
                             [ div [ class "tw:grow tw:flex tw:flex-col tw:items-center" ]
                                 [ p [ class "tw:pt-[3px] tw:text-[20px] tw:leading-[28px] tw:font-semibold" ]
                                     [ text <| Format.cents <| centsMap ((*) quantity) <| variantPrice variant
@@ -308,7 +308,7 @@ view authStatus { formItems } ({ items, charges } as cartDetails) =
                     ]
                 , Html.map (AddToCartMsg id) <|
                     AddToCart.statusView
-                        (Maybe.withDefault AddToCart.init <|
+                        (Maybe.withDefault AddToCart.initAddToCart <|
                             Maybe.map .addToCart <|
                                 Dict.get (fromCartItemId id) formItems
                         )

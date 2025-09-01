@@ -9,8 +9,8 @@ import Utils.Images as Images
 import Utils.View exposing (routeLinkAttributes)
 
 
-view : Html Msg
-view =
+view : Int -> Html Msg
+view year =
     let
         break =
             br [] []
@@ -62,9 +62,6 @@ view =
                 , break
                 , abbr [ title "Phone" ] [ text "P:" ]
                 , span [ Microdata.telephone ] [ text " (540) 894-9480" ]
-                , break
-                , abbr [ title "Fax" ] [ text "F:" ]
-                , span [ Microdata.faxNumber ] [ text " (540) 266-1021" ]
                 ]
 
         contactBlock =
@@ -118,7 +115,7 @@ view =
                 , div [ class "tw:pt-[40px]" ]
                     [ hr [] []
                     , div [ class "tw:pt-[32px] tw:flex tw:flex-col tw:lg:flex-row tw:gap-[24px]" ]
-                        [ div [ class "tw:grow" ] [ text "Copyright © 2020 Southern Exposure Seed Exchange" ]
+                        [ div [ class "tw:grow" ] [ text <| "Copyright © 2020 - " ++ String.fromInt year ++ " Southern Exposure Seed Exchange" ]
                         , div [ class "tw:flex tw:gap-[24px]" ]
                             [ staticPageLink "privacy" "Privacy Notice"
                             , staticPageLink "conditions" "Conditions of Use"

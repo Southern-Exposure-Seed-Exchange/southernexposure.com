@@ -5,6 +5,8 @@ module Data.Product exposing
     , ProductVariant
     , ProductVariantId(..)
     , decoder
+    , getFirstValidVariantId
+    , getFirstValidVariantIdFromDict
     , idDecoder
     , idEncoder
     , isLimitedAvailability
@@ -12,6 +14,7 @@ module Data.Product exposing
     , nameWithLotSize
     , productMainImage
     , singleVariantName
+    , unProductId
     , variantDecoder
     , variantPrice
     )
@@ -28,6 +31,11 @@ import Markdown exposing (defaultOptions)
 
 type ProductId
     = ProductId Int
+
+
+unProductId : ProductId -> Int
+unProductId (ProductId i) =
+    i
 
 
 idDecoder : Decoder ProductId
@@ -174,3 +182,31 @@ variantDecoder =
                 Decode.map (\isActive -> partialData isActive)
                     (Decode.field "isActive" Decode.bool)
             )
+
+
+getFirstValidVariantId : List ProductVariant -> Maybe ProductVariantId
+getFirstValidVariantId variantList =
+    variantList
+        |> (\vs ->
+                let
+                    purchasableVs =
+                        List.filter
+                            (\v -> isPurchaseable v)
+                            vs
+                in
+                if List.length purchasableVs > 0 then
+                    purchasableVs
+
+                else
+                    vs
+           )
+        |> List.sortBy .skuSuffix
+        |> List.head
+        |> Maybe.map .id
+
+
+getFirstValidVariantIdFromDict : Dict Int ProductVariant -> Maybe ProductVariantId
+getFirstValidVariantIdFromDict variantDict =
+    Dict.toList variantDict
+        |> List.map (\( _, v ) -> v)
+        |> getFirstValidVariantId
