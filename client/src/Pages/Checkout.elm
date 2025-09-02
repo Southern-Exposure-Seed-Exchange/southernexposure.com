@@ -1121,7 +1121,7 @@ getHelcimCheckoutToken authStatus maybeSessionToken cartInventoryNotifications s
                     Encode.object
                         [ ( "cartInventoryNotifications", encodeCartInventoryNotifications cartInventoryNotifications )
                         , ( "shippingAddress", encodeAddress shippingAddress False )
-                        , ("skipAddressVerification", Encode.bool skipAddressVerification)
+                        , ( "skipAddressVerification", Encode.bool skipAddressVerification )
                         ]
             in
             Api.post Api.CheckoutHelcimToken
@@ -1463,7 +1463,11 @@ view : Form -> AuthStatus -> AddressLocations -> PageData.CheckoutDetails -> Lis
 view model authStatus locations checkoutDetails =
     let
         generalErrors =
-            Api.getErrorHtml "" model.errors
+            if Dict.get "" model.errors /= Nothing then
+                div [ class "mb-3" ] [ Api.getErrorHtml "" model.errors ]
+
+            else
+                text ""
 
         hasErrors =
             not <|
@@ -1475,17 +1479,25 @@ view model authStatus locations checkoutDetails =
             case Dict.get "shipping-address-verification" model.errors of
                 Just errs ->
                     not (List.isEmpty errs)
+
                 Nothing ->
                     False
 
-        shippingAddressVerificationErrorsView = viewIf hasShippingAddressVerificationErrors
-            (div [ class "mb-3" ]
-                [ p [class "text-warning"] [ text "We failed to verify your shipping address." ]
-                , br [] []
-                , p [ class "text-warning" ] [ text "Please double-check your details." ]
-                , p [ class "text-warning" ] [ text "If the address is correct, proceed with the checkout." ]
-                ]
-            )
+        shippingAddressVerificationErrorsView =
+            viewIf hasShippingAddressVerificationErrors <|
+                div [ class "tw:pb-[16px]" ]
+                    [ Alert.view
+                        { defaultAlert
+                            | content =
+                                div [ class "tw:text-[#bd8e00]" ]
+                                    [ p [ class "tw:font-semibold" ] [ text "We failed to verify your shipping address." ]
+                                    , br [] []
+                                    , p [] [ text "Please double-check your details." ]
+                                    , p [] [ text "If the address is correct, proceed with the checkout." ]
+                                    ]
+                            , style = Alert.Warning
+                        }
+                    ]
 
         addrErrors addr =
             case addr of
@@ -1720,7 +1732,7 @@ view model authStatus locations checkoutDetails =
             , paymentConfirmationOverlay
             , genericErrorText hasErrors
             , guestCard
-            , div [ class "mb-3" ] [ generalErrors ]
+            , generalErrors
             , shippingAddressVerificationErrorsView
             , div [ class "tw:grid tw:grid-cols-1 tw:lg:grid-cols-2 tw:gap-[24px] tw:lg:gap-[16px]" ]
                 [ addressForm
