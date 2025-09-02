@@ -189,7 +189,7 @@ view tagger model redirectTo clearCart =
                     , loginInputs
                     , errorHtml
                     , rememberCheckbox
-                    , div [ class "tw:pb-[16px]" ] [ Button.view { defaultButton | label = "Login", type_ = Button.FormSubmit, padding = Button.Width "tw:w-full tw:lg:w-[160px]" } ]
+                    , div [ class "tw:pb-[12px]" ] [ Button.view { defaultButton | label = "Login", type_ = Button.FormSubmit, padding = Button.Width "tw:w-full tw:lg:w-[160px]" } ]
                     , div []
                         [ a
                             ([ class "tw:text-[14px] tw:opacity-60" ] ++ (routeLinkAttributes <| ResetPassword <| Just ""))

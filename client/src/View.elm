@@ -81,7 +81,7 @@ view ({ route, pageData, navigationData, zone, helcimUrl } as model) =
 
         withSidebar content =
             div [ class "se-container", Aria.live "polite" ]
-                [ div [ class "tw:flex tw:flex-col-reverse tw:lg:flex-row tw:gap-[500px] tw:lg:gap-[40px]" ]
+                [ div [ class "tw:flex tw:flex-col-reverse tw:lg:flex-row tw:gap-[80px] tw:lg:gap-[40px]" ]
                     [ SiteSidebar.view route
                     , div [ class "tw:w-full tw:grow tw:min-h-screen tw:lg:min-h-auto", id "main" ] content
                     ]
@@ -814,10 +814,18 @@ searchResultsView shared ({ query } as data) pagination productDict products =
 
         searchDescription =
             if uniqueSearch == Nothing then
-                p [ class "tw:hidden tw:lg:block tw:lg:px-[16px] tw:pt-[14px]" ]
-                    [ queryDescription
-                    , filterDescriptions
-                    ]
+                if not <| String.isEmpty query then
+                    p [ class "tw:hidden tw:lg:block tw:lg:px-[8px] tw:pb-0 tw:lg:pb-[32px]" ]
+                        [ queryDescription
+                        ]
+
+                else if Paginate.getTotalItems products == 0 then
+                    p [ class "tw:hidden tw:lg:block tw:lg:px-[8px] tw:pb-0 tw:lg:pb-[32px]" ]
+                        [ text "No products found."
+                        ]
+
+                else
+                    text ""
 
             else
                 text ""
@@ -883,6 +891,5 @@ searchResultsView shared ({ query } as data) pagination productDict products =
     in
     [ pageTitleView header
     , searchDescription
-    , div [ class "tw:pb-0 tw:lg:pb-[40px]" ] []
     ]
         ++ ProductViews.listView shared (SearchResults data) pagination productDict products

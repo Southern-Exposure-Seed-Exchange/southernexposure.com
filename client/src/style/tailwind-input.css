@@ -21,6 +21,10 @@
   --mobile-navbar-padding: calc(var(--mobile-navbar-height) - 10px);
 }
 
+#keywords::-webkit-search-cancel-button{
+    -webkit-appearance: none;
+}
+
 textarea:focus, input:focus, select:focus{
     outline: none;
 }

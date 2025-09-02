@@ -241,21 +241,21 @@ customNumberView style model vId =
                 Card ->
                     { class_ = "tw:bg-[rgba(29,127,110,1)] tw:text-white"
                     , fillClass = "tw:fill-white"
-                    , buttonSizeClass = "tw:h-[40px] tw:w-[40px] tw:hover:bg-[rgb(17,75,65)]"
+                    , buttonSizeClass = "tw:h-[40px] tw:w-[40px] tw:hover:bg-[#0C6F5E]"
                     , formClass = "tw:w-[46px] text-center tw:border-white"
                     }
 
                 Detail ->
                     { class_ = "tw:bg-[rgba(29,127,110,1)] tw:text-white"
                     , fillClass = "tw:fill-white"
-                    , buttonSizeClass = "tw:w-[48px] tw:h-[48px] tw:hover:bg-[rgb(17,75,65)]"
+                    , buttonSizeClass = "tw:w-[48px] tw:h-[48px] tw:hover:bg-[#0C6F5E]"
                     , formClass = "tw:w-[46px] text-center tw:border-white"
                     }
 
                 Checkout ->
                     { class_ = "tw:bg-white tw:border tw:border-[rgba(29,127,110,1)] tw:box-border"
                     , fillClass = "tw:fill-black"
-                    , buttonSizeClass = "tw:w-[48px] tw:h-[40px] tw:hover:bg-[rgb(219,219,219)]"
+                    , buttonSizeClass = "tw:w-[48px] tw:h-[40px] tw:hover:bg-[#E4F2F0]"
                     , formClass = "tw:w-[46px] tw:text-center tw:border-[rgba(29,127,110,1)]"
                     }
     in
@@ -350,7 +350,7 @@ view style vId model =
                 paddingClass
                     ++ " "
                     ++ widthClass
-                    ++ " tw:bg-[rgba(77,170,154,1)] tw:text-white tw:flex tw:rounded-[8px]! tw:gap-[8px] tw:items-center tw:justify-center tw:leading-[24px]"
+                    ++ " tw:bg-[rgba(77,170,154,1)] tw:hover:bg-[#34C3AB] tw:active:bg-[#1D7F6E] tw:transition-all tw:text-white tw:flex tw:rounded-[8px]! tw:gap-[8px] tw:items-center tw:justify-center tw:leading-[24px]"
             , onClick (TriggerAdd vId)
             ]
         <|

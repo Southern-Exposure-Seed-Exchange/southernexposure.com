@@ -60,7 +60,7 @@ customBootstrapPager linkAttributes endPagesToShow middlePagesToShow pagination 
         class_ =
             "tw:flex tw:shrink-0 tw:items-center tw:justify-center tw:w-[36px] tw:h-[36px] tw:rounded-[8px]"
                 ++ " "
-                ++ "tw:hover:no-underline! tw:hover:bg-[#4DAA9A]! tw:hover:text-white!"
+                ++ "tw:hover:no-underline! tw:hover:bg-[rgba(77,170,154,0.06)]! "
 
         itemClass isCurrent =
             if isCurrent then

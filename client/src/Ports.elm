@@ -1,31 +1,4 @@
-port module Ports exposing
-    ( PageMetadata
-    , appendHelcimPayIframe
-    , cartItemCountChanged
-    , collapseMobileMenus
-    , helcimMessageReceived
-    , historyBack
-    , initializeOrDestroyHomepageCarousel
-    , logPurchase
-    , logStatusCode
-    , loggedIn
-    , loggedOut
-    , newCartSessionToken
-    , removeAuthDetails
-    , removeCartSessionToken
-    , removeHelcimPayIframe
-    , scrollLeftSmooth
-    , scrollToErrorMessage
-    , scrollToID
-    , scrollToName
-    , scrollToTop
-    , setCartItemCount
-    , setPageTitle
-    , storeAuthDetails
-    , storeCartSessionToken
-    , subscribeToHelcimMessages
-    , updatePageMetadata
-    )
+port module Ports exposing (..)
 
 import Json.Encode exposing (Value)
 
@@ -154,3 +127,12 @@ type alias PageMetadata =
 {-| Initialize the carousel if True, otherwise destroy any running Carousel.
 -}
 port initializeOrDestroyHomepageCarousel : Bool -> Cmd msg
+
+
+
+-- Input related
+
+
+{-| Focus on an id
+-}
+port focus : String -> Cmd msg

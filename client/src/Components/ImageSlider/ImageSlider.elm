@@ -257,7 +257,7 @@ view onClickOpenGallery mkParentMsg model =
                         , onClick <|
                             mkParentMsg PrevImage
                         , class
-                            "tw:transition-all tw:opacity-0 tw:group-hover:opacity-100 tw:w-[40px] tw:h-[40px] tw:bg-white tw:rounded-full! tw:overflow-hidden tw:hover:shadow-lg tw:shadow-md tw:flex tw:items-center tw:justify-center"
+                            "tw:w-[40px] tw:h-[40px] tw:bg-white tw:rounded-full! tw:overflow-hidden tw:hover:shadow-lg tw:shadow-md tw:flex tw:items-center tw:justify-center"
                         ]
                         [ chevronLeftSvg
                         ]
@@ -270,7 +270,7 @@ view onClickOpenGallery mkParentMsg model =
                     [ button
                         [ type_ "button"
                         , onClick <| mkParentMsg NextImage
-                        , class "tw:transition-all tw:opacity-0 tw:group-hover:opacity-100 tw:w-[40px] tw:h-[40px] tw:bg-white tw:rounded-full! tw:overflow-hidden tw:hover:shadow-lg tw:shadow-md tw:flex tw:items-center tw:justify-center"
+                        , class "tw:w-[40px] tw:h-[40px] tw:bg-white tw:rounded-full! tw:overflow-hidden tw:hover:shadow-lg tw:shadow-md tw:flex tw:items-center tw:justify-center"
                         ]
                         [ chevronRightSvg
                         ]

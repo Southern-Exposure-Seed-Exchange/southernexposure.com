@@ -361,7 +361,7 @@ listView shared routeConstructor pagination productDict products =
     let
         sortHtml =
             if productsCount > 1 then
-                div [ class "tw:flex tw:justify-between tw:pb-[20px] tw:px-0 tw:lg:px-[20px] tw:items-center" ]
+                div [ class "tw:flex tw:justify-between tw:pb-[20px] tw:px-0 tw:lg:px-[8px] tw:items-center" ]
                     [ sortingInput
                     , pager.perPageLinks ()
                     ]
@@ -375,22 +375,24 @@ listView shared routeConstructor pagination productDict products =
         sortingInput : Html pmsg
         sortingInput =
             div [ class "form-inline products-sorting" ]
-                [ select
-                    [ id "product-sort-select"
-                    , class "form-control form-control-sm"
-                    , onProductsSortSelect (shared.navigateToMsg << routeConstructor)
-                    , Aria.label "Select Products Sorting Method"
+                [ div [ class "form-control form-control-sm" ]
+                    [ select
+                        [ id "product-sort-select"
+                        , class "tw:w-full tw:lg:w-auto tw:border-white tw:border-r-[0px]!"
+                        , onProductsSortSelect (shared.navigateToMsg << routeConstructor)
+                        , Aria.label "Select Products Sorting Method"
+                        ]
+                      <|
+                        List.map
+                            (\data ->
+                                option
+                                    [ value <| Sorting.toQueryValue data
+                                    , selected (data == pagination.sorting)
+                                    ]
+                                    [ text <| Sorting.toDescription data ]
+                            )
+                            Sorting.all
                     ]
-                  <|
-                    List.map
-                        (\data ->
-                            option
-                                [ value <| Sorting.toQueryValue data
-                                , selected (data == pagination.sorting)
-                                ]
-                                [ text <| Sorting.toDescription data ]
-                        )
-                        Sorting.all
                 ]
 
         onProductsSortSelect : (Pagination.Data -> msg) -> Html.Attribute msg
@@ -529,7 +531,7 @@ addToCartInput shared model style product maybeSelectedVariant =
     case maybeSelectedVariant of
         Just selectedVariant ->
             if not (Product.isPurchaseable selectedVariant) then
-                addToCartInputDisabled
+                div [] [ addToCartInputDisabled ]
 
             else
                 view

@@ -6,6 +6,7 @@ module Data.Search exposing
     , encode
     , fromQueryString
     , initial
+    , isFilterExist
     , resetQuery
     , toQueryString
     , uniqueSearch
@@ -27,7 +28,13 @@ type alias Data =
     , isSmallGrower : Bool
     , category : Maybe CategoryId
     , mobileFilterStatus : Bool
+    , isFocus : Bool
     }
+
+
+isFilterExist : Data -> Bool
+isFilterExist data =
+    data.isOrganic || data.isHeirloom || data.isRegional || data.isSmallGrower || data.category /= Nothing
 
 
 type SearchScope
@@ -50,6 +57,7 @@ initial =
     , isSmallGrower = False
     , category = Nothing
     , mobileFilterStatus = False
+    , isFocus = False
     }
 
 
@@ -153,7 +161,7 @@ fromQueryString pathParser =
         <?> Routing.fromIntParam categoryFlagName CategoryId
         |> Url.map
             (\constructor q descr org heir reg eco cat ->
-                constructor <| Data q descr org heir reg eco cat initial.mobileFilterStatus
+                constructor <| Data q descr org heir reg eco cat initial.mobileFilterStatus False
             )
 
 

@@ -1,6 +1,7 @@
 module Components.SiteUI.Footer exposing (view)
 
 import Components.Microdata as Microdata
+import Components.Svg exposing (serokellSvg)
 import Data.Msg exposing (Msg)
 import Data.Routing.Routing as Routing exposing (Route(..))
 import Html exposing (..)
@@ -24,6 +25,8 @@ view year =
             div [ class "tw:flex tw:flex-col tw:gap-[16px]" ]
                 [ staticPageLink "shipping-info" "Shipping & Returns"
                 , staticPageLink "contact-us" "Contact Us"
+                , staticPageLink "privacy" "Privacy Notice"
+                , staticPageLink "conditions" "Conditions of Use"
                 ]
 
         importantLinks =
@@ -103,7 +106,7 @@ view year =
     in
     div [ id "footer", class "tw:mt-[80px] tw:lg:mt-[136px] tw:px-[16px] tw:lg:px-[124px] tw:pt-[40px] tw:lg:pt-[60px] tw:pb-[40px] tw:bg-[rgba(30,12,3,0.03)]" ]
         [ node "footer"
-            [ class "" ]
+            [ class "se-container" ]
             [ div [ class "tw:flex tw:flex-col" ]
                 [ div [ class "tw:flex tw:flex-col tw:lg:flex-row tw:gap-[40px]" ]
                     [ contactUsBlock
@@ -114,12 +117,14 @@ view year =
                     ]
                 , div [ class "tw:pt-[40px]" ]
                     [ hr [] []
-                    , div [ class "tw:pt-[32px] tw:flex tw:flex-col tw:lg:flex-row tw:gap-[24px]" ]
-                        [ div [ class "tw:grow" ] [ text <| "Copyright © 2020 - " ++ String.fromInt year ++ " Southern Exposure Seed Exchange" ]
-                        , div [ class "tw:flex tw:gap-[24px]" ]
-                            [ staticPageLink "privacy" "Privacy Notice"
-                            , staticPageLink "conditions" "Conditions of Use"
+                    , div [ class "tw:pt-[32px] tw:flex tw:flex-col tw:lg:flex-row tw:gap-[24px]  tw:text-[14px]" ]
+                        [ div [ class "tw:grow tw:flex tw:items-center tw:gap-[10px] " ]
+                            [ span [ class "tw:opacity-80 tw:whitespace-nowrap" ] [ text "Created by Pavan Rikhi" ]
+                            , span [ class "tw:opacity-80 tw:h-[12px] tw:w-[1px] tw:bg-[#1E0C03] shrink-0" ] []
+                            , span [ class "tw:opacity-80 tw:whitespace-nowrap" ] [ text "Improved by" ]
+                            , a [ href "https://serokell.io/", target "_blank", class "tw:opacity-80 tw:hover:opacity-100" ] [ serokellSvg ]
                             ]
+                        , div [ class "tw:shrink-0 tw:opacity-80" ] [ text <| "© " ++ String.fromInt year ++ " Southern Exposure Seed Exchange. All rights reserved." ]
                         ]
                     ]
                 ]
