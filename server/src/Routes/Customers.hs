@@ -744,33 +744,36 @@ addressEditRoute token aId addressData = withValidatedCookie token $ \(Entity cu
                 -- We may want to update existing non-verified shipping address to get
                 -- address verification feedback
                 | toAddressData address == addressData &&
-                    (addressVerified (entityVal address) || addressType (entityVal address) == Fields.Billing) ->
-                    return AddressEditSuccess
+                    (addressVerified (entityVal address) || addressType (entityVal address) == Fields.Billing) -> do
+                        updateAddress address addressId False customerId
                 | otherwise -> do
-                    let addrType = addressType $ entityVal address
-                    verificationFeedback <- lift $ verifyAddressData addressData addrType
+                    if adSkipVerification addressData
+                        then updateAddress address addressId False customerId
+                        else do
+                            verificationFeedback <- lift $ verifyAddressData addressData (addressType $ entityVal address)
+                            case verificationFeedback of
+                                Left _ -> throwIO AddressVerificationAPIFailed
+                                Right AddressVerifiedSuccessfully -> updateAddress address addressId True customerId
+                                Right (AddressCorrected correctedData _) -> return $ AddressEditCorrected correctedData
+                                Right (AddressVerificationFailed errors) -> return $ AddressEditFailed errors
+    where
+        updateAddress address addressId addressVerified customerId = do
+            let addrType = addressType $ entityVal address
 
-                    let updateAddress = do
-                            when (adIsDefault addressData) $
-                                updateWhere
-                                    [ AddressCustomerId ==. customerId
-                                    , AddressType ==. addrType
-                                    ]
-                                    [ AddressIsDefault =. False ]
-                            update addressId
-                                [ AddressIsActive =. False
-                                , AddressIsDefault =. False
-                                , AddressVerified =. True
-                                ]
-                            void . insertOrActivateAddress
-                                $ fromAddressData addrType customerId addressData
-                            return AddressEditSuccess
-
-                    case verificationFeedback of
-                        Left _ -> throwIO AddressVerificationAPIFailed
-                        Right AddressVerifiedSuccessfully -> updateAddress
-                        Right (AddressCorrected correctedData _) -> return $ AddressEditCorrected correctedData
-                        Right (AddressVerificationFailed errors) -> return $ AddressEditFailed errors
+            when (adIsDefault addressData) $
+                updateWhere
+                    [ AddressCustomerId ==. customerId
+                    , AddressType ==. addrType
+                    ]
+                    [ AddressIsDefault =. False ]
+            update addressId
+                [ AddressIsActive =. False
+                , AddressIsDefault =. False
+                , AddressVerified =. addressVerified
+                ]
+            void . insertOrActivateAddress
+                $ fromAddressData addrType customerId addressData
+            return AddressEditSuccess
 
 type AddressDeleteRoute =
        AuthProtect "cookie-auth"

@@ -101,6 +101,7 @@ type alias Form =
     , isPaymentProcessing : Bool
     , isProcessing : Bool
     , hasNewCartInventoryNotifications : Bool
+    , skipAddressVerification : Bool
     , checkoutToken : Maybe String
     , confirmationModel : Maybe PaymentConfirmationModel
     }
@@ -122,6 +123,7 @@ initial =
     , isPaymentProcessing = False
     , isProcessing = False
     , hasNewCartInventoryNotifications = False
+    , skipAddressVerification = False
     , checkoutToken = Nothing
     , confirmationModel = Nothing
     }
@@ -168,6 +170,7 @@ initialWithDefaults shippingAddresses billingAddresses restrictionsError =
     , isPaymentProcessing = False
     , isProcessing = False
     , hasNewCartInventoryNotifications = False
+    , skipAddressVerification = False
     , checkoutToken = Nothing
     , confirmationModel = Nothing
     }
@@ -327,6 +330,18 @@ processCheckoutValidationErrors model errs authStatus maybeSessionToken =
                 Api.initialErrors
                 errs
 
+        hasShippingAddressVerificationErrors =
+            List.any
+                (\e ->
+                    case e of
+                        ShippingAddressVerificationFailed _ ->
+                            True
+
+                        _ ->
+                            False
+                )
+                errs
+
         errors =
             Dict.insert "shipping-address-verification" (List.concat (Dict.values validationErrorsDict)) model.errors
 
@@ -341,6 +356,7 @@ processCheckoutValidationErrors model errs authStatus maybeSessionToken =
         | isPaymentProcessing = False
         , isProcessing = False
         , hasNewCartInventoryNotifications = hasNewCartInventoryNotifications
+        , skipAddressVerification = hasShippingAddressVerificationErrors
         , errors = errors
     }
         |> refreshAction
@@ -533,6 +549,7 @@ update msg postgridApiKey model authStatus maybeSessionToken checkoutDetails =
             { model
                 | shippingAddress = selectAddress addressId
                 , makeShippingDefault = False
+                , skipAddressVerification = False
             }
                 |> refreshDetails authStatus maybeSessionToken False model
 
@@ -551,7 +568,7 @@ update msg postgridApiKey model authStatus maybeSessionToken checkoutDetails =
                 addrCmdLifted =
                     Cmd.map ShippingMsg addrCmd
             in
-            ( refreshedModel, mbOutMsg, Cmd.batch [ refreshCmd, addrCmdLifted ] )
+            ( { refreshedModel | skipAddressVerification = False }, mbOutMsg, Cmd.batch [ refreshCmd, addrCmdLifted ] )
 
         SelectBilling addressId ->
             { model
@@ -626,6 +643,7 @@ update msg postgridApiKey model authStatus maybeSessionToken checkoutDetails =
                                 maybeSessionToken
                                 (checkoutDetailsToCartInventoryNotifications details)
                                 model.shippingAddress
+                                model.skipAddressVerification
                             )
 
                 _ ->
@@ -1094,8 +1112,8 @@ encodeStringAsMaybe str =
         Encode.string str
 
 
-getHelcimCheckoutToken : AuthStatus -> Maybe String -> CartInventoryNotifications -> CheckoutAddress -> Cmd Msg
-getHelcimCheckoutToken authStatus maybeSessionToken cartInventoryNotifications shippingAddress =
+getHelcimCheckoutToken : AuthStatus -> Maybe String -> CartInventoryNotifications -> CheckoutAddress -> Bool -> Cmd Msg
+getHelcimCheckoutToken authStatus maybeSessionToken cartInventoryNotifications shippingAddress skipAddressVerification =
     case authStatus of
         User.Authorized _ ->
             let
@@ -1103,6 +1121,7 @@ getHelcimCheckoutToken authStatus maybeSessionToken cartInventoryNotifications s
                     Encode.object
                         [ ( "cartInventoryNotifications", encodeCartInventoryNotifications cartInventoryNotifications )
                         , ( "shippingAddress", encodeAddress shippingAddress False )
+                        , ( "skipAddressVerification", Encode.bool skipAddressVerification )
                         ]
             in
             Api.post Api.CheckoutHelcimToken
@@ -1116,6 +1135,7 @@ getHelcimCheckoutToken authStatus maybeSessionToken cartInventoryNotifications s
                     Encode.object
                         [ ( "cartInventoryNotifications", encodeCartInventoryNotifications cartInventoryNotifications )
                         , ( "sessionToken", encodeMaybe Encode.string maybeSessionToken )
+                        , ( "skipAddressVerification", Encode.bool skipAddressVerification )
                         ]
             in
             Api.post Api.CheckoutHelcimTokenAnonymous
@@ -1136,6 +1156,7 @@ placeOrder model authStatus maybeSessionToken helcimData checkoutDetails =
                  , ( "couponCode", encodeStringAsMaybe model.couponCode )
                  , ( "comment", Encode.string model.comment )
                  , ( "cartInventoryNotifications", encodedCartInventoryNotifications )
+                 , ( "skipAddressVerification", Encode.bool model.skipAddressVerification )
                  ]
                     ++ (helcimData
                             |> Maybe.map
@@ -1158,6 +1179,7 @@ placeOrder model authStatus maybeSessionToken helcimData checkoutDetails =
                  , ( "sessionToken", encodeMaybe Encode.string maybeSessionToken )
                  , ( "email", Encode.string model.email )
                  , ( "cartInventoryNotifications", encodedCartInventoryNotifications )
+                 , ( "skipAddressVerification", Encode.bool model.skipAddressVerification )
                  ]
                     ++ (helcimData
                             |> Maybe.map
@@ -1441,7 +1463,11 @@ view : Form -> AuthStatus -> AddressLocations -> PageData.CheckoutDetails -> Lis
 view model authStatus locations checkoutDetails =
     let
         generalErrors =
-            Api.getErrorHtml "" model.errors
+            if Dict.get "" model.errors /= Nothing then
+                div [ class "mb-3" ] [ Api.getErrorHtml "" model.errors ]
+
+            else
+                text ""
 
         hasErrors =
             not <|
@@ -1458,20 +1484,20 @@ view model authStatus locations checkoutDetails =
                     False
 
         shippingAddressVerificationErrorsView =
-            viewIf hasShippingAddressVerificationErrors
-                (div [ class "mb-3" ]
-                    [ p [ class "text-danger" ] [ text "We failed to verify your shipping address:" ]
-                    , Dict.get "shipping-address-verification" model.errors
-                        |> Maybe.map (\errs -> p [] [ small [] [ Api.errorHtml errs ] ])
-                        |> Maybe.withDefault (text "")
-                    , case model.shippingAddress of
-                        ExistingAddress _ ->
-                            p [ class "text-danger" ] [ text "Please update your shipping address in your account settings." ]
-
-                        NewAddress _ ->
-                            p [ class "text-danger" ] [ text "Please update your shipping details." ]
+            viewIf hasShippingAddressVerificationErrors <|
+                div [ class "tw:pb-[16px]" ]
+                    [ Alert.view
+                        { defaultAlert
+                            | content =
+                                div [ class "tw:text-[#bd8e00]" ]
+                                    [ p [ class "tw:font-semibold" ] [ text "We failed to verify your shipping address." ]
+                                    , br [] []
+                                    , p [] [ text "Please double-check your details." ]
+                                    , p [] [ text "If the address is correct, proceed with the checkout." ]
+                                    ]
+                            , style = Alert.Warning
+                        }
                     ]
-                )
 
         addrErrors addr =
             case addr of
@@ -1706,7 +1732,7 @@ view model authStatus locations checkoutDetails =
             , paymentConfirmationOverlay
             , genericErrorText hasErrors
             , guestCard
-            , div [ class "mb-3" ] [ generalErrors ]
+            , generalErrors
             , shippingAddressVerificationErrorsView
             , div [ class "tw:grid tw:grid-cols-1 tw:lg:grid-cols-2 tw:gap-[24px] tw:lg:gap-[16px]" ]
                 [ addressForm

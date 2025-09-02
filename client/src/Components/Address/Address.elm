@@ -58,6 +58,7 @@ type alias Model =
     , country : String
     , phoneNumber : String
     , isDefault : Bool
+    , skipVerification : Bool
     , showSuggestions : Bool
     , suggestions : List AutocompleteData
     , debounceId : Int
@@ -79,6 +80,7 @@ initial =
     , country = "US"
     , phoneNumber = ""
     , isDefault = True
+    , skipVerification = False
     , showSuggestions = False
     , suggestions = []
     , debounceId = 0
@@ -100,11 +102,12 @@ decoder =
         (Decode.field "state" <| Decode.map Just regionDecoder)
         |> Decode.andThen
             (\constr ->
-                Decode.map4 constr
+                Decode.map5 constr
                     (Decode.field "zipCode" Decode.string)
                     (Decode.field "country" Decode.string)
                     (Decode.field "phoneNumber" Decode.string)
                     (Decode.field "isDefault" Decode.bool)
+                    (Decode.field "skipVerification" Decode.bool)
                     |> hardcoded False
                     |> hardcoded []
                     |> hardcoded 0
@@ -169,6 +172,7 @@ encode { model } =
             )
         |> (::) ( "state", encodedState )
         |> (::) ( "isDefault", Encode.bool model.isDefault )
+        |> (::) ( "skipVerification", Encode.bool model.skipVerification )
         |> Encode.object
 
 
@@ -252,9 +256,9 @@ updateModel addressCompletionSetting msg model =
 
         Country str ->
             if model.country /= str then
-                { model | country = str, state = Nothing, warnings = Dict.empty } |> noCommand
+                { model | country = str, state = Nothing, warnings = Dict.empty, skipVerification = False } |> noCommand
             else
-                { model | warnings = Dict.empty } |> noCommand
+                { model | warnings = Dict.empty, skipVerification = False } |> noCommand
 
         PhoneNumber str ->
             { model | phoneNumber = str } |> noCommand
@@ -450,7 +454,7 @@ handleAutocompleteField addressCompletionSetting msg updateField m =
             Street _ -> String.length concatFields > 3
             _ -> updatedModel.showSuggestions
     in
-    ( { updatedModel | debounceId = newDebounceId, suggestions = suggestions, showSuggestions = showSuggestions, warnings = Dict.empty }, cmd )
+    ( { updatedModel | debounceId = newDebounceId, suggestions = suggestions, showSuggestions = showSuggestions, warnings = Dict.empty, skipVerification = False }, cmd )
 
 
 

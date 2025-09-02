@@ -1093,6 +1093,7 @@ data AddressData =
         , adCountry :: Country
         , adPhoneNumber :: T.Text
         , adIsDefault :: Bool
+        , adSkipVerification :: Bool
         } deriving (Eq, Show)
 
 instance FromJSON AddressData where
@@ -1110,6 +1111,7 @@ instance FromJSON AddressData where
             <*> v .: "country"
             <*> v .: "phoneNumber"
             <*> v .: "isDefault"
+            <*> v .: "skipVerification"
 
 instance ToJSON AddressData where
     toJSON address =
@@ -1126,6 +1128,7 @@ instance ToJSON AddressData where
             , "country" .= adCountry address
             , "phoneNumber" .= adPhoneNumber address
             , "isDefault" .= adIsDefault address
+            , "skipVerification" .= adSkipVerification address
             ]
 
 instance Validation AddressData where
@@ -1199,6 +1202,7 @@ toAddressData (Entity addressId address) =
         , adCountry = addressCountry address
         , adPhoneNumber = addressPhoneNumber address
         , adIsDefault = addressIsDefault address
+        , adSkipVerification = (addressType address) /= Shipping
         }
 
 -- | Transform an 'AddressData' into an Avalara Address.
