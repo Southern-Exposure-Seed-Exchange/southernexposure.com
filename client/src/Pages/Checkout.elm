@@ -2161,7 +2161,7 @@ summaryTableDesktop ({ items, charges } as checkoutDetails) creditString couponC
                         []
                     ]
                 , td []
-                    [ div [ class "font-weight-bold" ] [ Product.nameWithLotSize p.product p.variant ]
+                    [ div [ class "tw:line-clamp-1" ] [ Product.nameWithLotSize p.product p.variant ]
                     , small [ class "text-muted" ]
                         [ text <| "Item #" ++ p.product.baseSKU ++ p.variant.skuSuffix ]
                     ]

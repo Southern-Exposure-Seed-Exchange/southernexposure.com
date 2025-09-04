@@ -93,11 +93,23 @@ view route authStatus navigationData activeCategoryIds cartItemCount =
                 [ text category.name ]
 
         mobileOnlyItems =
-            [ mobileLink (PageDetails "about-us" Nothing) "About Us"
-            , mobileLink (PageDetails "growing-guides" Nothing) "Growing Guides"
+            [ hr [ class "tw:mt-[8px]! tw:mb-[4px]!" ] []
+            , mobileLink (PageDetails "about-us" Nothing) "About Us"
             , mobileLink (PageDetails "retail-stores" Nothing) "Retail Stores"
+            , mobileLink (PageDetails "growing-guides" Nothing) "Growing Guides"
+            , mobileLink (PageDetails "events" Nothing) "Events"
+            , mobileLink (PageDetails "fundraisers" Nothing) "Fundraisers"
+            , li
+                [ class "nav-item d-md-none" ]
+                [ a [ class "nav-link", href "/blog/", target "_blank" ]
+                    [ text "Blog" ]
+                ]
+            , mobileLink (PageDetails "links" Nothing) "Links"
+            , hr [ class "tw:mt-[8px]! tw:mb-[4px]!" ] []
+            , mobileLink (PageDetails "faq" Nothing) "FAQ"
+            , mobileLink (PageDetails "contact-us" Nothing) "Contact Us"
+            , hr [ class "tw:mt-[8px]! tw:mb-[4px]!" ] []
             , mobileLink QuickOrder "Quick Order"
-            , hr [] []
             ]
                 ++ authLinks
                 ++ [ hr [] [] ]

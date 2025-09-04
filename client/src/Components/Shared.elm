@@ -52,7 +52,7 @@ searchIcon : Html msg
 searchIcon =
     a
         [ class "tw:relative tw:p-[6px]! tw:cursor-pointer tw:group", href "/all-products" ]
-        [ searchSvgBig
+        [ IconButton.view searchSvgBig
         ]
 
 

@@ -1,6 +1,7 @@
 @import "~bootstrap/scss/functions"
 @import '~@fontsource-variable/inter/wght.css'
 
+
 /** Variables **/
 /* Set the height of the Site Logo & Title */
 $logo-height: 94px
@@ -38,9 +39,9 @@ $navbar-padding-x: 10px
 // $navbar-light-color: lighten($light-pale-tan, 10%)
 $navbar-light-color: $black-2
 $navbar-light-active-color: rgba(10, 89, 75, 1)
-$navbar-light-active-bg: darken($pink-2, 7.5%)
+$navbar-light-active-bg: rgba(77, 170, 154, 0.2)
 $navbar-light-hover-color: black
-$navbar-light-hover-bg: $pink-2
+$navbar-light-hover-bg: rgba(77, 170, 154, 0.2)
 $navbar-light-toggler-border-color: $light-pale-tan
 $navbar-light-toggler-icon-bg: str-replace(url("data:image/svg+xml;charset=utf8,%3Csvg viewBox='0 0 30 30' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath stroke='#{$light-pale-tan}' stroke-width='2' stroke-linecap='round' stroke-miterlimit='10' d='M4 7h22M4 15h22M4 23h22'/%3E%3C/svg%3E"), "#", "%23") !default;
 
@@ -211,7 +212,7 @@ body > div.container, body > nav.container
       /* Highlight an active item */
       a.active
         color: rgba(10, 89, 75, 1)
-        background-color: $pale-tan-accent
+        background-color: $navbar-light-active-bg
 
   .dropdown-item
     border-radius: 8px

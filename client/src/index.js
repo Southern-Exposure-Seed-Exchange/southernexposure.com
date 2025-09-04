@@ -197,7 +197,6 @@ app.ports.historyBack.subscribe(() => {
 });
 
 
-// Scroll horizontally
 app.ports.scrollLeftSmooth.subscribe(function({id, amount}) {
     var el = document.getElementById(id);
     if (el) {
@@ -207,6 +206,8 @@ app.ports.scrollLeftSmooth.subscribe(function({id, amount}) {
         });
     }
 });
+
+
 /** UTILITIES **/
 
 /* Parse an Int or return null */
@@ -252,4 +253,15 @@ function createOrUpdateMeta(name, content) {
     metaElement.setAttribute('content', content);
     document.head.appendChild(metaElement);
   }
+}
+
+/* Focus an element by id */
+/* Note: For some reason, webpack throw an error that, this is undefined. */
+if(app.ports.focus){
+  app.ports.focus.subscribe(function(id) {
+      const el = document.getElementById(id);
+      if (el) {
+        el.focus();
+      }
+  });
 }

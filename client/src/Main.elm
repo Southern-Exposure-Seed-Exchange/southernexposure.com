@@ -958,16 +958,19 @@ update msg ({ pageData, key, productListPage } as model) =
 
         AdvancedSearchMsg subMsg ->
             let
-                ( advancedSearchData, formActionType ) =
+                ( advancedSearchData, formActionType, cmd ) =
                     AdvancedSearch.update subMsg model.advancedSearchData
             in
             ( { model | advancedSearchData = advancedSearchData }
-            , case formActionType of
-                Search.SubmitForm ->
-                    Routing.newUrl key <| SearchResults advancedSearchData Pagination.default
+            , Cmd.batch
+                [ Cmd.map AdvancedSearchMsg cmd
+                , case formActionType of
+                    Search.SubmitForm ->
+                        Routing.newUrl key <| SearchResults advancedSearchData Pagination.default
 
-                Search.NoSubmitForm ->
-                    Cmd.none
+                    Search.NoSubmitForm ->
+                        Cmd.none
+                ]
             )
 
         CreateAccountMsg subMsg ->
