@@ -23,7 +23,7 @@ import Ports
 import RemoteData exposing (WebData)
 import Utils.Decode as Decode
 import Utils.Update exposing (nothingAndNoCommand)
-import Utils.View exposing (legendView, pageTitleView)
+import Utils.View exposing (icon, legendView, pageTitleView)
 
 
 
@@ -35,6 +35,7 @@ type alias Form =
     , password : String
     , passwordConfirm : String
     , errors : Api.FormErrors
+    , isLoading : Bool
     }
 
 
@@ -44,6 +45,7 @@ initial =
     , password = ""
     , passwordConfirm = ""
     , errors = Api.initialErrors
+    , isLoading = False
     }
 
 
@@ -104,7 +106,7 @@ update key msg form maybeSessionToken =
                 )
 
             else
-                ( { form | errors = Api.initialErrors }
+                ( { form | errors = Api.initialErrors, isLoading = True }
                 , Nothing
                 , createNewAccount form maybeSessionToken
                 )
@@ -113,7 +115,7 @@ update key msg form maybeSessionToken =
         SubmitResponse response ->
             case response of
                 RemoteData.Success (Ok ()) ->
-                    ( form
+                    ( { form | isLoading = False }
                     , Nothing
                     , Cmd.batch
                         [ Routing.newUrl key CreateAccountSuccess
@@ -123,19 +125,19 @@ update key msg form maybeSessionToken =
                     )
 
                 RemoteData.Success (Err errors) ->
-                    ( { form | errors = errors }
+                    ( { form | errors = errors, isLoading = False }
                     , Nothing
                     , Ports.scrollToErrorMessage
                     )
 
                 RemoteData.Failure error ->
-                    ( { form | errors = Api.apiFailureToError error }
+                    ( { form | errors = Api.apiFailureToError error, isLoading = False }
                     , Nothing
                     , Ports.scrollToErrorMessage
                     )
 
                 _ ->
-                    form |> nothingAndNoCommand
+                    { form | isLoading = False } |> nothingAndNoCommand
 
 
 createNewAccount : Form -> Maybe String -> Cmd Msg
@@ -171,7 +173,24 @@ view tagger model =
                     , signupInputs
                     , Form.genericErrorText (not <| Dict.isEmpty model.errors)
                     , Api.getErrorHtml "" model.errors
-                    , div [ class "tw:pb-[16px]" ] [ Button.view { defaultButton | label = "Register", type_ = Button.FormSubmit, padding = Button.Width "tw:w-full tw:lg:w-[160px]" } ]
+                    , div [ class "tw:pb-[16px]" ]
+                        [ if model.isLoading then
+                            Button.view
+                                { defaultButton
+                                    | label = ""
+                                    , type_ = Button.Disabled
+                                    , padding = Button.Width "tw:w-full tw:lg:w-[160px]"
+                                    , icon = Just <| icon "spinner fa-spin"
+                                }
+
+                          else
+                            Button.view
+                                { defaultButton
+                                    | label = "Register"
+                                    , type_ = Button.FormSubmit
+                                    , padding = Button.Width "tw:w-full tw:lg:w-[160px]"
+                                }
+                        ]
                     ]
                 ]
 

@@ -36,6 +36,7 @@ type alias Form =
     , remember : Bool
     , errors : Api.FormErrors
     , redirectTo : Maybe String
+    , isLoading : Bool
     }
 
 
@@ -46,6 +47,7 @@ initial =
     , remember = True
     , errors = Api.initialErrors
     , redirectTo = Nothing
+    , isLoading = False
     }
 
 
@@ -110,7 +112,11 @@ update key msg model maybeSessionToken =
                 |> nothingAndNoCommand
 
         SubmitForm redirectTo clearCart ->
-            ( { model | errors = Api.initialErrors, redirectTo = redirectTo }
+            ( { model
+                | errors = Api.initialErrors
+                , redirectTo = redirectTo
+                , isLoading = True
+              }
             , Nothing
             , login model maybeSessionToken clearCart
             )
@@ -146,10 +152,10 @@ update key msg model maybeSessionToken =
                     )
 
                 RemoteData.Success (Err errors) ->
-                    ( { model | errors = errors }, Nothing, Ports.scrollToTop )
+                    ( { model | errors = errors, isLoading = False }, Nothing, Ports.scrollToTop )
 
                 RemoteData.Failure error ->
-                    ( { model | errors = Api.apiFailureToError error }
+                    ( { model | errors = Api.apiFailureToError error, isLoading = False }
                     , Nothing
                     , Ports.scrollToTop
                     )
@@ -189,7 +195,24 @@ view tagger model redirectTo clearCart =
                     , loginInputs
                     , errorHtml
                     , rememberCheckbox
-                    , div [ class "tw:pb-[12px]" ] [ Button.view { defaultButton | label = "Login", type_ = Button.FormSubmit, padding = Button.Width "tw:w-full tw:lg:w-[160px]" } ]
+                    , div [ class "tw:pb-[12px]" ]
+                        [ if model.isLoading then
+                            Button.view
+                                { defaultButton
+                                    | label = ""
+                                    , type_ = Button.Disabled
+                                    , padding = Button.Width "tw:w-full tw:lg:w-[160px]"
+                                    , icon = Just <| icon "spinner fa-spin"
+                                }
+
+                          else
+                            Button.view
+                                { defaultButton
+                                    | label = "Login"
+                                    , type_ = Button.FormSubmit
+                                    , padding = Button.Width "tw:w-full tw:lg:w-[160px]"
+                                }
+                        ]
                     , div []
                         [ a
                             ([ class "tw:text-[14px] tw:opacity-60" ] ++ (routeLinkAttributes <| ResetPassword <| Just ""))
