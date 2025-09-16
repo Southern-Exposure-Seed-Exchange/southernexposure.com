@@ -1135,6 +1135,7 @@ getHelcimCheckoutToken authStatus maybeSessionToken cartInventoryNotifications s
                     Encode.object
                         [ ( "cartInventoryNotifications", encodeCartInventoryNotifications cartInventoryNotifications )
                         , ( "sessionToken", encodeMaybe Encode.string maybeSessionToken )
+                        , ( "shippingAddress", encodeAddress shippingAddress False )
                         , ( "skipAddressVerification", Encode.bool skipAddressVerification )
                         ]
             in
