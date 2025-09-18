@@ -19,8 +19,7 @@ var isPostgridProduction = process.env.POSTGRID_ENV === 'production';
 var helcimUrl = isHelcimProduction ? "https://southern-exposure-seed-exchange.myhelcim.com" : "https://test-southern-exposure-seed-exchange.myhelcim.com";
 
 const GA_MEASUREMENT_ID = process.env.GA_MEASUREMENT_ID;
-// TODO: put actual keys here
-const POSTGRID_API_KEY = process.env.POSTGRID_API_KEY || (isPostgridProduction ? "<REPLACE ME WITH THE REAL KEY>" : "live_pk_apy2XeQfGkproRtzeNth6s");
+const POSTGRID_API_KEY = process.env.POSTGRID_API_KEY || (isPostgridProduction ? "live_pk_ewm39rmWfJJ6zLUnShubgv" : "test_pk_qEwkqHZgmPL1h3xBkwyZ7T");
 
 module.exports = {
   mode: isProduction ? 'production' : 'development',
