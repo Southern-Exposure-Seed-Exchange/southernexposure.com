@@ -20,7 +20,7 @@ import Data.Text.Encoding (decodeUtf8)
 import Data.Version (showVersion)
 import Database.Persist.Postgresql
 import Network.Wai (Request, requestMethod, rawPathInfo, rawQueryString)
-import Network.Wai.Middleware.RequestLogger (logStdoutDev, logStdout)
+import Network.Wai.Middleware.RequestLogger (logStdoutDev)
 import System.Directory (getCurrentDirectory, createDirectoryIfMissing)
 import System.Environment (lookupEnv)
 import System.Log.FastLogger
