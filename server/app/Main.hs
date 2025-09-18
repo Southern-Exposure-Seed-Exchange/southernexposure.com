@@ -225,7 +225,7 @@ main = do
         httpLogger env =
             case env of
             Production ->
-                logStdout
+                logStdoutDev
             Development ->
                 logStdoutDev
 
