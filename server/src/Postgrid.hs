@@ -27,7 +27,7 @@ runPostgrid
 runPostgrid clientFunc req mbCachedApiEndpoint = do
     apiKey <- asks getPostgridApiKey
     forM apiKey $ \key -> do
-        logger <- asks getHelcimLogger
+        logger <- asks getPostgridLogger
         log_ logger encode req
         res <- case mbCachedApiEndpoint of
             Nothing ->
