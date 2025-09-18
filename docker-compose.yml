@@ -11,6 +11,7 @@ services:
       - MEDIA=/home/sese/media
       - LOGS=/home/sese/backend-logs
       - BASE_URL=${BASE_URL}
+      - AVATAX_STATUS=${AVATAX_STATUS}
       - AVATAX_ENVIRONMENT=${AVATAX_ENVIRONMENT}
       - AVATAX_COMPANY_CODE=${AVATAX_COMPANY_CODE}
       - AVATAX_ACCOUNT_ID_FILE=/run/secrets/avatax_account_id
