@@ -30,6 +30,10 @@ RUN npm --prefix client install
 COPY client ./client
 ARG HELCIM_ENV
 ENV HELCIM_ENV=$HELCIM_ENV
+ARG POSTGRID_ENV
+ENV POSTGRID_ENV=$POSTGRID_ENV
+ARG GA_MEASUREMENT_ID
+ENV GA_MEASUREMENT_ID=$GA_MEASUREMENT_ID
 RUN npm --prefix client run build
 
 FROM base AS backend-builder
