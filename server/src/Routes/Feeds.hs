@@ -11,8 +11,7 @@ module Routes.Feeds
 import Control.Concurrent.STM (readTVarIO)
 import Control.Monad (forM)
 import Control.Monad.Reader (asks, liftIO)
-import Data.Maybe (listToMaybe)
-import Data.Monoid ((<>))
+import Data.Maybe (fromMaybe, listToMaybe)
 import Data.Scientific (Scientific, scientific)
 import Data.Time (UTCTime, getCurrentTime)
 import Database.Persist ((==.), (>=.), (<=.), Entity(..), selectList)
@@ -23,7 +22,7 @@ import Web.Sitemap.Gen
     )
 
 import Cache (Caches(..), CategoryPredecessorCache, queryCategoryPredecessorCache)
-import Config (Config(getCaches))
+import Config (Config(getCaches, getBaseUrl))
 import Models
 import Models.Fields (Milligrams(..), LotSize(..), renderLotSize, toDollars)
 import Routes.Utils (XML, activeVariantExists)
@@ -32,7 +31,7 @@ import Server (App, AppSQL, runDB, readCache)
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.Map.Strict as M
 import qualified Data.Text as T
-import qualified Database.Esqueleto as E
+import qualified Database.Esqueleto.Experimental as E
 import qualified MerchantFeed as GMerch
 
 
@@ -79,20 +78,18 @@ sitemapRoute = do
             , "quick-order"
             , "cart"
             ]
+    base <- asks getBaseUrl
     let urls =
             map makeCategoryUrl categories
                 <> map makeProductUrl products
                 <> map makePageUrl pages
                 <> map makeUrl staticPages
-        -- TODO: Move our URL into a Config field
-        base =
-            "https://www.southernexposure.com"
         urlsWithBase =
             map (\url -> url { sitemapLocation = base <> sitemapLocation url }) urls
     return $ renderSitemap $ Sitemap urlsWithBase
   where
     getActiveProducts :: AppSQL [Entity Product]
-    getActiveProducts = E.select $ E.from $ \p -> do
+    getActiveProducts = E.select $ E.from E.table >>= \p -> do
         E.where_ $ activeVariantExists p
         return p
     makeCategoryUrl :: Entity Category -> SitemapUrl
@@ -136,10 +133,9 @@ sitemapRoute = do
 type SitemapIndexRoute =
           Get '[XML] LBS.ByteString
 
-sitemapIndexRoute :: Monad m => m LBS.ByteString
-sitemapIndexRoute =
-    let baseUrl = "https://www.southernexposure.com"
-    in
+sitemapIndexRoute :: App LBS.ByteString
+sitemapIndexRoute = do
+    baseUrl <- asks getBaseUrl
     return $ renderSitemapIndex $ SitemapIndex
         [ IndexEntry { indexLocation = baseUrl <> "/sitemap.xml", indexLastModified = Nothing }
         , IndexEntry { indexLocation = baseUrl <> "/blog/sitemap.xml.gz", indexLastModified = Nothing }
@@ -154,6 +150,7 @@ type MerchantFeedRoute =
 
 merchantFeedRoute :: App LBS.ByteString
 merchantFeedRoute = do
+    baseUrl <- asks getBaseUrl
     currentTime <- liftIO getCurrentTime
     isCheckoutDisabled <- readCache $ settingsDisableCheckout . getSettingsCache
     (variantSales, categorySales, products, categories) <- runDB $ do
@@ -167,8 +164,9 @@ merchantFeedRoute = do
             , CategorySaleEndDate >=. currentTime
             ]
             []
-        psVs <- E.select $ E.from $ \(p `E.InnerJoin` v) -> do
-            E.on $ v E.^. ProductVariantProductId E.==. p E.^. ProductId
+        psVs <- E.select $ do
+            (p E.:& v) <- E.from $ E.table `E.innerJoin` E.table
+                `E.on` \(p E.:& v) -> v E.^. ProductVariantProductId E.==. p E.^. ProductId
             E.where_ $ v E.^. ProductVariantIsActive
             return (p, v)
         psVsCs <- forM psVs $ \(p, v) -> do
@@ -178,26 +176,25 @@ merchantFeedRoute = do
         return (vs, catSale, psVsCs, cs)
     let categoryMap = foldr (\(Entity cId c) m -> M.insert cId c m) M.empty categories
     categoryCache <- asks getCaches >>= fmap getCategoryPredecessorCache . liftIO . readTVarIO
-    let convert = convertProduct isCheckoutDisabled categoryCache categoryMap variantSales categorySales
+    let convert = convertProduct baseUrl isCheckoutDisabled categoryCache categoryMap variantSales categorySales
     return $ GMerch.renderFeed $ map convert products
 
 convertProduct
-    :: Bool
+    :: T.Text
+    -> Bool
     -> CategoryPredecessorCache
     -> M.Map CategoryId Category
     -> [ProductSale]
     -> [CategorySale]
     -> (Entity Product, Entity ProductVariant, [Entity ProductToCategory])
     -> GMerch.Product
-convertProduct checkoutDisabled predCache categoryMap prodSales catSales (Entity _ prod, Entity variantId variant, categories) =
+convertProduct baseUrl checkoutDisabled predCache categoryMap prodSales catSales (Entity _ prod, Entity variantId variant, categories) =
     let
         fullSku =
             productBaseSku prod <> productVariantSkuSuffix variant
         lotSize =
             maybe "" (\ls -> ", " <> renderLotSize ls)
                 $ productVariantLotSize variant
-        baseUrl =
-            "https://www.southernexposure.com"
         productUrl =
             baseUrl <> "/products/"
         imageUrl =
@@ -221,7 +218,7 @@ convertProduct checkoutDisabled predCache categoryMap prodSales catSales (Entity
         , pTitle = productName prod <> lotSize
         , pDescription = productLongDescription prod
         , pLink = productUrl <> productSlug prod <> "/" <> "?variant=" <> T.pack (show $ E.fromSqlKey variantId)
-        , pImageLink = imageUrl <> productImageUrl prod
+        , pImageLink = imageUrl <> fromMaybe "" (listToMaybe $ productImageUrls prod)
         , pProductType = categoryHierarchy
         , pGoogleProductType = Just googleCategory
         , pPriceData =

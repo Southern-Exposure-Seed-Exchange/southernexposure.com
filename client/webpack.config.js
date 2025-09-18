@@ -13,13 +13,13 @@ var OptimizeCSSAssetsPlugin = require('optimize-css-assets-webpack-plugin');
 var RobotsTxtPlugin = require('robotstxt-webpack-plugin');
 
 var isProduction = process.env.NODE_ENV === 'production';
-var isStripeProduction = process.env.STRIPE_ENV === 'production';
+var isHelcimProduction = process.env.HELCIM_ENV === 'production';
+var isPostgridProduction = process.env.POSTGRID_ENV === 'production';
 
-var STRIPE_API_KEY = isStripeProduction
-  ? 'pk_live_TBFfasfS7K7wBmYGrsbetA4W' : 'pk_test_F6Mr5XLKEDMn4rUsmsv5aqvr';
+var helcimUrl = isHelcimProduction ? "https://southern-exposure-seed-exchange.myhelcim.com" : "https://test-southern-exposure-seed-exchange.myhelcim.com";
 
-const GA_MEASUREMENT_ID = 'UA-5070189-1';
-
+const GA_MEASUREMENT_ID = process.env.GA_MEASUREMENT_ID;
+const POSTGRID_API_KEY = process.env.POSTGRID_API_KEY || (isPostgridProduction ? "live_pk_ewm39rmWfJJ6zLUnShubgv" : "test_pk_qEwkqHZgmPL1h3xBkwyZ7T");
 
 module.exports = {
   mode: isProduction ? 'production' : 'development',
@@ -27,7 +27,6 @@ module.exports = {
     styles: [
       './src/styles.sass',
       'bootstrap',
-      'font-awesome-sass-loader',
     ],
     app: [
       './src/index.js',
@@ -42,7 +41,8 @@ module.exports = {
 
   optimization: {
     runtimeChunk: 'single',
-    minimizer: [new TerserJSPlugin({}), new OptimizeCSSAssetsPlugin({}),],
+    minimizer: [new TerserJSPlugin({})],
+    minimize: isProduction,
     splitChunks: {
       chunks: 'all',
       automaticNameDelimiter: '.',
@@ -87,8 +87,6 @@ module.exports = {
         use: [
           { loader: MiniCssExtractPlugin.loader,
             options: {
-              hmr: !isProduction,
-              reloadAll: true,
             },
           }, 'css-loader', 'postcss-loader', 'sass-loader'
         ],
@@ -138,7 +136,7 @@ module.exports = {
 
       ],
       scripts:
-        [ 'https://checkout.stripe.com/checkout.js',
+        [ 'https://secure.helcim.app/helcim-pay/services/start.js',
           { "src": 'https://www.googletagmanager.com/gtag/js?id=' + GA_MEASUREMENT_ID,
             "async": true
           }
@@ -157,19 +155,20 @@ module.exports = {
       hash: false,
       baseHref: '/',
     }),
-    new CopyWebpackPlugin([
+    new CopyWebpackPlugin({patterns: [
       { from: 'src/static',
         to: 'static',
-        ignore: ['PoorRichard.ttf'],
+        globOptions: {ignore: ['PoorRichard.ttf']},
       },
-    ]),
+    ],}),
     new webpack.ProvidePlugin({
       $: 'jquery',
       jQuery: 'jquery',
     }),
     new webpack.DefinePlugin({
       GA_MEASUREMENT_ID: JSON.stringify(GA_MEASUREMENT_ID),
-      STRIPE_API_KEY: JSON.stringify(STRIPE_API_KEY),
+      helcimUrl: JSON.stringify(helcimUrl),
+      POSTGRID_API_KEY: JSON.stringify(POSTGRID_API_KEY),
     }),
     new SriWebpackPlugin({
       hashFuncNames: ['sha512'],
@@ -196,10 +195,10 @@ module.exports = {
       'upgrade-insecure-requests': [],
       'default-src': ["'self'", "data:"],
       'object-src': "'none'",
-      'connect-src': ["'self'", "https://checkout.stripe.com"],
-      'frame-src': ["'self'", "https://checkout.stripe.com", "https://www.farmraiser.com"],
-      'script-src': ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://www.googletagmanager.com", "https://www.google-analytics.com/", "https://checkout.stripe.com"],
-      'img-src': ["'self'", "data:", "https://www.googletagmanager.com", "https://www.google-analytics.com/", "https://stats.g.doubleclick.net/", "https://www.google.com", "https://*.stripe.com"],
+      'connect-src': ["'self'", "https://api.helcim.app", "https://www.google-analytics.com", "https://www.googletagmanager.com", "https://api.postgrid.com"],
+      'frame-src': ["'self'", "https://www.farmraiser.com", "https://secure.helcim.app"],
+      'script-src': ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://www.googletagmanager.com", "https://www.google-analytics.com/"],
+      'img-src': ["'self'", "data:", "https://www.googletagmanager.com", "https://www.google-analytics.com/", "https://stats.g.doubleclick.net/", "https://www.google.com"],
       'font-src': ["'self'", "data:", "https://fonts.gstatic.com"],
       'style-src': ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
     }, {
@@ -221,8 +220,8 @@ module.exports = {
       policy: [
         { userAgent: "*",
           crawlDelay: 2,
-          allow: isStripeProduction ? "/" : false,
-          disallow: isStripeProduction ? ["/admin"] : "/"
+          allow: isProduction ? "/" : false,
+          disallow: isProduction ? ["/admin"] : "/"
         },
       ],
       sitemap: "https://www.southernexposure.com/sitemap-index.xml",
@@ -231,22 +230,19 @@ module.exports = {
   ],
 
   devServer: {
-    inline: true,
     host: '0.0.0.0',
-    disableHostCheck: true,
+    allowedHosts: 'all',
     historyApiFallback: true,
-    stats: {
-      colors: true,
-      chunks: false,
-    },
     proxy: {
       '/api/*': {
-        target: 'http://localhost:3000',
+        target: 'http://127.0.0.1:3000',
+        secure: false,
         changeOrigin: true,
         pathRewrite: { "^/api/": "/" },
       },
       '/media/*': {
-        target: 'http://localhost:3000',
+        target: 'http://127.0.0.1:3000',
+        secure: false,
         changeOrigin: true,
       },
       '/blog/*': {
@@ -258,6 +254,10 @@ module.exports = {
         changeOrigin: true,
       }
     },
+    https: {
+      key: '../local.southernexposure.com+2-key.pem',
+      cert: '../local.southernexposure.com+2.pem',
+    }
   },
 
 }

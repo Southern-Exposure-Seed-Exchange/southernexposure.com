@@ -1,8 +1,10 @@
 @import "~bootstrap/scss/functions"
+@import '~@fontsource-variable/inter/wght.css'
+
 
 /** Variables **/
 /* Set the height of the Site Logo & Title */
-$logo-height: 120px
+$logo-height: 94px
 
 /* Colors */
 $dark-green: #158312
@@ -13,6 +15,10 @@ $pale-tan-accent: lighten($pale-tan, 18%)
 $orange-yellow: #FFCC44
 $brown: #A32E2E
 
+/* New color */
+$pink-2: #f6eee4
+$black-2: #1E0C03
+
 /* Theme Colors */
 $blue: #245B9F
 $green: $dark-green
@@ -22,23 +28,25 @@ $red: #C20000
 /* Bootstrap Overrides */
 
 $body-bg: lighten($light-pale-tan, 14.5%)
-$body-color: $dark-brown
-$link-color: $dark-green
+$body-color: $black-2
+$link-color: $black-2
 
 $container-max-widths: ( sm: 570px, md: 762px, lg: 995px, xl: 1180px)
 
 $navbar-padding-y: 2px
 $navbar-padding-x: 10px
 
-$navbar-light-color: lighten($light-pale-tan, 10%)
-$navbar-light-active-color: white
-$navbar-light-active-bg: darken($dark-green, 7.5%)
-$navbar-light-hover-color: $orange-yellow
-$navbar-light-hover-bg: $dark-green
+// $navbar-light-color: lighten($light-pale-tan, 10%)
+$navbar-light-color: $black-2
+$navbar-light-active-color: rgba(10, 89, 75, 1)
+$navbar-light-active-bg: rgba(77, 170, 154, 0.2)
+$navbar-light-hover-color: black
+$navbar-light-hover-bg: rgba(77, 170, 154, 0.2)
 $navbar-light-toggler-border-color: $light-pale-tan
 $navbar-light-toggler-icon-bg: str-replace(url("data:image/svg+xml;charset=utf8,%3Csvg viewBox='0 0 30 30' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath stroke='#{$light-pale-tan}' stroke-width='2' stroke-linecap='round' stroke-miterlimit='10' d='M4 7h22M4 15h22M4 23h22'/%3E%3C/svg%3E"), "#", "%23") !default;
 
-$nav-pills-link-active-bg: $dark-green
+$nav-pills-link-active-color: $black-2
+$nav-pills-link-active-bg: $pink-2
 
 $table-bg: lighten($light-pale-tan, 12.5%)
 $table-accent-bg: $pale-tan-accent
@@ -47,11 +55,26 @@ $input-color: #333
 
 $hr-border: #C0C0C0
 
-$breadcrumb-padding-y: 0.2rem
-$breadcrumb-bg: $pale-tan-accent
+$breadcrumb-padding-y: 0px
+$breadcrumb-padding-x: 0px
+$breadcrumb-bg: white
+$breadcrumb-font-size: 14px
+$breadcrumb-active-color: rgba(30, 12, 3, 0.6)
+
+// Form input variables
+$input-border-color: #E8E7E6
+$input-border-radius: 8px
+$input-placeholder-color: rgba(187, 182, 179, 1)
+
+$grid-breakpoints: (xs: 0,sm: 992px,md: 992px,lg: 992px,xl: 1200px)
 
 @import "~bootstrap/scss/variables"
 @import "~bootstrap/scss/bootstrap"
+
+@mixin hover-focus()
+  &:hover,
+  &:focus
+    @content
 
 /** Fonts **/
 @font-face
@@ -68,17 +91,36 @@ div#site-title h1.media-heading
 
 /* Set Header & Nav text to a Serif font */
 h1, h2, h3, h4, h5, h6, .h1, .h2, .h3, .h4, .h5, .h6, #category-navbar, legend, .nav-pills
-  font-family: 'Crimson Text', Georgia, serif
+  // font-family: 'Crimson Text', Georgia, serif
+  font-family: 'Inter Variable', Georgia, serif
   font-weight: 600
+  margin-bottom: 0px
 
+/* Set p*/
+p
+  margin-bottom: 0px
+
+address
+  margin-bottom: 0px
+
+hr
+  margin: 0px
+
+a, a:hover
+  text-decoration: none
+
+.poor-richard
+  font-family: 'Poor Richard', 'Glass Antiqua', Helvetica, Arial, sans-serif
 
 /** Site Layout **/
 /* Set our background image */
 body
-  background-color: $body-color
-  background-image: linear-gradient(rgba(0,0,0,0.25), rgba(0,0,0,0.25)), url('./static/img/sese_background.jpg')
-  background-attachment: fixed
-  background-size: contain
+  font-family: 'Inter Variable', serif
+  background-color: white
+  // transition: initial
+  // background-image: linear-gradient(rgba(0,0,0,0.25), rgba(0,0,0,0.25)), url('./static/img/sese_background.jpg')
+  // background-attachment: fixed
+  // background-size: contain
 
 /* Set the background color of the body content */
 body > div.container, body > nav.container
@@ -87,25 +129,25 @@ body > div.container, body > nav.container
 #site-header
   /* Set logo height & spacing */
   #site-logo
-    height: $logo-height - 10px
-    margin-top: 5px
-    margin-bottom: 5px
-    +media-breakpoint-only(xs)
-      height: calc(#{$logo-height / 3} - 10px)
-    +media-breakpoint-only(sm)
-      height: calc(#{$logo-height / 2} - 10px)
+    // height: $logo-height + 120px
+    // margin-top: 5px
+    // margin-bottom: 5px
+    // +media-breakpoint-only(xs)
+    //   height: calc(#{$logo-height / 3} - 10px)
+    // +media-breakpoint-only(sm)
+    //   height: calc(#{$logo-height / 2} - 10px)
 
   /* Don't color or decorate the site title link */
   #site-title
-    a, a:hover
-      color: $body-color
-      text-decoration: none
-      +media-breakpoint-only(xs)
-        font-size: 1.5rem
-      +media-breakpoint-between(sm, md)
-        font-size: 2rem
-    +media-breakpoint-down(sm)
-      flex: initial
+  //   a, a:hover
+  //     color: $body-color
+  //     text-decoration: none
+  //     +media-breakpoint-only(xs)
+  //       font-size: 1.5rem
+  //     +media-breakpoint-between(sm, md)
+  //       font-size: 2rem
+  //   +media-breakpoint-down(sm)
+  //     flex: initial
 
   /* Style the Quick Links */
   #quick-links
@@ -122,16 +164,14 @@ body > div.container, body > nav.container
         text-decoration: none
         background-color: darken($pale-tan-accent, 10%)
 
-
 #navigation
   /* Decrease Spacing & Close Gap Below Navbar */
-  padding-bottom: 10px
+  // padding-bottom: 10px
   /* Round the Corners of the Navbar */
   nav
     border-radius: 4px
     +media-breakpoint-down(sm)
-      padding-top: 0.25rem
-      padding-bottom: 0.25rem
+      padding: 0
   /* Color the mobile navbar buttons */
   .navbar-toggler
     color: $light-pale-tan
@@ -140,32 +180,50 @@ body > div.container, body > nav.container
     &, .dropdown-menu
       /* De-emphasize */
       font-weight: normal
+    .nav-link:hover
+      color: rgba(29, 127, 110, 1)
+    .nav-link:active
+      color: rgba(10, 89, 75, 1)
     /* Space Out Navbar Links */
     .nav-link
-      padding: 0.75rem 1rem
+      padding: 12px 16px
+      +media-breakpoint-up(lg)
+        padding: 32px 20px
     /* Darken the Background of Active Nav Items */
     .active
-      background-color: $navbar-light-active-bg
+      // background-color: $navbar-light-active-bg
+      // text-decoration: underline
     .dropdown-menu
-      /* Increase font size */
-      font-size: 1.2rem
-      /* Remove corner rounding from top corners */
-      border-top-left-radius: 0
-      border-top-right-radius: 0
+      border-radius: 0px
+      border: 0
+      box-shadow: 0 1px 2px 0 rgba(16, 24, 40, 0.05)
+      top: 70px
+      padding: 0px 12px
+      z-index: 3
+      +media-breakpoint-up(lg)
+        padding: 12px 12px
+        border-radius: 16px
+        border: 1px solid #E8E7E6
 
       /* Highlight a hovered or clicked item */
       a:hover, a:active
-        color: white
+        color: $black-2
         background-color: $navbar-light-hover-bg
       /* Highlight an active item */
       a.active
-        color: black
-        background-color: $pale-tan-accent
+        color: rgba(10, 89, 75, 1)
+        background-color: $navbar-light-active-bg
+
+  .dropdown-item
+    border-radius: 8px
+    padding: 12px 20px
+    width: auto
 
   /* Properly space multi-column Nav dropdown menus */
   .multi-column-dropdown
     .dropdown-item
-      padding: 0.25rem 1.5rem
+      border-radius: 8px
+      padding: 12px 20px
       width: auto
     +media-breakpoint-up(md)
       min-width: 650px
@@ -181,11 +239,15 @@ body > div.container, body > nav.container
       border-radius: 0
 
 #breadcrumbs
-  padding-bottom: 0.5rem
-  +media-breakpoint-up(md)
-    padding-bottom: 1rem
+  // padding-bottom: 0.5rem
+  // +media-breakpoint-up(md)
+  //   padding-bottom: 1rem
 
 #sidebar
+  .nav-link
+    font-size: 1.1em
+  &, &:hover, &:active
+    color: $black-2
   .nav-pills
     font-size: 1.1em
   .icon-legend
@@ -194,7 +256,8 @@ body > div.container, body > nav.container
         height: 1.25rem
       &, &:hover, &:active
         /* Don't differentiate the active & hover states from the normal state */
-        color: $body-color
+        // color: $body-color
+        color: $black-2
         text-decoration: none
       &:hover, &:active
         /* Color the backgorund on hover instead */
@@ -206,14 +269,6 @@ body > div.container, body > nav.container
     /* Reduce padding inside of card */
     .card-body
       padding: 0.75rem
-
-/* The entire footer background should match the color of the table stripes */
-#footer
-  padding: 0
-  footer
-    padding: 0 15px
-    background-color:  $light-pale-tan
-
 
 /** General Elements **/
 
@@ -258,10 +313,29 @@ body > div.container, body > nav.container
   left: 0
   height: 100%
   width: 100%
-  background: linear-gradient(rgba($black, 0.6), rgba($black, 0.6))
-  transition: opacity 0.3s ease-in
+  background: linear-gradient(rgba(black, 0.3), rgba(black, 0.3))
+  transition: opacity 0.1s ease-in
   z-index: 999
   color: $white
+  &.hidden
+    opacity: 0
+    pointer-events: none
+    // z-index: -999
+
+.card-page-overlay
+  display: flex
+  flex-direction: column
+  align-items: center
+  justify-content: center
+  position: fixed
+  top: 0
+  left: 0
+  height: 100%
+  width: 100%
+  background: linear-gradient(rgba($black-2, 0.6), rgba($black-2, 0.6))
+  transition: opacity 0.3s ease-in
+  z-index: 999
+  color: $dark-brown
   &.hidden
     opacity: 0
     z-index: -999
@@ -296,7 +370,6 @@ body > div.container, body > nav.container
     cursor: pointer
     top: 2.5%
     right: 2.5%
-
 
 /** Product Details **/
 
@@ -352,7 +425,6 @@ h1.product-details-title
     width: 8rem
     text-align-last: center
 
-
 /** Category Details **/
 
 .products-table
@@ -363,7 +435,7 @@ h1.product-details-title
       text-decoration: none
   /* Reduce height of attribute icons */
   h3 img
-    height: 1.25rem
+      height: 1.25rem
   /* Restrict width of product image column */
   .row-product-image img
     max-width: 100px
@@ -403,16 +475,15 @@ h1.product-details-title
   +media-breakpoint-down(sm)
     width: 100%
 
-nav.products-pagination
-  /* Center pagination links on mobile */
-  margin-left: auto
-  margin-right: auto
-  /* Add spacing & increase size on mobile */
-  +media-breakpoint-down(sm)
-    margin-bottom: 1rem
-    a.page-link
-      font-size: 1.1rem
-
+// nav.products-pagination
+//   /* Center pagination links on mobile */
+//   margin-left: auto
+//   margin-right: auto
+//   /* Add spacing & increase size on mobile */
+//   +media-breakpoint-down(sm)
+//     margin-bottom: 1rem
+//     a.page-link
+//       font-size: 1.1rem
 
 /** Advanced Search **/
 
@@ -422,7 +493,6 @@ nav.products-pagination
       height: 1.2em
       margin-right: 0.25rem
       margin-bottom: 0.2rem
-
 
 /** Cart Details **/
 
@@ -447,8 +517,6 @@ nav.products-pagination
     width: 100%
     margin-bottom: 1rem
 
-
-
 /** Quick Order **/
 
 .quick-order-table
@@ -459,7 +527,6 @@ nav.products-pagination
     width: 3.9rem
   td.item-number
     width: 14rem
-
 
 /** Checkout **/
 
@@ -485,14 +552,10 @@ tr.total-row-coupon-input
       max-width: 10rem
   td
     vertical-align: middle
-  +media-breakpoint-only(xs)
-    td:first-of-type > div
-      display: none
 
 tr.checkout-coupon-line
   td
     vertical-align: middle
-
 
 /** My Account **/
 
@@ -503,7 +566,6 @@ tr.checkout-coupon-line
     border-bottom: 1px solid $gray-300
     &:first-of-type
       border-top: 1px solid $gray-300
-
 
 /** Order Details **/
 
@@ -521,12 +583,11 @@ tr.checkout-coupon-line
   table
     margin-top: 0.5rem
 
-
 /** Admin Site **/
 
 // Hide the Background Image
 body > div.admin
-  background-color: white
+    background-color: white
 
 div.admin#navigation
   // Space Out Header & Nav
@@ -592,3 +653,25 @@ div.admin#navigation
   // Make dashboard card headers match the table headers
   .card-header
     background-color: $table-bg
+
+a.unlink
+  color: inherit
+
+a.unlink:hover
+  color: inherit
+
+.form-control
+  box-shadow: 0 1px 2px 0 rgba(16, 24, 40, 0.05)
+
+/* Chrome, Safari, Edge, Opera */
+input.no-arrow::-webkit-outer-spin-button,
+input.no-arrow::-webkit-inner-spin-button
+  -webkit-appearance: none
+  margin: 0
+
+/* Firefox */
+input.no-arrow[type=number]
+  -moz-appearance: textfield
+
+@import "./style/tailwind-output.css"
+@import "./style/fontawesome/css/all.css"

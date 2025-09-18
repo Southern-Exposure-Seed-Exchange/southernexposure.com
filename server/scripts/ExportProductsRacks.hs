@@ -2,24 +2,25 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE RecordWildCards #-}
-{-| Export Product SKUs, Names, & Categories. -}
+{- Export Product SKUs, Names, & Categories. -}
 import Control.Monad.Logger (runNoLoggingT)
 import Data.Csv (ToNamedRecord, DefaultOrdered(..), encodeDefaultOrderedByName)
 import Data.List (sortOn)
-import Data.Monoid ((<>))
+import Data.Maybe (fromMaybe, listToMaybe)
 import Data.Time (formatTime, defaultTimeLocale)
 import Database.Persist
 import Database.Persist.Postgresql
-    ( ConnectionPool, SqlPersistT, createPostgresqlPool, runSqlPool
+    ( ConnectionPool, SqlPersistT, runSqlPool
     )
 import GHC.Generics (Generic)
 
 import Models
 import Models.Fields
+import Utils (makeSqlPool)
 
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.Text as T
-import qualified Database.Esqueleto as E
+import qualified Database.Esqueleto.Experimental as E
 
 main :: IO ()
 main = do
@@ -28,13 +29,19 @@ main = do
 
 connectToPostgres :: IO ConnectionPool
 connectToPostgres =
-    runNoLoggingT $ createPostgresqlPool "dbname=sese-website" 1
+    runNoLoggingT $ makeSqlPool 1
 
 getProductData :: SqlPersistT IO [(Entity ProductVariant, Entity Product, Maybe (Entity SeedAttribute), E.Value T.Text)]
-getProductData = E.select $ E.from $ \(v `E.InnerJoin` p `E.InnerJoin` c `E.LeftOuterJoin` sa) -> do
-    E.on $ sa E.?. SeedAttributeProductId E.==. E.just (p E.^. ProductId)
-    E.on $ c E.^. CategoryId E.==. p E.^. ProductMainCategory
-    E.on $ v E.^. ProductVariantProductId E.==. p E.^. ProductId
+getProductData = E.select $ do 
+    (v E.:& p E.:& c E.:& sa) <- E.from $ E.table
+        `E.innerJoin` E.table 
+            `E.on` (\(v E.:& p) -> v E.^. ProductVariantProductId E.==. p E.^. ProductId)
+        `E.innerJoin` E.table 
+            `E.on` (\(_ E.:& p E.:& c) -> c E.^. CategoryId E.==. p E.^. ProductMainCategory)
+        `E.leftJoin` E.table 
+            `E.on` (\(_ E.:& p E.:& _ E.:& sa) -> 
+                sa E.?. SeedAttributeProductId E.==. E.just (p E.^. ProductId))
+    
     E.where_ $ v E.^. ProductVariantIsActive E.==. E.val True
     return (v, p, sa, c E.^. CategoryName)
 
@@ -71,7 +78,7 @@ makeExportData (Entity _ ProductVariant {..}, Entity _ Product {..}, maybeAttrib
         , price = formatCents productVariantPrice
         , lotSize = maybe "" renderLotSize productVariantLotSize
         , description = productLongDescription
-        , imageUrl = "https://southernexposure.com/media/products/originals/" <> productImageUrl
+        , imageUrl = "https://southernexposure.com/media/products/originals/" <> fromMaybe "" (listToMaybe productImageUrls)
         , isOrganic = getStatus seedAttributeIsOrganic maybeAttribute
         , isHeirloom = getStatus seedAttributeIsHeirloom maybeAttribute
         , isSmallGrower = getStatus seedAttributeIsSmallGrower maybeAttribute

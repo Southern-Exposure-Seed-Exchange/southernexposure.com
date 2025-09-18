@@ -12,7 +12,6 @@ import Control.Monad (unless)
 import Control.Monad.Trans (lift, liftIO)
 import Data.Aeson ((.=), (.:), ToJSON(..), FromJSON(..), object, withObject)
 import Data.Maybe (catMaybes)
-import Data.Monoid ((<>))
 import Data.Time (LocalTime, TimeZone, getCurrentTimeZone, localTimeToUTC)
 import Database.Persist
     ( Entity(..), SelectOpt(Desc), Update, selectList, insert, get, update
@@ -32,7 +31,7 @@ import Validation (Validation(..))
 
 import qualified Data.Text as T
 import qualified Data.Map.Strict as M
-import qualified Database.Esqueleto as E
+import qualified Database.Esqueleto.Experimental as E
 import qualified Validation as V
 
 
@@ -102,8 +101,10 @@ instance ToJSON SaleVariantData where
 
 getProductsAndVariants :: AppSQL [(Entity ProductVariant, Entity Product)]
 getProductsAndVariants =
-    E.select $ E.from $ \(v `E.InnerJoin` p) -> do
-        E.on $ v E.^. ProductVariantProductId E.==. p E.^. ProductId
+    E.select $ do
+        (v E.:& p) <- E.from $ E.table `E.innerJoin` E.table
+            `E.on` \(v E.:& p) -> v E.^. ProductVariantProductId E.==. p E.^. ProductId
+        E.where_ (p E.^. ProductDeleted E.==. E.val False)
         return (v, p)
 
 toVariantData :: Entity ProductVariant -> Entity Product -> SaleVariantData

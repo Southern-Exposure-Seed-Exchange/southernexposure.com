@@ -7,7 +7,6 @@ it's own module due to the extraneous vertical height of our XML generator
 module StoneEdgeFixtures where
 
 import qualified Data.ByteString as BS
-import Data.Monoid ((<>))
 import qualified Data.Text as T
 import Data.Text.Encoding (encodeUtf8, decodeUtf8)
 import Text.RawString.QQ (r)
@@ -245,7 +244,162 @@ orderOtherDataXml =
 ><Comments
 >Long, Multiline
 Customer Comments</Comments
-><CustomerID
->9001</CustomerID
+><WebCustomerID
+>9001</WebCustomerID
 ></Other
 >|]
+
+downloadProdsXml :: BS.ByteString
+downloadProdsXml =
+    sNL [r|<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<SETIProducts>
+<Response>
+<ResponseCode>1</ResponseCode>
+<ResponseDescription>Success</ResponseDescription>
+</Response>
+<Product>
+<Code>1</Code>
+<Name>test</Name>
+<Price>0.0</Price>
+<Description>test description</Description>
+<Weight>10.0</Weight>
+<Discontinued>No</Discontinued>
+<QOH>10</QOH>
+<CustomFields>
+<CustomField>
+<FieldName>Organic</FieldName>
+<FieldValue>False</FieldValue>
+</CustomField>
+<CustomField>
+<FieldName>Heirloom</FieldName>
+<FieldValue>False</FieldValue>
+</CustomField>
+</CustomFields>
+</Product>
+<Product>
+<Code>2</Code>
+<Name>Non-free</Name>
+<Price>5.0</Price>
+<Weight>0.0</Weight>
+<Discontinued>No</Discontinued>
+<QOH>20</QOH>
+<CustomFields>
+<CustomField>
+<FieldName>Organic</FieldName>
+<FieldValue>True</FieldValue>
+</CustomField>
+<CustomField>
+<FieldName>Heirloom</FieldName>
+<FieldValue>True</FieldValue>
+</CustomField>
+</CustomFields>
+</Product>
+<Product>
+<Code>2A</Code>
+<Name>Non-free</Name>
+<Price>6.0</Price>
+<Weight>0.0</Weight>
+<Discontinued>No</Discontinued>
+<QOH>30</QOH>
+<CustomFields>
+<CustomField>
+<FieldName>Organic</FieldName>
+<FieldValue>True</FieldValue>
+</CustomField>
+<CustomField>
+<FieldName>Heirloom</FieldName>
+<FieldValue>True</FieldValue>
+</CustomField>
+</CustomFields>
+</Product>
+<Product>
+<Code>2B</Code>
+<Name>Non-free</Name>
+<Price>7.0</Price>
+<Weight>0.0</Weight>
+<Discontinued>Yes</Discontinued>
+<QOH>0</QOH>
+<CustomFields>
+<CustomField>
+<FieldName>Organic</FieldName>
+<FieldValue>True</FieldValue>
+</CustomField>
+<CustomField>
+<FieldName>Heirloom</FieldName>
+<FieldValue>True</FieldValue>
+</CustomField>
+</CustomFields>
+</Product>
+<Product>
+<Code>3</Code>
+<Name>Another product</Name>
+<Price>10.0</Price>
+<Weight>0.0</Weight>
+<Discontinued>No</Discontinued>
+<QOH>40</QOH>
+<CustomFields>
+<CustomField>
+<FieldName>Organic</FieldName>
+<FieldValue>True</FieldValue>
+</CustomField>
+<CustomField>
+<FieldName>Heirloom</FieldName>
+<FieldValue>False</FieldValue>
+</CustomField>
+</CustomFields>
+</Product>
+</SETIProducts>|]
+
+downloadCustomersXml :: BS.ByteString
+downloadCustomersXml =
+    sNL [r|<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<SETICustomers>
+<Response>
+<ResponseCode>1</ResponseCode>
+<ResponseDescription>Success</ResponseDescription>
+</Response>
+<Customer>
+<WebID>12548</WebID>
+<UserName>kevin</UserName>
+<Password>xyz123</Password>
+<BillAddr>
+<NamePrefix>Mr.</NamePrefix>
+<FirstName>John</FirstName>
+<LastName>Doe</LastName>
+<Company>Stone Edge</Company>
+<Phone>215-641-1837</Phone>
+<Email>john@stoneedge.com</Email>
+<TaxID>123456789</TaxID>
+<Address>
+<Addr1>One Valley Square</Addr1>
+<Addr2>Suite 130</Addr2>
+<City>Blue Bell</City>
+<State>PA</State>
+<Zip>19422</Zip>
+<Country>US</Country>
+</Address>
+</BillAddr>
+<ShipAddr>
+<NamePrefix>Mr.</NamePrefix>
+<FirstName>John</FirstName>
+<LastName>Doe</LastName>
+<Company>Stone Edge</Company>
+<Phone>215-641-1837</Phone>
+<Email>jdoe@stoneedge.com</Email>
+<Address>
+<Addr1>One Valley Square</Addr1>
+<Addr2>Suite 130</Addr2>
+<City>Blue Bell</City>
+<State>PA</State>
+<Zip>19422</Zip>
+<Country>US</Country>
+</Address>
+</ShipAddr>
+<CustomFields>
+<CustomField>
+<FieldName>Nickname</FieldName>
+<FieldValue>jdoe</FieldValue>
+</CustomField>
+</CustomFields>
+</Customer>
+</SETICustomers>|]

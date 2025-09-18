@@ -169,8 +169,8 @@ newCouponRoute = validateAdminAndParameters $ \_ NewCouponParameters {..} -> do
         , couponDiscount = ncpDiscount
         , couponMinimumOrder = ncpMinimumOrder
         , couponExpirationDate = expiration
-        , couponTotalUses = ncpTotalUses
-        , couponUsesPerCustomer = ncpUsesPerCustomer
+        , couponTotalUses = fromIntegral ncpTotalUses
+        , couponUsesPerCustomer = fromIntegral ncpUsesPerCustomer
         , couponCreatedAt = currentTime
         }
 
@@ -228,8 +228,8 @@ editCouponDataRoute t couponId = withAdminCookie t $ \_ ->
                 , ecdDiscount = couponDiscount
                 , ecdMinimumOrder = couponMinimumOrder
                 , ecdExpirationDate = localDay localTime
-                , ecdTotalUses = couponTotalUses
-                , ecdUsesPerCustomer = couponUsesPerCustomer
+                , ecdTotalUses = fromIntegral couponTotalUses
+                , ecdUsesPerCustomer = fromIntegral couponUsesPerCustomer
                 }
 
 
@@ -309,6 +309,6 @@ editCouponRoute = validateAdminAndParameters $ \_ parameters -> do
             , mapUpdate CouponDiscount ecpDiscount
             , mapUpdate CouponMinimumOrder ecpMinimumOrder
             , mapUpdate CouponExpirationDate expires
-            , mapUpdate CouponTotalUses ecpTotalUses
-            , mapUpdate CouponUsesPerCustomer ecpUsesPerCustomer
+            , mapUpdate CouponTotalUses (fmap fromIntegral ecpTotalUses)
+            , mapUpdate CouponUsesPerCustomer (fmap fromIntegral ecpUsesPerCustomer)
             ]

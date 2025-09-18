@@ -1,70 +1,70 @@
 module View exposing (pageDescription, pageImage, pageTitle, view)
 
-import AdvancedSearch
-import Auth.CreateAccount as CreateAccount
-import Auth.EditAddress as EditAddress
-import Auth.EditLogin as EditLogin
-import Auth.Login as Login
-import Auth.MyAccount as MyAccount
-import Auth.ResetPassword as ResetPassword
 import BootstrapGallery as Gallery
 import Browser exposing (Document)
-import Cart
-import Categories.AdminViews as CategoryAdminViews
-import Categories.Views as CategoryViews
-import Checkout
+import Components.Admin.AdminDashboard as AdminDashboard
+import Components.Admin.CategoryAdmin as CategoryAdminViews
+import Components.Admin.CategorySalesAdmin as CategorySalesAdmin
+import Components.Admin.CouponAdmin as CouponAdmin
+import Components.Admin.CustomerAdmin as CustomerAdmin
+import Components.Admin.OrderAdmin as OrderAdmin
+import Components.Admin.ProductAdmin as ProductAdmin
+import Components.Admin.ProductSalesAdmin as ProductSalesAdmin
+import Components.Admin.SettingsAdmin as SettingsAdmin
+import Components.Admin.ShippingAdmin as ShippingAdmin
+import Components.Admin.StaticPageAdmin as StaticPageAdmin
+import Components.Admin.SurchargesAdmin as SurchargesAdmin
+import Components.AdvancedSearch as AdvancedSearch
+import Components.Aria as Aria
+import Components.OrderDetails as OrderDetails
+import Components.Pagination as Pagination
+import Components.Product.Type as Product
+import Components.Product.Views as ProductViews
+import Components.SiteUI.Breadcrumbs as SiteBreadcrumbs
+import Components.SiteUI.Footer as SiteFooter
+import Components.SiteUI.Header as SiteHeader
+import Components.SiteUI.Navigation as SiteNavigation
+import Components.SiteUI.Sidebar as SiteSidebar
+import Data.Model exposing (Model)
+import Data.Msg exposing (Msg(..))
+import Data.PageData as PageData
+import Data.Product exposing (productMainImage)
+import Data.Routing.Routing exposing (AdminRoute(..), Route(..), isAdminRoute, showSearchbar)
+import Data.Search as Search exposing (UniqueSearch(..))
+import Data.SeedAttribute as SeedAttribute
+import Data.Shared exposing (Shared)
+import Data.StaticPage exposing (StaticPage)
+import Data.User as User exposing (unauthorized)
+import Dict exposing (Dict)
 import Html exposing (..)
 import Html.Attributes exposing (class, href, id, target)
 import Html.Events exposing (onClick)
 import Http
-import Messages exposing (Msg(..))
-import Model exposing (CartForms, Model)
-import OrderDetails
-import PageData
+import Pages.Cart.Cart as Cart
+import Pages.Cart.Type as Cart
+import Pages.Checkout as Checkout
+import Pages.CreateAccount as CreateAccount
+import Pages.EditAddress as EditAddress
+import Pages.EditLogin as EditLogin
+import Pages.Login as Login
+import Pages.MyAccount as MyAccount
+import Pages.ProductList.CategoryDetail.View as CategoryDetail
+import Pages.QuickOrder as QuickOrder
+import Pages.ResetPassword as ResetPassword
+import Pages.VerificationRequired as VerificationRequired
+import Pages.VerifyEmail as VerifyEmail
 import Paginate
-import Products.AdminViews as ProductAdmin
-import Products.Pagination as Pagination
-import Products.Views as ProductViews
-import QuickOrder
 import RemoteData exposing (WebData)
-import Routing exposing (AdminRoute(..), Route(..), isAdminRoute)
-import Search exposing (UniqueSearch(..))
-import SeedAttribute
-import SiteUI.Breadcrumbs as SiteBreadcrumbs
-import SiteUI.Footer as SiteFooter
-import SiteUI.Header as SiteHeader
-import SiteUI.Navigation as SiteNavigation
-import SiteUI.Sidebar as SiteSidebar
-import StaticPage exposing (StaticPage)
-import User
-import Views.AdminDashboard as AdminDashboard
-import Views.Aria as Aria
-import Views.CategorySalesAdmin as CategorySalesAdmin
-import Views.CouponAdmin as CouponAdmin
-import Views.CustomerAdmin as CustomerAdmin
-import Views.OrderAdmin as OrderAdmin
-import Views.ProductSalesAdmin as ProductSalesAdmin
-import Views.SettingsAdmin as SettingsAdmin
-import Views.ShippingAdmin as ShippingAdmin
-import Views.StaticPageAdmin as StaticPageAdmin
-import Views.SurchargesAdmin as SurchargesAdmin
-import Views.Utils exposing (pageOverlay, rawHtml)
+import Utils.View exposing (pageOverlay, pageTitleView, rawHtml)
 
 
 view : Model -> Document Msg
-view ({ route, pageData, navigationData, zone } as model) =
+view ({ route, pageData, navigationData, zone, helcimUrl } as model) =
     let
         middleContent =
             case route of
-                Checkout ->
-                    div [ class "container", Aria.live "polite", id "main" ]
-                        [ div [ class "row justify-content-center" ]
-                            [ div [ class "col-md-10" ] pageContent
-                            ]
-                        ]
-
                 Admin adminRoute ->
-                    if not <| User.isAdmin model.currentUser then
+                    if not <| User.isAdmin model.shared.currentUser then
                         withSidebar accessDeniedView
 
                     else
@@ -77,13 +77,13 @@ view ({ route, pageData, navigationData, zone } as model) =
                             ]
 
                 _ ->
-                    withSidebar pageContent
+                    withSidebar pageContentIncludingSearch
 
         withSidebar content =
-            div [ class "container", Aria.live "polite" ]
-                [ div [ class "row" ]
-                    [ div [ class "col order-md-2", id "main" ] content
-                    , SiteSidebar.view route
+            div [ class "se-container", Aria.live "polite" ]
+                [ div [ class "tw:flex tw:flex-col-reverse tw:lg:flex-row tw:gap-[80px] tw:lg:gap-[40px]" ]
+                    [ SiteSidebar.view route
+                    , div [ class "tw:w-full tw:grow tw:min-h-screen tw:lg:min-h-auto", id "main" ] content
                     ]
                 ]
 
@@ -95,37 +95,51 @@ view ({ route, pageData, navigationData, zone } as model) =
                 _ ->
                     h2 [] [ text <| adminTitle model adminRoute ]
 
+        advanceSearchView showDetail =
+            if showSearchbar route == True then
+                AdvancedSearch.view
+                    showDetail
+                    NavigateTo
+                    AdvancedSearchMsg
+                    model.advancedSearchData
+                    model.categoryListData
+
+            else
+                [ text "" ]
+
+        pageContentIncludingSearch =
+            div [] (advanceSearchView route) :: pageContent
+
         pageContent =
             case route of
                 ProductDetails _ _ ->
-                    withIntermediateText (ProductViews.details model.addToCartForms)
+                    withIntermediateText (ProductViews.detailView model.shared model.productListPage.productDict)
                         pageData.productDetails
 
                 CategoryDetails _ pagination ->
-                    if Paginate.getResponseData pageData.categoryDetails == Nothing then
+                    if Paginate.getResponseData model.productListPage.categoryDetails == Nothing then
                         [ loadingInterstitial True ]
 
-                    else if Paginate.getError pageData.categoryDetails /= Nothing then
+                    else if Paginate.getError model.productListPage.categoryDetails /= Nothing then
                         notFoundView
 
                     else
                         loadingInterstitial False
-                            :: CategoryViews.details pagination
-                                model.addToCartForms
-                                pageData.categoryDetails
+                            :: CategoryDetail.view model.shared
+                                pagination
+                                model.productListPage.productDict
+                                model.productListPage.categoryDetails
 
                 AdvancedSearch ->
-                    withIntermediateText
-                        (AdvancedSearch.view NavigateTo AdvancedSearchMsg model.advancedSearchData)
-                        pageData.advancedSearch
+                    []
 
                 SearchResults data pagination ->
-                    if Paginate.isLoading pageData.searchResults then
+                    if Paginate.isLoading model.productListPage.searchResults then
                         [ loadingInterstitial True ]
 
                     else
                         loadingInterstitial False
-                            :: searchResultsView data pagination model.addToCartForms pageData.searchResults
+                            :: searchResultsView model.shared data pagination model.productListPage.productDict model.productListPage.searchResults
 
                 PageDetails _ _ ->
                     withIntermediateText staticPageView pageData.pageDetails
@@ -133,11 +147,17 @@ view ({ route, pageData, navigationData, zone } as model) =
                 CreateAccount ->
                     CreateAccount.view CreateAccountMsg model.createAccountForm
 
+                VerifyEmail _ ->
+                    VerifyEmail.view model.verifyEmailForm LogOut
+
                 CreateAccountSuccess ->
                     CreateAccount.successView
 
                 Login redirectTo clearCart ->
                     Login.view LoginMsg model.loginForm redirectTo clearCart
+
+                VerificationRequired customerId ->
+                    VerificationRequired.view customerId model.verificationRequiredForm VerificationRequiredMsg
 
                 ResetPassword maybeCode ->
                     ResetPassword.view ResetPasswordMsg model.resetPasswordForm maybeCode
@@ -147,19 +167,19 @@ view ({ route, pageData, navigationData, zone } as model) =
                         |> withIntermediateText (apply <| MyAccount.view zone)
 
                 EditLogin ->
-                    EditLogin.view EditLoginMsg model.editLoginForm model.currentUser
+                    EditLogin.view EditLoginMsg model.editLoginForm model.shared.currentUser
 
                 EditAddress ->
                     RemoteData.map2 Tuple.pair pageData.locations pageData.addressDetails
                         |> withIntermediateText (apply <| EditAddress.view model.editAddressForm)
                         |> List.map (Html.map EditAddressMsg)
 
-                OrderDetails orderId ->
+                OrderDetails orderId _ ->
                     RemoteData.map2 Tuple.pair pageData.locations pageData.orderDetails
                         |> withIntermediateText (apply <| OrderDetails.view zone orderId)
 
                 Cart ->
-                    withIntermediateText (Cart.view model.currentUser model.editCartForm) pageData.cartDetails
+                    withIntermediateText (Cart.view model.shared.currentUser model.editCartForm) model.cartDetails
                         |> List.map (Html.map EditCartMsg)
 
                 QuickOrder ->
@@ -168,12 +188,13 @@ view ({ route, pageData, navigationData, zone } as model) =
 
                 Checkout ->
                     RemoteData.map2 Tuple.pair pageData.locations pageData.checkoutDetails
-                        |> withIntermediateText (apply <| Checkout.view model.checkoutForm model.currentUser)
+                        |> withIntermediateText (apply <| Checkout.view model.checkoutForm model.shared.currentUser)
                         |> List.map (Html.map CheckoutMsg)
 
-                CheckoutSuccess orderId newAccount ->
+                CheckoutSuccess orderId _ ->
                     RemoteData.map2 Tuple.pair pageData.locations pageData.orderDetails
-                        |> withIntermediateText (apply <| Checkout.successView zone LogOut orderId newAccount)
+                        |> withIntermediateText
+                            (apply <| Checkout.successView zone orderId (model.shared.currentUser == unauthorized))
 
                 Admin Dashboard ->
                     withIntermediateText (AdminDashboard.view model.adminDashboard zone pageData.adminDashboard)
@@ -212,7 +233,7 @@ view ({ route, pageData, navigationData, zone } as model) =
 
                 Admin (AdminOrderDetails orderId) ->
                     RemoteData.map2 Tuple.pair pageData.locations pageData.adminOrderDetails
-                        |> withIntermediateText (apply <| OrderAdmin.details zone orderId model.orderDetailsForm)
+                        |> withIntermediateText (apply <| OrderAdmin.details zone orderId helcimUrl model.orderDetailsForm)
                         |> List.map (Html.map OrderDetailsMsg)
 
                 NotFound ->
@@ -227,7 +248,7 @@ view ({ route, pageData, navigationData, zone } as model) =
 
                 Admin (CustomerEdit _) ->
                     RemoteData.map2 Tuple.pair pageData.locations pageData.adminEditCustomer
-                        |> withIntermediateText (apply <| CustomerAdmin.edit zone model.editCustomerForm)
+                        |> withIntermediateText (apply <| CustomerAdmin.edit zone helcimUrl model.editCustomerForm)
                         |> List.map (Html.map EditCustomerMsg)
 
                 Admin ProductList ->
@@ -299,7 +320,7 @@ view ({ route, pageData, navigationData, zone } as model) =
         activeCategoryIds =
             case route of
                 CategoryDetails _ _ ->
-                    Paginate.getResponseData pageData.categoryDetails
+                    Paginate.getResponseData model.productListPage.categoryDetails
                         |> Maybe.map
                             (\cd ->
                                 cd.category.id :: List.map .id cd.predecessors
@@ -324,7 +345,7 @@ view ({ route, pageData, navigationData, zone } as model) =
                 [ text "Skip to main content" ]
     in
     Document (pageTitle model) <|
-        if isAdminRoute route && User.isAdmin model.currentUser then
+        if isAdminRoute route && User.isAdmin model.shared.currentUser then
             [ SiteHeader.adminView
             , SiteNavigation.adminView route
             , middleContent
@@ -332,11 +353,12 @@ view ({ route, pageData, navigationData, zone } as model) =
 
         else
             [ skipLink
-            , SiteHeader.view SearchMsg model.searchData model.currentUser model.cartItemCount
-            , SiteNavigation.view route model.currentUser navigationData activeCategoryIds model.searchData
-            , SiteBreadcrumbs.view route pageData
+            , SiteHeader.view model model.shared.currentUser model.cartItemCount route navigationData activeCategoryIds
+            , SiteNavigation.view route model.shared.currentUser navigationData activeCategoryIds model.cartItemCount
+            , div [ class "tw:pt-(--mobile-navbar-padding) tw:lg:pt-0" ] []
+            , SiteBreadcrumbs.view route model.productListPage pageData
             , middleContent
-            , SiteFooter.view
+            , SiteFooter.view model.year
             , Gallery.modal model.productDetailsLightbox
                 |> Html.map ProductDetailsLightbox
             ]
@@ -360,7 +382,7 @@ pageTitle ({ route, pageData } as model) =
             getFromPageData .productDetails (.product >> .name)
 
         CategoryDetails _ _ ->
-            pageData.categoryDetails
+            model.productListPage.categoryDetails
                 |> Paginate.getResponseData
                 |> Maybe.map (.category >> .name)
                 |> Maybe.withDefault ""
@@ -378,29 +400,23 @@ pageTitle ({ route, pageData } as model) =
                         AllProducts ->
                             "All Products"
 
-                        AttributeSearch SeedAttribute.Organic ->
-                            "Organic Products"
-
-                        AttributeSearch SeedAttribute.Heirloom ->
-                            "Heirloom Products"
-
-                        AttributeSearch SeedAttribute.Regional ->
-                            "South-Eastern Products"
-
-                        AttributeSearch SeedAttribute.SmallGrower ->
-                            "Products from Small Farms in our Grower Network"
-
         PageDetails _ _ ->
             getFromPageData .pageDetails .name
 
         CreateAccount ->
             "Create an Account"
 
+        VerifyEmail _ ->
+            "Verify your email"
+
         CreateAccountSuccess ->
             "Account Creation Successful"
 
         Login _ _ ->
             "Customer Login"
+
+        VerificationRequired _ ->
+            "Verification required"
 
         ResetPassword Nothing ->
             "Reset Password"
@@ -417,7 +433,7 @@ pageTitle ({ route, pageData } as model) =
         EditAddress ->
             "Edit Addresses"
 
-        OrderDetails orderId ->
+        OrderDetails orderId _ ->
             "Order #" ++ String.fromInt orderId
 
         Cart ->
@@ -545,14 +561,14 @@ adminTitle ({ pageData } as model) adminRoute =
 
 
 pageImage : Model -> Maybe String
-pageImage { route, pageData } =
+pageImage ({ route, pageData } as model) =
     case route of
         ProductDetails _ _ ->
             RemoteData.toMaybe pageData.productDetails
-                |> Maybe.map (.product >> .image >> .original)
+                |> Maybe.map (.product >> productMainImage >> .original)
 
         CategoryDetails _ _ ->
-            Paginate.getResponseData pageData.categoryDetails
+            Paginate.getResponseData model.productListPage.categoryDetails
                 |> Maybe.map (.category >> .image >> .original)
 
         _ ->
@@ -562,7 +578,7 @@ pageImage { route, pageData } =
 {-| Get the meta description for a page.
 -}
 pageDescription : Model -> String
-pageDescription { route, pageData } =
+pageDescription ({ route, pageData } as model) =
     case route of
         ProductDetails _ _ ->
             RemoteData.toMaybe pageData.productDetails
@@ -570,7 +586,7 @@ pageDescription { route, pageData } =
                 |> Maybe.withDefault ""
 
         CategoryDetails _ _ ->
-            Paginate.getResponseData pageData.categoryDetails
+            Paginate.getResponseData model.productListPage.categoryDetails
                 |> Maybe.map (.category >> .description)
                 |> Maybe.withDefault ""
 
@@ -587,6 +603,12 @@ pageDescription { route, pageData } =
 
         CreateAccount ->
             "Create a free account to purchase products from our catalog."
+
+        VerifyEmail _ ->
+            "Verify email to continue shopping"
+
+        VerificationRequired _ ->
+            "Verification required before you're able to login"
 
         ResetPassword _ ->
             "Reset the password to your Southern Exposure Seed Exchange account."
@@ -624,7 +646,7 @@ pageDescription { route, pageData } =
         EditAddress ->
             ""
 
-        OrderDetails _ ->
+        OrderDetails _ _ ->
             ""
 
         Admin _ ->
@@ -713,8 +735,8 @@ remoteFailureView error =
 
 notFoundView : List (Html msg)
 notFoundView =
-    [ h1 [] [ text "Page Not Found" ]
-    , p []
+    [ pageTitleView "Page Not Found"
+    , p [ class "tw:pl-0 tw:lg:pl-[8px]" ]
         [ text <|
             "Sorry, we couldn't find the page your were looking for. "
                 ++ "If you got to this page from our site, please contact us so we can fix our links."
@@ -766,15 +788,18 @@ staticPageView { name, slug, content } =
                 text ""
 
             else
-                h1 [] [ text name ]
+                pageTitleView name
+
+        html =
+            rawHtml content
     in
     [ header
-    , rawHtml content
+    , div [ class "static-page tw:lg:pl-[8px]" ] [ html ]
     ]
 
 
-searchResultsView : Search.Data -> Pagination.Data -> CartForms -> PageData.SearchResults -> List (Html Msg)
-searchResultsView ({ query } as data) pagination addToCartForms products =
+searchResultsView : Shared Msg -> Search.Data -> Pagination.Data -> Dict Int Product.Model -> PageData.SearchResults -> List (Html Msg)
+searchResultsView shared ({ query } as data) pagination productDict products =
     let
         uniqueSearch =
             Search.uniqueSearch data
@@ -784,29 +809,23 @@ searchResultsView ({ query } as data) pagination addToCartForms products =
                 Nothing ->
                     "Search Results"
 
-                Just searchType ->
-                    case searchType of
-                        AllProducts ->
-                            "All Products"
-
-                        AttributeSearch SeedAttribute.Organic ->
-                            "Organic Products"
-
-                        AttributeSearch SeedAttribute.Heirloom ->
-                            "Heirloom Products"
-
-                        AttributeSearch SeedAttribute.Regional ->
-                            "South-Eastern Products"
-
-                        AttributeSearch SeedAttribute.SmallGrower ->
-                            "Products from Small Farms in our Grower Network"
+                Just AllProducts ->
+                    "All Products"
 
         searchDescription =
             if uniqueSearch == Nothing then
-                p []
-                    [ queryDescription
-                    , filterDescriptions
-                    ]
+                if not <| String.isEmpty query then
+                    p [ class "tw:hidden tw:lg:block tw:lg:px-[8px] tw:pb-0 tw:lg:pb-[32px]" ]
+                        [ queryDescription
+                        ]
+
+                else if Paginate.getTotalItems products == 0 then
+                    p [ class "tw:hidden tw:lg:block tw:lg:px-[8px] tw:pb-0 tw:lg:pb-[32px]" ]
+                        [ text "No products found."
+                        ]
+
+                else
+                    text ""
 
             else
                 text ""
@@ -870,8 +889,7 @@ searchResultsView ({ query } as data) pagination addToCartForms products =
                 |> List.map (\( _, name ) -> b [] [ text name ])
                 |> List.intersperse (text ", ")
     in
-    [ h1 [] [ text header ]
-    , hr [] []
+    [ pageTitleView header
     , searchDescription
     ]
-        ++ ProductViews.list (SearchResults data) pagination addToCartForms products
+        ++ ProductViews.listView shared (SearchResults data) pagination productDict products

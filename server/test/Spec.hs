@@ -1,26 +1,37 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE TypeFamilies #-}
 -- TODO: Split into ModuleNameSpec.hs files & Gen.hs file.
+import Control.Monad.Logger (runNoLoggingT)
 import Data.Aeson (Result(Success), FromJSON, fromJSON, ToJSON(..), eitherDecode)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LBS
-import Data.Monoid ((<>))
+import Data.Int (Int64)
+import qualified Data.Map.Strict as M
+import Data.List.NonEmpty (NonEmpty(..))
 import Data.Ratio ((%))
-import Data.Text (Text)
-import Data.Text.Encoding (decodeUtf8)
+import qualified Data.Set as S
+import Data.Text (Text, pack)
+import Data.Text.Lazy (isInfixOf)
+import Data.Text.Encoding (decodeUtf8, encodeUtf8)
 import Data.Time
     ( UTCTime(..), LocalTime(..), TimeOfDay(..), Day(..), DiffTime
     , secondsToDiffTime, getCurrentTime, fromGregorian
     )
-import Database.Persist.Sql (Entity(..), ToBackendKey, SqlBackend, toSqlKey)
+import Database.Persist.Postgresql (createPostgresqlPool)
+import Database.Persist.Sql (Entity(..), ToBackendKey, SqlBackend, runSqlPool, toSqlKey)
 import Hedgehog
 import qualified Hedgehog.Gen as Gen
 import qualified Hedgehog.Range as Range
-import Numeric.Natural (Natural)
 import Test.Tasty
 import Test.Tasty.Hedgehog
 import Test.Tasty.HUnit hiding (assert)
+import TestContainers.Tasty
+    ( MonadDocker, Pipe(Stderr), containerAddress, containerRequest, fromTag, run, setEnv, setExpose
+    , setSuffixedName, setWaitingFor, waitForLogLine, withContainers, (&),
+    )
+
 import Text.XML.Generator (Xml, Elem, doc, defaultDocInfo, xrender)
 import Web.FormUrlEncoded (FromForm(..), urlDecodeForm, fromEntriesByKey)
 
@@ -49,6 +60,7 @@ tests =
          , routesStoneEdge
          , avalara
          , routesAdminShipping
+         , databaseMigrations
          ]
 
 
@@ -119,6 +131,7 @@ commonData =
         , priorityFeeTests
         , categorySaleTests
         , productSaleTests
+        , cartInventoryNotificationTests
         ]
 
 
@@ -144,7 +157,7 @@ couponTests = testGroup "Coupon Discount Calculations"
     freeShippingNoMethods :: Property
     freeShippingNoMethods = property $ do
         coupon <- forAll $ couponWithType FreeShipping
-        calculateCouponDiscount coupon [] 0 === 0
+        calculateCouponDiscount coupon [] 0 === mkCents 0
     percentageDiscount :: Property
     percentageDiscount = property $ do
         coupon <- forAll genCoupon
@@ -164,7 +177,7 @@ couponTests = testGroup "Coupon Discount Calculations"
             FlatDiscount amt ->
                 return amt
             _ ->
-                (+ 1) <$> forAll genCents
+                (`plusCents` mkCents 1) <$> forAll genCents
         let coupon_ = coupon { couponDiscount = FlatDiscount amount }
         subTotal <- forAll genCents
         let result = calculateCouponDiscount coupon_ [] (fromCents subTotal)
@@ -206,14 +219,14 @@ priorityFeeTests = testGroup "Priority S&H Calculations"
             === Just (Cents $ round $ percentAmount + toRational flat)
     onlyFlat :: Assertion
     onlyFlat =
-        calculatePriorityFee [makeShippingCharge (PriorityShippingFee 200 0)] 1000
-            @?= Just 200
+        calculatePriorityFee [makeShippingCharge (PriorityShippingFee (mkCents 200) 0)] 1000
+            @?= Just (mkCents 200)
     onlyPercent :: Assertion
     onlyPercent =
-        calculatePriorityFee [makeShippingCharge (PriorityShippingFee 0 10)] 1000
-            @?= Just 100
+        calculatePriorityFee [makeShippingCharge (PriorityShippingFee (mkCents 0) 10)] 1000
+            @?= Just (mkCents 100)
     makeShippingCharge :: PriorityShippingFee -> ShippingCharge
-    makeShippingCharge fee = ShippingCharge (CartCharge "" 900) (Just fee) True
+    makeShippingCharge fee = ShippingCharge (CartCharge "" $ mkCents 900) (Just fee) True
 
 
 -- SALES
@@ -234,7 +247,7 @@ categorySaleTests = testGroup "Category Sale Calculations"
         saleAmount <- forAll $ genCentRange $ Range.linear 1 (fromCents (getVariantPrice variantData) - 1)
         sale <- forAll $ genCategorySale $ FlatSale saleAmount
         categorySalePrice (getVariantPrice variantData) sale
-            === getVariantPrice variantData - saleAmount
+            === getVariantPrice variantData `subtractCents` saleAmount
     testFlatGreaterThanPrice :: Property
     testFlatGreaterThanPrice = property $ do
         variantEntity <- forAll $ genEntity genProductVariant
@@ -242,7 +255,7 @@ categorySaleTests = testGroup "Category Sale Calculations"
             price = fromCents $ getVariantPrice variantData
         saleAmount <- forAll $ genCentRange $ Range.linear price (price * 10)
         sale <- forAll $ genCategorySale $ FlatSale saleAmount
-        categorySalePrice (getVariantPrice variantData) sale === 0
+        categorySalePrice (getVariantPrice variantData) sale === mkCents 0
     testPercentageProperty :: Property
     testPercentageProperty = property $ do
         variantEntity <- forAll $ genEntity genProductVariant
@@ -255,32 +268,32 @@ categorySaleTests = testGroup "Category Sale Calculations"
     testPercentageUnit :: Assertion
     testPercentageUnit = do
         time <- getCurrentTime
-        let variantData = makeVariantData (makeVariant 1000) Nothing
+        let variantData = makeVariantData (makeVariant $ mkCents 1000) Nothing
             sale = CategorySale "" (PercentSale 13) time time []
-        categorySalePrice (getVariantPrice variantData) sale @?= 870
+        categorySalePrice (getVariantPrice variantData) sale @?= mkCents 870
     testOverridesSalePrice :: Property
     testOverridesSalePrice = property $ do
         (variantEntity, price) <- forAll
             $ makeVariantWithPrice $ Range.linear 2000 5000
-        let variantData = makeVariantData variantEntity (Just $ price - 1500)
+        let variantData = makeVariantData variantEntity (Just $ price `subtractCents` mkCents 1500)
         saleAmount <- forAll $ genCentRange $ Range.linear 1501 $ fromCents price
         sale <- forAll $ genCategorySale $ FlatSale saleAmount
-        getVariantPrice (applyCategorySale sale variantData) === price - saleAmount
+        getVariantPrice (applyCategorySale sale variantData) === price `subtractCents` saleAmount
     testNoOverridesSalePrice :: Property
     testNoOverridesSalePrice = property $ do
         (variantEntity, price) <- forAll
             $ makeVariantWithPrice $ Range.linear 2000 5000
-        let variantData = makeVariantData variantEntity (Just 200)
+        let variantData = makeVariantData variantEntity (Just $ mkCents 200)
         sale <- forAll $ do
             let price_ = fromCents price
             amount <- genCentRange $ Range.linear 0 (price_ - 199)
             genCategorySale $ FlatSale amount
-        getVariantPrice (applyCategorySale sale variantData) === 200
+        getVariantPrice (applyCategorySale sale variantData) === mkCents 200
     makeVariant :: Cents -> Entity ProductVariant
     makeVariant price =
         Entity (toSqlKey 1)
-            $ ProductVariant (toSqlKey 1) "" price 1 (Just . Mass $ Milligrams 1) True
-    makeVariantWithPrice :: Range Natural -> Gen (Entity ProductVariant, Cents)
+            $ ProductVariant (toSqlKey 1) "" price 1 (Just . Mass $ Milligrams 1) True Unlimited
+    makeVariantWithPrice :: Range Int64 -> Gen (Entity ProductVariant, Cents)
     makeVariantWithPrice priceRange = do
         entity <- genProductVariant
         key <- genEntityKey
@@ -308,6 +321,39 @@ productSaleTests = testGroup "Product Sale Calculations"
         getVariantPrice (makeVariantData variant $ Just salePrice)
             === Cents normalPrice
 
+cartInventoryNotificationTests :: TestTree
+cartInventoryNotificationTests = testGroup "Cart Inventory Notifications"
+    [ testCase "No new notifications" noNewNotifications
+    , testCase "Some notifications resolved" someNotificationsResolved
+    , testCase "New notifications" newNotifications
+    ]
+    where
+        cartInventoryNotifications = CartInventoryNotifications
+            { cinWarnings = M.fromList [(1, S.fromList [LimitedAvailabilityWarning 5, GenericWarning "warning"])]
+            , cinErrors = M.fromList [(2, S.fromList [GenericError "error", OutOfStockError 3 10])]
+            }
+        noNewNotifications :: Assertion
+        noNewNotifications =
+            getUnseenCartInventoryNotifications cartInventoryNotifications cartInventoryNotifications @?=
+                CartInventoryNotifications M.empty M.empty
+        someNotificationsResolved :: Assertion
+        someNotificationsResolved = do
+            let notifications = CartInventoryNotifications
+                    { cinWarnings = M.fromList [(1, S.fromList [LimitedAvailabilityWarning 5])]
+                    , cinErrors = M.fromList [(2, S.fromList [GenericError "error"])]
+                    }
+            getUnseenCartInventoryNotifications cartInventoryNotifications notifications @?=
+                CartInventoryNotifications M.empty M.empty
+        newNotifications :: Assertion
+        newNotifications = do
+            let notifications = CartInventoryNotifications
+                    { cinWarnings = M.fromList [(1, S.fromList [LimitedAvailabilityWarning 5, GenericWarning "warning"]), (3, S.fromList [GenericWarning "new warning"])]
+                    , cinErrors = M.fromList [(4, S.fromList [OutOfStockError 2 5])]
+                    }
+            getUnseenCartInventoryNotifications cartInventoryNotifications notifications @?=
+                CartInventoryNotifications (M.fromList [(3, S.fromList [GenericWarning "new warning"])])
+                                           (M.fromList [(4, S.fromList [OutOfStockError 2 5])])
+
 
 -- STONE EDGE
 stoneEdge :: TestTree
@@ -317,6 +363,12 @@ stoneEdge = testGroup "StoneEdge Module"
     , sendVersionTests
     , orderCountTests
     , downloadOrdersTests
+    , qohReplaceTests
+    , getProductsCountTests
+    , downloadProdsTests
+    , invUpdateTests
+    , getCustomersCountTests
+    , downloadCustomersTests
     ]
   where
     errorTests :: TestTree
@@ -545,6 +597,223 @@ stoneEdge = testGroup "StoneEdge Module"
         "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n" <> expected
             @=?  xrender (doc defaultDocInfo element)
 
+    qohReplaceTests :: TestTree
+    qohReplaceTests = testGroup "Replace QOH"
+        -- SETI Documentation mentions there is no trailing '|' character, but in the real requests coming
+        -- from the Stone Edge instance it is actually present, so we're supporting both cases.
+        [ testCase "Form Parsing" qohReplaceParsing
+        , testCase "Form Parsing - No Trailing |" qohReplaceNoTrailingBar
+        , testCase "Response Rendering" qohReplaceResponse
+        ]
+    qohReplaceParsing :: Assertion
+    qohReplaceParsing =
+        testFormParsing "setifunction=qohreplace&setiuser=auser&password=pwd&code=mystore&count=2&update=sku1~2|sku2~5|&omversion=5.000"
+            $ QOHReplaceRequest "auser" "pwd" "mystore" 2
+                (("sku1", 2) :| [("sku2", 5)]) "5.000"
+
+    qohReplaceNoTrailingBar :: Assertion
+    qohReplaceNoTrailingBar =
+        testFormParsing "setifunction=qohreplace&setiuser=auser&password=pwd&code=mystore&count=3&update=sku1~2|sku2~5|sku3~10&omversion=5.000"
+            $ QOHReplaceRequest "auser" "pwd" "mystore" 3
+                (("sku1", 2) :| [("sku2", 5), ("sku3", 10)]) "5.000"
+
+    qohReplaceResponse :: Assertion
+    qohReplaceResponse =
+        renderQOHReplaceResponse (QOHReplaceResponse $ ("sku1", Ok) :| [("sku2", NotAvailable), ("sku3", NotFound)])
+            @?= "SETIResponse\nsku1=OK\nsku2=NA\nsku3=NF\nSETIEndOfData"
+
+    getProductsCountTests :: TestTree
+    getProductsCountTests = testGroup "GetProductsCount SETI Function"
+        [ testCase "Form Parsing" getProductsCountParsing
+        , testCase "Response Rendering" getProductsCountResponse
+        ]
+    getProductsCountParsing :: Assertion
+    getProductsCountParsing =
+        testFormParsing "setifunction=getproductscount&setiuser=auser&password=pwd&code=mystore&omversion=5.000"
+            $ GetProductsCountRequest "auser" "pwd" "mystore" "5.000"
+    getProductsCountResponse :: Assertion
+    getProductsCountResponse =
+        renderGetProductsCountResponse (GetProductsCountResponse 123)
+            @?= "SETIResponse: itemcount=123"
+
+    downloadProdsTests :: TestTree
+    downloadProdsTests = testGroup "DownloadProds SETI Function"
+        [ testCase "Form Parsing" downloadProdsParsing
+        , testCase "Response Rendering - With Products" downloadProdsResponse
+        ]
+    downloadProdsParsing :: Assertion
+    downloadProdsParsing =
+        testFormParsing "setifunction=downloadprods&setiuser=auser&password=pwd&code=mystore&startnum=1&batchsize=100&omversion=5.000"
+            $ DownloadProdsRequest "auser" "pwd" "mystore" (Just 1) (Just 100) "5.000"
+    downloadProdsResponse :: Assertion
+    downloadProdsResponse =
+        let prods =
+                [ StoneEdgeProduct
+                    { sepCode = "1"
+                    , sepName = "test"
+                    , sepPrice = 0
+                    , sepDescription = Just "test description"
+                    , sepWeight = 10
+                    , sepDiscontinued = False
+                    , sepQOH = 10
+                    , sepCustomFields =
+                        [ ("Organic", "False")
+                        , ("Heirloom", "False")
+                        ]
+                    }
+                , StoneEdgeProduct
+                    { sepCode = "2"
+                    , sepName = "Non-free"
+                    , sepPrice = 5
+                    , sepDescription = Nothing
+                    , sepWeight = 0
+                    , sepDiscontinued = False
+                    , sepQOH = 20
+                    , sepCustomFields =
+                        [ ("Organic", "True")
+                        , ("Heirloom", "True")
+                        ]
+                    }
+                , StoneEdgeProduct
+                    { sepCode = "2A"
+                    , sepName = "Non-free"
+                    , sepPrice = 6
+                    , sepDescription = Nothing
+                    , sepWeight = 0
+                    , sepDiscontinued = False
+                    , sepQOH = 30
+                    , sepCustomFields =
+                        [ ("Organic", "True")
+                        , ("Heirloom", "True")
+                        ]
+                    }
+                , StoneEdgeProduct
+                    { sepCode = "2B"
+                    , sepName = "Non-free"
+                    , sepPrice = 7
+                    , sepDescription = Nothing
+                    , sepWeight = 0
+                    , sepDiscontinued = True
+                    , sepQOH = 0
+                    , sepCustomFields =
+                        [ ("Organic", "True")
+                        , ("Heirloom", "True")
+                        ]
+                    }
+                , StoneEdgeProduct
+                    { sepCode = "3"
+                    , sepName = "Another product"
+                    , sepPrice = 10
+                    , sepDescription = Nothing
+                    , sepWeight = 0
+                    , sepDiscontinued = False
+                    , sepQOH = 40
+                    , sepCustomFields =
+                        [ ("Organic", "True")
+                        , ("Heirloom", "False")
+                        ]
+                    }
+                ]
+        in SEF.downloadProdsXml @=? renderDownloadProdsResponse (DownloadProdsResponse prods)
+
+    invUpdateTests :: TestTree
+    invUpdateTests = testGroup "InvUpdate SETI Function"
+        [ testCase "Form Parsing" invUpdateParsing
+        , testCase "Response Rendering - OK" invUpdateResponseOk
+        , testCase "Response Rendering - NotFound" invUpdateResponseNotFound
+        , testCase "Response Rendering - NotTracking" invUpdateResponseNotTracking
+        ]
+
+    invUpdateParsing :: Assertion
+    invUpdateParsing =
+        testFormParsing "setifunction=invupdate&setiuser=auser&password=pwd&code=mystore&update=sku1~5&omversion=5.000"
+            $ InvUpdateRequest "auser" "pwd" "mystore" ("sku1", 5) "5.000"
+
+    invUpdateResponseOk :: Assertion
+    invUpdateResponseOk =
+        renderInvUpdateResponse (InvUpdateResponse True "sku1" (Left 50) Nothing)
+            @?= "SETIResponse=OK;SKU=sku1;QOH=50;NOTE="
+
+    invUpdateResponseNotFound :: Assertion
+    invUpdateResponseNotFound =
+        renderInvUpdateResponse (InvUpdateResponse False "sku1" (Right NotFound) (Just "NotFound"))
+            @?= "SETIResponse=False;SKU=sku1;QOH=NF;NOTE=NotFound"
+
+    invUpdateResponseNotTracking :: Assertion
+    invUpdateResponseNotTracking =
+        renderInvUpdateResponse (InvUpdateResponse False "sku1" (Right NotAvailable) (Just "NotTracking"))
+            @?= "SETIResponse=False;SKU=sku1;QOH=NA;NOTE=NotTracking"
+
+    getCustomersCountTests :: TestTree
+    getCustomersCountTests = testGroup "GetCustomersCount SETI Function"
+        [ testCase "Form Parsing" getCustomersCountParsing
+        , testCase "Response Rendering" getCustomersCountResponse
+        ]
+
+    getCustomersCountParsing :: Assertion
+    getCustomersCountParsing =
+        testFormParsing "setifunction=getcustomerscount&setiuser=auser&password=pwd&code=mystore&omversion=5.000"
+            $ GetCustomersCountRequest "auser" "pwd" "mystore" "5.000"
+
+    getCustomersCountResponse :: Assertion
+    getCustomersCountResponse =
+        renderGetCustomersCountResponse (GetCustomersCountResponse 123)
+            @?= "SETIResponse: itemcount=123"
+
+    downloadCustomersTests :: TestTree
+    downloadCustomersTests = testGroup "DownloadCustomers SETI Function"
+        [ testCase "Form Parsing" downloadCustomersParsing
+        , testCase "Response Rendering - With Customers" downloadCustomersResponse
+        ]
+
+    downloadCustomersParsing :: Assertion
+    downloadCustomersParsing =
+        testFormParsing "setifunction=downloadcustomers&setiuser=auser&password=pwd&code=mystore&startnum=1&batchsize=100&omversion=5.000"
+            $ DownloadCustomersRequest "auser" "pwd" "mystore" (Just 1) (Just 100) "5.000"
+
+    downloadCustomersResponse :: Assertion
+    downloadCustomersResponse =
+        let addr = StoneEdgeCustomerAddress
+                { secaAddr1 = "One Valley Square"
+                , secaAddr2 = Just "Suite 130"
+                , secaCity = "Blue Bell"
+                , secaState = "PA"
+                , secaZip = "19422"
+                , secaCountry = "US"
+                }
+            customers =
+                [ StoneEdgeCustomer
+                    { secWebID = Just 12548
+                    , secUserName = Just "kevin"
+                    , secuPassword = Just "xyz123"
+                    , secAffiliateId = Nothing
+                    , secBillAddr = StoneEdgeCustomerBillingAddress
+                        { secbaNamePrefix = Just "Mr."
+                        , secbaFirstName = "John"
+                        , secbaMiddleName = Nothing
+                        , secbaLastName = "Doe"
+                        , secbaNameSuffix = Nothing
+                        , secbaCompany = Just "Stone Edge"
+                        , secbaPhone = Just "215-641-1837"
+                        , secbaEmail = Just "john@stoneedge.com"
+                        , secbaTaxId = Just "123456789"
+                        , secbaAddress = addr
+                        }
+                    , secShipAddr = StoneEdgeCustomerShippingAddress
+                        { secsaNamePrefix = Just "Mr."
+                        , secsaFirstName = "John"
+                        , secsaMiddleName = Nothing
+                        , secsaLastName = "Doe"
+                        , secsaNameSuffix = Nothing
+                        , secsaCompany = Just "Stone Edge"
+                        , secsaPhone = Just "215-641-1837"
+                        , secsaEmail = Just "jdoe@stoneedge.com"
+                        , secsaAddress = addr
+                        }
+                    , secCustomFields = [("Nickname", "jdoe")]
+                    }
+                ]
+        in SEF.downloadCustomersXml @=? renderDownloadCustomersResponse (DownloadCustomersResponse customers)
 
 routesStoneEdge :: TestTree
 routesStoneEdge = testGroup "Routes.StoneEdge Module"
@@ -584,24 +853,24 @@ routesStoneEdge = testGroup "Routes.StoneEdge Module"
         ]
     couponTransform :: Assertion
     couponTransform =
-        let c = Entity nullSqlKey $ Coupon "CC" "Coup" "" True (FlatDiscount 300) 0 fillerTime 0 0 fillerTime
-            li = Entity nullSqlKey $ OrderLineItem nullSqlKey CouponDiscountLine "Coup Discount" 300
+        let c = Entity nullSqlKey $ Coupon "CC" "Coup" "" True (FlatDiscount $ mkCents 300) (mkCents 0) fillerTime 0 0 fillerTime
+            li = Entity nullSqlKey $ OrderLineItem nullSqlKey CouponDiscountLine "Coup Discount" (mkCents 300)
             sc = StoneEdgeCoupon  "Coup" Nothing (StoneEdgeCents 300) (Just True)
         in Just sc @=? transformCoupon c li
     storeCreditTransform :: Assertion
     storeCreditTransform =
-        let li = Entity nullSqlKey $ OrderLineItem nullSqlKey StoreCreditLine "Store Credit" 500
+        let li = Entity nullSqlKey $ OrderLineItem nullSqlKey StoreCreditLine "Store Credit" (mkCents 500)
             sc = StoneEdgeOrderStoreCredit $ StoneEdgePaymentStoreCredit
                     (StoneEdgeCents 500) (Just "Store Credit")
         in Just sc @=? transformStoreCredit li
     couponTransformNothing :: Assertion
     couponTransformNothing =
-        let c = Entity nullSqlKey $ Coupon "CC" "Coup" "" True (FlatDiscount 300) 0 fillerTime 0 0 fillerTime
-            li = Entity nullSqlKey $ OrderLineItem nullSqlKey PriorityShippingLine "Not a coupon" 900
+        let c = Entity nullSqlKey $ Coupon "CC" "Coup" "" True (FlatDiscount $ mkCents 300) (mkCents 0) fillerTime 0 0 fillerTime
+            li = Entity nullSqlKey $ OrderLineItem nullSqlKey PriorityShippingLine "Not a coupon" (mkCents 900)
         in Nothing @=? transformCoupon c li
     storeCreditTransformNothing :: Assertion
     storeCreditTransformNothing =
-        let li = Entity nullSqlKey $ OrderLineItem nullSqlKey PriorityShippingLine "Not store credit" 900
+        let li = Entity nullSqlKey $ OrderLineItem nullSqlKey PriorityShippingLine "Not store credit" (mkCents 900)
         in Nothing @=? transformStoreCredit li
     taxTransform :: Assertion
     taxTransform =
@@ -759,7 +1028,19 @@ routesAdminShipping = testGroup "Routes.Admin.ShippingMethods Module"
             <*> Gen.integral (Range.linear 1 1000)
             <*> Gen.bool
 
+-- Database migrations
 
+databaseMigrations :: TestTree
+databaseMigrations = withContainers setupPostgresContainer $ \connString ->
+    testGroup "Database Migrations"
+        [ testCase "Migration over empty DB is successful" (migrationOverEmptyDB connString)
+        ]
+    where
+        migrationOverEmptyDB :: IO BS.ByteString -> Assertion
+        migrationOverEmptyDB connString = do
+            connStr <- connString
+            conn <- runNoLoggingT $ createPostgresqlPool connStr 1
+            runSqlPool runMigrations conn
 
 -- UTILITIES
 
@@ -829,6 +1110,7 @@ genProductVariant =
         <*> Gen.integral (Range.linear 1 1000)
         <*> Gen.maybe genLotSize
         <*> Gen.bool
+        <*> genInventoryPolicy
 
 genCategorySale :: SaleType -> Gen CategorySale
 genCategorySale saleType =
@@ -870,7 +1152,7 @@ genEntityKey =
     toSqlKey <$> Gen.int64 (Range.linear 1 1000)
 
 
-genCentRange :: Range Natural -> Gen Cents
+genCentRange :: Range Int64 -> Gen Cents
 genCentRange r =
     Cents <$> Gen.integral r
 
@@ -891,6 +1173,14 @@ genLotSize =
         Gen.integral $ Range.linear 1 1000
     genMilligrams =
         Milligrams <$> Gen.integral (Range.linear 1 454000)
+
+genInventoryPolicy :: Gen InventoryPolicy
+genInventoryPolicy =
+    Gen.choice $ return <$>
+        [ RequireStock
+        , AllowBackorder
+        , Unlimited
+        ]
 
 genWholePercentage :: Gen Percent
 genWholePercentage = Gen.integral $ Range.linear 1 100
@@ -919,3 +1209,27 @@ genSaleType =
         [ FlatSale <$> genCents
         , PercentSale <$> genWholePercentage
         ]
+
+setupPostgresContainer :: MonadDocker m => m BS.ByteString
+setupPostgresContainer = do
+    let
+        pgImage = fromTag "postgres:16"
+        pgUser = "postgres"
+        pgPassword = "postgres"
+        pgDbName = "postgres"
+        container = containerRequest pgImage
+            & setSuffixedName "postgres-test"
+            & setEnv [("POSTGRES_USER", pgUser), ("POSTGRES_PASSWORD", pgPassword), ("POSTGRES_DB", pgDbName)]
+            & setExpose [5432]
+            & setWaitingFor (waitForLogLine Stderr ("database system is ready to accept connections" `isInfixOf`))
+    postgresContainer <- run container
+    let (ip, port) = containerAddress postgresContainer 5432
+        connString :: BS.ByteString
+        connString = encodeUtf8 $
+            "host=" <> ip <>
+            " port=" <> pack (show port) <>
+            " user=" <> pgUser <>
+            " password=" <> pgPassword <>
+            " dbname=" <> pgDbName
+
+    return connString

@@ -4,12 +4,13 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE MultiWayIf #-}
 module Routes.CommonData
     ( ProductData
     , getProductData
     , BaseProductData(bpdName, bpdShippingRestrictions)
     , makeBaseProductData
-    , VariantData(vdId, vdProductId)
+    , VariantData(vdId, vdInventoryPolicy, vdProductId, vdQuantity)
     , makeVariantData
     , getVariantPrice
     , applySalesToVariants
@@ -30,7 +31,12 @@ module Routes.CommonData
     , PasswordValidationError(..)
     , handlePasswordValidationError
     , CartItemData(..)
+    , CartItemError(..)
+    , CartItemWarning(..)
     , getCartItems
+    , CartInventoryNotifications(..)
+    , getCartInventoryNotifications
+    , getUnseenCartInventoryNotifications
     , CartCharges(..)
     , getCharges
     , ShippingCharge(..)
@@ -42,23 +48,25 @@ module Routes.CommonData
     , toAddressData
     , addressToAvalara
     , OrderDetails(..)
+    , DeliveryData(..)
+    , toDeliveryData
     , CheckoutOrder(..)
     , toCheckoutOrder
+    , toOrderStatus
     , CheckoutProduct(..)
     , getCheckoutProducts
     ) where
 
 import Prelude hiding (product)
 
-import Control.Exception.Safe (Exception, throw)
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Monad.Reader (MonadReader, lift, asks, void, when)
 import Data.Aeson ((.=), (.:), (.:?), ToJSON(..), FromJSON(..), object, withObject)
 import Data.Digest.Pure.MD5 (md5)
+import Data.Foldable (foldl')
 import Data.Int (Int64)
 import Data.List (intersect)
 import Data.Maybe (mapMaybe, listToMaybe, fromMaybe, maybeToList)
-import Data.Monoid ((<>))
 import Data.Ratio ((%))
 import Data.Text.Encoding (encodeUtf8, decodeUtf8)
 import Data.Time (UTCTime, getCurrentTime)
@@ -68,6 +76,8 @@ import Database.Persist
     )
 import Numeric.Natural (Natural)
 import Servant (errBody, err500)
+import Data.Coerce (coerce)
+import UnliftIO.Exception (throwIO, Exception)
 
 import Avalara (CreateTransactionRequest(..), AddressInfo(..))
 import Cache (CategoryPredecessorCache, getCategoryPredecessorCache, queryCategoryPredecessorCache)
@@ -85,8 +95,10 @@ import qualified Data.ISO3166_CountryCodes as CountryCodes
 import qualified Data.StateCodes as StateCodes
 import qualified Data.List as L
 import qualified Data.Map.Strict as M
+import qualified Data.Map.Internal as M (dropMissing, merge, preserveMissing, zipWithMatched)
+import qualified Data.Set as S
 import qualified Data.Text as T
-import qualified Database.Esqueleto as E
+import qualified Database.Esqueleto.Experimental as E
 import qualified Validation as V
 
 
@@ -114,7 +126,7 @@ data BaseProductData =
         , bpdSlug :: T.Text
         , bpdBaseSku :: T.Text
         , bpdLongDescription :: T.Text
-        , bpdImage :: ImageSourceSet
+        , bpdImages :: [ImageSourceSet]
         , bpdCategories :: [CategoryId]
         , bpdShippingRestrictions :: [Region]
         } deriving (Show)
@@ -127,20 +139,20 @@ instance ToJSON BaseProductData where
             , "slug" .= bpdSlug
             , "baseSku" .= bpdBaseSku
             , "longDescription" .= bpdLongDescription
-            , "image" .= bpdImage
+            , "images" .= bpdImages
             , "shippingRestrictions" .= bpdShippingRestrictions
             ]
 
 makeBaseProductData :: (MonadReader Config m, MonadIO m) => Entity Product -> [Entity ProductToCategory] -> m BaseProductData
 makeBaseProductData (Entity pId Product {..}) categories = do
-    image <- makeSourceSet "products" $ T.unpack productImageUrl
+    images <- mapM (makeSourceSet "products" . T.unpack) productImageUrls
     return BaseProductData
         { bpdId = pId
         , bpdName = productName
         , bpdSlug = productSlug
         , bpdBaseSku = productBaseSku
         , bpdLongDescription = productLongDescription
-        , bpdImage = image
+        , bpdImages = images
         , bpdCategories =
             productMainCategory
                 : map (productToCategoryCategoryId . entityVal) categories
@@ -158,6 +170,7 @@ data VariantData =
         , vdQuantity :: Int64
         , vdLotSize :: Maybe LotSize
         , vdIsActive :: Bool
+        , vdInventoryPolicy :: InventoryPolicy
         } deriving (Show)
 
 instance ToJSON VariantData where
@@ -171,6 +184,7 @@ instance ToJSON VariantData where
             , "quantity" .= vdQuantity
             , "lotSize" .= vdLotSize
             , "isActive" .= vdIsActive
+            , "inventoryPolicy" .= vdInventoryPolicy
             ]
 
 getVariantPrice :: VariantData -> Cents
@@ -226,6 +240,7 @@ makeVariantData (Entity variantId ProductVariant {..}) maybeSalePrice =
         , vdQuantity = productVariantQuantity
         , vdLotSize = productVariantLotSize
         , vdIsActive = productVariantIsActive
+        , vdInventoryPolicy = productVariantInventoryPolicy
         }
 
 -- | Get the CategorySales for the Product's Categories, than apply any
@@ -446,29 +461,30 @@ validatePassword :: T.Text -> T.Text -> AppSQL (Entity Customer)
 validatePassword email password = do
     maybeCustomer <- getCustomerByEmail email
     case maybeCustomer of
-        Just e@(Entity customerId customer) -> do
-            when (T.null $ customerEncryptedPassword customer) resetRequiredError
+        Just e@(Entity customerId customer)
+            | Just storedPassword <- customerEncryptedPassword customer -> do
+            when (T.null storedPassword) resetRequiredError
             let hashedPassword =
-                    encodeUtf8 $ customerEncryptedPassword customer
+                    encodeUtf8 storedPassword
                 isValid =
                     BCrypt.validatePassword hashedPassword
                         (encodeUtf8 password)
                 usesPolicy =
                     BCrypt.hashUsesPolicy BCrypt.slowerBcryptHashingPolicy
                         hashedPassword
-            if isValid && usesPolicy then
-                return e
-            else if isValid then
-                makeNewPasswordHash customerId >> return e
-            else
-                validateZencartPassword e
-        Nothing ->
-            hashAnyways $ throw NoCustomer
+            if | isValid && usesPolicy
+                -> return e
+               | isValid
+                -> makeNewPasswordHash customerId >> return e
+               | otherwise ->
+                validateZencartPassword e storedPassword
+        _ ->
+            hashAnyways $ throwIO NoCustomer
   where
     resetRequiredError =
-        void . hashAnyways $ throw PasswordResetRequired
+        void . hashAnyways $ throwIO PasswordResetRequired
     authorizationError =
-        throw AuthorizationError
+        throwIO AuthorizationError
     -- Hash the password without trying to validate it to prevent
     -- mining of valid logins.
     hashAnyways :: AppSQL a -> AppSQL a
@@ -479,9 +495,9 @@ validatePassword email password = do
     -- Try to use Zencart's password hashing scheme to validate the
     -- user's password. If it is valid, upgrade to the BCrypt hashing
     -- scheme.
-    validateZencartPassword :: Entity Customer -> AppSQL (Entity Customer)
-    validateZencartPassword e@(Entity customerId customer) =
-        case T.splitOn ":" (customerEncryptedPassword customer) of
+    validateZencartPassword :: Entity Customer -> T.Text -> AppSQL (Entity Customer)
+    validateZencartPassword e@(Entity customerId _) storedPassword =
+        case T.splitOn ":" storedPassword of
             [passwordHash, salt] ->
                 if T.length salt == 2 then
                     let isValid =
@@ -504,9 +520,9 @@ validatePassword email password = do
             BCrypt.slowerBcryptHashingPolicy
             $ encodeUtf8 password
         newHash <- maybe
-            (throw MisconfiguredHashingPolicy)
+            (throwIO MisconfiguredHashingPolicy)
             (return . decodeUtf8) maybeNewHash
-        update customerId [CustomerEncryptedPassword =. newHash]
+        update customerId [CustomerEncryptedPassword =. Just newHash]
 
 data PasswordValidationError
     = AuthorizationError
@@ -535,13 +551,66 @@ handlePasswordValidationError = \case
 
 -- Carts
 
+data CartItemError
+    = OutOfStockError Natural Natural
+    | GenericError T.Text
+    deriving (Eq, Ord, Show)
+
+instance ToJSON CartItemError where
+    toJSON (OutOfStockError available requested) =
+        object [ "code" .= ("OUT_OF_STOCK" :: T.Text)
+               , "available" .= available
+               , "requested" .= requested
+               ]
+    toJSON (GenericError message) =
+        object [ "code" .= ("GENERIC" :: T.Text)
+               , "message" .= message
+               ]
+
+instance FromJSON CartItemError where
+    parseJSON = withObject "CartItemError" $ \v -> do
+        code <- v .: "code"
+        case (code :: T.Text) of
+            "OUT_OF_STOCK" ->
+                OutOfStockError <$> v .: "available" <*> v .: "requested"
+            "GENERIC" ->
+                GenericError <$> v .: "message"
+            _ ->
+                fail $ "Unknown CartItemError code: " ++ T.unpack code
+
+data CartItemWarning
+    = LimitedAvailabilityWarning Int
+    -- ^ Currently available stock, the argument could be negative.
+    -- In this case, a backorder is required
+    | GenericWarning T.Text
+    deriving (Eq, Ord, Show)
+
+instance ToJSON CartItemWarning where
+    toJSON (LimitedAvailabilityWarning available) =
+        object [ "code" .= ("LIMITED_AVAILABILITY" :: T.Text)
+               , "available" .= available
+               ]
+    toJSON (GenericWarning message) =
+        object [ "code" .= ("GENERIC" :: T.Text)
+               , "message" .= message
+               ]
+
+instance FromJSON CartItemWarning where
+    parseJSON = withObject "CartItemWarning" $ \v -> do
+        code <- v .: "code"
+        case (code :: T.Text) of
+            "LIMITED_AVAILABILITY" -> LimitedAvailabilityWarning <$> v .: "available"
+            "GENERIC" -> GenericWarning <$> v .: "message"
+            _ -> fail $ "Unknown CartItemWarning code: " ++ T.unpack code
 
 data CartItemData =
     CartItemData
         { cidItemId :: CartItemId
         , cidProduct :: BaseProductData
         , cidVariant :: VariantData
-        , cidQuantity :: Natural
+        , cidQuantity :: Int64
+        , cidErrors :: S.Set CartItemError
+        , cidWarnings :: S.Set CartItemWarning
         }
 
 instance ToJSON CartItemData where
@@ -550,6 +619,8 @@ instance ToJSON CartItemData where
                , "product" .= cidProduct item
                , "variant" .= cidVariant item
                , "quantity" .= cidQuantity item
+               , "errors" .= cidErrors item
+               , "warnings" .= cidWarnings item
                ]
 
 
@@ -610,19 +681,30 @@ getCartItems
     :: (E.SqlExpr (Entity Cart) -> E.SqlExpr (E.Value Bool))        -- ^ The `E.where_` query
     -> AppSQL [CartItemData]
 getCartItems whereQuery = do
-    items <- E.select $ E.from
-        $ \(ci `E.InnerJoin` c `E.InnerJoin` v `E.InnerJoin` p) -> do
-            E.on (p E.^. ProductId E.==. v E.^. ProductVariantProductId)
-            E.on (v E.^. ProductVariantId E.==. ci E.^. CartItemProductVariantId)
-            E.on (c E.^. CartId E.==. ci E.^. CartItemCartId)
-            E.where_ $ whereQuery c
-            E.orderBy [E.asc $ p E.^. ProductName]
-            return (ci E.^. CartItemId, p, v, ci E.^. CartItemQuantity)
+    items <- E.select $ do
+        (ci E.:& c E.:& v E.:& p) <- E.from $ E.table
+            `E.innerJoin` E.table
+                `E.on` (\(ci E.:& c) -> c E.^. CartId E.==. ci E.^. CartItemCartId)
+            `E.innerJoin` E.table
+                `E.on` (\(ci E.:& _ E.:& v) -> v E.^. ProductVariantId E.==. ci E.^. CartItemProductVariantId)
+            `E.innerJoin` E.table
+                `E.on` (\(_ E.:& v E.:& p) -> p E.^. ProductId E.==. v E.^. ProductVariantProductId)
+        E.where_ $ whereQuery c
+        E.orderBy [E.asc $ p E.^. ProductName]
+        return (ci E.^. CartItemId, p, v, ci E.^. CartItemQuantity)
     mapM toItemData items
-    where toItemData (i, p, v, q) =
+    where toItemData (i, p, v@(Entity _ pv), q) =
             let
                 quantity =
                     E.unValue q
+                errors =
+                    [ OutOfStockError (fromIntegral $ productVariantQuantity pv) (fromIntegral quantity)
+                    | quantity > productVariantQuantity pv && productVariantInventoryPolicy pv == RequireStock
+                    ]
+                warnings =
+                    [ LimitedAvailabilityWarning (fromIntegral $ productVariantQuantity pv)
+                    | quantity > productVariantQuantity pv && productVariantInventoryPolicy pv == AllowBackorder
+                    ]
             in do
                 categories <- getAdditionalCategories (entityKey p)
                 maybeCategorySale <- listToMaybe <$> getCategorySales p
@@ -633,7 +715,9 @@ getCartItems whereQuery = do
                     { cidItemId = E.unValue i
                     , cidProduct = productData
                     , cidVariant = variantData
-                    , cidQuantity = quantity
+                    , cidQuantity = coerce quantity
+                    , cidErrors = S.fromList errors
+                    , cidWarnings = S.fromList warnings
                     }
 
 
@@ -664,8 +748,8 @@ getCharges maybeShipping maybeAvalaraCustomer items maybeCoupon priorityShipping
             adCountry <$> maybeShipping
         subTotal =
             foldl (\acc item -> acc + itemTotal item) 0 items
-        itemTotal item =
-            fromIntegral (cidQuantity item) * fromCents (getVariantPrice $ cidVariant item)
+        itemTotal item = fromCents $
+            getVariantPrice (cidVariant item) `timesQuantity` cidQuantity item
         couponCredit ms (Entity _ coupon) =
             if couponMinimumOrder coupon <= Cents subTotal then
                 Just $ CartCharge
@@ -694,10 +778,10 @@ getCharges maybeShipping maybeAvalaraCustomer items maybeCoupon priorityShipping
         sumGrandTotal avalaraStatus cc =
             let preTaxTotal =
                     ccProductTotal cc
-                        + sum (map ccAmount $ ccSurcharges cc)
-                        + mAmt (listToMaybe . map scCharge . ccShippingMethods)
-                        + mAmt ccPriorityShippingFee
-                        - mAmt ccCouponDiscount
+                        `plusCents` sumPrices (map ccAmount $ ccSurcharges cc)
+                        `plusCents` mAmt (listToMaybe . map scCharge . ccShippingMethods)
+                        `plusCents` mAmt ccPriorityShippingFee
+                        `subtractCents` mAmt ccCouponDiscount
             in do
             taxCharge <- case avalaraStatus of
                 AvalaraEnabled ->
@@ -708,7 +792,7 @@ getCharges maybeShipping maybeAvalaraCustomer items maybeCoupon priorityShipping
                 _ ->
                     return (taxLine preTaxTotal)
             return cc
-                { ccGrandTotal = preTaxTotal + ccAmount taxCharge
+                { ccGrandTotal = preTaxTotal `plusCents` ccAmount taxCharge
                 , ccTax = taxCharge
                 }
             where mAmt f = maybe (Cents 0) ccAmount $ f cc
@@ -723,11 +807,11 @@ getCharges maybeShipping maybeAvalaraCustomer items maybeCoupon priorityShipping
             , ccPriorityShippingFee = priorityCharge shippingMethods
             , ccProductTotal = Cents subTotal
             , ccCouponDiscount = maybeCoupon >>= couponCredit shippingMethods
-            , ccGrandTotal = 0
+            , ccGrandTotal = mkCents 0
             }
   where
     blankCharge =
-        CartCharge "" 0
+        CartCharge "" (mkCents 0)
     getTaxQuote :: CartCharges -> AppSQL CartCharge
     getTaxQuote cc = flip (maybe $ return blankCharge) maybeShipping $ \shippingAddress -> do
         date <- liftIO getCurrentTime
@@ -746,7 +830,7 @@ getCharges maybeShipping maybeAvalaraCustomer items maybeCoupon priorityShipping
             debitLines =
                 surchargeLines <> shippingLine <> priorityLine
             discount =
-                toDollars $ sum $ map ccAmount $ maybeToList $ ccCouponDiscount cc
+                toDollars $ sumPrices $ map ccAmount $ maybeToList $ ccCouponDiscount cc
             address =
                 Avalara.Address
                     { Avalara.addrSingleLocation = Nothing
@@ -817,7 +901,7 @@ getCharges maybeShipping maybeAvalaraCustomer items maybeCoupon priorityShipping
 
 -- | Calculate the discount of a Coupon, given the Coupon, a list of
 -- shipping methods, & the order sub-total.
-calculateCouponDiscount :: Coupon -> [CartCharge] -> Natural -> Cents
+calculateCouponDiscount :: Coupon -> [CartCharge] -> Int64 -> Cents
 calculateCouponDiscount coupon shipMethods subTotal =
     case (couponDiscount coupon, shipMethods) of
         (FreeShipping, m:_) ->
@@ -830,7 +914,7 @@ calculateCouponDiscount coupon shipMethods subTotal =
         (PercentageDiscount percent, _) ->
             Cents . round $ toRational subTotal * (fromIntegral percent % 100)
 
-calculatePriorityFee :: [ShippingCharge] -> Natural -> Maybe Cents
+calculatePriorityFee :: [ShippingCharge] -> Int64 -> Maybe Cents
 calculatePriorityFee shipMethods subTotal =
     case shipMethods of
         ShippingCharge _ (Just fee) True:_ ->
@@ -867,7 +951,7 @@ getSurcharges items =
                 else
                     Just $ CartCharge (surchargeDescription surcharge) amount
 
-getShippingMethods :: Maybe Country -> [CartItemData] -> Natural -> AppSQL [ShippingCharge]
+getShippingMethods :: Maybe Country -> [CartItemData] -> Int64 -> AppSQL [ShippingCharge]
 getShippingMethods maybeCountry items subTotal =
     case maybeCountry of
         Nothing ->
@@ -881,7 +965,7 @@ getShippingMethods maybeCountry items subTotal =
                     country `elem` shippingMethodCountries method
                 validProducts =
                     null (shippingMethodCategoryIds method)
-                        || all isValidProduct (map cidProduct items)
+                        || all (isValidProduct . cidProduct) items
                 isValidProduct prod =
                      not . null $ bpdCategories prod `intersect` shippingMethodCategoryIds method
                 thresholdAmount rates =
@@ -917,7 +1001,7 @@ getShippingMethods maybeCountry items subTotal =
                             (Just $ shippingMethodPriorityRate method)
                             priorityEnabled
                 priorityExcluded =
-                    any productExcludesPriority (map cidProduct items)
+                    any (productExcludesPriority . cidProduct) items
                 productExcludesPriority prod =
                     not . null $ bpdCategories prod `intersect`
                         shippingMethodExcludedPriorityCategoryIds method
@@ -929,6 +1013,68 @@ getShippingMethods maybeCountry items subTotal =
                 else
                     Nothing
 
+-- | Errors and warnings known for the current state of the cart.
+-- This is used to compare against the cart state in the database to ensure that user
+-- has the latest regarding the availability of the products in the cart.
+data CartInventoryNotifications = CartInventoryNotifications
+    { cinWarnings :: M.Map Int64 (S.Set CartItemWarning)
+    , cinErrors :: M.Map Int64 (S.Set CartItemError)
+    } deriving (Eq, Show)
+
+instance ToJSON CartInventoryNotifications where
+    toJSON (CartInventoryNotifications warnings errors) =
+        object
+            [ "warnings" .= warnings
+            , "errors" .= errors
+            ]
+
+instance FromJSON CartInventoryNotifications where
+    parseJSON = withObject "CartInventoryNotifications" $ \v ->
+        CartInventoryNotifications
+            <$> v .: "warnings"
+            <*> v .: "errors"
+
+getCartInventoryNotifications :: CartId -> AppSQL CartInventoryNotifications
+getCartInventoryNotifications cartId = do
+    items <- getCartItems $ \c -> c E.^. CartId E.==. E.val cartId
+    let (cinWarnings, cinErrors) = foldl' processItem (M.empty, M.empty) items
+    return $ CartInventoryNotifications cinWarnings cinErrors
+    where
+        processItem
+            :: (M.Map Int64 (S.Set CartItemWarning), M.Map Int64 (S.Set CartItemError))
+            -> CartItemData
+            -> (M.Map Int64 (S.Set CartItemWarning), M.Map Int64 (S.Set CartItemError))
+        processItem (warnings, errors) CartItemData{..} =
+            let
+                productVariantId = E.fromSqlKey cidItemId
+            in
+                ( M.insert productVariantId cidWarnings warnings
+                , M.insert productVariantId cidErrors errors
+                )
+
+getUnseenCartInventoryNotifications
+    :: CartInventoryNotifications
+    -> CartInventoryNotifications
+    -> CartInventoryNotifications
+getUnseenCartInventoryNotifications seenNotifications currentNotifications =
+    CartInventoryNotifications
+        { cinWarnings = filterNotNull $
+            merge (cinWarnings seenNotifications) (cinWarnings currentNotifications)
+        , cinErrors = filterNotNull $
+            merge (cinErrors seenNotifications) (cinErrors currentNotifications)
+        }
+    where
+        filterNotNull = M.filter (not . S.null)
+        -- We only keep the warnings and errors that are not seen yet.
+        -- If both current and seen have the same key, we keep the difference.
+        -- If seen has a key that is not in current, we ignore it.
+        -- If current has a key that is not in seen, we keep it as is.
+        merge seen current = M.merge
+            M.dropMissing
+            M.preserveMissing
+            (M.zipWithMatched $ \_ seenSet currentSet ->
+                S.difference currentSet seenSet
+            ) seen current
 
 -- Addresses
 
@@ -947,6 +1093,7 @@ data AddressData =
         , adCountry :: Country
         , adPhoneNumber :: T.Text
         , adIsDefault :: Bool
+        , adSkipVerification :: Bool
         } deriving (Eq, Show)
 
 instance FromJSON AddressData where
@@ -964,6 +1111,7 @@ instance FromJSON AddressData where
             <*> v .: "country"
             <*> v .: "phoneNumber"
             <*> v .: "isDefault"
+            <*> v .: "skipVerification"
 
 instance ToJSON AddressData where
     toJSON address =
@@ -980,6 +1128,7 @@ instance ToJSON AddressData where
             , "country" .= adCountry address
             , "phoneNumber" .= adPhoneNumber address
             , "isDefault" .= adIsDefault address
+            , "skipVerification" .= adSkipVerification address
             ]
 
 instance Validation AddressData where
@@ -1035,6 +1184,7 @@ fromAddressData type_ customerId address =
         , addressType = type_
         , addressCustomerId = customerId
         , addressIsActive = True
+        , addressVerified = False
         }
 
 toAddressData :: Entity Address -> AddressData
@@ -1052,6 +1202,7 @@ toAddressData (Entity addressId address) =
         , adCountry = addressCountry address
         , adPhoneNumber = addressPhoneNumber address
         , adIsDefault = addressIsDefault address
+        , adSkipVerification = (addressType address) /= Shipping
         }
 
 -- | Transform an 'AddressData' into an Avalara Address.
@@ -1070,7 +1221,6 @@ addressToAvalara AddressData {..} =
         , aiLongitude = Nothing
         }
 
-
 -- Order Details
 
 
@@ -1081,7 +1231,22 @@ data OrderDetails =
         , odProducts :: [CheckoutProduct]
         , odShippingAddress :: AddressData
         , odBillingAddress :: Maybe AddressData
+        , odDeliveryData :: [DeliveryData]
         } deriving (Show)
+
+data DeliveryData = DeliveryData
+    { ddTrackNumber :: T.Text
+    , ddTrackCarrier :: T.Text
+    , ddTrackPickupDate :: T.Text
+    } deriving (Show)
+
+instance ToJSON DeliveryData where
+    toJSON delivery =
+        object
+            [ "trackNumber" .= ddTrackNumber delivery
+            , "trackCarrier" .= ddTrackCarrier delivery
+            , "trackPickupDate" .= ddTrackPickupDate delivery
+            ]
 
 instance ToJSON OrderDetails where
     toJSON details =
@@ -1091,12 +1256,21 @@ instance ToJSON OrderDetails where
             , "products" .= odProducts details
             , "shippingAddress" .= odShippingAddress details
             , "billingAddress" .= odBillingAddress details
+            , "deliveryData" .= odDeliveryData details
             ]
+
+toDeliveryData :: Entity OrderDelivery -> DeliveryData
+toDeliveryData (Entity _ delivery) =
+    DeliveryData
+        { ddTrackNumber = orderDeliveryTrackNumber delivery
+        , ddTrackCarrier = orderDeliveryTrackCarrier delivery
+        , ddTrackPickupDate = orderDeliveryTrackPickupDate delivery
+        }
 
 data CheckoutOrder =
     CheckoutOrder
         { coId :: OrderId
-        , coStatus :: OrderStatus
+        , coStatus :: T.Text
         , coComment :: T.Text
         , coCreatedAt :: UTCTime
         } deriving (Show)
@@ -1110,11 +1284,14 @@ instance ToJSON CheckoutOrder where
             , "createdAt" .= coCreatedAt order
             ]
 
+toOrderStatus :: Order -> T.Text
+toOrderStatus order = fromMaybe (showOrderStatus $ orderStatus order) $ orderStoneEdgeStatus order
+
 toCheckoutOrder :: Entity Order -> CheckoutOrder
 toCheckoutOrder (Entity orderId order) =
     CheckoutOrder
         { coId = orderId
-        , coStatus = orderStatus order
+        , coStatus = toOrderStatus order
         , coComment = orderCustomerComment order
         , coCreatedAt = orderCreatedAt order
         }
@@ -1140,18 +1317,20 @@ instance ToJSON CheckoutProduct where
 
 getCheckoutProducts :: OrderId -> AppSQL [CheckoutProduct]
 getCheckoutProducts orderId = do
-    orderProducts <- E.select $ E.from $
-        \(op `E.InnerJoin` v `E.InnerJoin` p) -> do
-            E.on $ p E.^. ProductId E.==. v E.^. ProductVariantProductId
-            E.on $ v E.^. ProductVariantId E.==. op E.^. OrderProductProductVariantId
-            E.where_ $ op E.^. OrderProductOrderId E.==. E.val orderId
-            return (op, v , p)
+    orderProducts <- E.select $ do
+        (op E.:& v E.:& p) <-  E.from $ E.table
+            `E.innerJoin` E.table
+                `E.on` (\(op E.:& v) -> v E.^. ProductVariantId E.==. op E.^. OrderProductProductVariantId)
+            `E.innerJoin` E.table
+                `E.on` (\(_ E.:& v E.:& p) -> p E.^. ProductId E.==. v E.^. ProductVariantProductId)
+        E.where_ $ op E.^. OrderProductOrderId E.==. E.val orderId
+        return (op, v , p)
     return $ map makeCheckoutProduct orderProducts
     where makeCheckoutProduct (Entity _ orderProd, Entity _ variant, Entity _ product) =
             CheckoutProduct
                 { cpName = productName product
                 , cpSku = productBaseSku product <> productVariantSkuSuffix variant
                 , cpLotSize = productVariantLotSize variant
-                , cpQuantity = orderProductQuantity orderProd
+                , cpQuantity = fromIntegral $ orderProductQuantity orderProd
                 , cpPrice = orderProductPrice orderProd
                 }

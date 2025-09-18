@@ -2,6 +2,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE InstanceSigs #-}
 {-| This module contains types and functions required for integrating with
 the StoneEdge Order Manager.
 
@@ -37,6 +38,35 @@ module StoneEdge
     , DownloadOrdersRequest(..)
     , DownloadOrdersResponse(..)
     , renderDownloadOrdersResponse
+      -- ** Order Update Status
+    , UpdateStatusRequest(..)
+    , UpdateStatusResponse(..)
+    , renderUpdateStatusResponse
+      -- * QOH Replace
+    , QOHReplaceRequest(..)
+    , QOHReplaceResponse(..)
+    , SKUQOHUpdateStatus(..)
+    , renderQOHReplaceResponse
+      -- Product Count
+    , GetProductsCountRequest(..)
+    , GetProductsCountResponse(..)
+    , renderGetProductsCountResponse
+      -- Download Product
+    , DownloadProdsRequest(..)
+    , DownloadProdsResponse(..)
+    , renderDownloadProdsResponse
+      -- Inventory Update
+    , InvUpdateRequest(..)
+    , InvUpdateResponse(..)
+    , renderInvUpdateResponse
+      -- Customer Count
+    , GetCustomersCountRequest(..)
+    , GetCustomersCountResponse(..)
+    , renderGetCustomersCountResponse
+      -- Download Customers
+    , DownloadCustomersRequest(..)
+    , DownloadCustomersResponse(..)
+    , renderDownloadCustomersResponse
       -- *** Order Download Sub-Types
     , StoneEdgeOrder(..)
     , renderStoneEdgeOrder
@@ -72,9 +102,20 @@ module StoneEdge
     , renderStoneEdgeCoupon
     , StoneEdgeOtherData(..)
     , renderStoneEdgeOtherData
+    , StoneEdgeTrackData(..)
+      -- Product Download Sub-Types
+    , StoneEdgeProduct(..)
+      -- Customer Download Sub-Types
+    , StoneEdgeCustomer(..)
+    , renderStoneEdgeCustomer
+    , StoneEdgeCustomerBillingAddress(..)
+    , StoneEdgeCustomerShippingAddress(..)
+    , StoneEdgeCustomerAddress(..)
     ) where
 
-import Data.Monoid ((<>))
+import Data.Bool (bool)
+import Data.List.NonEmpty (NonEmpty, fromList, toList)
+import Data.Maybe (fromMaybe)
 import Data.Scientific (Scientific, FPFormat(Fixed), formatScientific, scientific)
 import Data.Text.Encoding (decodeUtf8, encodeUtf8)
 import Data.Time (LocalTime, Day, parseTimeM, defaultTimeLocale, formatTime)
@@ -87,6 +128,7 @@ import Web.FormUrlEncoded (FromForm(..), Form, parseUnique, parseMaybe)
 
 import qualified Data.ByteString as BS
 import qualified Data.Text as T
+import Models.DB (OrderId)
 
 
 -- Errors
@@ -572,7 +614,7 @@ renderStoneEdgeOtherData StoneEdgeOtherData {..} =
     xelem "Other" $ xelems
         [ maybeXelemText "OrderInstructions" seodOrderInstructions
         , maybeXelemText "Comments" seodComments
-        , maybeXelemTextWith "CustomerID" showText seodCustomerId
+        , maybeXelemTextWith "WebCustomerID" showText seodCustomerId
         ]
 
 
@@ -633,10 +675,457 @@ instance FromForm LastDate where
         "all" ->
             return NoDate
         dateStr ->
-            fmap LastDate . parseTimeM True defaultTimeLocale "%e-%h-%Y"
+            fmap LastDate . runFormatError . parseTimeM True defaultTimeLocale "%e-%h-%Y"
                 $ T.unpack dateStr
 
 
+newtype FormatError a = MkFormatError { runFormatError :: Either T.Text a }
+    deriving newtype (Functor, Applicative, Monad)
+
+instance MonadFail FormatError where
+    fail = MkFormatError . Left . T.pack
+
+-- Update Status
+
+data UpdateStatusRequest = UpdateStatusRequest
+    { usrUser :: T.Text
+    , usrPass :: T.Text
+    , usrStoreCode :: T.Text
+    , usrOrderNumber :: OrderId
+    , usrOrderStatus :: T.Text
+    , usrRefNumber :: Maybe T.Text
+    , usrOrderDetail :: Maybe T.Text
+    , usrTrackCount :: Maybe Integer
+    , usrTrackData :: [StoneEdgeTrackData]
+    , usrOMVersion :: T.Text
+    } deriving (Eq, Show, Read)
+
+data StoneEdgeTrackData = StoneEdgeTrackData
+    { setdTrackNum :: T.Text
+    , setdTrackCarrier :: T.Text
+    , setdPickupDate :: T.Text
+    } deriving (Eq, Show, Read)
+
+instance FromForm UpdateStatusRequest where
+    fromForm :: Form -> Either T.Text UpdateStatusRequest
+    fromForm = matchFunction "updatestatus" $ \f -> do
+        usrUser <- parseUnique "setiuser" f
+        usrPass <- parseUnique "password" f
+        usrStoreCode <- parseUnique "code" f
+        usrOrderNumber <- parseUnique "ordernumber" f
+        usrOrderStatus <- parseUnique "orderstatus" f
+        usrRefNumber <- parseMaybe "refnumber" f
+        usrOrderDetail <- parseMaybe "orderdetail" f
+        usrTrackCount <- parseMaybe "trackcount" f
+        usrTrackData <- if usrTrackCount == Just 1
+            then do
+                (:[]) <$> parseTrackData "" f
+            else do
+                sequence $ traverse (parseTrackData . T.pack . show) [1..(fromMaybe 0 usrTrackCount)] f
+        usrOMVersion <- parseUnique "omversion" f
+        return UpdateStatusRequest {..}
+        where
+            parseTrackData prefix f = do
+                tdTrackNum <- parseUnique ("tracknum" <> prefix) f
+                tdTrackCarrier <- parseUnique ("trackcarrier" <> prefix) f
+                tdPickupDate <- parseUnique ("trackpickupdate" <> prefix) f
+                return $ StoneEdgeTrackData tdTrackNum tdTrackCarrier tdPickupDate
+
+instance HasStoneEdgeCredentials UpdateStatusRequest where
+    userParam = usrUser
+    passwordParam = usrPass
+    storeCodeParam = usrStoreCode
+
+data UpdateStatusResponse
+    = UpdateStatusSuccess
+    | UpdateStatusError T.Text
+
+renderUpdateStatusResponse :: UpdateStatusResponse -> T.Text
+renderUpdateStatusResponse = \case
+    UpdateStatusSuccess -> "SETIResponse: update=OK;Notes="
+    UpdateStatusError err -> "SETIResponse: update=False;Notes=" <> err
+
+-- QOH Replace
+
+data QOHReplaceRequest
+    = QOHReplaceRequest
+        { qrrUser :: T.Text
+        , qrrPass :: T.Text
+        , qrrStoreCode :: T.Text
+        , qrrCount :: Integer
+        , qrrUpdates :: NonEmpty (T.Text, Integer) -- (sku, quantity)
+        , qrrOMVersion :: T.Text
+        } deriving (Eq, Show, Read)
+
+instance FromForm QOHReplaceRequest where
+    fromForm = matchFunction "qohreplace" $ \f -> do
+        qrrUser <- parseUnique "setiuser" f
+        qrrPass <- parseUnique "password" f
+        qrrStoreCode <- parseUnique "code" f
+        qrrCount <- parseUnique "count" f
+        updateRaw <- parseUnique @T.Text "update" f
+        qrrUpdates <- case parseUpdates qrrCount updateRaw of
+            Left err -> Left err
+            Right updates -> Right updates
+        qrrOMVersion <- parseUnique "omversion" f
+        return QOHReplaceRequest {..}
+      where
+        parseUpdates :: Integer -> T.Text -> Either T.Text (NonEmpty (T.Text, Integer))
+        parseUpdates count updateRaw =
+            -- the format is 'sku1~quantity1|sku2~quantity2|...|', however the documentation specifies
+            -- 'sku1~quantity1|sku2~quantity2|...' without the trailing '|', so
+            -- we use `init` when the last character is '|'
+            let updates = T.splitOn "|" updateRaw
+                parsedUpdates = map (T.splitOn "~") $ bool updates (init updates) (T.last updateRaw == '|')
+            in if length parsedUpdates /= fromIntegral count then
+                Left $ "Expected " <> T.pack (show count) <> " updates, got " <> T.pack (show $ length parsedUpdates)
+            else
+                fromList <$> sequence
+                    [ case vs of
+                        [k, v] ->
+                            case readMaybe (T.unpack v) of
+                                Just qty -> Right (k, qty)
+                                Nothing -> Left $ "Could not parse quantity for SKU " <> k <> ": " <> v
+                        _ -> Left $ "Malformed update entry: " <> T.intercalate "~" vs
+                    | vs <- parsedUpdates
+                    ]
+
+instance HasStoneEdgeCredentials QOHReplaceRequest where
+    userParam = qrrUser
+    passwordParam = qrrPass
+    storeCodeParam = qrrStoreCode
+
+data SKUQOHUpdateStatus
+    = Ok
+    | NotAvailable
+    | NotFound
+    deriving (Eq, Show, Read)
+
+renderSKUQOHUpdateStatus :: SKUQOHUpdateStatus -> T.Text
+renderSKUQOHUpdateStatus = \case
+    Ok -> "OK"
+    NotAvailable -> "NA"
+    NotFound -> "NF"
+
+newtype QOHReplaceResponse = QOHReplaceResponse (NonEmpty (T.Text, SKUQOHUpdateStatus))
+    -- ^ List of (SKU, Status) pairs indicating the result of the QOH update.
+    deriving (Eq, Show, Read)
+
+renderQOHReplaceResponse :: QOHReplaceResponse -> T.Text
+renderQOHReplaceResponse (QOHReplaceResponse updates) =
+    "SETIResponse\n" <> T.intercalate "\n" (map renderUpdate (toList updates)) <> "\nSETIEndOfData"
+    where
+        renderUpdate (sku, status) =
+            sku <> "=" <> renderSKUQOHUpdateStatus status
+
+-- Product Count
+
+data GetProductsCountRequest
+    = GetProductsCountRequest
+        { gpcrUser :: T.Text
+        , gpcrPass :: T.Text
+        , gpcrStoreCode :: T.Text
+        , gpcrOMVersion :: T.Text
+        } deriving (Eq, Show, Read)
+
+instance FromForm GetProductsCountRequest where
+    fromForm = matchFunction "getproductscount" $ \f -> do
+        gpcrUser <- parseUnique "setiuser" f
+        gpcrPass <- parseUnique "password" f
+        gpcrStoreCode <- parseUnique "code" f
+        gpcrOMVersion <- parseUnique "omversion" f
+        return GetProductsCountRequest {..}
+
+instance HasStoneEdgeCredentials GetProductsCountRequest where
+    userParam = gpcrUser
+    passwordParam = gpcrPass
+    storeCodeParam = gpcrStoreCode
+
+newtype GetProductsCountResponse = GetProductsCountResponse { gpcrProductCount :: Integer }
+    deriving (Eq, Show, Read)
+
+renderGetProductsCountResponse :: GetProductsCountResponse -> T.Text
+renderGetProductsCountResponse GetProductsCountResponse {..} =
+    "SETIResponse: itemcount=" <> T.pack (show gpcrProductCount)
+
+-- Download Products
+
+data DownloadProdsRequest = DownloadProdsRequest
+    { dprUser :: T.Text
+    , dprPass :: T.Text
+    , dprStoreCode :: T.Text
+    , dprStartNumber :: Maybe Integer
+    , dprBatchSize :: Maybe Integer
+    , dprOMVersion :: T.Text
+    } deriving (Eq, Show, Read)
+
+instance FromForm DownloadProdsRequest where
+    fromForm = matchFunction "downloadprods" $ \f -> do
+        dprUser <- parseUnique "setiuser" f
+        dprPass <- parseUnique "password" f
+        dprStoreCode <- parseUnique "code" f
+        dprStartNumber <- parseMaybe "startnum" f
+        dprBatchSize <- parseMaybe "batchsize" f
+        dprOMVersion <- parseUnique "omversion" f
+        return DownloadProdsRequest {..}
+
+instance HasStoneEdgeCredentials DownloadProdsRequest where
+    userParam = dprUser
+    passwordParam = dprPass
+    storeCodeParam = dprStoreCode
+
+newtype DownloadProdsResponse = DownloadProdsResponse { dprProducts :: [StoneEdgeProduct] }
+    deriving (Eq, Show, Read)
+
+renderDownloadProdsResponse :: DownloadProdsResponse -> BS.ByteString
+renderDownloadProdsResponse (DownloadProdsResponse products) =
+    renderXmlSETIResponse Products 1 "Success" . xelems $ map renderStoneEdgeProduct products
+
+data StoneEdgeProduct = StoneEdgeProduct
+    { sepCode :: T.Text
+    , sepName :: T.Text
+    , sepPrice :: Scientific
+    , sepDescription :: Maybe T.Text
+    , sepWeight :: Scientific
+    , sepDiscontinued :: Bool
+    , sepQOH :: Integer
+    , sepCustomFields :: [(T.Text, T.Text)]
+    -- There are more fields in the specification, but we're using only these
+    -- at the moment
+    } deriving (Eq, Show, Read)
+
+renderStoneEdgeProduct :: StoneEdgeProduct -> Xml Elem
+renderStoneEdgeProduct StoneEdgeProduct {..} =
+    xelem "Product" $ xelems
+        [ xelemWithText "Code" sepCode
+        , xelemWithText "Name" sepName
+        , xelemWithText "Price" $ renderScientific sepPrice
+        , maybeXelemText "Description" sepDescription
+        , xelemWithText "Weight" $ renderScientific sepWeight
+        , xelemWithText "Discontinued" $ renderBoolAsYesNo sepDiscontinued
+        , xelemWithText "QOH" $ showText sepQOH
+        , xelem "CustomFields" $ xelems
+            [ xelem "CustomField" $ xelems
+                [ xelemWithText "FieldName" name
+                , xelemWithText "FieldValue" value
+                ]
+            | (name, value) <- sepCustomFields
+            ]
+        ]
+
+-- Inventory Update
+
+data InvUpdateRequest = InvUpdateRequest
+    { iurUser :: T.Text
+    , iurPass :: T.Text
+    , iurStoreCode :: T.Text
+    , iurUpdate :: (T.Text, Integer) -- (sku, quantity)
+    , iurOMVersion :: T.Text
+    } deriving (Eq, Show, Read)
+
+instance FromForm InvUpdateRequest where
+    fromForm = matchFunction "invupdate" $ \f -> do
+        iurUser <- parseUnique "setiuser" f
+        iurPass <- parseUnique "password" f
+        iurStoreCode <- parseUnique "code" f
+        updateRaw <- parseUnique @T.Text "update" f
+        iurOMVersion <- parseUnique "omversion" f
+        case T.splitOn "~" updateRaw of
+            [sku, qtyStr] -> do
+                qty <- case readMaybe (T.unpack qtyStr) of
+                    Just q -> Right q
+                    Nothing -> Left $ "Could not parse quantity for SKU " <> sku <> ": " <> qtyStr
+                let iurUpdate = (sku, qty)
+                return InvUpdateRequest {..}
+            _ -> Left $ "Malformed update entry: " <> updateRaw
+
+instance HasStoneEdgeCredentials InvUpdateRequest where
+    userParam = iurUser
+    passwordParam = iurPass
+    storeCodeParam = iurStoreCode
+
+data InvUpdateResponse = InvUpdateResponse
+    { iruSuccess :: Bool
+    , iruSKU :: T.Text
+    , iruQOH :: Either Integer SKUQOHUpdateStatus
+    , iruNote :: Maybe T.Text
+    } deriving (Eq, Show, Read)
+
+renderInvUpdateResponse :: InvUpdateResponse -> T.Text
+renderInvUpdateResponse InvUpdateResponse {..} =
+    "SETIResponse=" <> bool "False" "OK" iruSuccess <>
+    ";SKU=" <> iruSKU <>
+    ";QOH=" <> (case iruQOH of
+        Left qoh -> T.pack (show qoh)
+        Right status -> renderSKUQOHUpdateStatus status
+    ) <> ";NOTE=" <> fromMaybe "" iruNote
+
+-- Customers Count
+
+data GetCustomersCountRequest
+    = GetCustomersCountRequest
+        { gccrUser :: T.Text
+        , gccrPass :: T.Text
+        , gccrStoreCode :: T.Text
+        , gccrOMVersion :: T.Text
+        } deriving (Eq, Show, Read)
+
+instance FromForm GetCustomersCountRequest where
+    fromForm = matchFunction "getcustomerscount" $ \f -> do
+        gccrUser <- parseUnique "setiuser" f
+        gccrPass <- parseUnique "password" f
+        gccrStoreCode <- parseUnique "code" f
+        gccrOMVersion <- parseUnique "omversion" f
+        return GetCustomersCountRequest {..}
+
+instance HasStoneEdgeCredentials GetCustomersCountRequest where
+    userParam = gccrUser
+    passwordParam = gccrPass
+    storeCodeParam = gccrStoreCode
+
+newtype GetCustomersCountResponse = GetCustomersCountResponse { gccrCustomerCount :: Integer }
+    deriving (Eq, Show, Read)
+
+renderGetCustomersCountResponse :: GetCustomersCountResponse -> T.Text
+renderGetCustomersCountResponse GetCustomersCountResponse {..} =
+    "SETIResponse: itemcount=" <> T.pack (show gccrCustomerCount)
+
+-- Download Customers
+
+data DownloadCustomersRequest = DownloadCustomersRequest
+    { dcrUser :: T.Text
+    , dcrPass :: T.Text
+    , dcrStoreCode :: T.Text
+    , dcrStartNumber :: Maybe Integer
+    , dcrBatchSize :: Maybe Integer
+    , dcrOMVersion :: T.Text
+    } deriving (Eq, Show, Read)
+
+instance FromForm DownloadCustomersRequest where
+    fromForm = matchFunction "downloadcustomers" $ \f -> do
+        dcrUser <- parseUnique "setiuser" f
+        dcrPass <- parseUnique "password" f
+        dcrStoreCode <- parseUnique "code" f
+        dcrStartNumber <- parseMaybe "startnum" f
+        dcrBatchSize <- parseMaybe "batchsize" f
+        dcrOMVersion <- parseUnique "omversion" f
+        return DownloadCustomersRequest {..}
+
+instance HasStoneEdgeCredentials DownloadCustomersRequest where
+    userParam = dcrUser
+    passwordParam = dcrPass
+    storeCodeParam = dcrStoreCode
+
+newtype DownloadCustomersResponse = DownloadCustomersResponse
+    { dcrCustomers :: [StoneEdgeCustomer]
+    } deriving (Eq, Show, Read)
+
+renderDownloadCustomersResponse :: DownloadCustomersResponse -> BS.ByteString
+renderDownloadCustomersResponse (DownloadCustomersResponse customers) =
+    renderXmlSETIResponse Customers 1 "Success" . xelems $ map renderStoneEdgeCustomer customers
+
+data StoneEdgeCustomer = StoneEdgeCustomer
+    { secWebID :: Maybe Integer
+    , secUserName :: Maybe T.Text
+    , secuPassword :: Maybe T.Text
+    , secAffiliateId :: Maybe T.Text
+    , secBillAddr :: StoneEdgeCustomerBillingAddress
+    , secShipAddr :: StoneEdgeCustomerShippingAddress
+    , secCustomFields :: [(T.Text, T.Text)]
+    } deriving (Eq, Show, Read)
+
+renderStoneEdgeCustomer :: StoneEdgeCustomer -> Xml Elem
+renderStoneEdgeCustomer StoneEdgeCustomer {..} =
+    xelem "Customer" $ xelems
+        [ maybe xempty (xelemWithText "WebID" . showText) secWebID
+        , maybe xempty (xelemWithText "UserName") secUserName
+        , maybe xempty (xelemWithText "Password") secuPassword
+        , maybe xempty (xelemWithText "AffiliateID") secAffiliateId
+        , renderStoneEdgeCustomerBillingAddress secBillAddr
+        , renderStoneEdgeCustomerShippingAddress secShipAddr
+        , xelem "CustomFields" $ xelems
+            [ xelem "CustomField" $ xelems
+                [ xelemWithText "FieldName" name
+                , xelemWithText "FieldValue" value
+                ]
+            | (name, value) <- secCustomFields
+            ]
+        ]
+
+data StoneEdgeCustomerBillingAddress = StoneEdgeCustomerBillingAddress
+    { secbaNamePrefix :: Maybe T.Text
+    , secbaFirstName :: T.Text
+    , secbaMiddleName :: Maybe T.Text
+    , secbaLastName :: T.Text
+    , secbaNameSuffix :: Maybe T.Text
+    , secbaCompany :: Maybe T.Text
+    , secbaPhone :: Maybe T.Text
+    , secbaEmail :: Maybe T.Text
+    , secbaTaxId :: Maybe T.Text
+    , secbaAddress :: StoneEdgeCustomerAddress
+    } deriving (Eq, Show, Read)
+
+renderStoneEdgeCustomerBillingAddress :: StoneEdgeCustomerBillingAddress -> Xml Elem
+renderStoneEdgeCustomerBillingAddress StoneEdgeCustomerBillingAddress {..} =
+    xelem "BillAddr" $ xelems
+        [ maybeXelemText "NamePrefix" secbaNamePrefix
+        , xelemWithText "FirstName" secbaFirstName
+        , maybeXelemText "MiddleName" secbaMiddleName
+        , xelemWithText "LastName" secbaLastName
+        , maybeXelemText "NameSuffix" secbaNameSuffix
+        , maybeXelemText "Company" secbaCompany
+        , maybeXelemText "Phone" secbaPhone
+        , maybeXelemText "Email" secbaEmail
+        , maybeXelemText "TaxID" secbaTaxId
+        , renderStoneEdgeCustomerAddress secbaAddress
+        ]
+
+data StoneEdgeCustomerShippingAddress = StoneEdgeCustomerShippingAddress
+    { secsaNamePrefix :: Maybe T.Text
+    , secsaFirstName :: T.Text
+    , secsaMiddleName :: Maybe T.Text
+    , secsaLastName :: T.Text
+    , secsaNameSuffix :: Maybe T.Text
+    , secsaCompany :: Maybe T.Text
+    , secsaPhone :: Maybe T.Text
+    , secsaEmail :: Maybe T.Text
+    , secsaAddress :: StoneEdgeCustomerAddress
+    } deriving (Eq, Show, Read)
+
+renderStoneEdgeCustomerShippingAddress :: StoneEdgeCustomerShippingAddress -> Xml Elem
+renderStoneEdgeCustomerShippingAddress StoneEdgeCustomerShippingAddress {..} =
+    xelem "ShipAddr" $ xelems
+        [ maybeXelemText "NamePrefix" secsaNamePrefix
+        , xelemWithText "FirstName" secsaFirstName
+        , maybeXelemText "MiddleName" secsaMiddleName
+        , xelemWithText "LastName" secsaLastName
+        , maybeXelemText "NameSuffix" secsaNameSuffix
+        , maybeXelemText "Company" secsaCompany
+        , maybeXelemText "Phone" secsaPhone
+        , maybeXelemText "Email" secsaEmail
+        , renderStoneEdgeCustomerAddress secsaAddress
+        ]
+
+data StoneEdgeCustomerAddress = StoneEdgeCustomerAddress
+    { secaAddr1 :: T.Text
+    , secaAddr2 :: Maybe T.Text
+    , secaCity :: T.Text
+    , secaState :: T.Text
+    -- ^ 2 Characters
+    , secaZip :: T.Text
+    , secaCountry :: T.Text
+    } deriving (Eq, Show, Read)
+
+renderStoneEdgeCustomerAddress :: StoneEdgeCustomerAddress -> Xml Elem
+renderStoneEdgeCustomerAddress StoneEdgeCustomerAddress {..} =
+    xelem "Address" $ xelems
+        [ xelemWithText "Addr1" secaAddr1
+        , maybe xempty (xelemWithText "Addr2") secaAddr2
+        , xelemWithText "City" secaCity
+        , xelemWithText "State" secaState
+        , xelemWithText "Zip" secaZip
+        , xelemWithText "Country" secaCountry
+        ]
 
 -- Utils
 

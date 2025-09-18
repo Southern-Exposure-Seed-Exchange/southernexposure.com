@@ -27,6 +27,11 @@ description: >
     routing. It is paired with an Elm frontend available in the same
     repository.
 
+default-extensions:
+    - DerivingStrategies
+    - GeneralisedNewtypeDeriving
+    - DerivingVia
+    - TypeApplications
 
 ghc-options:
     - -Wall
@@ -40,6 +45,7 @@ ghc-options:
 dependencies:
     - base >= 4.7 && < 5
     - aeson
+    - aeson-casing
     - async
     - base64-bytestring
     - bcrypt
@@ -47,6 +53,7 @@ dependencies:
     - blaze-markup
     - bytestring
     - ca-province-codes
+    - cassava
     - cereal
     - cereal-text
     - containers
@@ -56,26 +63,31 @@ dependencies:
     - esqueleto
     - fast-logger
     - filepath
+    - hashable
     - hostname
     - http-api-data
     - http-client
+    - http-client-tls
     - http-media
     - http-types
     - immortal-queue
     - iso3166-country-codes
+    - lrucaching
     - markdown
     - mime-mail
-    - monad-control
+    - monad-logger
     - mtl
+    - network
     - pandoc
     - persistent
+    - persistent-migration
+    - persistent-postgresql
     - persistent-template
     - pureMD5
     - resource-pool
     - req
-    - safe-exceptions
     - scientific
-    - servant-auth-cookie
+    - servant-client
     - servant-server
     - sitemap-gen
     - smtp-mail
@@ -92,7 +104,16 @@ dependencies:
     - wai
     - xmlgen
     - xss-sanitize
-
+    - blaze-builder
+    - cereal-time
+    - cookie
+    - exceptions
+    - memory
+    - servant
+    - tagged
+    - transformers
+    - unliftio
+    - vector
 
 library:
     source-dirs: src
@@ -102,14 +123,18 @@ library:
         - Avalara
         - Cache
         - Config
+        - Helcim.API
         - Images
         - Models
         - Models.Fields
         - Models.PersistJSON
+        - Postgrid.API
+        - Postgrid.Cache
         - Routes.Admin.ShippingMethods
         - Routes.CommonData
         - Routes.StoneEdge
         - StoneEdge
+        - Utils
         - Workers
 
 tests:
@@ -127,6 +152,7 @@ tests:
             - tasty
             - tasty-hedgehog
             - tasty-hunit
+            - testcontainers
             - hedgehog
             - HUnit
             - raw-strings-qq
@@ -274,3 +300,12 @@ executables:
             - persistent-postgresql
             - text
             - time
+
+    export-stoneedge-xml:
+        main: ExportStoneEdgeXML.hs
+        <<: *script-defaults
+        other-modules: []
+        dependencies:
+            - sese-website
+            - monad-logger
+            - persistent-postgresql

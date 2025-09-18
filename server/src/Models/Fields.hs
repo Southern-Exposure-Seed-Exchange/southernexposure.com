@@ -1,5 +1,6 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -7,10 +8,8 @@
 module Models.Fields where
 
 import Control.Applicative ((<|>))
-import Control.Monad (fail)
 import Data.Aeson (ToJSON(..), FromJSON(..), (.=), (.:), object, withObject, withText)
 import Data.ISO3166_CountryCodes (CountryCode)
-import Data.Monoid ((<>))
 import Data.Ratio ((%), numerator, denominator)
 import Data.Scientific (Scientific, scientific)
 import Data.StateCodes (StateCode)
@@ -19,29 +18,60 @@ import Database.Persist (PersistField(..))
 import Database.Persist.Sql (PersistFieldSql(..), SqlType(SqlString))
 import Database.Persist.TH (derivePersistField)
 import GHC.Generics (Generic)
-import Numeric.Natural (Natural)
 import Text.Read (readMaybe, readPrec)
+import Data.Coerce (coerce)
 
 import qualified Avalara
 import qualified Data.CAProvinceCodes as CACodes
 import qualified Data.StateCodes as StateCodes
 import qualified Data.Text as T
 import qualified Web.Stripe.Types as Stripe
-
+import Data.Int
+import qualified Data.Foldable
+import GHC.Stack
+import Control.Monad
 
 -- | Cents are used to do any currency-related arithmetic & are represented
 -- as arbitrary-percision numbers.
 newtype Cents =
-    Cents { fromCents :: Natural }
-    deriving (Eq, Ord, Num, ToJSON, FromJSON, PersistField, PersistFieldSql)
+    Cents { fromCents :: Int64 }
+    deriving newtype (Eq, Ord, ToJSON, Show, PersistField, PersistFieldSql)
 
--- | Fallback to the `Natural` instance.
-instance Show Cents where
-    show = show . fromCents
-
--- | Fallback to the `Natural` instance.
 instance Read Cents where
-    readPrec = Cents <$> readPrec
+    readPrec = do
+        val <- readPrec
+        when (val < 0) $ fail "Negative cents aren't allowed"
+        pure (Cents val)
+
+instance FromJSON Cents where
+    parseJSON v = do
+        val <- parseJSON v
+        when (val < 0) $ fail "Negative cents aren't allowed"
+        pure (Cents val)
+
+timesQuantity :: HasCallStack => Cents -> Int64 -> Cents
+timesQuantity x y
+    | y < 0 = error ("Negative quantity isn't allowed: " <> show x <> ", " <> show y)
+    | otherwise = coerce ((*) @Int64) x y
+
+plusCents :: Cents -> Cents -> Cents
+plusCents = coerce ((+) @Int64)
+
+subtractCents :: HasCallStack => Cents -> Cents -> Cents
+subtractCents x y
+    | x < y = error ("Negatvie cents aren't allowed: " <> show x <> ", " <> show y)
+    | otherwise = coerce ((-) @Int64) x y
+
+infixl 6 `plusCents`     -- the same as +
+infixl 6 `subtractCents` -- the same as -
+infixl 7 `timesQuantity` -- the same as *
+
+sumPrices :: Foldable f => f Cents -> Cents
+sumPrices = Data.Foldable.foldl' plusCents (Cents 0)
+{-# SPECIALISE sumPrices :: [Cents] -> Cents #-}
+
+mkCents :: Int64 -> Cents
+mkCents = coerce
 
 formatCents :: Cents -> T.Text
 formatCents (Cents c) =
@@ -82,16 +112,11 @@ fromDollars dollars =
 -- | Milligrams are used to do any weight-related arithmetic & are
 -- represented as arbitrary-percision numbers.
 newtype Milligrams =
-    Milligrams { fromMilligrams :: Natural }
-    deriving (Eq, Ord, ToJSON, FromJSON, PersistField, PersistFieldSql)
+    Milligrams { fromMilligrams :: Int64 }
+    deriving newtype (Eq, Ord, ToJSON, FromJSON, Show, Read, PersistField, PersistFieldSql)
 
--- | Fallback to the 'Natural' instance.
-instance Show Milligrams where
-    show = show . fromMilligrams
-
--- | Fallback to the 'Natural' instance.
-instance Read Milligrams where
-    readPrec = Milligrams <$> readPrec
+mkMilligrams :: Int64 -> Milligrams
+mkMilligrams = coerce
 
 -- | Prettify the milligrams by turning some values into pounds.
 -- Note: When changing matches, update the client code in Models.Fields as
@@ -144,7 +169,9 @@ renderMilligrams (Milligrams mg) =
         else
             t
 
-
+toGrams :: Milligrams -> Scientific
+toGrams (Milligrams mg) =
+    scientific (fromIntegral mg) (-3)
 
 -- LOT SIZES
 
@@ -291,6 +318,19 @@ regionName = \case
         region
 
 
+-- Convert the Region to a 2-letter code textual representation.
+regionCode :: Region -> T.Text
+regionCode = \case
+    USState code ->
+        StateCodes.toText code
+    USArmedForces code -> case code of
+        AA -> "AA"
+        AE -> "AE"
+        AP -> "AP"
+    CAProvince code -> T.pack (show code)
+    CustomRegion region ->
+        T.toUpper region
+
 newtype Country =
     Country { fromCountry :: CountryCode }
     deriving (Show, Read, Eq, Ord)
@@ -323,7 +363,7 @@ instance FromJSON Country where
 
 type Threshold = Cents
 
-type Percent = Natural
+type Percent = Int64
 
 data ShippingRate
     = Flat Threshold Cents
@@ -485,6 +525,15 @@ data OrderStatus
     | Delivered
     deriving (Show, Read, Generic)
 
+showOrderStatus :: OrderStatus -> T.Text
+showOrderStatus = \case
+    OrderReceived -> "Order Received"
+    PaymentReceived -> "Payment Received"
+    PaymentFailed -> "Payment Failed"
+    Processing -> "Processing"
+    Refunded -> "Refunded"
+    Delivered -> "Shipped"
+
 instance ToJSON OrderStatus
 instance FromJSON OrderStatus
 
@@ -579,3 +628,38 @@ instance FromJSON SaleType where
                 PercentSale <$> v .: "amount"
             unexpected ->
                 fail $ "Unexpected SaleType type: " ++ T.unpack unexpected
+
+-- INVENTORY POLICY
+
+data InventoryPolicy
+    = RequireStock
+    -- ^ Purchase is disabled when QOH is 0.
+    | AllowBackorder
+    -- ^ Purchase is always allowed, but when QOH is 0 or less, a
+    -- disclaimer regarding increased shipping time is shown.
+    | Unlimited
+    -- ^ Purchase is always allowed, and no disclaimer is shown.
+    deriving (Show, Read, Eq, Generic)
+
+derivePersistField "InventoryPolicy"
+
+instance ToJSON InventoryPolicy where
+    toJSON = \case
+        RequireStock ->
+            "requireStock"
+        AllowBackorder ->
+            "allowBackorder"
+        Unlimited ->
+            "unlimited"
+
+instance FromJSON InventoryPolicy where
+    parseJSON = withText "InventoryPolicy" $ \t ->
+        case t of
+            "requireStock" ->
+                return RequireStock
+            "allowBackorder" ->
+                return AllowBackorder
+            "unlimited" ->
+                return Unlimited
+            _ ->
+                fail $ "Unexpected InventoryPolicy: " ++ T.unpack t

@@ -1,0 +1,380 @@
+module Pages.QuickOrder exposing
+    ( Forms
+    , Msg
+    , initial
+    , update
+    , view
+    )
+
+import Array exposing (Array)
+import Components.Aria as Aria
+import Components.Button as Button exposing (ButtonType(..), defaultButton)
+import Components.Svg exposing (shoppingCartSvgSmall)
+import Data.Api as Api
+import Data.User as User exposing (AuthStatus)
+import Dict
+import Html exposing (..)
+import Html.Attributes as A exposing (class, id, name, placeholder, required, type_, value)
+import Html.Events exposing (on, onClick, onInput, onSubmit)
+import Html.Events.Extra exposing (targetValueInt)
+import Json.Decode as Decode
+import Json.Encode as Encode exposing (Value)
+import Ports
+import RemoteData exposing (WebData)
+import Utils.View exposing (numericInput, pageTitleView)
+
+
+
+-- Model
+
+
+type alias Forms =
+    { forms : Array Form
+    , errors : Api.FormErrors
+    }
+
+
+initial : Forms
+initial =
+    { forms = Array.initialize 14 initialForm
+    , errors = Api.initialErrors
+    }
+
+
+type alias Form =
+    { sku : String
+    , quantity : Int
+    }
+
+
+initialForm : Int -> Form
+initialForm _ =
+    { sku = ""
+    , quantity = 1
+    }
+
+
+
+-- Update
+
+
+type Msg
+    = Sku Int String
+    | Quantity Int Int
+    | AddRows
+    | Submit
+    | SubmitResponse Int (WebData (Result Api.FormErrors String))
+
+
+update : Msg -> Forms -> AuthStatus -> Maybe String -> ( Forms, Maybe ( Int, String ), Cmd Msg )
+update msg ({ forms } as model) authStatus maybeSessionToken =
+    case msg of
+        Sku formIndex sku ->
+            updateForm model
+                formIndex
+                (\f -> { f | sku = sku })
+
+        Quantity formIndex quantity ->
+            updateForm model
+                formIndex
+                (\f -> { f | quantity = quantity })
+
+        AddRows ->
+            let
+                formCount =
+                    Array.length forms
+            in
+            ( { model
+                | forms =
+                    Array.append forms <|
+                        Array.initialize 14 (\i -> initialForm <| i + formCount)
+              }
+            , Nothing
+            , Cmd.none
+            )
+
+        Submit ->
+            let
+                ( quantityToAdd, _, changedForms ) =
+                    Array.foldl
+                        (\f ( q, i, acc ) ->
+                            if not (String.isEmpty f.sku) then
+                                ( q + f.quantity, i + 1, ( i, f ) :: acc )
+
+                            else
+                                ( q, i + 1, acc )
+                        )
+                        ( 0, 0, [] )
+                        forms
+
+                encodedForms =
+                    Encode.object
+                        [ ( "items", Encode.list encodeForm changedForms )
+                        , ( "sessionToken"
+                          , Maybe.map Encode.string maybeSessionToken
+                                |> Maybe.withDefault Encode.null
+                          )
+                        ]
+
+                encodeForm : ( Int, Form ) -> Value
+                encodeForm ( index, { sku, quantity } ) =
+                    Encode.object
+                        [ ( "sku", Encode.string sku )
+                        , ( "quantity", Encode.int quantity )
+                        , ( "index", Encode.int index )
+                        ]
+            in
+            if List.isEmpty changedForms then
+                ( model, Nothing, Cmd.none )
+
+            else
+                case authStatus of
+                    User.Authorized _ ->
+                        ( model
+                        , Nothing
+                        , addItemsToCustomerCart encodedForms quantityToAdd
+                        )
+
+                    User.Anonymous ->
+                        ( model
+                        , Nothing
+                        , addItemsToAnonymousCart encodedForms quantityToAdd
+                        )
+
+        SubmitResponse quantityToAdd response ->
+            case response of
+                RemoteData.Success (Ok newToken) ->
+                    ( initial, Just ( quantityToAdd, newToken ), Cmd.none )
+
+                RemoteData.Success (Err errors) ->
+                    ( { model | errors = errors }, Nothing, Ports.scrollToID "quick-order-form" )
+
+                RemoteData.Failure error ->
+                    ( { model | errors = Api.apiFailureToError error }
+                    , Nothing
+                    , Ports.scrollToID "quick-order-form"
+                    )
+
+                _ ->
+                    ( model, Nothing, Cmd.none )
+
+
+updateForm : Forms -> Int -> (Form -> Form) -> ( Forms, Maybe a, Cmd msg )
+updateForm ({ forms } as model) formIndex updater =
+    Array.get formIndex forms
+        |> Maybe.map (\f -> Array.set formIndex (updater f) forms)
+        |> Maybe.withDefault forms
+        |> (\fs -> ( { model | forms = fs }, Nothing, Cmd.none ))
+
+
+addItemsToCustomerCart : Value -> Int -> Cmd Msg
+addItemsToCustomerCart encodedForms quantityToAdd =
+    Api.post Api.CartQuickOrderCustomer
+        |> Api.withJsonBody encodedForms
+        |> Api.withErrorHandler (Decode.succeed "")
+        |> Api.sendRequest (SubmitResponse quantityToAdd)
+
+
+addItemsToAnonymousCart : Value -> Int -> Cmd Msg
+addItemsToAnonymousCart encodedForms quantityToAdd =
+    Api.post Api.CartQuickOrderAnonymous
+        |> Api.withJsonBody encodedForms
+        |> Api.withStringErrorHandler
+        |> Api.sendRequest (SubmitResponse quantityToAdd)
+
+
+
+-- View
+
+
+view : Forms -> List (Html Msg)
+view model =
+    let
+        generalErrorHtml =
+            if Dict.isEmpty model.errors then
+                text ""
+
+            else
+                div [ class "alert alert-danger" ]
+                    [ p []
+                        [ text <|
+                            "There were some issues with your Quick Order "
+                                ++ "Form. The items have not yet been added to "
+                                ++ "your Shopping Cart - please fix the "
+                                ++ "highlighted errors below and re-submit the form."
+                        ]
+                    ]
+
+        buildTableRows index item acc =
+            case acc of
+                ( [], rows ) ->
+                    ( renderForm model.errors index item, rows )
+
+                ( firstFormInRow, rows ) ->
+                    ( [], rows ++ [ tr [] (firstFormInRow ++ renderForm model.errors index item) ] )
+
+        applyOddRow ( unappliedForm, rows ) =
+            case unappliedForm of
+                [] ->
+                    rows
+
+                formColumns ->
+                    rows ++ [ tr [] (formColumns ++ [ td [] [], td [] [] ]) ]
+    in
+    [ pageTitleView "Quick Order"
+    , div [ class "tw:pl-[8px]" ]
+        [ p [ class "tw:font-semibold" ] [ text "Instructions" ]
+        , instructions
+        ]
+    , form [ id "quick-order-form", onSubmit Submit ]
+        [ generalErrorHtml
+        , table [ class "se-table" ]
+            [ thead []
+                [ tr []
+                    [ th [] [ text "Item Number" ]
+                    , th [] [ text "Quantity" ]
+                    , th [ class "d-none d-sm-table-cell" ] [ text "Item Number" ]
+                    , th [ class "d-none d-sm-table-cell" ] [ text "Quantity" ]
+                    ]
+                ]
+            , indexedFoldl buildTableRows ( [], [] ) model.forms
+                |> applyOddRow
+                |> tbody []
+            ]
+        , div [ class "tw:flex tw:justify-center tw:pt-[28px] tw:gap-[24px]" ]
+            [ Button.view { defaultButton | label = "Add Rows", style = Button.Outline, type_ = Button.TriggerMsg AddRows, padding = Button.Width "tw:w-[160px]" }
+            , Button.view
+                { defaultButton
+                    | label = "Add to Cart"
+                    , type_ = Button.FormSubmit
+                    , padding = Button.Width "tw:w-[160px]"
+                    , icon = Just <| shoppingCartSvgSmall
+                }
+            ]
+        ]
+    ]
+
+
+
+-- | Return the 2 Table Columns for a form row
+
+
+renderForm : Api.FormErrors -> Int -> Form -> List (Html Msg)
+renderForm errors index model =
+    let
+        itemNumberInput =
+            input
+                [ id <| "item-number-" ++ String.fromInt index
+                , class itemNumberClass
+                , name <| "item-number-" ++ String.fromInt index
+                , type_ "text"
+                , placeholder "Item Number"
+                , value model.sku
+                , onInput <| Sku index
+                , Aria.label "Item Number"
+                ]
+                []
+
+        errorHtml =
+            if List.isEmpty itemNumberErrors then
+                text ""
+
+            else
+                itemNumberErrors
+                    |> List.map text
+                    |> List.intersperse (br [] [])
+                    |> div [ class "invalid-feedback" ]
+
+        itemNumberClass =
+            if List.isEmpty itemNumberErrors && not (Dict.isEmpty errors || String.isEmpty model.sku) then
+                "form-control is-valid"
+
+            else if List.isEmpty itemNumberErrors then
+                "form-control"
+
+            else
+                "form-control is-invalid"
+
+        itemNumberErrors =
+            Dict.get (String.fromInt index) errors
+                |> Maybe.withDefault []
+
+        onIntInput msg =
+            targetValueInt |> Decode.map msg |> on "input"
+
+        hiddenInMobile =
+            modBy 2 index == 1
+
+        withMobileClass class_ =
+            if hiddenInMobile then
+                class <| class_ ++ " d-none d-sm-table-cell"
+
+            else
+                class class_
+    in
+    [ td [ withMobileClass "item-number" ] [ itemNumberInput, errorHtml ]
+    , td [ withMobileClass "quantity" ]
+        [ input
+            [ id <| "quantity-" ++ String.fromInt index
+            , class "form-control tw:w-[80]!"
+            , name <| "quantity-" ++ String.fromInt index
+            , type_ "number"
+            , A.min "1"
+            , A.step "1"
+            , A.size 5
+            , onIntInput <| Quantity index
+            , value <| String.fromInt model.quantity
+            , required <| not <| String.isEmpty model.sku
+            , numericInput
+            , Aria.label "Quantity"
+            ]
+            []
+        ]
+    ]
+
+
+instructions : Html msg
+instructions =
+    ul [ class "se-ul" ]
+        [ li []
+            [ text <|
+                String.join " "
+                    [ "5-digit Item Numbers can be found at the end of each"
+                    , "item description in our catalog, or under the price on"
+                    , "our website. A letter at the end of an item number"
+                    , "indicates a bulk size. Include the letter if you would"
+                    , "like to purchase the bulk size."
+                    ]
+            ]
+        , li []
+            [ text "Press "
+            , code [ class "tw:text-[#34c3ab]!" ] [ text "Tab" ]
+            , text " to move between fields."
+            ]
+        , li []
+            [ text "To add the items to your Shopping Cart, press "
+            , code [ class "tw:text-[#34c3ab]!" ] [ text "Enter" ]
+            , text " or click the "
+            , code [ class "tw:text-[#34c3ab]!" ] [ text "Add to Cart" ]
+            , text <|
+                " button at the bottom of the page. You can review the "
+                    ++ "items and quantities once they have been moved to your Cart."
+            ]
+        , li []
+            [ text "To add more rows, click the "
+            , code [ class "tw:text-[#34c3ab]!" ] [ text "Add Rows" ]
+            , text " button at the bottom of the page."
+            ]
+        ]
+
+
+
+-- Utils
+
+
+indexedFoldl : (Int -> a -> b -> b) -> b -> Array a -> b
+indexedFoldl reducer initialValue =
+    Array.foldl
+        (\item ( index, acc ) -> ( index + 1, reducer index item acc ))
+        ( 0, initialValue )
+        >> Tuple.second

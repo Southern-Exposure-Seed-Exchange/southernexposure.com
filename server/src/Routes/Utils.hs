@@ -7,6 +7,7 @@ module Routes.Utils
       paginatedSelect
     , activeVariantExists
       -- * Customers
+    , deletedEmail
     , generateUniqueToken
     , hashPassword
       -- * Checkout
@@ -15,6 +16,7 @@ module Routes.Utils
     , makeImageFromBase64
       -- * Servant
     , XML
+    , getClientIP
       -- * General
     , extractRowCount
     , buildWhereQuery
@@ -38,10 +40,12 @@ import Database.Persist
     ( (=.), Entity(..), PersistEntityBackend, PersistEntity, Update, getBy
     )
 import Database.Persist.Sql (SqlBackend)
+import Network.Socket (SockAddr(..), hostAddressToTuple, hostAddress6ToTuple)
 import Servant (Accept(..), MimeRender(..), errBody, err500)
 import System.FilePath ((</>), takeFileName)
 import Text.HTML.SanitizeXSS (filterTags, safeTagName, sanitizeAttribute)
 import Text.HTML.TagSoup (Tag(TagOpen, TagClose))
+import Text.Printf (printf)
 
 import Cache (Caches(getSettingsCache))
 import Config (Config(..))
@@ -58,9 +62,8 @@ import qualified Data.ByteString.Lazy as LBS
 import qualified Data.Text as T
 import qualified Data.UUID as UUID
 import qualified Data.UUID.V4 as UUID4
-import qualified Database.Esqueleto as E
+import qualified Database.Esqueleto.Experimental as E
 import qualified Network.HTTP.Media as Media
-
 
 -- PRODUCTS
 
@@ -94,9 +97,13 @@ paginatedSelect maybeSorting maybePage maybePerPage productFilters =
           offset =
             (page - 1) * perPage
           productsSelect ordering = do
-            products <- E.select $ E.from $ \(p `E.LeftOuterJoin` sa `E.LeftOuterJoin` pToC) -> do
-                E.on (E.just (p E.^. ProductId) E.==. pToC E.?. ProductToCategoryProductId)
-                E.on (E.just (p E.^. ProductId) E.==. sa E.?. SeedAttributeProductId)
+            products <- E.select $ do
+                (p E.:& sa E.:& pToC) <- E.from $ E.table
+                    `E.leftJoin` E.table
+                        `E.on` (\(p E.:& sa) -> E.just (p E.^. ProductId) E.==. sa E.?. SeedAttributeProductId)
+                    `E.leftJoin` E.table
+                        `E.on` (\(p E.:& _ E.:& pToC) -> E.just (p E.^. ProductId) E.==. pToC E.?. ProductToCategoryProductId)
+
                 E.where_ $ productFilters p sa pToC E.&&. activeVariantExists p
                 void $ ordering p
                 E.limit perPage
@@ -110,18 +117,25 @@ variantSorted :: (E.SqlExpr (E.Value (Maybe Cents)) -> [E.SqlExpr E.OrderBy])
               -> (E.SqlExpr (Entity Product) -> E.SqlExpr (Maybe (Entity SeedAttribute)) -> E.SqlExpr (Maybe (Entity ProductToCategory)) -> E.SqlExpr (E.Value Bool))
               -> AppSQL ([Entity Product], Int)
 variantSorted ordering offset perPage filters = do
-    productsAndPrice <- E.select $ E.from $ \(p `E.InnerJoin` v `E.LeftOuterJoin` sa `E.LeftOuterJoin` pToC) ->
-        let minPrice = E.min_ $ v E.^. ProductVariantPrice in
+    productsAndPrice <- E.select $ do
+        (p E.:& v E.:& sa E.:& pToC) <- E.from $ E.table
+            `E.innerJoin` E.table
+                `E.on` (\(p E.:& v) -> p E.^. ProductId E.==. v E.^. ProductVariantProductId
+                                 E.&&. v E.^. ProductVariantIsActive E.==. E.val True)
+            `E.leftJoin` E.table
+                `E.on` (\(p E.:& _ E.:& sa) ->
+                        E.just (p E.^. ProductId) E.==. sa E.?. SeedAttributeProductId)
+            `E.leftJoin` E.table
+                `E.on` (\(p E.:& _ E.:& _ E.:& pToC) ->
+                        E.just (p E.^. ProductId) E.==. pToC E.?. ProductToCategoryProductId)
+
+        let minPrice = E.min_ $ v E.^. ProductVariantPrice
         E.distinctOnOrderBy (ordering minPrice ++ [E.asc $ p E.^. ProductName]) $ do
-        E.on (E.just (p E.^. ProductId) E.==. pToC E.?. ProductToCategoryProductId)
-        E.on (E.just (p E.^. ProductId) E.==. sa E.?. SeedAttributeProductId)
-        E.on (p E.^. ProductId E.==. v E.^. ProductVariantProductId
-                E.&&. v E.^. ProductVariantIsActive E.==. E.val True)
-        E.groupBy $ p E.^. ProductId
-        E.where_ $ filters p sa pToC
-        E.limit perPage
-        E.offset offset
-        return (p, minPrice)
+            E.groupBy $ p E.^. ProductId
+            E.where_ $ filters p sa pToC
+            E.limit perPage
+            E.offset offset
+            return (p, minPrice)
     pCount <- countProducts filters
     let (ps, _) = unzip productsAndPrice
     return (ps, pCount)
@@ -131,15 +145,18 @@ countProducts
     :: (E.SqlExpr (Entity Product) -> E.SqlExpr (Maybe (Entity SeedAttribute)) -> E.SqlExpr (Maybe (Entity ProductToCategory)) -> E.SqlExpr (E.Value Bool))
     -> AppSQL Int
 countProducts filters =
-    extractRowCount . E.select $ E.from $ \(p `E.LeftOuterJoin` sa `E.LeftOuterJoin` pToC) -> do
-        E.on (E.just (p E.^. ProductId) E.==. pToC E.?. ProductToCategoryProductId)
-        E.on (E.just (p E.^. ProductId) E.==. sa E.?. SeedAttributeProductId)
+    extractRowCount . E.select $ do
+        (p E.:& sa E.:& pToC) <- E.from $ E.table
+            `E.leftJoin` E.table
+                `E.on` (\(p E.:& sa) -> E.just (p E.^. ProductId) E.==. sa E.?. SeedAttributeProductId)
+            `E.leftJoin` E.table
+                `E.on` (\(p E.:& _ E.:& pToC) -> E.just (p E.^. ProductId) E.==. pToC E.?. ProductToCategoryProductId)
         E.where_ $ filters p sa pToC E.&&. activeVariantExists p
         return (E.countRows :: E.SqlExpr (E.Value Int))
 
 -- | Determine if the Product has an active ProductVariant.
 activeVariantExists :: E.SqlExpr (Entity Product) -> E.SqlExpr (E.Value Bool)
-activeVariantExists p =  E.exists $ E.from $ \v -> E.where_ $
+activeVariantExists p =  E.exists $ E.from E.table >>= \v -> E.where_ $
     p E.^. ProductId E.==. v E.^. ProductVariantProductId E.&&.
     v E.^. ProductVariantIsActive E.==. E.val True
 
@@ -151,8 +168,8 @@ generateUniqueToken :: (PersistEntityBackend r ~ SqlBackend, PersistEntity r)
                     => (T.Text -> Unique r) -> AppSQL T.Text
 generateUniqueToken uniqueConstraint = do
     token <- UUID.toText <$> liftIO UUID4.nextRandom
-    maybeCustomer <- getBy $ uniqueConstraint token
-    case maybeCustomer of
+    maybeEntity <- getBy $ uniqueConstraint token
+    case maybeEntity of
         Just _ ->
             generateUniqueToken uniqueConstraint
         Nothing ->
@@ -168,6 +185,8 @@ hashPassword password = do
         Just pass ->
             return $ decodeUtf8 pass
 
+deletedEmail :: T.Text
+deletedEmail = "gardens+deleted@southernexposure.com"
 
 -- CHECKOUT
 
@@ -305,3 +324,24 @@ parseMaybeLocalTime =
             return Nothing
         val ->
             Just <$> parseLocalTime val
+
+-- | Get the Client's IP Address from the 'X-Forwarded-For', 'X-Real-IP'
+-- headers or the 'SockAddr' of the request.
+--
+-- IP address is required for Helcim payment API
+getClientIP :: SockAddr -> Maybe T.Text -> Maybe T.Text -> T.Text
+getClientIP sockAddr forwardedFor realIP =
+  case forwardedFor of
+    Just xff -> T.takeWhile (/= ',') xff  -- Take first IP if comma-separated
+    Nothing -> case realIP of
+      Just ip -> ip
+      Nothing -> extractIPFromSockAddr sockAddr
+
+extractIPFromSockAddr :: SockAddr -> T.Text
+extractIPFromSockAddr (SockAddrInet _ hostAddr) =
+  let (a, b, c, d) = hostAddressToTuple hostAddr
+  in T.pack $ printf "%d.%d.%d.%d" a b c d
+extractIPFromSockAddr (SockAddrInet6 _ _ hostAddr6 _) =
+  let (a, b, c, d, e, f, g, h) = hostAddress6ToTuple hostAddr6
+  in T.pack $ printf "%x:%x:%x:%x:%x:%x:%x:%x" a b c d e f g h
+extractIPFromSockAddr _ = "unknown"

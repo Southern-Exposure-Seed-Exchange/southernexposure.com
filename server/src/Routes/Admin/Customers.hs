@@ -3,6 +3,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TypeOperators #-}
+
+{-# OPTIONS -Wno-deprecations #-}
 module Routes.Admin.Customers
     ( CustomerAPI
     , customerRoutes
@@ -12,7 +14,6 @@ import Control.Monad (unless, forM, forM_)
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Data.Aeson ((.=), (.:), ToJSON(..), FromJSON(..), object, withObject)
 import Data.Maybe (fromMaybe, catMaybes)
-import Data.Monoid ((<>))
 import Database.Persist
     ( (=.), (==.), Entity(..), Filter, Update, count, selectFirst, get, update
     , selectList, getBy, insert, updateWhere, deleteCascade
@@ -21,17 +22,18 @@ import Data.Time (UTCTime)
 import Data.Text.Encoding (encodeUtf8, decodeUtf8)
 import Servant
     ( (:<|>)(..), (:>), AuthProtect, QueryParam, Capture, ReqBody, Get, Patch
-    , Delete, JSON, err404
+    , Delete, JSON, err404, ServerT
     )
 
 import Auth (Cookied, WrappedAuthToken, withAdminCookie, validateAdminAndParameters)
+import qualified Helcim.API.Types.Customer as Helcim (CustomerId(..))
 import Models
     ( CustomerId, Customer(..), Address(..), EntityField(..), Unique(..)
     , Order(..), OrderId, getOrderTotal, AddressId
     )
-import Models.Fields (Cents, StripeCustomerId, OrderStatus, AvalaraCustomerCode)
+import Models.Fields (Cents, StripeCustomerId, OrderStatus, AvalaraCustomerCode, mkCents)
 import Routes.CommonData (AddressData, toAddressData)
-import Routes.Utils (extractRowCount, buildWhereQuery, hashPassword, generateUniqueToken, mapUpdate)
+import Routes.Utils (deletedEmail, extractRowCount, buildWhereQuery, hashPassword, generateUniqueToken, mapUpdate)
 import Server (App, AppSQL, runDB, serverError)
 import Validation (Validation(..))
 
@@ -39,7 +41,7 @@ import qualified Crypto.BCrypt as BCrypt
 import qualified Data.Text as T
 import qualified Data.UUID as UUID
 import qualified Data.UUID.V4 as UUID4
-import qualified Database.Esqueleto as E
+import qualified Database.Esqueleto.Experimental as E
 import qualified Validation as V
 
 
@@ -49,11 +51,7 @@ type CustomerAPI =
     :<|> "edit" :> CustomerEditRoute
     :<|> "delete" :> CustomerDeleteRoute
 
-type CustomerRoutes =
-         (WrappedAuthToken -> Maybe Int -> Maybe Int -> Maybe T.Text -> App (Cookied CustomerListData))
-    :<|> (WrappedAuthToken -> CustomerId -> App (Cookied CustomerEditData))
-    :<|> (WrappedAuthToken -> CustomerEditParameters -> App (Cookied CustomerId))
-    :<|> (WrappedAuthToken -> CustomerId -> App (Cookied ()))
+type CustomerRoutes = ServerT CustomerAPI App
 
 customerRoutes :: CustomerRoutes
 customerRoutes =
@@ -112,21 +110,26 @@ customerListRoute t mPage mPerPage maybeQuery = withAdminCookie t $ \_ -> do
             if T.null query then
                 count ([] :: [Filter Customer])
             else
-                extractRowCount . E.select $ E.from $ \(c `E.LeftOuterJoin` a) -> do
-                    E.on $ E.just (c E.^. CustomerId) E.==. a E.?. AddressCustomerId
-                        E.&&. E.just (E.val True) E.==. a E.?. AddressIsActive
+                extractRowCount . E.select $ do
+                    (c E.:& a) <- E.from $ E.table `E.leftJoin` E.table
+                        `E.on` \(c E.:& a) ->
+                                E.just (c E.^. CustomerId) E.==. a E.?. AddressCustomerId
+                                E.&&. E.just (E.val True) E.==. a E.?. AddressIsActive
                     E.where_ $ whereQuery c a query
                     return $ E.countDistinct $ c E.^. CustomerId
-        customerResult <- E.select $ E.from $ \(c `E.LeftOuterJoin` a) ->
+        customerResult <- E.select $ do
+            (c E.:& a) <- E.from $ E.table `E.leftJoin` E.table `E.on`
+                \(c E.:& a) ->
+                    let activeAddressFilter =
+                            if T.null query then
+                                E.just (E.val True) E.==. a E.?. AddressIsDefault
+                            else
+                                E.val True
+                    in E.just (c E.^. CustomerId) E.==. a E.?. AddressCustomerId
+                        E.&&. E.just (E.val True) E.==. a E.?. AddressIsActive
+                        E.&&. activeAddressFilter
             E.distinctOnOrderBy [E.asc $ c E.^. CustomerEmail] $ do
-                let activeAddressFilter =
-                        if T.null query then
-                            E.just (E.val True) E.==. a E.?. AddressIsDefault
-                        else
-                            E.val True
-                E.on $ E.just (c E.^. CustomerId) E.==. a E.?. AddressCustomerId
-                    E.&&. E.just (E.val True) E.==. a E.?. AddressIsActive
-                    E.&&. activeAddressFilter
+
                 E.limit $ fromIntegral perPage
                 E.offset $ fromIntegral offset
                 E.where_ $ whereQuery c a query
@@ -193,7 +196,9 @@ data CustomerEditData =
         , cedEmail :: T.Text
         , cedStoreCredit :: Cents
         , cedIsAdmin :: Bool
+        , cedVerified :: Bool
         , cedStripeId :: Maybe StripeCustomerId
+        , cedHelcimCustomerId :: Maybe Helcim.CustomerId
         , cedAvalaraCode :: Maybe AvalaraCustomerCode
         , cedOrders :: [OrderData]
         } deriving (Show)
@@ -205,7 +210,9 @@ instance ToJSON CustomerEditData where
             , "email" .= cedEmail
             , "storeCredit" .= cedStoreCredit
             , "isAdmin" .= cedIsAdmin
+            , "verified" .= cedVerified
             , "stripeId" .= cedStripeId
+            , "helcimCustomerId" .= cedHelcimCustomerId
             , "avalaraCode" .= cedAvalaraCode
             , "orders" .= cedOrders
             ]
@@ -227,6 +234,7 @@ instance ToJSON OrderData where
             , "status" .= odStatus
             , "shipping" .= odShipping
             , "total" .= odTotal
+
             ]
 
 customerEditDataRoute :: WrappedAuthToken -> CustomerId -> App (Cookied CustomerEditData)
@@ -241,15 +249,18 @@ customerEditDataRoute t customerId = withAdminCookie t $ \_ ->
                 , cedEmail = customerEmail customer
                 , cedStoreCredit = customerStoreCredit customer
                 , cedIsAdmin = customerIsAdmin customer
+                , cedVerified = customerVerified customer
                 , cedStripeId = customerStripeId customer
+                , cedHelcimCustomerId = customerHelcimCustomerId customer
                 , cedAvalaraCode = customerAvalaraCode customer
                 , cedOrders = orders
                 }
   where
     getOrders :: App [OrderData]
     getOrders = runDB $ do
-        os <- E.select $ E.from $ \(o `E.InnerJoin` sa) -> do
-            E.on $ sa E.^. AddressId E.==. o E.^. OrderShippingAddressId
+        os <- E.select $ do
+            (o E.:& sa) <- E.from $ E.table `E.innerJoin` E.table
+                `E.on` \(o E.:& sa) -> sa E.^. AddressId E.==. o E.^. OrderShippingAddressId
             E.where_ $ o E.^. OrderCustomerId E.==. E.val customerId
             E.orderBy [E.desc $ o E.^. OrderCreatedAt]
             return (o, sa)
@@ -339,7 +350,7 @@ customerEditRoute = validateAdminAndParameters $ \_ parameters -> do
                 passwordHash <- hashPassword password
                 newToken <- runDB $ generateUniqueToken UniqueToken
                 return
-                    [ CustomerEncryptedPassword =. passwordHash
+                    [ CustomerEncryptedPassword =. Just passwordHash
                     , CustomerAuthToken =. newToken
                     ]
             else
@@ -371,19 +382,21 @@ type CustomerDeleteRoute =
 -- models.
 customerDeleteRoute :: WrappedAuthToken -> CustomerId -> App (Cookied ())
 customerDeleteRoute t customerId = withAdminCookie t $ \_ -> runDB $ do
-    newCustomerId <- getBy (UniqueEmail "gardens+deleted@southernexposure.com") >>= \case
+    newCustomerId <- getBy (UniqueEmail deletedEmail) >>= \case
         Nothing -> do
             hashedPassword <- generateRandomPassword
             token <- generateUniqueToken UniqueToken
             insert Customer
-                { customerEmail = "gardens+deleted@southernexposure.com"
-                , customerStoreCredit = 0
+                { customerEmail = deletedEmail
+                , customerStoreCredit = mkCents 0
                 , customerMemberNumber = ""
-                , customerEncryptedPassword = hashedPassword
+                , customerEncryptedPassword = Just hashedPassword
                 , customerAuthToken = token
                 , customerStripeId = Nothing
+                , customerHelcimCustomerId = Nothing
                 , customerAvalaraCode = Nothing
                 , customerIsAdmin = False
+                , customerVerified = False
                 }
         Just (Entity cId _) ->
             return cId

@@ -1,0 +1,152 @@
+---
+# yamllint disable rule:line-length
+
+name: CI Build
+
+# yamllint disable-line rule:truthy
+on:
+  push:
+    branches:
+      - master
+      - develop
+  pull_request:
+    branches:
+      - master
+      - develop
+
+jobs:
+  build-frontend:
+    name: Build Frontend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Needed to build the frontend
+      - run:
+          echo "CXXFLAGS=-std=c++17" >> $GITHUB_ENV
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18.x
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+      - name: Cache Client Dependencies
+        uses: actions/cache@v4
+        with:
+          path: client/node_modules
+          key: client-${{ github.ref }}-${{ github.sha }}
+
+      - name: Install Client Dependencies
+        working-directory: client
+        run: npm ci
+
+      # Check if generated Tailwind CSS is up to date
+      # If not, it will fail the build and prompt the user to run `npm run tailwind`
+      - name: Check Tailwind
+        working-directory: client
+        run: |
+          npm run tailwind
+          git diff --exit-code || (echo "Tailwind CSS needs to be built. Please run 'npm run tailwind' before committing."; exit 1)
+
+      - name: Build Client Project
+        working-directory: client
+        run: npm run build
+
+  build-backend:
+    name: Build Backend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '8.10.7'
+          enable-stack: true
+          stack-version: 'latest'
+      # Avoid installing GHC via stack
+      - run: |
+          stack config set system-ghc true --global
+          stack config set install-ghc false --global
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.stack
+            server/.stack-work
+          key: server-${{ hashFiles('server/package.yaml', 'server/stack.yaml', 'server/stack.yaml.lock') }}
+      - name: Install Server Dependencies
+        working-directory: server
+        run: stack build --ghc-options="-Werror -O1" --only-dependencies --test --no-run-tests
+      - name: Build Server Project
+        working-directory: server
+        run: stack build --ghc-options="-Werror -O1" --test --no-run-tests
+      - name: Run Tests
+        working-directory: server
+        run: stack test --ghc-options="-Werror -O1"
+
+  build-backend-image:
+    name: Build backend Docker image
+    runs-on: ubuntu-latest
+    needs: build-backend
+    if: ${{ github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/master' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+          logout: true
+
+      - name: Docker Setup Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and Push Docker Image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          target: backend
+          tags: ghcr.io/southern-exposure-seed-exchange/sese-backend:${{ github.sha }}
+          push: ${{ github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/master' }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  build-frontend-image:
+    name: Build frontend Docker image
+    runs-on: ubuntu-latest
+    needs: build-frontend
+    if: ${{ github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/master' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prepare env
+        run: |
+          echo "HELCIM_ENV=${{ github.ref == 'refs/heads/master' && 'production' || 'staging' }}" >> $GITHUB_ENV
+          echo "POSTGRID_ENV=${{ github.ref == 'refs/heads/master' && 'production' || 'staging' }}" >> $GITHUB_ENV
+          echo "GA_MEASUREMENT_ID='UA-5070189-1'" >> $GITHUB_ENV
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+          logout: true
+
+      - name: Docker Setup Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and Push Docker Image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          target: frontend
+          tags: ghcr.io/southern-exposure-seed-exchange/sese-frontend:${{ github.sha }}
+          push: ${{ github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/master' }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            HELCIM_ENV
+            GA_MEASUREMENT_ID
+            POSTGRID_ENV

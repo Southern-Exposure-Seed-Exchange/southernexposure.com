@@ -22,24 +22,24 @@ import Server
 
 import qualified Data.Map.Strict as Map
 import qualified Data.Text as T
-import qualified Database.Esqueleto as E
+import qualified Database.Esqueleto.Experimental as E
 
 
 type CategoryAPI =
          "nav" :> CategoryNavbarRoute
     :<|> "details" :> CategoryDetailsRoute
-    :<|> "search" :> AdvancedSearchRoute
+    :<|> "search" :> CategorySearchRoute
 
 type CategoryRoutes =
          App CategoryNavbarData
     :<|> (T.Text -> Maybe T.Text -> Maybe Int -> Maybe Int -> App CategoryDetailsData)
-    :<|> App AdvancedSearchData
+    :<|> App CategorySearchData
 
 categoryRoutes :: CategoryRoutes
 categoryRoutes =
          categoryNavbarRoute
     :<|> categoryDetailsRoute
-    :<|> advancedSearchRoute
+    :<|> categorySearchRoute
 
 
 -- NAVBAR
@@ -125,9 +125,12 @@ categoryDetailsRoute slug maybeSort maybePage maybePerPage = do
             (products, productsCount) <- paginatedSelect
                 maybeSort maybePage maybePerPage
                     (\p _ pToC ->
-                        p E.^. ProductMainCategory `E.in_` E.valList descendants E.||.
-                        (E.just (p E.^. ProductId) E.==. pToC E.?. ProductToCategoryProductId E.&&.
-                         pToC E.?. ProductToCategoryCategoryId `E.in_` E.justList (E.valList descendants)
+                        p E.^. ProductDeleted E.==. E.val False E.&&.
+                        (
+                            p E.^. ProductMainCategory `E.in_` E.valList descendants E.||.
+                            (E.just (p E.^. ProductId) E.==. pToC E.?. ProductToCategoryProductId E.&&.
+                            pToC E.?. ProductToCategoryCategoryId `E.in_` E.justList (E.valList descendants)
+                            )
                         )
                     )
             productData <- mapM (getProductData . truncateDescription) products
@@ -139,13 +142,13 @@ categoryDetailsRoute slug maybeSort maybePage maybePerPage = do
 -- ADVANCED SEARCH
 
 
-newtype AdvancedSearchData =
-    AdvancedSearchData
+newtype CategorySearchData =
+    CategorySearchData
         { asdCategories :: [ASDCategory]
         } deriving (Show)
 
-instance ToJSON AdvancedSearchData where
-    toJSON AdvancedSearchData { asdCategories } =
+instance ToJSON CategorySearchData where
+    toJSON CategorySearchData { asdCategories } =
         object [ "categories" .= toJSON asdCategories ]
 
 data ASDCategory =
@@ -158,13 +161,13 @@ instance ToJSON ASDCategory where
     toJSON ASDCategory { asdcId, asdcName } =
         object [ "id" .= asdcId, "name" .= asdcName ]
 
-type AdvancedSearchRoute =
-    Get '[JSON] AdvancedSearchData
+type CategorySearchRoute =
+    Get '[JSON] CategorySearchData
 
-advancedSearchRoute :: App AdvancedSearchData
-advancedSearchRoute = do
-    cs <- runDB $ E.select $ E.from $ \c -> do
+categorySearchRoute :: App CategorySearchData
+categorySearchRoute = do
+    cs <- runDB $ E.select $ E.from E.table >>= \c -> do
         E.orderBy [E.asc $ c E.^. CategoryName]
         return (c E.^. CategoryId, c E.^. CategoryName)
-    return . AdvancedSearchData
+    return . CategorySearchData
         $ map (\(i, n) -> ASDCategory (fromSqlKey $ E.unValue i) (E.unValue n)) cs

@@ -1,7 +1,7 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeFamilies #-}
-{-| Export any Product Variants with Zero Mass Lot Sizes & Non-Standard
+{- Export any Product Variants with Zero Mass Lot Sizes & Non-Standard
 Masses Greater Than 42g.
 
 -}
@@ -9,15 +9,15 @@ import Control.Monad (forM)
 import Control.Monad.Logger (runNoLoggingT)
 import Data.List (intercalate)
 import Data.Maybe (catMaybes, mapMaybe)
-import Data.Monoid ((<>))
 import Data.Ratio ((%), Ratio, numerator, denominator)
 import Database.Persist
 import Database.Persist.Postgresql
-    ( ConnectionPool, SqlWriteT, createPostgresqlPool, runSqlPool )
+    ( ConnectionPool, SqlPersistT, runSqlPool )
 import Numeric.Natural (Natural)
 
 import Models
 import Models.Fields
+import Utils (makeSqlPool)
 
 import qualified Data.Text as T
 
@@ -35,10 +35,10 @@ type ProductAndVariants = (Entity Product, [Entity ProductVariant])
 
 connectToPostgres :: IO ConnectionPool
 connectToPostgres =
-    runNoLoggingT $ createPostgresqlPool "dbname=sese-website" 1
+    runNoLoggingT $ makeSqlPool 1
 
 -- | Get Active Products join with any Active Variants.
-getMassVariants :: SqlWriteT IO [ProductAndVariants]
+getMassVariants :: SqlPersistT IO [ProductAndVariants]
 getMassVariants = do
     products <- selectList [] [Asc ProductBaseSku]
     fmap catMaybes . forM products $ \e@(Entity pId _) -> do
@@ -108,7 +108,7 @@ getMass :: Entity ProductVariant -> Natural
 getMass v =
     case productVariantLotSize (entityVal v) of
         Just (Mass (Milligrams m)) ->
-            m
+            fromIntegral m
         _ ->
             0
 

@@ -1,29 +1,13 @@
-port module Ports exposing
-    ( PageMetadata
-    , cartItemCountChanged
-    , collapseMobileMenus
-    , collectStripeToken
-    , initializeOrDestroyHomepageCarousel
-    , logPurchase
-    , logStatusCode
-    , loggedIn
-    , loggedOut
-    , newCartSessionToken
-    , removeAuthDetails
-    , removeCartSessionToken
-    , scrollToErrorMessage
-    , scrollToID
-    , scrollToName
-    , scrollToTop
-    , setCartItemCount
-    , setPageTitle
-    , storeAuthDetails
-    , storeCartSessionToken
-    , stripeTokenReceived
-    , updatePageMetadata
-    )
+port module Ports exposing (..)
 
 import Json.Encode exposing (Value)
+
+
+
+-- Window
+
+
+port historyBack : () -> Cmd msg
 
 
 
@@ -37,6 +21,9 @@ port scrollToSelector : String -> Cmd msg
 
 
 port collapseMobileMenus : () -> Cmd msg
+
+
+port scrollLeftSmooth : { id : String, amount : Float } -> Cmd msg
 
 
 scrollToTop : Cmd msg
@@ -102,10 +89,16 @@ port cartItemCountChanged : (Int -> msg) -> Sub msg
 -- Checkout
 
 
-port collectStripeToken : ( String, Int ) -> Cmd msg
+port subscribeToHelcimMessages : () -> Cmd msg
 
 
-port stripeTokenReceived : (String -> msg) -> Sub msg
+port helcimMessageReceived : (Value -> msg) -> Sub msg
+
+
+port removeHelcimPayIframe : () -> Cmd msg
+
+
+port appendHelcimPayIframe : String -> Cmd msg
 
 
 
@@ -134,3 +127,12 @@ type alias PageMetadata =
 {-| Initialize the carousel if True, otherwise destroy any running Carousel.
 -}
 port initializeOrDestroyHomepageCarousel : Bool -> Cmd msg
+
+
+
+-- Input related
+
+
+{-| Focus on an id
+-}
+port focus : String -> Cmd msg

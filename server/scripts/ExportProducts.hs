@@ -1,24 +1,24 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeFamilies #-}
-{-| Export Product SKUs, Names, & Categories. -}
+{- Export Product SKUs, Names, & Categories. -}
 import Control.Monad.Logger (runNoLoggingT)
 import Data.Csv (ToNamedRecord, DefaultOrdered(..), encodeDefaultOrderedByName, header)
 import Data.List (sortOn)
-import Data.Monoid ((<>))
 import Database.Persist
 import Database.Persist.Postgresql
-    ( ConnectionPool, SqlPersistT, createPostgresqlPool, runSqlPool
+    ( ConnectionPool, SqlPersistT, runSqlPool
     )
 import GHC.Generics (Generic)
 
 import Cache (syncCategoryPredecessorCache, queryCategoryPredecessorCache)
 import Models
 import Models.Fields
+import Utils (makeSqlPool)
 
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.Text as T
-import qualified Database.Esqueleto as E
+import qualified Database.Esqueleto.Experimental as E
 
 main :: IO ()
 main = do
@@ -27,15 +27,19 @@ main = do
 
 connectToPostgres :: IO ConnectionPool
 connectToPostgres =
-    runNoLoggingT $ createPostgresqlPool "dbname=sese-website" 1
+    runNoLoggingT $ makeSqlPool 1
 
 getProductData :: SqlPersistT IO [(Entity Product, Entity ProductVariant, Maybe (Entity SeedAttribute), [Entity Category])]
 getProductData = do
     categoryCache <- syncCategoryPredecessorCache
-    products <- E.select $ E.from $ \(p `E.InnerJoin` v `E.InnerJoin` c `E.LeftOuterJoin` sa) -> do
-        E.on $ sa E.?. SeedAttributeProductId E.==. E.just (p E.^. ProductId)
-        E.on $ c E.^. CategoryId E.==. p E.^. ProductMainCategory
-        E.on $ v E.^. ProductVariantProductId E.==. p E.^. ProductId
+    products <- E.select $ do 
+        (p E.:& v E.:& c E.:& sa) <- E.from $ E.table 
+            `E.innerJoin` E.table 
+                `E.on` (\(p E.:& v) -> v E.^. ProductVariantProductId E.==. p E.^. ProductId)
+            `E.innerJoin` E.table 
+                `E.on` (\(p E.:& _ E.:& c) -> c E.^. CategoryId E.==. p E.^. ProductMainCategory)
+            `E.leftJoin` E.table 
+                `E.on` (\(p E.:& _ E.:& _ E.:& sa) -> sa E.?. SeedAttributeProductId E.==. E.just (p E.^. ProductId))
         E.where_ $ v E.^. ProductVariantIsActive
         return (p, v, sa, c)
     return $ map (addCategoryParents categoryCache) products

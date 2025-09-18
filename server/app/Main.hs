@@ -1,6 +1,8 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+
 module Main where
 
 import Control.Concurrent (newEmptyMVar, takeMVar, putMVar, threadDelay)
@@ -9,12 +11,10 @@ import Control.Concurrent.STM (newTVarIO, writeTVar, atomically)
 import Control.Exception (Exception(..), SomeException)
 import Control.Immortal.Queue (processImmortalQueue, closeImmortalQueue)
 import Control.Monad (when, forever, void, forM_)
-import Control.Monad.IO.Class (MonadIO)
-import Control.Monad.Trans.Control (MonadBaseControl)
-import Control.Monad.Logger (MonadLogger, runNoLoggingT, runStderrLoggingT)
+import Control.Monad.IO.Class (MonadIO(..))
+import Control.Monad.Logger (MonadLoggerIO, runNoLoggingT, runStderrLoggingT)
 import Data.Aeson (Result(..), fromJSON)
 import Data.Maybe (fromMaybe, mapMaybe)
-import Data.Monoid ((<>))
 import Data.Pool (destroyAllResources)
 import Data.Text.Encoding (decodeUtf8)
 import Data.Version (showVersion)
@@ -24,20 +24,26 @@ import Network.Wai.Middleware.RequestLogger (logStdoutDev, logStdout)
 import System.Directory (getCurrentDirectory, createDirectoryIfMissing)
 import System.Environment (lookupEnv)
 import System.Log.FastLogger
-     ( LogType(LogStdout, LogFile), FileLogSpec(..), TimedFastLogger
+     ( LogType'(LogStdout, LogFile), FileLogSpec(..), TimedFastLogger
      , newTimeCache, newTimedFastLogger, defaultBufSize
      )
 import System.Posix.Signals (installHandler, sigTERM, Handler(CatchOnce))
 import Web.Stripe.Client (StripeConfig(..), StripeKey(..))
+import UnliftIO (MonadUnliftIO)
 
 import Api
 import Auth (sessionEntropy, mkPersistentServerKey)
 import Cache (initializeCaches, emptyCache)
 import Config
+
+import qualified Helcim.API as Helcim (ApiToken(..))
 import Models
 import Models.PersistJSON (JSONValue(..))
 import Paths_sese_website (version)
+import qualified Postgrid.API as Postgrid (ApiKey(..))
+import qualified Postgrid.Cache as Postgrid (newPostgridQueryCache)
 import StoneEdge (StoneEdgeCredentials(..))
+import Utils (lookupSettingWith, makeSqlPool)
 import Workers (Task(CleanDatabase, AddSalesReportDay), taskQueueConfig, enqueueTask)
 
 import qualified Avalara
@@ -47,25 +53,23 @@ import qualified Network.Wai.Handler.Warp as Warp
 
 import Prelude hiding (log)
 
-
 -- | Connect to the database, configure the application, & start the server.
 --
 -- TODO: Document enviornmental variables in README.
 main :: IO ()
 main = do
     env <- lookupSetting "ENV" Development
-    (avalaraLogger, stripeLogger, serverLogger, cleanupLoggers) <- makeLoggers env
+    (avalaraLogger, stripeLogger, serverLogger, helcimLogger, postgridLogger, cleanupLoggers) <- makeLoggers env
     let log = logMsg serverLogger
     log "SESE API Server starting up."
     port <- lookupSetting "PORT" 3000
     mediaDir <- lookupDirectory "MEDIA" "/media/"
     log $ "Media directory initialized at " <> T.pack mediaDir <> "."
-    smtpServer <- fromMaybe "" <$> lookupEnv "SMTP_SERVER"
-    smtpUser <- fromMaybe "" <$> lookupEnv "SMTP_USER"
-    smtpPass <- fromMaybe "" <$> lookupEnv "SMTP_PASS"
-    emailPool <- smtpPool smtpServer (poolSize env)
-    log $ "Initialized SMTP Pool at " <> T.pack smtpServer <> "."
+    (smtpUser, smtpPass, emailPool) <- makeSMTPPool log env
+    devMail <- makeDevMail log env
     stripeToken <- fromMaybe "" <$> lookupEnv "STRIPE_TOKEN"
+    helcimToken <- requireSetting "HELCIM_TOKEN"
+    postgridApiKey <- lookupEnv "POSTGRID_API_KEY"
     cookieSecret <- mkPersistentServerKey . C.pack . fromMaybe ""
         <$> lookupEnv "COOKIE_SECRET"
     entropySource <- sessionEntropy
@@ -76,9 +80,11 @@ main = do
     avalaraCompanyCode <- Avalara.CompanyCode . T.pack <$> requireSetting "AVATAX_COMPANY_CODE"
     avalaraSourceLocation <- T.pack . fromMaybe "DEFAULT" <$> lookupEnv "AVATAX_LOCATION_CODE"
     dbPool <- makePool env
+    baseUrl <- makeDomainName env
     initializeJobs dbPool
     log "Initialized database pool."
     cache <- newTVarIO emptyCache
+    postgridQueryCache <- Postgrid.newPostgridQueryCache 10 100
     void . async
         $ runSqlPool initializeCaches dbPool >>= atomically . writeTVar cache
     log "Started initialization of database cache."
@@ -86,11 +92,16 @@ main = do
             { getPool = dbPool
             , getEnv = env
             , getCaches = cache
+            , getPostgridQueryCache = postgridQueryCache
             , getMediaDirectory = mediaDir
             , getSmtpPool = emailPool
             , getSmtpUser = smtpUser
             , getSmtpPass = smtpPass
-            , getStripeConfig = StripeConfig $ StripeKey $ C.pack stripeToken
+            , getStripeConfig = StripeConfig (StripeKey $ C.pack stripeToken) Nothing
+            , getHelcimAuthKey = Helcim.ApiToken $ T.pack helcimToken
+            , getPostgridApiKey =
+                fmap (Postgrid.ApiKey . T.pack) $ postgridApiKey >>=
+                    \k -> if null k then Nothing else Just k
             , getStoneEdgeAuth = stoneEdgeAuth
             , getCookieSecret = cookieSecret
             , getCookieEntropySource = entropySource
@@ -102,6 +113,10 @@ main = do
             , getAvalaraLogger = avalaraLogger
             , getStripeLogger = stripeLogger
             , getServerLogger = serverLogger
+            , getHelcimLogger = helcimLogger
+            , getPostgridLogger = postgridLogger
+            , getDeveloperEmail = devMail
+            , getBaseUrl = baseUrl
             }
     log "Starting 2 worker threads."
     workers <- processImmortalQueue $ taskQueueConfig 2 cfg
@@ -124,36 +139,68 @@ main = do
     log "PostgreSQL pool closed."
     log "Shutdown completed successfully."
     cleanupLoggers
-    where lookupSetting env def =
-            maybe def read <$> lookupEnv env
-          requireSetting :: String -> IO String
-          requireSetting env =
+
+    where
+        lookupSetting env def = lookupSettingWith env def read
+
+        requireSetting :: String -> IO String
+        requireSetting env =
             lookupEnv env
                 >>= maybe (error $ "Could not find required env variable: " ++ env) return
-          makePool :: Environment -> IO ConnectionPool
-          makePool env =
+
+        makeDevMail (log :: T.Text -> IO ()) env = do
+            mDev <- fmap T.pack <$> lookupEnv "DEV_MAIL"
+            case mDev of
+              Just {} | env == Production -> do
+                    log "DEV_MAIL variable ignored: server is in Production mode"
+                    pure Nothing
+              Nothing | env == Development ->
+                    error "DEV_MAIL is required in the development setup"
+              _ -> pure mDev
+
+        makePool :: Environment -> IO ConnectionPool
+        makePool env = do
+            let action :: (MonadIO m, MonadLoggerIO m, MonadUnliftIO m) => m ConnectionPool
+                action = do
+                    pool <- makeSqlPool $ poolSize env
+                    liftIO $ runSqlPool runMigrations pool
+                    return pool
             case env of
-                Production ->
-                    runNoLoggingT $ makeSqlPool env
-                Development ->
-                    runStderrLoggingT $ makeSqlPool env
-          makeSqlPool :: (MonadIO m, MonadLogger m, MonadBaseControl IO m) => Environment -> m ConnectionPool
-          makeSqlPool env = do
-                pool <- createPostgresqlPool "dbname=sese-website" $ poolSize env
-                runSqlPool (runMigration migrateAll) pool
-                return pool
-          poolSize env =
+                Production -> runNoLoggingT action
+                Development -> runStderrLoggingT action
+
+        makeSMTPPool (log :: T.Text -> IO ()) env = do
+            smtpServer <- fromMaybe "" <$> lookupEnv "SMTP_SERVER"
+            smtpUser <- fromMaybe "" <$> lookupEnv "SMTP_USER"
+            smtpPass <- fromMaybe "" <$> lookupEnv "SMTP_PASS"
+            smtpPort <- lookupSetting "SMTP_PORT" 2525
+            smtpEncrypted <- lookupSetting "SMTP_TLS" False
+            emailPool <- smtpPool smtpEncrypted smtpPort smtpServer (poolSize env)
+            log $ "Initialized SMTP Pool at " <> T.pack smtpServer <> "."
+            pure (smtpUser, smtpPass, emailPool)
+
+        makeDomainName env = do
+            let defUrl = case env of
+                    Development ->
+                        "http://localhost:7000"
+                    Production ->
+                        "https://www.southernexposure.com"
+            lookupSettingWith "BASE_URL" defUrl T.pack
+
+        poolSize env =
             case env of
                 Production ->
                     8
                 Development ->
                     2
-          warpSettings port serverLogger =
-              Warp.setServerName ""
-              $ Warp.setOnException (exceptionHandler serverLogger)
-              $ Warp.setPort port Warp.defaultSettings
-          exceptionHandler :: TimedFastLogger -> Maybe Request -> SomeException -> IO ()
-          exceptionHandler logger mReq e =
+
+        warpSettings port serverLogger =
+            Warp.setServerName ""
+                $ Warp.setOnException (exceptionHandler serverLogger)
+                $ Warp.setPort port Warp.defaultSettings
+
+        exceptionHandler :: TimedFastLogger -> Maybe Request -> SomeException -> IO ()
+        exceptionHandler logger mReq e =
             let reqString = flip (maybe "") mReq $ \req ->
                     decodeUtf8 $
                         "("
@@ -170,22 +217,26 @@ main = do
                     , ": "
                     , T.pack $ displayException e
                     ]
-          logMsg :: TimedFastLogger -> T.Text -> IO ()
-          logMsg logger =
+
+        logMsg :: TimedFastLogger -> T.Text -> IO ()
+        logMsg logger =
             logger . timedLogStr
-          httpLogger env =
-              case env of
-                Production ->
-                    logStdout
-                Development ->
-                    logStdoutDev
-          makeStoneEdgeAuth = do
+
+        httpLogger env =
+            case env of
+            Production ->
+                logStdout
+            Development ->
+                logStdoutDev
+
+        makeStoneEdgeAuth = do
             secUsername <- T.pack . fromMaybe "" <$> lookupEnv "STONE_EDGE_USER"
             secPassword <- T.pack . fromMaybe "" <$> lookupEnv "STONE_EDGE_PASS"
             secStoreCode <- T.pack . fromMaybe "" <$> lookupEnv "STONE_EDGE_CODE"
             return StoneEdgeCredentials {..}
-          makeAvalaraConfig :: IO Avalara.Config
-          makeAvalaraConfig = do
+
+        makeAvalaraConfig :: IO Avalara.Config
+        makeAvalaraConfig = do
             let cAppName = "SESE Retail Website"
                 cAppVersion = T.pack $ showVersion version
             cAccountId <- Avalara.AccountId . T.pack
@@ -202,8 +253,9 @@ main = do
                     error $ "Invalid AVATAX_ENVIRONMENT: " ++ T.unpack rawEnvironment
                         ++ "\n\n\tValid value are `Production` or `Sandbox`"
             return Avalara.Config {..}
-          makeLoggers :: Environment -> IO (TimedFastLogger, TimedFastLogger, TimedFastLogger, IO ())
-          makeLoggers env = do
+
+        makeLoggers :: Environment -> IO (TimedFastLogger, TimedFastLogger, TimedFastLogger, TimedFastLogger, TimedFastLogger, IO ())
+        makeLoggers env = do
             timeCache <- newTimeCache "%Y-%m-%dT%T"
             case env of
                 Development -> do
@@ -211,7 +263,9 @@ main = do
                     (avalara, aClean) <- makeLogger (LogStdout defaultBufSize)
                     (stripe, stripeClean) <- makeLogger (LogStdout defaultBufSize)
                     (server, servClean) <- makeLogger (LogStdout defaultBufSize)
-                    return (avalara, stripe, server, aClean >> stripeClean >> servClean)
+                    (helcim, helcimClean) <- makeLogger (LogStdout defaultBufSize)
+                    (postgrid, postgridClean) <- makeLogger (LogStdout defaultBufSize)
+                    return (avalara, stripe, server, helcim, postgrid, aClean >> stripeClean >> servClean >> helcimClean >> postgridClean)
                 Production -> do
                     logDir <- lookupDirectory "LOGS" "/logs/"
                     let makeLogger fp = newTimedFastLogger timeCache
@@ -220,25 +274,30 @@ main = do
                     (avalara, aClean) <- makeLogger $ logDir ++ "/avalara.log"
                     (stripe, stripeClean) <- makeLogger $ logDir ++ "/stripe.log"
                     (server, servClean) <- makeLogger $ logDir ++ "/server.log"
-                    return (avalara, stripe, server, aClean >> stripeClean >> servClean)
-          lookupDirectory :: String -> FilePath -> IO FilePath
-          lookupDirectory envName defaultPath = do
-                dir <- lookupEnv envName
-                    >>= maybe ((++ defaultPath) <$> getCurrentDirectory) return
-                createDirectoryIfMissing True dir
-                return dir
-          initializeJobs :: ConnectionPool -> IO ()
-          initializeJobs = runSqlPool $ do
-                jobs <- selectList [] []
-                let decodedJobs = mapMaybe (decodeJobType . entityVal) jobs
-                    recurringTasks = [CleanDatabase, AddSalesReportDay]
-                forM_ recurringTasks $ \task ->
-                    when (task `notElem` decodedJobs) $
-                        enqueueTask Nothing task
-          decodeJobType :: Job -> Maybe Task
-          decodeJobType job =
-                case fromJSON (fromJSONValue $ jobAction job) of
-                    Success j ->
-                        Just j
-                    Error _ ->
-                        Nothing
+                    (helcim, helcimClean) <- makeLogger $ logDir ++ "/helcim.log"
+                    (postgrid, postgridClean) <- makeLogger $ logDir ++ "/postgrid.log"
+                    return (avalara, stripe, server, helcim, postgrid, aClean >> stripeClean >> servClean >> helcimClean >> postgridClean)
+
+        lookupDirectory :: String -> FilePath -> IO FilePath
+        lookupDirectory envName defaultPath = do
+            dir <- lookupEnv envName
+                >>= maybe ((++ defaultPath) <$> getCurrentDirectory) return
+            createDirectoryIfMissing True dir
+            return dir
+
+        initializeJobs :: ConnectionPool -> IO ()
+        initializeJobs = runSqlPool $ do
+            jobs <- selectList [] []
+            let decodedJobs = mapMaybe (decodeJobType . entityVal) jobs
+                recurringTasks = [CleanDatabase, AddSalesReportDay]
+            forM_ recurringTasks $ \task ->
+                when (task `notElem` decodedJobs) $
+                    enqueueTask Nothing task
+
+        decodeJobType :: Job -> Maybe Task
+        decodeJobType job =
+            case fromJSON (fromJSONValue $ jobAction job) of
+                Success j ->
+                    Just j
+                Error _ ->
+                    Nothing

@@ -13,7 +13,6 @@ import Data.Aeson (ToJSON(..), FromJSON(..), (.=), (.:), Value(Null), Object, ob
 import Data.Aeson.Types (Parser)
 import Data.List (sortOn)
 import Data.Maybe (fromMaybe, catMaybes)
-import Data.Monoid ((<>))
 import Data.Time (getCurrentTime)
 import Data.Text.Encoding (encodeUtf8)
 import Database.Persist

@@ -1,0 +1,5 @@
+server/.stack-work
+server/sese-website.cabal
+client/node_modules
+client/dist
+client/elm-stuff

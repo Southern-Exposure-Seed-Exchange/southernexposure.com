@@ -1,5 +1,6 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TupleSections #-}
@@ -12,15 +13,18 @@ module Routes.Admin.Products
 import Control.Monad (forM_, unless)
 import Control.Monad.Reader (liftIO, lift)
 import Data.Aeson ((.=), (.:), (.:?), ToJSON(..), FromJSON(..), Value(Object), object, withObject)
+import Data.Csv (DefaultOrdered(..), ToNamedRecord(..), encodeDefaultOrderedByName, namedRecord)
 import Data.Maybe (mapMaybe, listToMaybe, fromMaybe)
-import Data.Monoid ((<>))
 import Data.Text.Encoding (encodeUtf8)
 import Data.Time (UTCTime, getCurrentTime)
 import Database.Persist
-    ( (==.), (=.), Entity(..), SelectOpt(Asc), selectList, selectFirst
+    ( (==.), (=.), (<-.), Entity(..), SelectOpt(Asc), selectList, selectFirst
     , insert, insertMany_, insert_, update, get, getBy, deleteWhere, delete
     )
-import Servant ((:<|>)(..), (:>), AuthProtect, ReqBody, Capture, Get, Post, JSON, err404)
+import Network.HTTP.Media ((//), (/:))
+import Servant
+    ( (:<|>)(..), (:>), Accept(..), AuthProtect, Delete, ReqBody, Capture, Get , MimeRender(..), Post, JSON, err404
+    )
 
 import Auth (WrappedAuthToken, Cookied, withAdminCookie, validateAdminAndParameters)
 import Models
@@ -28,7 +32,7 @@ import Models
     , SeedAttribute(..), Category(..), CategoryId, Unique(..), slugify
     , ProductToCategory(..)
     )
-import Models.Fields (LotSize, Cents, Region)
+import Models.Fields (InventoryPolicy(..), LotSize(..), Cents, Milligrams, Region, formatCents, toGrams)
 import Routes.CommonData
     ( AdminCategorySelect, makeAdminCategorySelects, validateCategorySelect
     , getAdditionalCategories
@@ -38,10 +42,12 @@ import Server (App, AppSQL, runDB, serverError)
 import Validation (Validation(validators))
 
 import qualified Data.ByteString as BS
+import qualified Data.ByteString.Lazy as LBS
+import qualified Data.Csv as CSV
 import qualified Data.Text as T
 import qualified Data.List as L
 import qualified Data.Map.Strict as M
-import qualified Database.Esqueleto as E
+import qualified Database.Esqueleto.Experimental as E
 import qualified Validation as V
 
 
@@ -51,6 +57,9 @@ type ProductAPI =
     :<|> "new" :> NewProductRoute
     :<|> "edit" :> EditProductDataRoute
     :<|> "edit" :> EditProductRoute
+    :<|> "export" :> ExportProductRoute
+    :<|> "delete" :> DeleteProductRoute
+    :<|> "restore" :> RestoreDeletedProductRoute
 
 type ProductRoutes =
          (WrappedAuthToken -> App (Cookied ProductListData))
@@ -58,6 +67,9 @@ type ProductRoutes =
     :<|> (WrappedAuthToken -> ProductParameters -> App (Cookied ProductId))
     :<|> (WrappedAuthToken -> ProductId -> App (Cookied EditProductData))
     :<|> (WrappedAuthToken -> EditProductParameters -> App (Cookied ProductId))
+    :<|> (WrappedAuthToken -> ProductId -> App (Cookied LBS.ByteString))
+    :<|> (WrappedAuthToken -> ProductId -> App (Cookied ()))
+    :<|> (WrappedAuthToken -> ProductId -> App (Cookied ()))
 
 productRoutes :: ProductRoutes
 productRoutes =
@@ -66,6 +78,9 @@ productRoutes =
     :<|> newProductRoute
     :<|> editProductDataRoute
     :<|> editProductRoute
+    :<|> exportProductRoute
+    :<|> deleteProductRoute
+    :<|> restoreDeletedProductRoute
 
 
 -- LIST
@@ -93,6 +108,7 @@ data ListProduct =
         , lpBaseSku :: T.Text
         , lpCategories :: [T.Text]
         , lpIsActive :: Bool
+        , lpIsDeleted :: Bool
         } deriving (Show)
 
 instance ToJSON ListProduct where
@@ -103,6 +119,7 @@ instance ToJSON ListProduct where
             , "baseSKU" .= lpBaseSku
             , "categories" .= lpCategories
             , "isActive" .= lpIsActive
+            , "isDeleted" .= lpIsDeleted
             ]
 
 productListRoute :: WrappedAuthToken -> App (Cookied ProductListData)
@@ -115,7 +132,7 @@ productListRoute t = withAdminCookie t $ \_ -> runDB $ do
         foldr (\(Entity cId c) m -> M.insert cId (categoryName c) m) M.empty
     getProducts :: AppSQL [(Entity Product, E.Value Bool)]
     getProducts =
-        E.select $ E.from $ \p -> do
+        E.select $ E.from E.table >>= \p -> do
             E.orderBy [E.asc $ p E.^. ProductBaseSku]
             return (p, activeVariantExists p )
     makeProduct :: M.Map CategoryId T.Text -> (Entity Product, E.Value Bool) -> ListProduct
@@ -126,6 +143,7 @@ productListRoute t = withAdminCookie t $ \_ -> runDB $ do
             , lpBaseSku = productBaseSku prod
             , lpCategories = (: []) . fromMaybe "" $ productMainCategory prod `M.lookup` nameMap
             , lpIsActive = E.unValue isActive
+            , lpIsDeleted = productDeleted prod
             }
 
 
@@ -157,14 +175,37 @@ data ProductParameters =
         , ppCategories :: [CategoryId]
         , ppBaseSku :: T.Text
         , ppLongDescription :: T.Text
-        , ppImageData :: BS.ByteString
-        -- ^ Base64 Encoded
-        , ppImageName :: T.Text
+        , ppImageUpdates :: M.Map Int ProductImageOperation
+        -- ^ Base64 Encoded image file and the image name
         , ppKeywords :: T.Text
         , ppShippingRestrictions :: [Region]
         , ppVariantData :: [VariantData]
         , ppSeedAttribute :: Maybe SeedData
         } deriving (Show)
+
+data ProductImageOperation
+    = ProductImageDelete
+    | ProductImageUpdate ProductImageData
+    deriving (Show)
+
+instance FromJSON ProductImageOperation where
+    parseJSON = withObject "ProductImageOperation" $ \v -> do
+        opType <- v .: "operation"
+        case opType of
+            "delete" -> return ProductImageDelete
+            "update" -> ProductImageUpdate <$> v .: "data"
+            _ -> fail $ "Unknown operation type: " ++ T.unpack opType
+
+data ProductImageData = ProductImageData
+    { pidFileName :: T.Text
+    , pidBase64Data :: BS.ByteString
+    } deriving (Show)
+
+instance FromJSON ProductImageData where
+    parseJSON = withObject "ProductImageData" $ \v -> do
+        pidFileName <- v .: "fileName"
+        pidBase64Data <- encodeUtf8 <$> v .: "base64Image"
+        return ProductImageData {..}
 
 instance FromJSON ProductParameters where
     parseJSON = withObject "ProductParameters" $ \v -> do
@@ -173,8 +214,7 @@ instance FromJSON ProductParameters where
         ppCategories <- v .: "categories"
         ppBaseSku <- v .: "baseSku"
         ppLongDescription <- v .: "longDescription"
-        ppImageData <- encodeUtf8 <$> v .: "imageData"
-        ppImageName <- v .: "imageName"
+        ppImageUpdates <- v .: "imageUpdates"
         ppKeywords <- fromMaybe "" <$> (v .:? "keywords")
         ppShippingRestrictions <- v .: "shippingRestrictions"
         ppVariantData <- v .: "variants"
@@ -218,6 +258,7 @@ data VariantData =
         , vdQuantity :: Int
         , vdLotSize :: Maybe LotSize
         , vdIsActive :: Bool
+        , vdInventoryPolicy :: InventoryPolicy
         , vdId :: Maybe ProductVariantId
         -- ^ Only used in the EditProductRoute
         } deriving (Show)
@@ -230,6 +271,7 @@ instance FromJSON VariantData where
         vdLotSize <- v .: "lotSize"
         vdIsActive <- v .: "isActive"
         vdId <- v .: "id"
+        vdInventoryPolicy <- v .: "inventoryPolicy"
         return VariantData {..}
 
 instance ToJSON VariantData where
@@ -241,6 +283,7 @@ instance ToJSON VariantData where
             , "quantity" .= vdQuantity
             , "lotSize" .= vdLotSize
             , "isActive" .= vdIsActive
+            , "inventoryPolicy" .= vdInventoryPolicy
             ]
 
 data SeedData =
@@ -280,17 +323,23 @@ type NewProductRoute =
 newProductRoute :: WrappedAuthToken -> ProductParameters -> App (Cookied ProductId)
 newProductRoute = validateAdminAndParameters $ \_ p@ProductParameters {..} -> do
     time <- liftIO getCurrentTime
-    imageFileName <- makeImageFromBase64 "products" ppImageName ppImageData
+    imageFileNames <- mapM
+        (\(ProductImageData fileName encodedImage) -> makeImageFromBase64 "products" fileName encodedImage)
+        (mapMaybe
+            (\case
+                ProductImageUpdate imageData -> Just imageData
+                _ -> Nothing
+            ) (M.elems ppImageUpdates)
+        )
     runDB $ do
-        (prod, extraCategories) <- makeProduct p imageFileName time
+        (prod, extraCategories) <- makeProduct p imageFileNames time
         productId <- insert prod
         insertMany_ $ map (ProductToCategory productId) extraCategories
-        insertMany_ $ map (makeVariant productId) ppVariantData
         maybe (return ()) (insert_ . makeAttributes productId) ppSeedAttribute
         return productId
   where
-    makeProduct :: ProductParameters -> T.Text -> UTCTime -> AppSQL (Product, [CategoryId])
-    makeProduct ProductParameters {..} imageUrl time =
+    makeProduct :: ProductParameters -> [T.Text] -> UTCTime -> AppSQL (Product, [CategoryId])
+    makeProduct ProductParameters {..} imageUrls time =
         case ppCategories of
             main : rest -> return
                 ( Product
@@ -300,11 +349,12 @@ newProductRoute = validateAdminAndParameters $ \_ p@ProductParameters {..} -> do
                     , productBaseSku = ppBaseSku
                     , productShortDescription = ""
                     , productLongDescription = sanitize ppLongDescription
-                    , productImageUrl = imageUrl
+                    , productImageUrls = imageUrls
                     , productKeywords = ppKeywords
                     , productShippingRestrictions = L.nub ppShippingRestrictions
                     , productCreatedAt = time
                     , productUpdatedAt = time
+                    , productDeleted = False
                     }
                 , rest
                 )
@@ -328,7 +378,7 @@ data EditProductData =
         , epdCategories :: [CategoryId]
         , epdBaseSku :: T.Text
         , epdLongDescription :: T.Text
-        , epdImageUrl :: T.Text
+        , epdImageUrls :: [T.Text]
         , epdKeywords :: T.Text
         , epdShippingRestrictions :: [Region]
         , epdVariantData :: [VariantData]
@@ -344,7 +394,7 @@ instance ToJSON EditProductData where
             , "categories" .= epdCategories
             , "baseSku" .= epdBaseSku
             , "longDescription" .= epdLongDescription
-            , "imageUrl" .= epdImageUrl
+            , "imageUrls" .= epdImageUrls
             , "keywords" .= epdKeywords
             , "shippingRestrictions" .= epdShippingRestrictions
             , "variants" .= epdVariantData
@@ -371,7 +421,7 @@ editProductDataRoute t productId = withAdminCookie t $ \_ ->
                     : map (productToCategoryCategoryId . entityVal) categories
                 , epdBaseSku = productBaseSku
                 , epdLongDescription = productLongDescription
-                , epdImageUrl = productImageUrl
+                , epdImageUrls = productImageUrls
                 , epdKeywords = productKeywords
                 , epdShippingRestrictions = productShippingRestrictions
                 , epdVariantData = variants
@@ -387,6 +437,7 @@ editProductDataRoute t productId = withAdminCookie t $ \_ ->
             , vdQuantity = fromIntegral productVariantQuantity
             , vdLotSize = productVariantLotSize
             , vdIsActive = productVariantIsActive
+            , vdInventoryPolicy = productVariantInventoryPolicy
             }
     makeAttributeData :: Entity SeedAttribute -> SeedData
     makeAttributeData (Entity _ SeedAttribute {..}) =
@@ -440,9 +491,11 @@ editProductRoute :: WrappedAuthToken -> EditProductParameters -> App (Cookied Pr
 editProductRoute = validateAdminAndParameters $ \_ EditProductParameters {..} -> do
     let ProductParameters {..} = eppProduct
     imageUpdate <-
-        if not (BS.null ppImageData) && not (T.null ppImageName) then do
-            imageFileName <- makeImageFromBase64 "products" ppImageName ppImageData
-            return [ ProductImageUrl =. imageFileName ]
+        if not (null ppImageUpdates) then do
+            imageUrls <- fmap (fmap (\(Entity _ p) -> productImageUrls p)) $ runDB $ selectFirst [ProductId ==. eppId] []
+            let existingImages = fromMaybe [] imageUrls
+            imageFileNames <- updateImageList ppImageUpdates existingImages
+            return [ ProductImageUrls =. imageFileNames ]
         else
             return []
     time <- liftIO getCurrentTime
@@ -492,11 +545,177 @@ editProductRoute = validateAdminAndParameters $ \_ EditProductParameters {..} ->
                         , ProductVariantQuantity =. fromIntegral vdQuantity
                         , ProductVariantLotSize =. vdLotSize
                         , ProductVariantIsActive =. vdIsActive
+                        , ProductVariantInventoryPolicy =. vdInventoryPolicy
                         ]
                     unless vdIsActive $
                         deleteWhere [CartItemProductVariantId ==. variantId]
     return eppId
+    where
+        updateImageList :: M.Map Int ProductImageOperation -> [T.Text] -> App [T.Text]
+        updateImageList imageUpdates oldImageUrls = do
+            let maxIdx = max (if null oldImageUrls then -1 else length oldImageUrls - 1)
+                    (if null (M.keys imageUpdates) then -1 else maximum (M.keys imageUpdates))
+            let buildList idx
+                    | idx > maxIdx = return []
+                    | otherwise = case M.lookup idx imageUpdates of
+                        Just ProductImageDelete ->
+                            buildList (idx + 1)
+                        Just (ProductImageUpdate (ProductImageData fileName encodedImage)) -> do
+                            img <- makeImageFromBase64 "products" fileName encodedImage
+                            rest <- buildList (idx + 1)
+                            return $ img : rest
+                        Nothing ->
+                            case drop idx oldImageUrls of
+                                (img : _) -> do
+                                    rest <- buildList (idx + 1)
+                                    return $ img : rest
+                                [] -> buildList (idx + 1)
+            buildList 0
 
+-- EXPORT
+
+data CSV
+
+instance Accept CSV where
+    contentType _ = "text" // "csv" /: ("charset", "utf-8")
+
+instance MimeRender CSV LBS.ByteString where
+    mimeRender _ = id
+
+data ProductExportData = ProductExportData
+    { pedSku :: T.Text
+    , pedName :: T.Text
+    , pedPrice :: Cents
+    , pedLotSize :: Maybe LotSize
+    , pedDescription :: T.Text
+    , pedDiscontinued :: Bool
+    , pedQOH :: Int
+    , pedCategory :: T.Text
+    , pedOrganic :: Bool
+    , pedHeirloom :: Bool
+    , pedSmallGrower :: Bool
+    , pedRegional :: Bool
+    }
+
+instance ToNamedRecord ProductExportData where
+    toNamedRecord ProductExportData {..} =
+        namedRecord
+            [ "sku" CSV..= pedSku
+            , "name" CSV..= pedName
+            , "price" CSV..= formatCents pedPrice
+            , "weight" CSV..= CSV.toField (toGrams <$> lotSizeToWeight pedLotSize)
+            , "description" CSV..= pedDescription
+            , "discontinued" CSV..= show pedDiscontinued
+            , "qoh" CSV..= pedQOH
+            , "category" CSV..= pedCategory
+            , "organic" CSV..= boolSeedAttributeToField pedOrganic
+            , "heirloom" CSV..= boolSeedAttributeToField pedHeirloom
+            , "small grower" CSV..= boolSeedAttributeToField pedSmallGrower
+            , "regional" CSV..= boolSeedAttributeToField pedRegional
+            ]
+        where
+            boolSeedAttributeToField :: Bool -> String
+            boolSeedAttributeToField = show
+
+            lotSizeToWeight :: Maybe LotSize -> Maybe Milligrams
+            lotSizeToWeight = \case
+                Just (Mass m) -> Just m
+                Just (Bulbs _) -> Nothing
+                Just (Slips _) -> Nothing
+                Just (Plugs _) -> Nothing
+                Just (CustomLotSize _) -> Nothing
+                Nothing -> Nothing
+
+instance DefaultOrdered ProductExportData where
+    headerOrder _ = CSV.header
+        [ "sku"
+        , "name"
+        , "price"
+        , "weight"
+        , "description"
+        , "discontinued"
+        , "qoh"
+        , "category"
+        , "organic"
+        , "heirloom"
+        , "small grower"
+        , "regional"
+        ]
+
+type ExportProductRoute =
+       AuthProtect "cookie-auth"
+    :> Capture "id" ProductId
+    :> Get '[CSV] (Cookied LBS.ByteString)
+
+exportProductRoute :: WrappedAuthToken -> ProductId -> App (Cookied LBS.ByteString)
+exportProductRoute t productId = withAdminCookie t $ \_ -> runDB $ do
+    products <- E.select $ do
+        (p E.:& v E.:& c E.:& sa) <- E.from $ E.table @Product
+            `E.innerJoin` E.table @ProductVariant
+                `E.on` (\(p E.:& v) -> v E.^. ProductVariantProductId E.==. p E.^. ProductId)
+            `E.innerJoin` E.table @Category
+                `E.on` (\(p E.:& _ E.:& c) -> c E.^. CategoryId E.==. p E.^. ProductMainCategory)
+            `E.leftJoin` E.table @ SeedAttribute
+                `E.on` (\(p E.:& _ E.:& _ E.:& sa) ->
+                    sa E.?. SeedAttributeProductId E.==. E.just (p E.^. ProductId))
+        E.where_ $ p E.^. ProductId E.==. E.val productId
+        return (p, v, c, sa)
+    return $ productExportData products
+
+productExportData :: [(Entity Product, Entity ProductVariant, Entity Category, Maybe (Entity SeedAttribute))] -> LBS.ByteString
+productExportData productData =
+    encodeDefaultOrderedByName $ map toProductExportData productData
+    where
+        toProductExportData (Entity _ Product {..}, Entity _ ProductVariant {..}, Entity _ Category {..}, maybeSeedAttr) =
+            ProductExportData
+                { pedSku = productBaseSku <> productVariantSkuSuffix
+                , pedName = productName
+                , pedPrice = productVariantPrice
+                , pedLotSize = productVariantLotSize
+                , pedDescription = productLongDescription
+                , pedDiscontinued = not productVariantIsActive
+                , pedQOH = fromIntegral productVariantQuantity
+                , pedCategory = categoryName
+                , pedOrganic = maybe False (seedAttributeIsOrganic . E.entityVal) maybeSeedAttr
+                , pedHeirloom = maybe False (seedAttributeIsHeirloom . E.entityVal) maybeSeedAttr
+                , pedSmallGrower = maybe False (seedAttributeIsSmallGrower . E.entityVal) maybeSeedAttr
+                , pedRegional = maybe False (seedAttributeIsRegional . E.entityVal) maybeSeedAttr
+                }
+
+type DeleteProductRoute =
+       AuthProtect "cookie-auth"
+    :> Capture "id" ProductId
+    :> Delete '[JSON] (Cookied ())
+
+
+deleteProductRoute :: WrappedAuthToken -> ProductId -> App (Cookied ())
+deleteProductRoute t productId = withAdminCookie t $ \_ -> runDB $ do
+    get productId >>= \case
+        Nothing -> lift $ serverError err404
+        Just _ -> do
+            -- Soft delete the product by setting deleted to True
+            update productId [ProductDeleted =. True]
+            productVariants <- fmap entityKey <$> selectList [ProductVariantProductId ==. productId] []
+            -- Delete all product variants from customer carts
+            deleteWhere [CartItemProductVariantId <-. productVariants]
+            -- Delete all sales with product variants
+            deleteWhere [ProductSaleProductVariantId <-. productVariants]
+            return ()
+
+type RestoreDeletedProductRoute =
+    AuthProtect "cookie-auth"
+    :> Capture "id" ProductId
+    :> Post '[JSON] (Cookied ())
+
+restoreDeletedProductRoute :: WrappedAuthToken -> ProductId -> App (Cookied ())
+restoreDeletedProductRoute t productId = withAdminCookie t $ \_ -> runDB $
+    get productId >>= \case
+        Nothing -> lift $ serverError err404
+        Just Product {..} -> do
+            unless productDeleted $ lift $ serverError err404
+            -- Restore the product by setting deleted to False
+            update productId [ProductDeleted =. False]
+            return ()
 
 -- UTILS
 
@@ -510,6 +729,7 @@ makeVariant pId VariantData {..} =
         , productVariantQuantity = fromIntegral vdQuantity
         , productVariantLotSize = vdLotSize
         , productVariantIsActive = vdIsActive
+        , productVariantInventoryPolicy = vdInventoryPolicy
         }
 
 makeAttributes :: ProductId -> SeedData -> SeedAttribute

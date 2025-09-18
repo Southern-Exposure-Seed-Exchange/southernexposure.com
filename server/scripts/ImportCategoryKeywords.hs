@@ -4,20 +4,20 @@
 {-# LANGUAGE TypeFamilies #-}
 import Control.Monad.Logger (runNoLoggingT)
 import Data.Csv (FromRecord(..), HasHeader(NoHeader), decode)
-import Data.Monoid ((<>))
 import Database.Persist
 import Database.Persist.Postgresql
-    ( ConnectionPool, SqlPersistT, createPostgresqlPool, runSqlPool
+    ( ConnectionPool, SqlPersistT, runSqlPool
     )
 import GHC.Generics (Generic)
 
 import Models
+import Utils (makeSqlPool)
 
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.List as L
 import qualified Data.Text as T
 import qualified Data.Vector as V
-import qualified Database.Esqueleto as E
+import qualified Database.Esqueleto.Experimental as E
 
 main :: IO ()
 main = do
@@ -39,7 +39,7 @@ instance FromRecord ImportData
 
 connectToPostgres :: IO ConnectionPool
 connectToPostgres =
-    runNoLoggingT $ createPostgresqlPool "dbname=sese-website" 1
+    runNoLoggingT $ makeSqlPool 1
 
 updateCategoryKeywords :: [ImportData] -> SqlPersistT IO ()
 updateCategoryKeywords =
@@ -53,8 +53,8 @@ updateCategoryKeywords =
                 error $ "Invalid slug: " <> T.unpack slug
             Just (Entity cId _) ->
                 getChildCategoryIds cId
-        products <- E.select $ E.from $ \p -> do
-            let alternateExists = E.exists $ E.from $ \ptc ->
+        products <- E.select $ E.from E.table >>= \p -> do
+            let alternateExists = E.exists $ E.from E.table >>= \ptc ->
                     E.where_ $ (ptc E.^. ProductToCategoryProductId E.==. p E.^. ProductId) E.&&.
                         (ptc E.^. ProductToCategoryCategoryId `E.in_` E.valList categoryTree)
             E.where_ $

@@ -2,8 +2,10 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeOperators #-}
+{-# OPTIONS -Wno-deprecations #-}
 module Routes.Checkout
     ( CheckoutAPI
     , checkoutRoutes
@@ -11,15 +13,15 @@ module Routes.Checkout
 
 import Control.Applicative ((<|>))
 import Control.Arrow (first)
-import Control.Exception.Safe (MonadThrow, MonadCatch, Exception, throwM, try, handle)
-import Control.Monad ((>=>), when, unless, void, forM_)
+import UnliftIO (MonadUnliftIO, MonadIO)
+import UnliftIO.Exception (Exception, throwIO, try, handle)
+import Control.Monad ((>=>), when, unless, void, forM_, guard)
 import Control.Monad.Reader (asks, lift, liftIO)
-import Data.Aeson ((.:), (.:?), (.=), FromJSON(..), ToJSON(..), Value(Object), withObject, object)
+import Data.Aeson ((.:), (.:?), (.=), FromJSON(..), ToJSON(..), withObject, object)
 import Data.Foldable (asum)
 import Data.Int (Int64)
 import Data.List (partition, find)
 import Data.Maybe (listToMaybe, isJust, isNothing, fromMaybe, mapMaybe)
-import Data.Monoid ((<>))
 import Data.Time.Clock (getCurrentTime, UTCTime)
 import Data.Typeable (Typeable)
 import Database.Persist
@@ -27,11 +29,8 @@ import Database.Persist
     , getBy, selectList, update, updateWhere, delete, deleteWhere, count
     , getEntity, selectFirst
     )
-import Servant ((:<|>)(..), (:>), AuthProtect, JSON, Post, ReqBody, err404)
-import Web.Stripe ((-&-))
-import Web.Stripe.Card (createCustomerCardByToken, updateCustomerCard, getCustomerCards)
-import Web.Stripe.Charge (createCharge)
-import Web.Stripe.Customer (Email(..), createCustomer, updateCustomer)
+import Network.Socket (SockAddr(..))
+import Servant ((:<|>)(..), (:>), AuthProtect, Header, JSON, Post, RemoteHost, ReqBody, err404, ServerT)
 
 import Auth
 import Avalara
@@ -39,29 +38,42 @@ import Avalara
     , CustomerCode
     )
 import Config
+import Helcim (createVerifyCheckout, getCustomer, getCustomers, purchase, updateCustomer)
+import Helcim.API (HelcimError(..), ApiError(..))
+import Helcim.API.Types.Checkout (CheckoutToken(..), CheckoutCreateResponse (..))
+import Helcim.API.Types.Common (CardToken(..))
+import Helcim.API.Types.Customer (CustomerResponse(..), CreateCustomerRequest(..), GetCustomersRequest(..))
+import qualified Helcim.API.Types.Customer as Helcim
+import Helcim.API.Types.Payment (CardData(..), TransactionResponse(..), PurchaseRequest(..), Status(..))
+import Helcim.Utils (addressToHelcimAddress)
 import Models
 import Models.Fields
+import Postgrid (AddressVerificationResult(..), verifyAddressData)
+import Postgrid.API.Types (VerifyStructuredAddressErrors)
 import Server
 import Routes.CommonData
-    ( AuthorizationData, toAuthorizationData, CartItemData(..), CartCharges(..)
-    , CartCharge(..), getCartItems, getCharges, AddressData(..), toAddressData
+    ( CartItemData(..), CartInventoryNotifications(..), getCartInventoryNotifications, getUnseenCartInventoryNotifications
+    , CartCharges(..), CartCharge(..), getCartItems, getCharges, AddressData(..), toAddressData
     , fromAddressData, ShippingCharge(..), VariantData(..), getVariantPrice
-    , OrderDetails(..), toCheckoutOrder, getCheckoutProducts, CheckoutProduct
-    , LoginParameters(..), validatePassword, handlePasswordValidationError
-    , PasswordValidationError(..), BaseProductData(..)
+    , OrderDetails(..), toCheckoutOrder, getCheckoutProducts, CheckoutProduct, toDeliveryData
+
+    , BaseProductData(..)
     )
 import Routes.AvalaraUtils (createAvalaraTransaction, createAvalaraCustomer)
-import Routes.Utils (hashPassword, generateUniqueToken, getDisabledCheckoutDetails)
+import Routes.Utils (getDisabledCheckoutDetails, getClientIP, generateUniqueToken)
+import Routes.Carts (ValidateCartParameters(..))
+import Routes.Customers (RegistrationParametersWith(..), registerNewCustomer)
 import Validation (Validation(..))
 import Workers (Task(..), AvalaraTask(..), enqueueTask)
 
 import qualified Avalara
+import qualified Data.Map.Strict as M
 import qualified Data.Text as T
-import qualified Database.Esqueleto as E
+import qualified Database.Esqueleto.Experimental as E
 import qualified Emails
 import qualified Validation as V
-import qualified Web.Stripe as Stripe
-import qualified Web.Stripe.Types as Stripe
+import qualified Data.UUID as UUID
+import Control.Monad.Trans.Maybe ( MaybeT(MaybeT, runMaybeT) )
 
 
 type CheckoutAPI =
@@ -69,16 +81,12 @@ type CheckoutAPI =
     :<|> "customer-place-order" :> CustomerPlaceOrderRoute
     :<|> "anonymous-details" :> AnonymousDetailsRoute
     :<|> "anonymous-place-order" :> AnonymousPlaceOrderRoute
-    :<|> "login" :> LoginRoute
     :<|> "success" :> SuccessRoute
+    :<|> "anonymous-success" :> AnonymousSuccessRoute
+    :<|> "helcim-checkout-token" :> CheckoutTokenRoute
+    :<|> "anonymous-helcim-checkout-token" :> AnonymousCheckoutTokenRoute
 
-type CheckoutRoutes =
-         (WrappedAuthToken -> CustomerDetailsParameters -> App (Cookied CheckoutDetailsData))
-    :<|> (WrappedAuthToken -> CustomerPlaceOrderParameters -> App (Cookied PlaceOrderData))
-    :<|> (AnonymousDetailsParameters -> App CheckoutDetailsData)
-    :<|> (AnonymousPlaceOrderParameters -> App (Cookied AnonymousPlaceOrderData))
-    :<|> (CheckoutLoginParameters -> App (Cookied LoginData))
-    :<|> (WrappedAuthToken -> SuccessParameters -> App (Cookied OrderDetails))
+type CheckoutRoutes = ServerT CheckoutAPI App
 
 checkoutRoutes :: CheckoutRoutes
 checkoutRoutes =
@@ -86,8 +94,10 @@ checkoutRoutes =
     :<|> customerPlaceOrderRoute
     :<|> anonymousDetailsRoute
     :<|> anonymousPlaceOrderRoute
-    :<|> loginRoute
     :<|> customerSuccessRoute
+    :<|> anonymousSuccessRoute
+    :<|> getCheckoutTokenRoute
+    :<|> anonymousGetCheckoutTokenRoute
 
 
 -- COUPON ERRORS
@@ -173,8 +183,6 @@ withCheckoutDetailsErrors =
             handlePriorityShippingErrors priorityError
         DetailsCouponError couponError ->
             handleCouponErrors couponError
-
-
 
 data CustomerDetailsParameters =
     CustomerDetailsParameters
@@ -321,7 +329,7 @@ anonymousDetailsRoute parameters =
                 , cddBillingAddresses = []
                 , cddItems = items
                 , cddCharges = charges
-                , cddStoreCredit = 0
+                , cddStoreCredit = mkCents 0
                 , cddIsDisabled = isDisabled
                 , cddDisabledMessage = disabledMsg
                 , cddRestrictionsError = restrictions
@@ -336,16 +344,16 @@ getCoupon currentTime maybeCustomerId couponCode = do
     maybeCoupon <- getBy $ UniqueCoupon couponCode
     case maybeCoupon of
         Nothing ->
-            throwM CouponNotFound
+            throwIO CouponNotFound
         Just e@(Entity couponId coupon) -> do
             unless (couponIsActive coupon)
-                $ throwM CouponInactive
+                $ throwIO CouponInactive
             when (currentTime > couponExpirationDate coupon)
-                $ throwM CouponExpired
+                $ throwIO CouponExpired
             when (couponTotalUses coupon /= 0) $ do
                 totalUses <- count [OrderCouponId ==. Just couponId]
                 when (totalUses >= fromIntegral (couponTotalUses coupon))
-                    $ throwM CouponMaxUses
+                    $ throwIO CouponMaxUses
             when (couponUsesPerCustomer coupon /= 0) $
                 checkCustomerUses e
             return e
@@ -359,7 +367,7 @@ getCoupon currentTime maybeCustomerId couponCode = do
                         , OrderCustomerId ==. customerId
                         ]
                     when (customerUses >= fromIntegral (couponUsesPerCustomer coupon))
-                        $ throwM CouponCustomerMaxUses
+                        $ throwIO CouponCustomerMaxUses
                 Nothing -> return ()
 
 -- | Get the CartCharges & a potential ShippingRestrictionErrorfor the
@@ -384,7 +392,7 @@ detailsCharges maybeShipping avalaraCode items maybeCoupon priorityShipping = do
 --
 -- Throws a ShippingRestrictionError when some products are not allowed to
 -- be shipped to the given shipping address.
-checkProductRestrictions :: MonadThrow m => Maybe AddressData -> [CartItemData] -> m ()
+checkProductRestrictions :: MonadIO m => Maybe AddressData -> [CartItemData] -> m ()
 checkProductRestrictions maybeShipping items =
     forM_ maybeShipping $ \shipping -> do
         let restrictedProducts = flip mapMaybe items $ \CartItemData { cidProduct } ->
@@ -393,16 +401,16 @@ checkProductRestrictions maybeShipping items =
                 else
                     Nothing
         unless (null restrictedProducts) $
-            throwM $ CannotShipTo (adState shipping) restrictedProducts
+            throwIO $ CannotShipTo (adState shipping) restrictedProducts
 
 -- | Ensure the product total equals or exceeds the Coupon
 -- minimum by seeing if it was removed from the CartCharges. If
 -- it does not meet the minimum, throw a CouponError.
-checkCouponMeetsMinimum :: MonadThrow m => Maybe (Entity Coupon) -> CartCharges -> m ()
+checkCouponMeetsMinimum :: MonadIO m => Maybe (Entity Coupon) -> CartCharges -> m ()
 checkCouponMeetsMinimum maybeCoupon CartCharges { ccCouponDiscount } =
     case (maybeCoupon, ccCouponDiscount) of
         (Just (Entity _ coupon), Nothing) ->
-            throwM $ CouponBelowOrderMinimum $ couponMinimumOrder coupon
+            throwIO $ CouponBelowOrderMinimum $ couponMinimumOrder coupon
         _ ->
             return ()
 
@@ -411,12 +419,12 @@ checkCouponMeetsMinimum maybeCoupon CartCharges { ccCouponDiscount } =
 -- available.
 --
 -- Does nothing if no shipping methods are present.
-checkPriorityShippingAvailable :: MonadThrow m => Bool -> CartCharges -> m ()
+checkPriorityShippingAvailable :: MonadIO m => Bool -> CartCharges -> m ()
 checkPriorityShippingAvailable hasPriority charges =
     when hasPriority $
         case ccShippingMethods charges of
             ShippingCharge _ Nothing _:_ ->
-                throwM PriorityShippingNotAvailable
+                throwIO PriorityShippingNotAvailable
             _ ->
                 return ()
 
@@ -431,24 +439,28 @@ data PlaceOrderError
     | StripeTokenRequired
     | NotEnoughStoreCredit
     | NoShippingMethod
-    | StripeError Stripe.StripeError
     | CardChargeError
     | PlaceOrderCouponError CouponError
     | AvalaraNoTransactionCode
     | PlaceOrderCannotShip ShippingRestrictionError
+    | NoHelcimCustomer
+    | HelcimError HelcimError
+    | HelcimPaymentDeclined
+    | ItemsOutOfStock
+    | AddressVerificationAPIFailed
     deriving (Show, Typeable)
 
 instance Exception PlaceOrderError
 
-withPlaceOrderErrors :: CustomerAddress -> App a -> App a
+withPlaceOrderErrors :: CustomerAddress -> AppSQL a -> AppSQL a
 withPlaceOrderErrors shippingAddress =
-    handle $ \case
+    handle $ lift . \case
         CartNotFound ->
             V.singleError
                 $ "We couldn't find any items in your Cart. This usually means "
                 <> "that your Order has been successfully submitted but we "
                 <> "encountered an error while sending your confirmation email, please "
-                <> "check yur Order History to verify and contact us if needed."
+                <> "check your Order History to verify and contact us if needed."
         NoShippingMethod ->
             case shippingAddress of
                 ExistingAddress _ _ ->
@@ -471,8 +483,6 @@ withPlaceOrderErrors shippingAddress =
         NotEnoughStoreCredit ->
             V.singleFieldError "store-credit"
                 "You cannot apply more store credit than you have."
-        StripeError stripeError ->
-            V.singleError $ Stripe.errorMsg stripeError
         CardChargeError ->
             V.singleError
                 $ "An error occured while charging your card. Please try again or "
@@ -485,7 +495,25 @@ withPlaceOrderErrors shippingAddress =
                 <> "contact us for help. (Error ANTC: No Transction Code Returned)"
         PlaceOrderCannotShip shippingError ->
             handleShippingRestrictionError shippingError
-
+        NoHelcimCustomer ->
+            V.singleError
+                $ "An error occured while processing your payment details. Please try again or "
+                <> "contact us for help."
+        HelcimError helcimError -> case helcimError of
+            HelcimClientError _ ->
+                V.singleError
+                    $ "An error occured while processing your payment. Please try again or "
+                    <> "contact us for help."
+            HelcimApiError ApiError { errors } ->
+                V.singleError
+                    $ "An error occured while processing your payment: "
+                    <> T.intercalate ", " (map (T.pack . show) errors)
+        HelcimPaymentDeclined ->
+            V.singleError "Your payment was declined. Please try again or contact us for help."
+        ItemsOutOfStock ->
+            V.singleError "Some items in your cart are out of stock. Please remove them and try again."
+        AddressVerificationAPIFailed ->
+            V.singleError "There was an error verifying your address, please try again later."
 
 
 data CustomerAddress
@@ -504,6 +532,88 @@ instance FromJSON CustomerAddress where
               parseNew =
                 fmap NewAddress . parseJSON
 
+verifyCustomerAddress :: CustomerAddress -> AddressType -> AppSQL AddressVerificationResult
+verifyCustomerAddress addr addrType = case addr of
+    NewAddress a -> lift $ verifyAddressData a addrType >>= \case
+        Left _ -> throwIO AddressVerificationAPIFailed
+        Right r -> return r
+    ExistingAddress addrId _ -> do
+        maybeAddr <- getEntity addrId
+        res <- case maybeAddr of
+            Just a -> if addressVerified (entityVal a)
+                then return $ Right AddressVerifiedSuccessfully
+                else lift $ verifyAddressData (toAddressData a) addrType
+            Nothing -> throwIO $ AddressNotFound addrType
+        case res of
+            Left _ -> throwIO AddressVerificationAPIFailed
+            Right r -> do
+                case r of
+                    AddressVerifiedSuccessfully -> do
+                        update addrId [AddressVerified =. True]
+                    _ -> return ()
+                return r
+
+
+data CheckoutResult a
+    = CheckoutSuccess a
+    | CheckoutValidationErrors [CheckoutValidationError]
+
+data CheckoutValidationError
+    = ShippingAddressVerificationFailed VerifyStructuredAddressErrors
+    | NewCartInventoryNotifications
+    deriving (Eq, Show)
+
+instance ToJSON CheckoutValidationError where
+    toJSON (ShippingAddressVerificationFailed errors) =
+        object
+            [ "type" .= ("shippingAddressVerificationFailed" :: T.Text)
+            , "errors" .= errors
+            ]
+    toJSON NewCartInventoryNotifications =
+        object
+            [ "type" .= ("newCartInventoryNotifications" :: T.Text)
+            ]
+
+instance ToJSON a => ToJSON (CheckoutResult a) where
+    toJSON (CheckoutSuccess a) = object
+        [ "status" .= ("ok" :: T.Text)
+        , "result" .= a
+        ]
+    toJSON (CheckoutValidationErrors errors) = object
+        [ "status" .= ("error" :: T.Text)
+        , "errors" .= errors
+        ]
+
+hasNewCartInventoryNotifications
+    :: CartInventoryNotifications -> CartId
+    -> AppSQL Bool
+hasNewCartInventoryNotifications seenWarnings cartId = do
+    currentWarnings <- getCartInventoryNotifications cartId
+    let unseenWarnings = getUnseenCartInventoryNotifications seenWarnings currentWarnings
+    if M.null (cinWarnings unseenWarnings) && M.null (cinErrors unseenWarnings)
+        then return False
+        else return True
+
+checkCartAndShippingAddress
+    :: CartInventoryNotifications -> CartId -> CustomerAddress -> Bool -> AppSQL a
+    -> AppSQL (CheckoutResult a)
+checkCartAndShippingAddress cartNotifications cartId shippingAddress skipAddressVerification action = do
+    hasCartNotification <- hasNewCartInventoryNotifications cartNotifications cartId
+    shippingAddressVerification <-
+        if skipAddressVerification then
+            return AddressVerifiedSuccessfully
+        else
+            verifyCustomerAddress shippingAddress Shipping
+    case (hasCartNotification, shippingAddressVerification) of
+        (False, AddressVerifiedSuccessfully) ->
+            CheckoutSuccess <$> action
+        _ ->
+            let validationErrors = ([NewCartInventoryNotifications | hasCartNotification])
+                    ++ (case shippingAddressVerification of
+                        AddressVerifiedSuccessfully -> []
+                        AddressCorrected _ errs -> [ShippingAddressVerificationFailed errs]
+                        AddressVerificationFailed errs -> [ShippingAddressVerificationFailed errs])
+            in return $ CheckoutValidationErrors validationErrors
 
 data CustomerPlaceOrderParameters =
     CustomerPlaceOrderParameters
@@ -513,7 +623,9 @@ data CustomerPlaceOrderParameters =
         , cpopPriorityShipping :: Bool
         , cpopCouponCode :: Maybe T.Text
         , cpopComment :: T.Text
-        , cpopStripeToken :: Maybe T.Text
+        , cpopHelcimData :: Maybe (CardToken, Helcim.CustomerCode)
+        , cpopCartInventoryNotifications :: CartInventoryNotifications
+        , cpopSkipShippingAddressVerification :: Bool
         }
 
 instance FromJSON CustomerPlaceOrderParameters where
@@ -525,7 +637,14 @@ instance FromJSON CustomerPlaceOrderParameters where
             <*> v .: "priorityShipping"
             <*> v .:? "couponCode"
             <*> v .: "comment"
-            <*> v .:? "stripeToken"
+            <*> do
+                v .:? "helcimToken" >>= maybe
+                    (return Nothing)
+                    (\cardToken -> do
+                        customerCode <- v .: "helcimCustomerCode"
+                        return $ Just (cardToken, customerCode))
+            <*> v .: "cartInventoryNotifications"
+            <*> v .: "skipAddressVerification"
 
 instance Validation CustomerPlaceOrderParameters where
     validators parameters = do
@@ -534,7 +653,7 @@ instance Validation CustomerPlaceOrderParameters where
         checkoutDisabled <- fst <$> getDisabledCheckoutDetails
         return $
             ( "", [ ( "There was an error processing your payment, please try again."
-                    , whenJust T.null $ cpopStripeToken parameters )
+                    , whenJust T.null $ unCardToken . fst <$> cpopHelcimData parameters )
                   , ( "Sorry, we have temporarily stopped accepting Orders. "
                         <> "Please check our Homepage for updates."
                     , checkoutDisabled
@@ -577,9 +696,12 @@ instance ToJSON PlaceOrderData where
             ]
 
 type CustomerPlaceOrderRoute =
-       AuthProtect "cookie-auth"
+    RemoteHost
+    :> Header "X-Forwarded-For" T.Text
+    :> Header "X-Real-IP" T.Text
+    :> AuthProtect "cookie-auth"
     :> ReqBody '[JSON] CustomerPlaceOrderParameters
-    :> Post '[JSON] (Cookied PlaceOrderData)
+    :> Post '[JSON] (Cookied (CheckoutResult PlaceOrderData))
 
 
 -- | Place an Order using a Customer's Cart.
@@ -587,62 +709,69 @@ type CustomerPlaceOrderRoute =
 -- If the Customer has a StripeId, add a new Card & set it as their
 -- Default. Otherwise create a new Stripe Customer for them. Then charge
 -- the Stripe Customer.
-customerPlaceOrderRoute :: WrappedAuthToken -> CustomerPlaceOrderParameters -> App (Cookied PlaceOrderData)
-customerPlaceOrderRoute = validateCookieAndParameters $ \ce@(Entity customerId customer) parameters -> do
+customerPlaceOrderRoute
+    :: SockAddr -> Maybe T.Text -> Maybe T.Text -> WrappedAuthToken -> CustomerPlaceOrderParameters
+    -> App (Cookied (CheckoutResult PlaceOrderData))
+customerPlaceOrderRoute remoteHost forwardedFor realIP = validateCookieAndParameters $ \ce@(Entity customerId customer) parameters -> do
     let shippingParameter = cpopShippingAddress parameters
-        maybeStripeToken = cpopStripeToken parameters
+        maybeHelcimData = cpopHelcimData parameters
     currentTime <- liftIO getCurrentTime
-    orderId <- withPlaceOrderErrors shippingParameter . runDB $ do
-        (maybeBillingAddress, shippingAddress, order@(Entity orderId _), preTaxTotal, cartId, appliedCredit) <-
-            createAddressesAndOrder ce shippingParameter (cpopBillingAddress parameters)
-                (cpopStoreCredit parameters) (cpopPriorityShipping parameters)
-                (cpopCouponCode parameters) (cpopComment parameters) currentTime
-        when (appliedCredit > customerStoreCredit customer) $
-            throwM NotEnoughStoreCredit
-        when (appliedCredit > 0) $
-            update customerId [CustomerStoreCredit -=. appliedCredit]
-        let remainingCredit = maybe 0 (\c -> c - appliedCredit) $ cpopStoreCredit parameters
-        when (preTaxTotal > 0 || preTaxTotal + appliedCredit > 0 ) $
-            withAvalaraTransaction order preTaxTotal remainingCredit ce shippingAddress maybeBillingAddress $ \orderTotal ->
-                when (orderTotal >= 50) $ case (maybeBillingAddress, maybeStripeToken) of
-                    (Just (Entity _ billingAddress), Just stripeToken) -> do
-                        stripeCustomerId <- getOrCreateStripeCustomer ce stripeToken
-                        setCustomerCard customer stripeCustomerId billingAddress stripeToken
-                        chargeCustomer stripeCustomerId orderId orderTotal
-                    (Nothing, _) ->
-                        throwM BillingAddressRequired
-                    (_, Nothing) ->
-                        throwM StripeTokenRequired
-        deleteCart cartId
-        reduceQuantities orderId
-        return orderId
-    runDB $ enqueuePostOrderTasks orderId
-    (orderLines, products) <- runDB $ (,)
-        <$> selectList [OrderLineItemOrderId ==. orderId] []
-        <*> getCheckoutProducts orderId
-    return $ PlaceOrderData
-        { podOrderId = orderId
-        , podLines = orderLines
-        , podProducts = products
-        }
+    orderCreationRes <- runDB $ do
+        (Entity cartId _) <- getBy (UniqueCustomerCart $ Just customerId)
+            >>= maybe (throwIO CartNotFound) return
+        checkCartAndShippingAddress (cpopCartInventoryNotifications parameters) cartId shippingParameter
+            (cpopSkipShippingAddressVerification parameters) $ withPlaceOrderErrors shippingParameter $ do
+            (maybeBillingAddress, shippingAddress, order@(Entity orderId _), preTaxTotal, appliedCredit) <-
+                createAddressesAndOrder ce cartId shippingParameter (cpopBillingAddress parameters)
+                    (cpopStoreCredit parameters) (cpopPriorityShipping parameters)
+                    (cpopCouponCode parameters) (cpopComment parameters) currentTime
+            when (appliedCredit > customerStoreCredit customer) $
+                throwIO NotEnoughStoreCredit
+            when (appliedCredit > mkCents 0) $
+                update customerId [CustomerStoreCredit -=. appliedCredit]
+            let remainingCredit = maybe (mkCents 0) (`subtractCents` appliedCredit) $ cpopStoreCredit parameters
+            when (preTaxTotal > mkCents 0 || preTaxTotal `plusCents` appliedCredit > mkCents 0 ) $
+                withAvalaraTransaction order preTaxTotal remainingCredit ce shippingAddress maybeBillingAddress $ \orderTotal ->
+                    when (orderTotal >= mkCents 50) $ case (maybeBillingAddress, maybeHelcimData) of
+                        (Just (Entity _ billingAddress), Just (helcimToken, customerCode)) -> do
+                            getAndUpdateHelcimCustomerByCode customerId customer customerCode billingAddress (entityVal shippingAddress)
+                            helcimCharge helcimToken customerCode (getClientIP remoteHost forwardedFor realIP) orderId orderTotal
+                        (Nothing, _) ->
+                            throwIO BillingAddressRequired
+                        (_, Nothing) ->
+                            throwIO StripeTokenRequired
+            deleteCart cartId
+            reduceQuantities orderId
+            return orderId
+    case orderCreationRes of
+        CheckoutSuccess orderId -> do
+            runDB $ enqueuePostOrderTasks orderId
+            (orderLines, products) <- runDB $ (,)
+                <$> selectList [OrderLineItemOrderId ==. orderId] []
+                <*> getCheckoutProducts orderId
+            return $ CheckoutSuccess $ PlaceOrderData
+                { podOrderId = orderId
+                , podLines = orderLines
+                , podProducts = products
+                }
+        CheckoutValidationErrors errs ->
+            return $ CheckoutValidationErrors errs
     where
           createAddressesAndOrder
-            :: Entity Customer -> CustomerAddress -> Maybe CustomerAddress
+            :: Entity Customer -> CartId -> CustomerAddress -> Maybe CustomerAddress
             -> Maybe Cents -> Bool -> Maybe T.Text -> T.Text -> UTCTime
-            -> AppSQL (Maybe (Entity Address), Entity Address, Entity Order, Cents, CartId, Cents)
-          createAddressesAndOrder customer@(Entity customerId _) shippingParam billingParam maybeStoreCredit priorityShipping maybeCouponCode comment currentTime = do
+            -> AppSQL (Maybe (Entity Address), Entity Address, Entity Order, Cents, Cents)
+          createAddressesAndOrder customer@(Entity customerId _) cartId shippingParam billingParam maybeStoreCredit priorityShipping maybeCouponCode comment currentTime = do
             shippingAddress <- getOrInsertAddress Shipping customerId shippingParam
             billingAddress <- sequence $ getOrInsertAddress Billing customerId <$> billingParam
-            (Entity cartId _) <- getBy (UniqueCustomerCart $ Just customerId)
-                >>= maybe (throwM CartNotFound) return
             (order, orderTotal, appliedCredit) <- createOrder
                 customer cartId shippingAddress (entityKey <$> billingAddress)
-                maybeStoreCredit priorityShipping maybeCouponCode comment currentTime
-            return (billingAddress, shippingAddress, order, orderTotal, cartId, appliedCredit)
+                maybeStoreCredit priorityShipping maybeCouponCode Nothing comment currentTime
+            return (billingAddress, shippingAddress, order, orderTotal, appliedCredit)
           getOrInsertAddress :: AddressType -> CustomerId -> CustomerAddress -> AppSQL (Entity Address)
           getOrInsertAddress addrType customerId = \case
             ExistingAddress addrId makeDefault -> do
-                let noAddress = throwM $ AddressNotFound addrType
+                let noAddress = throwIO $ AddressNotFound addrType
                 address <- get addrId >>= maybe noAddress return
                 when (addressCustomerId address /= customerId) noAddress
                 when makeDefault $ do
@@ -654,7 +783,7 @@ customerPlaceOrderRoute = validateCookieAndParameters $ \ce@(Entity customerId c
                         insert_ (address { addressIsDefault = True, addressType = addrType })
                 return $ Entity addrId address
             NewAddress ca -> do
-                let newAddress = fromAddressData addrType customerId ca
+                let newAddress = (fromAddressData addrType customerId ca) { addressVerified = True }
                 when (addressIsDefault newAddress)
                     $ updateWhere
                         [ AddressType ==. addrType
@@ -666,28 +795,35 @@ customerPlaceOrderRoute = validateCookieAndParameters $ \ce@(Entity customerId c
 data AnonymousPlaceOrderParameters =
     AnonymousPlaceOrderParameters
         { apopEmail :: T.Text
-        , apopPassword :: T.Text
         , apopShippingAddress :: AddressData
         , apopBillingAddress :: Maybe AddressData
         , apopPriorityShipping :: Bool
         , apopCouponCode :: Maybe T.Text
         , apopComment :: T.Text
         , apopCartToken :: T.Text
-        , apopStripeToken :: Maybe T.Text
+        , apopHelcimData :: Maybe (CardToken, Helcim.CustomerCode)
+        , apopCartInventoryNotifications :: CartInventoryNotifications
+        , apopSkipShippingAddressVerification :: Bool
         }
 
 instance FromJSON AnonymousPlaceOrderParameters where
     parseJSON = withObject "AnonymousPlaceOrderParameters" $ \v ->
         AnonymousPlaceOrderParameters
             <$> v .: "email"
-            <*> v .: "password"
             <*> v .: "shippingAddress"
             <*> v .: "billingAddress"
             <*> v .: "priorityShipping"
             <*> v .:? "couponCode"
             <*> v .: "comment"
             <*> v .: "sessionToken"
-            <*> v .: "stripeToken"
+            <*> do
+                v .:? "helcimToken" >>= maybe
+                    (return Nothing)
+                    (\cardToken -> do
+                        customerCode <- v .: "helcimCustomerCode"
+                        return $ Just (cardToken, customerCode))
+            <*> v .: "cartInventoryNotifications"
+            <*> v .: "skipAddressVerification"
 
 instance Validation AnonymousPlaceOrderParameters where
     validators parameters = do
@@ -698,11 +834,6 @@ instance Validation AnonymousPlaceOrderParameters where
         return $
             [ ( "email"
               , [ V.required $ apopEmail parameters
-                ]
-              )
-            , ( "password"
-              , [ V.required $ apopPassword parameters
-                , V.minimumLength 8 $ apopPassword parameters
                 ]
               )
             , ( ""
@@ -719,179 +850,146 @@ instance Validation AnonymousPlaceOrderParameters where
 data AnonymousPlaceOrderData =
     AnonymousPlaceOrderData
         { apodOrderId :: OrderId
+        , apodGuestToken :: T.Text
         , apodLines :: [Entity OrderLineItem]
         , apodProducts :: [CheckoutProduct]
-        , apodAuthorizationData :: AuthorizationData
         }
 
 instance ToJSON AnonymousPlaceOrderData where
     toJSON orderData =
         object
             [ "orderId" .= apodOrderId orderData
+            , "guestToken" .= apodGuestToken orderData
             , "lines" .= apodLines orderData
             , "products" .= apodProducts orderData
-            , "authData" .= apodAuthorizationData orderData
             ]
 
 type AnonymousPlaceOrderRoute =
-       ReqBody '[JSON] AnonymousPlaceOrderParameters
-    :> Post '[JSON] (Cookied AnonymousPlaceOrderData)
+       RemoteHost
+    :> Header "X-Forwarded-For" T.Text
+    :> Header "X-Real-IP" T.Text
+    :> ReqBody '[JSON] AnonymousPlaceOrderParameters
+    :> Post '[JSON] (CheckoutResult AnonymousPlaceOrderData)
 
 -- | Place an Order using an Anonymous Cart.
 --
 -- A new Customer & Order is created & the Customer is charged.
-anonymousPlaceOrderRoute :: AnonymousPlaceOrderParameters -> App (Cookied AnonymousPlaceOrderData)
-anonymousPlaceOrderRoute = validate >=> \parameters -> do
-    let email = apopEmail parameters
-        password = apopPassword parameters
-        shippingParam = apopShippingAddress parameters
+anonymousPlaceOrderRoute :: SockAddr -> Maybe T.Text -> Maybe T.Text -> AnonymousPlaceOrderParameters -> App (CheckoutResult AnonymousPlaceOrderData)
+anonymousPlaceOrderRoute remoteHost forwardedFor realIP = validate >=> \parameters -> do
+    let shippingParam = apopShippingAddress parameters
         billingParam = apopBillingAddress parameters
-        makeAvalaraCustomer = createAvalaraCustomer email
-            $ fromMaybe shippingParam billingParam
-    maybeCustomer <-
-        try (runDB $ validatePassword email password) >>= \case
-            Right e ->
-                return $ Just e
-            Left NoCustomer ->
-                return Nothing
-            Left e@MisconfiguredHashingPolicy ->
-                handlePasswordValidationError e
-            Left AuthorizationError ->
-                V.singleFieldError "email" "An Account with this Email already exists."
-            Left PasswordResetRequired ->
-                V.singleFieldError "email"
-                    "An Account with this Email exists, but a password reset is required."
-    authToken <- maybe (runDB $ generateUniqueToken UniqueToken)
-        (return . customerAuthToken . entityVal) maybeCustomer
     currentTime <- liftIO getCurrentTime
-    (orderId, orderData) <- withPlaceOrderErrors (NewAddress shippingParam) . runDB $ do
-        c@(Entity customerId customer) <- case maybeCustomer of
-            Nothing -> do
-                encryptedPass <- lift . hashPassword $ apopPassword parameters
-                avalaraCustomerCode <- makeAvalaraCustomer
-                let customer = Customer
-                        { customerEmail = email
-                        , customerStoreCredit = Cents 0
-                        , customerMemberNumber = ""
-                        , customerEncryptedPassword = encryptedPass
-                        , customerAuthToken = authToken
-                        , customerStripeId = Nothing
-                        , customerAvalaraCode = avalaraCustomerCode
-                        , customerIsAdmin = False
-                        }
-                customerId <- insert customer
-                mergeAnonymousCart (apopCartToken parameters) customerId
-                return $ Entity customerId customer
-            Just c@(Entity customerId customer) -> do
-                overwriteCustomerCart customerId . Just $ apopCartToken parameters
-                case customerAvalaraCode customer of
-                    Just _ -> return c
-                    Nothing -> do
-                        avalaraCustomerCode <- makeAvalaraCustomer
-                        update customerId [CustomerAvalaraCode =. avalaraCustomerCode]
-                        return $ Entity customerId customer
-                            { customerAvalaraCode = avalaraCustomerCode }
-        (Entity cartId _) <- getBy (UniqueCustomerCart $ Just customerId)
-            >>= maybe (throwM CartNotFound) return
-        let shippingAddress = fromAddressData Shipping customerId
-                shippingParam
-            maybeBillingAddress = fromAddressData Billing customerId
-                <$> billingParam
-        shippingId <- insert shippingAddress
-        billingId <- sequence $ insert <$> maybeBillingAddress
-        let shippingEntity = Entity shippingId shippingAddress
-            billingEntity = Entity <$> billingId <*> maybeBillingAddress
-            customerEntity = Entity customerId customer
-        (order@(Entity orderId _), preTaxTotal, _) <- createOrder
-            (Entity customerId customer) cartId shippingEntity billingId Nothing
-            (apopPriorityShipping parameters) (apopCouponCode parameters)
-            (apopComment parameters) currentTime
-        when (preTaxTotal > 0)
-            $ withAvalaraTransaction order preTaxTotal 0 customerEntity shippingEntity billingEntity
-            $ \orderTotal ->
-                case (maybeBillingAddress, apopStripeToken parameters) of
-                    (Just billingAddress, Just stripeToken) -> do
-                        stripeCustomerId <- getOrCreateStripeCustomer c
-                            stripeToken
-                        update customerId [CustomerStripeId =. Just stripeCustomerId]
-                        setCustomerCard customer stripeCustomerId billingAddress stripeToken
-                        chargeCustomer stripeCustomerId orderId orderTotal
-                    (Nothing, _) ->
-                        throwM BillingAddressRequired
-                    (_, Nothing) ->
-                        throwM StripeTokenRequired
-        deleteCart cartId
-        reduceQuantities orderId
-        orderLines <- selectList [OrderLineItemOrderId ==. orderId] []
-        products <- getCheckoutProducts orderId
-        return
-            ( orderId
-            , AnonymousPlaceOrderData
-                { apodOrderId = orderId
-                , apodLines = orderLines
-                , apodProducts = products
-                , apodAuthorizationData = toAuthorizationData $ Entity customerId customer
-                }
-            )
-    runDB $ enqueuePostOrderTasks orderId
-    addSessionCookie temporarySession (AuthToken authToken) orderData
+    orderCreationRes <- runDB $ do
+        (Entity cartId _) <- getBy (UniqueAnonymousCart $ Just $ apopCartToken parameters)
+            >>= maybe (throwIO CartNotFound) return
+        checkCartAndShippingAddress (apopCartInventoryNotifications parameters) cartId (NewAddress shippingParam)
+            (apopSkipShippingAddressVerification parameters) $ withPlaceOrderErrors (NewAddress shippingParam) $ do
+            Entity customerId customer <- createAnonymousCustomer parameters
+            let shippingAddress = (fromAddressData Shipping customerId shippingParam)
+                    { addressVerified = True }
+                maybeBillingAddress = fromAddressData Billing customerId
+                    <$> billingParam
 
+            -- When customer with the same email makes multiple "anonymous" orders, we should
+            -- mark all previous addresses (shipping and billing) as non-default.
+            updateWhere [ AddressCustomerId ==. customerId, AddressType ==. Shipping ] [ AddressIsDefault =. False ]
+            when (isJust maybeBillingAddress) $ updateWhere [ AddressCustomerId ==. customerId, AddressType ==. Billing ] [ AddressIsDefault =. False ]
 
--- | Get the Customer's StripeCustomerId or create a new Stripe Customer.
---
--- Throws 'StripeError'.
-getOrCreateStripeCustomer :: Entity Customer -> T.Text -> AppSQL StripeCustomerId
-getOrCreateStripeCustomer (Entity customerId customer) stripeToken =
-    case customerStripeId customer of
-        Just stripeId ->
-            return stripeId
-        Nothing -> do
-            newId <- createStripeCustomer (customerEmail customer) stripeToken
-            update customerId [CustomerStripeId =. Just newId]
-            return newId
+            shippingId <- insert shippingAddress
+            billingId <- mapM insert maybeBillingAddress
+            let shippingEntity = Entity shippingId shippingAddress
+                billingEntity = Entity <$> billingId <*> maybeBillingAddress
+                customerEntity = Entity customerId customer
+            guestToken <- generateUniqueToken (UniqueGuestToken . Just)
+            (order@(Entity orderId _), preTaxTotal, _) <- createOrder
+                (Entity customerId customer) cartId shippingEntity billingId Nothing
+                (apopPriorityShipping parameters) (apopCouponCode parameters)
+                (Just guestToken) (apopComment parameters) currentTime
+            when (preTaxTotal > mkCents 0)
+                $ withAvalaraTransaction order preTaxTotal (mkCents 0) customerEntity shippingEntity billingEntity
+                $ \orderTotal ->
+                    case (billingEntity, apopHelcimData parameters) of
+                        (Just (Entity _ billingAddress), Just (cardToken, customerCode)) -> do
+                            getAndUpdateHelcimCustomerByCode customerId customer customerCode billingAddress shippingAddress
+                            helcimCharge cardToken customerCode (getClientIP remoteHost forwardedFor realIP) orderId orderTotal
+                        (Nothing, _) ->
+                            throwIO BillingAddressRequired
+                        (_, Nothing) ->
+                            throwIO StripeTokenRequired
+            deleteCart cartId
+            reduceQuantities orderId
+            orderLines <- selectList [OrderLineItemOrderId ==. orderId] []
+            products <- getCheckoutProducts orderId
+            return
+                ( orderId
+                , AnonymousPlaceOrderData
+                    { apodOrderId = orderId
+                    , apodGuestToken = guestToken
+                    , apodLines = orderLines
+                    , apodProducts = products
+                    }
+                )
+    case orderCreationRes of
+        CheckoutSuccess (orderId, orderData) -> do
+            runDB $ enqueuePostOrderTasks orderId
+            pure $ CheckoutSuccess orderData
+        CheckoutValidationErrors errs ->
+            return $ CheckoutValidationErrors errs
+    where
+        createAnonymousCustomer parameters = do
+            let email = apopEmail parameters
+                shippingParam = apopShippingAddress parameters
+                billingParam = apopBillingAddress parameters
+                makeAvalaraCustomer = createAvalaraCustomer email
+                    $ fromMaybe shippingParam billingParam
 
--- | Create a Stripe Customer with an Email & Token.
---
--- Throws 'StripeError'.
-createStripeCustomer :: T.Text -> T.Text -> AppSQL StripeCustomerId
-createStripeCustomer email stripeToken =
-    lift (stripeRequest $ createCustomer -&- Email email -&- Stripe.TokenId stripeToken)
-        >>= either (throwM . StripeError)
-            (return . StripeCustomerId . Stripe.customerId)
+            (Entity cId c) <- lift $ registerNewCustomer RegistrationParameters
+                    { rpEmail = email
+                    , rpPassword = Nothing
+                    , rpCartToken = Nothing
+                    }
+            overwriteCustomerCart cId . Just $ apopCartToken parameters
+            avalaraCode <- case customerAvalaraCode c of
+                Just avalaraCode -> pure (Just avalaraCode)
+                Nothing -> do
+                    avalaraCustomerCode <- makeAvalaraCustomer
+                    update cId [CustomerAvalaraCode =. avalaraCustomerCode]
+                    return avalaraCustomerCode
+            pure $ Entity cId c { customerAvalaraCode = avalaraCode
+                                }
 
--- | Set the Customer's default Stripe Card. Uses the first card if the
--- customer had no StripeId before, or creates a new card using the
--- StripeToken if the Stripe Customer existed. Sets the address of the Card
--- to the Billing Address.
---
--- Throws 'StripeError'.
-setCustomerCard :: Customer -> StripeCustomerId -> Address -> T.Text -> AppSQL ()
-setCustomerCard customer stripeCustomerId billingAddress stripeToken = do
-    stripeCardId <- case customerStripeId customer of
-        Nothing ->
-            getFirstStripeCard stripeCustomerId
-        Just _ -> do
-            -- Already Had Customer, Create New Card w/ Token
-            requestResult <- lift . stripeRequest $
-                createCustomerCardByToken (fromStripeCustomerId stripeCustomerId)
-                    (Stripe.TokenId stripeToken)
-            either (throwM . StripeError) (return . Stripe.cardId) requestResult
-    updateCardAddress stripeCustomerId stripeCardId billingAddress
-    lift (stripeRequest (updateCustomer (fromStripeCustomerId stripeCustomerId)
-        -&- Stripe.DefaultCard stripeCardId))
-        >>= either (throwM . StripeError) (void . return)
+-- | Get a Helcim Customer by their CustomerCode.
+-- And update their billing & shipping addresses with the current order's values. Map the Helcim Customer id
+-- with the Customer in the database.
+getAndUpdateHelcimCustomerByCode :: CustomerId -> Customer -> Helcim.CustomerCode -> Address -> Address -> AppSQL ()
+getAndUpdateHelcimCustomerByCode customerId customer helcimCustomerCode billingAddress shippingAddress = do
+    mbHelcimCustomerId <- lift $ getCustomers GetCustomersRequest
+        { gcrSearch = Nothing
+        , gcrCustomerCode = Just helcimCustomerCode
+        , gcrLimit = Just 1
+        , gcrPage = Just 1
+        , gcrIncludeCards = Nothing
+        } >>= either (throwIO . HelcimError) (return . fmap creId . listToMaybe)
+    case mbHelcimCustomerId of
+        Just helcimCustomerId -> do
+            -- Update Helcim Customer billing & shipping addresses with values from the current order
+            updateHelcimCustomer helcimCustomerId customer billingAddress shippingAddress
+            update customerId [CustomerHelcimCustomerId =. Just helcimCustomerId]
+        -- Something went wrong
+        -- CustomerCode is obtained from Helcim response, so it should exist
+        Nothing -> throwIO NoHelcimCustomer
 
--- | Update the Name & Address of a Stripe Card.
-updateCardAddress :: StripeCustomerId -> Stripe.CardId -> Address -> AppSQL ()
-updateCardAddress stripeCustomerId stripeCardId billingAddress =
-    lift . void . stripeRequest $
-        updateCustomerCard (fromStripeCustomerId stripeCustomerId) stripeCardId
-            -&- Stripe.Name (addressFirstName billingAddress <> " " <> addressLastName billingAddress)
-            -&- Stripe.AddressLine1 (addressAddressOne billingAddress)
-            -&- Stripe.AddressLine2 (addressAddressTwo billingAddress)
-            -&- Stripe.AddressCity (addressCity billingAddress)
-            -&- Stripe.AddressState (regionName $ addressState billingAddress)
-
+updateHelcimCustomer :: Helcim.CustomerId -> Customer -> Address -> Address -> AppSQL ()
+updateHelcimCustomer helcimCustomerId customer billingAddress shippingAddress = do
+    -- Update Helcim Customer billing & shipping addresses with provided values
+    void $ lift $ (updateCustomer helcimCustomerId $ CreateCustomerRequest
+        { ccrCustomerCode = Nothing
+        , ccrContactName = Just (customerEmail customer)
+        , ccrBusinessName = Just $ addressCompanyName billingAddress
+        , ccrCellPhone = Nothing
+        , ccrBillingAddress = Just $ addressToHelcimAddress billingAddress
+        , ccrShippingAddress = Just $ addressToHelcimAddress shippingAddress
+        }) >>= either (throwIO . HelcimError) return
 
 -- | Commit an uncommited Avalara Sales Tax Transaction. Throws
 -- a 'PlaceOrderError' on failure.
@@ -902,7 +1000,7 @@ commitAvalaraTransaction transaction = do
         Just tCode ->
             return tCode
         Nothing ->
-            throwM AvalaraNoTransactionCode
+            throwIO AvalaraNoTransactionCode
     let request =
             Avalara.commitTransaction companyCode transactionCode
                 $ CommitTransactionRequest { ctsrCommit = True }
@@ -922,7 +1020,7 @@ voidAvalaraTransaction transction = do
         Just tCode ->
             return tCode
         Nothing ->
-            throwM AvalaraNoTransactionCode
+            throwIO AvalaraNoTransactionCode
     let request =
             Avalara.voidTransaction companyCode transactionCode
                 $ VoidTransactionRequest { vtrCode = DocDeleted }
@@ -965,18 +1063,18 @@ withAvalaraTransaction order@(Entity orderId _) preTaxTotal storeCredit c@(Entit
                         Right () ->
                             enqueueTask Nothing . Avalara $ CreateTransaction orderId
                         Left (err :: PlaceOrderError) ->
-                            throwM err
+                            throwIO err
                 Just taxTransaction -> do
                     let taxTotal =
                             if status == AvalaraEnabled then
-                                maybe 0 fromDollars (Avalara.tTotalTax taxTransaction)
+                                maybe (mkCents 0) fromDollars (Avalara.tTotalTax taxTransaction)
                             else
-                                0
+                                mkCents 0
                         appliedCredit = min storeCredit taxTotal
-                        orderTotal = taxTotal + preTaxTotal - appliedCredit
+                        orderTotal = taxTotal `plusCents` preTaxTotal `subtractCents` appliedCredit
                     when (appliedCredit > customerStoreCredit customer) $
-                        throwM NotEnoughStoreCredit
-                    when (appliedCredit > 0) $
+                        throwIO NotEnoughStoreCredit
+                    when (appliedCredit > mkCents 0) $
                             update customerId [CustomerStoreCredit -=. appliedCredit]
                     try (innerAction orderTotal) >>= \case
                         Right () -> do
@@ -987,7 +1085,7 @@ withAvalaraTransaction order@(Entity orderId _) preTaxTotal storeCredit c@(Entit
                             let transactionCode = AvalaraTransactionCode companyCode
                                     <$> Avalara.tCode taxTransaction
                             update orderId [OrderAvalaraTransactionCode =. transactionCode]
-                            when (status == AvalaraEnabled && taxTotal > 0) $
+                            when (status == AvalaraEnabled && taxTotal > mkCents 0) $
                                 insert_ OrderLineItem
                                     { orderLineItemOrderId = orderId
                                     , orderLineItemType = TaxLine
@@ -996,11 +1094,11 @@ withAvalaraTransaction order@(Entity orderId _) preTaxTotal storeCredit c@(Entit
                                     }
                             when (status == AvalaraTesting) $
                                 voidOrEnqueueTransaction taxTransaction
-                            when (appliedCredit > 0) $
+                            when (appliedCredit > mkCents 0) $
                                 updateStoreCredit appliedCredit
                         Left (err :: PlaceOrderError) -> do
                             voidOrEnqueueTransaction taxTransaction
-                            throwM err
+                            throwIO err
   where
     -- Void a transaction, enqueueing a VoidTransaction task if the request
     -- fails.
@@ -1028,45 +1126,53 @@ withAvalaraTransaction order@(Entity orderId _) preTaxTotal storeCredit c@(Entit
                     [ OrderLineItemAmount +=. appliedCredit ]
 
 
-
--- | Charge a Stripe Customer for an Order or throw a validation error.
-chargeCustomer :: StripeCustomerId -> OrderId -> Cents -> AppSQL ()
-chargeCustomer stripeCustomerId orderId orderTotal = do
-    chargeResult <- lift $ stripeRequest
-        (createCharge (toStripeAmount orderTotal) Stripe.USD
-            -&- fromStripeCustomerId stripeCustomerId)
-    case chargeResult of
+helcimCharge :: CardToken -> Helcim.CustomerCode -> T.Text -> OrderId -> Cents -> AppSQL ()
+helcimCharge cardToken customerCode ipAddress orderId orderTotal = do
+    purchaseResult <- lift $ Helcim.purchase PurchaseRequest
+        { prqIpAddress = ipAddress
+        , prqEcommerce = Nothing
+        , prqTerminalId = Nothing
+        , prqCurrency = "USD"
+        , prqAmount = toDollars orderTotal
+        , prqCustomerCode = Just customerCode
+        , prqInvoiceNumber = Nothing
+        , prqBillingAddress = Nothing
+        , prqInvoice = Nothing
+        , prqCardData = CardData { cdCardToken = cardToken }
+        }
+    case purchaseResult of
         Left err ->
             update orderId [OrderStatus =. PaymentFailed]
-                >> throwM (StripeError err)
-        Right stripeCharge ->
-            let
-                stripeChargeId =
-                    StripeChargeId $ Stripe.chargeId stripeCharge
-                stripeLastFour =
-                    Stripe.cardLastFour <$> Stripe.chargeCreditCard stripeCharge
-                stripeIssuer =
-                    T.pack . show . Stripe.cardBrand <$> Stripe.chargeCreditCard stripeCharge
-            in
-                update orderId
-                    [ OrderStatus =. PaymentReceived
-                    , OrderStripeChargeId =. Just stripeChargeId
-                    , OrderStripeLastFour =. stripeLastFour
-                    , OrderStripeIssuer =. stripeIssuer
-                    ]
+                >> throwIO (HelcimError err)
+        Right purchaseResponse ->
+            case trStatus purchaseResponse of
+                Declined ->
+                    update orderId [OrderStatus =. PaymentFailed]
+                        >> throwIO HelcimPaymentDeclined
+                Approved -> do
+                    let helcimTransactionId = trTransactionId purchaseResponse
+                        helcimCardNumber = trCardNumber purchaseResponse
+                        helcimCardType = trCardType purchaseResponse
+                    update orderId
+                        [ OrderStatus =. PaymentReceived
+                        , OrderHelcimTransactionId =. Just helcimTransactionId
+                        , OrderHelcimCardNumber =. helcimCardNumber
+                        , OrderHelcimCardType =. Just helcimCardType
+                        ]
 
-
--- | Return the first Stripe Card Id for a Stripe Customer. This is useful
--- for getting new CardId after creating a Stripe Customer from a Stripe
--- Token.
-getFirstStripeCard :: StripeCustomerId -> AppSQL Stripe.CardId
-getFirstStripeCard stripeCustomerId =
-    lift (stripeRequest (getCustomerCards (fromStripeCustomerId stripeCustomerId)
-            -&- Stripe.Limit 1))
-        >>= either (throwM . StripeError)
-            (return . fmap Stripe.cardId . listToMaybe . Stripe.list)
-        >>= maybe (throwM CardChargeError) return
-
+-- | Check if there are any items that are out of stock and have 'RequireStock' inventory policy
+-- in the Cart. If there are, throw an 'ItemsOutOfStock' exception.
+checkCartItemsAvailability :: CartId -> AppSQL ()
+checkCartItemsAvailability cartId = do
+    unavailableItems <- E.select $ do
+        (ci E.:& pv) <- E.from $ E.table @CartItem
+            `E.innerJoin` E.table @ProductVariant
+                `E.on` (\(ci E.:& pv) -> ci E.^. CartItemProductVariantId E.==. pv E.^. ProductVariantId)
+        E.where_ $ pv E.^. ProductVariantInventoryPolicy E.==. E.val RequireStock
+        E.where_ $ ci E.^. CartItemQuantity E.>. pv E.^. ProductVariantQuantity
+        E.where_ $ ci E.^. CartItemCartId E.==. E.val cartId
+        return (ci, pv)
+    unless (null unavailableItems) $ throwIO ItemsOutOfStock
 
 -- | Create an Order and it's Line Items & Products, returning the ID, Total,
 -- & Applied Store Credit.
@@ -1088,55 +1194,68 @@ createOrder
     -- ^ Enable Priority Shipping
     -> Maybe T.Text
     -- ^ Coupon Code
+    -> Maybe T.Text
+    -- ^ Optional guest token (must be unique)
     -> T.Text
     -- ^ Order Comment
     -> UTCTime
     -- ^ Current Time
     -> AppSQL (Entity Order, Cents, Cents)
-createOrder ce@(Entity customerId customer) cartId shippingEntity billingId maybeStoreCredit priorityShipping maybeCouponCode comment currentTime = do
+createOrder ce@(Entity customerId customer) cartId shippingEntity
+            billingId maybeStoreCredit priorityShipping maybeCouponCode
+            maybeGuestToken comment currentTime = do
+    checkCartItemsAvailability cartId
     items <- getCartItems $ \c -> c E.^. CartId E.==. E.val cartId
     let order = Order
             { orderCustomerId = customerId
             , orderStatus = OrderReceived
+            , orderStoneEdgeStatus = Nothing
             , orderBillingAddressId = billingId
             , orderShippingAddressId = entityKey shippingEntity
+            , orderGuestToken = maybeGuestToken
             , orderCustomerComment = comment
             , orderAdminComments = []
             , orderAvalaraTransactionCode = Nothing
             , orderStripeChargeId = Nothing
             , orderStripeLastFour = Nothing
             , orderStripeIssuer = Nothing
+            , orderHelcimTransactionId = Nothing
+            , orderHelcimCardNumber = Nothing
+            , orderHelcimCardType = Nothing
             , orderCouponId = Nothing
             , orderCreatedAt = currentTime
             }
-    orderId <- insert order
-    (lineTotal, maybeCouponId) <- createLineItems currentTime ce
-        shippingEntity items orderId priorityShipping maybeCouponCode
-    when (isJust maybeCouponId) $
-        update orderId [OrderCouponId =. maybeCouponId]
-    productTotals <- createProducts items orderId
-    let totalCharges = lineTotal + fromIntegral (fromCents $ sum productTotals)
-        orderEntity = Entity orderId order
-    if totalCharges < 0 then
-        -- TODO: Throw an error? This means credits > charges which shouldn't happen...
-        return (orderEntity, 0, 0)
-    else
-        let totalInCents = Cents $ fromIntegral totalCharges in
-        case maybeStoreCredit of
-            Nothing ->
-                return (orderEntity, totalInCents, 0)
-            Just c ->
-                if c > 0 && totalInCents > 0 then do
-                    let storeCredit = min (customerStoreCredit customer) $ min totalInCents c
-                    insert_ OrderLineItem
-                        { orderLineItemOrderId = orderId
-                        , orderLineItemType = StoreCreditLine
-                        , orderLineItemDescription = "Store Credit"
-                        , orderLineItemAmount = storeCredit
-                        }
-                    return (orderEntity, totalInCents - storeCredit, storeCredit)
-                else
-                    return (orderEntity, totalInCents, 0)
+    let validateCartParameters = ValidateCartParameters cartId $
+            M.fromList $ map (\CartItemData{..} -> (E.fromSqlKey cidItemId, fromIntegral cidQuantity)) items
+    lift (validate validateCartParameters) >> do
+        orderId <- insert order
+        (lineTotal, maybeCouponId) <- createLineItems currentTime ce
+            shippingEntity items orderId priorityShipping maybeCouponCode
+        when (isJust maybeCouponId) $
+            update orderId [OrderCouponId =. maybeCouponId]
+        productTotals <- createProducts items orderId
+        let totalCharges = lineTotal + fromIntegral (fromCents $ sumPrices productTotals)
+            orderEntity = Entity orderId order
+        if totalCharges < 0 then
+            -- TODO: Throw an error? This means credits > charges which shouldn't happen...
+            return (orderEntity, mkCents 0, mkCents 0)
+        else
+            let totalInCents = Cents $ fromIntegral totalCharges in
+            case maybeStoreCredit of
+                Nothing ->
+                    return (orderEntity, totalInCents, mkCents 0)
+                Just c ->
+                    if c > mkCents 0 && totalInCents > mkCents 0 then do
+                        let storeCredit = min (customerStoreCredit customer) $ min totalInCents c
+                        insert_ OrderLineItem
+                            { orderLineItemOrderId = orderId
+                            , orderLineItemType = StoreCreditLine
+                            , orderLineItemDescription = "Store Credit"
+                            , orderLineItemAmount = storeCredit
+                            }
+                        return (orderEntity, totalInCents `subtractCents` storeCredit, storeCredit)
+                    else
+                        return (orderEntity, totalInCents, mkCents 0)
 
 
 -- | Delete a Cart & all it's Items.
@@ -1180,7 +1299,7 @@ createLineItems currentTime (Entity customerId customer) shippingAddress items o
     shippingCharge <-
         case ccShippingMethods charges of
             [] ->
-                throwM NoShippingMethod
+                throwIO NoShippingMethod
             charge : _ ->
                 return charge
     shippingLine <- insertEntity . makeLine ShippingLine $ scCharge shippingCharge
@@ -1192,7 +1311,7 @@ createLineItems currentTime (Entity customerId customer) shippingAddress items o
         maybe (return Nothing) (fmap Just . insertEntity . makeLine CouponDiscountLine)
             $ ccCouponDiscount charges
     maybeTaxLine <-
-        if ccAmount (ccTax charges) > 0 then
+        if ccAmount (ccTax charges) > mkCents 0 then
             fmap Just . insertEntity . makeLine TaxLine $ ccTax charges
         else
             return Nothing
@@ -1224,7 +1343,7 @@ createProducts :: [CartItemData] -> OrderId -> AppSQL [Cents]
 createProducts items orderId =
     mapM (fmap calculateTotal <$> insertEntity . makeProduct) items
     where calculateTotal (Entity _ prod) =
-            orderProductPrice prod * (Cents $ orderProductQuantity prod)
+            orderProductPrice prod `timesQuantity` orderProductQuantity prod
           makeProduct CartItemData { cidVariant, cidQuantity } =
             OrderProduct
                 { orderProductOrderId = orderId
@@ -1240,7 +1359,7 @@ reduceQuantities orderId =
     selectList [OrderProductOrderId ==. orderId] [] >>=
     mapM_ (\(Entity _ p) ->
         update (orderProductProductVariantId p)
-            [ProductVariantQuantity -=. fromIntegral (orderProductQuantity p)]
+            [ProductVariantQuantity -=. orderProductQuantity p]
     )
 
 
@@ -1253,59 +1372,12 @@ enqueuePostOrderTasks orderId =
         , RemoveSoldOutProducts orderId
         ]
 
-
--- LOGIN
-
-data CheckoutLoginParameters =
-    CheckoutLoginParameters
-        { clpLogin :: LoginParameters
-        , clpDetails :: CustomerDetailsParameters
-        }
-
-instance FromJSON CheckoutLoginParameters where
-    parseJSON = withObject "CheckoutLoginParameters" $ \v ->
-        CheckoutLoginParameters
-            <$> parseJSON (Object v)
-            <*> parseJSON (Object v)
-
-data LoginData =
-    LoginData
-        { ldAuth :: AuthorizationData
-        , ldDetails :: CheckoutDetailsData
-        }
-
-instance ToJSON LoginData where
-    toJSON ld =
-        object
-            [ "authData" .= ldAuth ld
-            , "details" .= ldDetails ld
-            ]
-
-type LoginRoute =
-       ReqBody '[JSON] CheckoutLoginParameters
-    :> Post '[JSON] (Cookied LoginData)
-
--- | Attempt to log the customer into their account. Note that this
--- differs from the Customer's login route - this route removes the
--- account's cart instead of merging the two together.
-loginRoute :: CheckoutLoginParameters -> App (Cookied LoginData)
-loginRoute CheckoutLoginParameters { clpLogin, clpDetails } = do
-    e@(Entity customerId customer) <- handle handlePasswordValidationError
-        $ runDB $ validatePassword (lpEmail clpLogin) (lpPassword clpLogin)
-    runDB $ overwriteCustomerCart customerId $ lpCartToken clpLogin
-    details <- withCheckoutDetailsErrors . runDB $ getCustomerDetails e clpDetails
-    let sessionSettings = if lpRemember clpLogin then permanentSession else temporarySession
-        authData = toAuthorizationData e
-    addSessionCookie sessionSettings (makeToken customer) $ LoginData
-            { ldAuth = authData
-            , ldDetails = details
-            }
-
 -- | Delete the Customer's existing cart and move the anonymous cart to the
 -- Customer.
 overwriteCustomerCart :: CustomerId -> Maybe T.Text -> AppSQL ()
 overwriteCustomerCart customerId cartToken = do
     getBy (UniqueCustomerCart $ Just customerId) >>= mapM_ (E.deleteCascade . entityKey)
+    -- TODO sand-witch: deleteCascade is deprecated
     mapM_ (`mergeAnonymousCart` customerId) cartToken
 
 
@@ -1330,23 +1402,56 @@ type SuccessRoute =
 
 customerSuccessRoute :: WrappedAuthToken -> SuccessParameters -> App (Cookied OrderDetails)
 customerSuccessRoute token parameters = withValidatedCookie token $ \(Entity customerId _) ->
-    handle handleError . runDB $ do
+    runOrderDetails $ getOrderDetails (E.toSqlKey $ cspOrderId parameters) customerId
+
+
+runOrderDetails :: AppSQL a -> App a
+runOrderDetails =
+    handle handleError . runDB
+    where handleError = \case
+            OrderNotFound ->
+                serverError err404
+
+getOrderDetails :: OrderId -> CustomerId -> AppSQL OrderDetails
+getOrderDetails externalOrderId customerId = do
         (e@(Entity orderId _), shipping, billing) <-
-            getOrderAndAddress customerId (E.toSqlKey $ cspOrderId parameters)
-                >>= maybe (throwM OrderNotFound) return
+            getOrderAndAddress customerId externalOrderId
+                >>= maybe (throwIO OrderNotFound) return
         lineItems <-
             selectList [OrderLineItemOrderId ==. orderId] []
         products <- getCheckoutProducts orderId
+        delivery <- selectList [OrderDeliveryOrderId ==. orderId] []
         return OrderDetails
             { odOrder = toCheckoutOrder e
             , odLineItems = lineItems
             , odProducts = products
             , odShippingAddress = toAddressData shipping
             , odBillingAddress = toAddressData <$> billing
+            , odDeliveryData = toDeliveryData <$> delivery
             }
-    where handleError = \case
-            OrderNotFound ->
-                serverError err404
+data AnonymousSuccessParameters = MkAnonymousSuccessParameters
+    { aspOrderId :: Int64
+    , aspSession :: UUID.UUID
+    }
+
+instance FromJSON AnonymousSuccessParameters where
+    parseJSON = withObject "AnonymousSuccessParameters" $ \o ->
+        MkAnonymousSuccessParameters <$> o .: "orderId" <*> o .: "token"
+
+type AnonymousSuccessRoute =
+    ReqBody '[JSON] AnonymousSuccessParameters :> Post '[JSON] OrderDetails
+
+anonymousSuccessRoute :: AnonymousSuccessParameters -> App OrderDetails
+anonymousSuccessRoute asp = do
+    mbOrderAndCustomer <- runDB $ runMaybeT $ do
+        Entity orderId order <-
+            MaybeT $ getBy $ UniqueGuestToken $ Just $ UUID.toText $ aspSession asp
+        guard (E.fromSqlKey orderId == aspOrderId asp)
+        pure (orderCustomerId order, orderId)
+    case mbOrderAndCustomer of
+        Nothing -> serverError err404
+        Just (customerId, orderId) ->
+            runOrderDetails $ getOrderDetails orderId customerId
 
 data SuccessError
     = OrderNotFound
@@ -1357,15 +1462,91 @@ instance Exception SuccessError
 
 getOrderAndAddress :: CustomerId -> OrderId -> AppSQL (Maybe (Entity Order, Entity Address, Maybe (Entity Address)))
 getOrderAndAddress customerId orderId =
-    fmap listToMaybe . E.select . E.from
-        $ \(o `E.InnerJoin` s `E.LeftOuterJoin` b) -> do
-            E.on $ o E.^. OrderBillingAddressId E.==. b E.?. AddressId
-            E.on $ o E.^. OrderShippingAddressId E.==. s E.^. AddressId
-            E.where_ $
-                o E.^. OrderId E.==. E.val orderId E.&&.
-                o E.^. OrderCustomerId E.==. E.val customerId
-            return (o, s, b)
+    fmap listToMaybe . E.select $ do
+        (o E.:& s E.:& b) <- E.from $ E.table
+            `E.innerJoin` E.table
+                `E.on` (\(o E.:& s) -> o E.^. OrderShippingAddressId E.==. s E.^. AddressId)
+            `E.leftJoin` E.table
+                `E.on` (\(o E.:& _ E.:& b) -> o E.^. OrderBillingAddressId E.==. b E.?. AddressId)
+        E.where_ $
+            o E.^. OrderId E.==. E.val orderId E.&&.
+            o E.^. OrderCustomerId E.==. E.val customerId
+        return (o, s, b)
 
+-- CHECKOUT TOKEN
+
+data CheckoutTokenParameters = CheckoutTokenParameters
+    { ctpCartInventoryNotifications :: CartInventoryNotifications
+    , ctpShippingAddress :: CustomerAddress
+    , ctpSkipShippingAddressVerification :: Bool
+    }
+
+instance FromJSON CheckoutTokenParameters where
+    parseJSON = withObject "CheckoutTokenParameters" $ \v ->
+        CheckoutTokenParameters
+            <$> v .: "cartInventoryNotifications"
+            <*> v .: "shippingAddress"
+            <*> v .: "skipAddressVerification"
+
+newtype CheckoutTokenData = CheckoutTokenData
+    { ctdToken :: CheckoutToken }
+
+instance ToJSON CheckoutTokenData where
+    toJSON (CheckoutTokenData token) =
+        object ["token" .= token]
+
+-- When the user is authenticated,
+-- we can get their corresponding Helcim Customer id (if it exists) or create a new one.
+type CheckoutTokenRoute =
+    AuthProtect "cookie-auth" :>
+    ReqBody '[JSON] CheckoutTokenParameters :>
+    Post '[JSON] (Cookied (CheckoutResult CheckoutTokenData))
+
+getCheckoutTokenRoute
+    :: WrappedAuthToken -> CheckoutTokenParameters
+    -> App (Cookied (CheckoutResult CheckoutTokenData))
+getCheckoutTokenRoute token CheckoutTokenParameters {..} = withValidatedCookie token $ \(Entity customerId customer) -> runDB $ do
+    (Entity cartId _) <- getBy (UniqueCustomerCart $ Just customerId)
+        >>= maybe (throwIO CartNotFound) return
+    checkCartAndShippingAddress ctpCartInventoryNotifications cartId ctpShippingAddress ctpSkipShippingAddressVerification $
+        lift $ getCheckoutToken (customerHelcimCustomerId customer)
+
+data AnonymousCheckoutTokenParameters = AnonymousCheckoutTokenParameters
+    { actpCartToken :: T.Text
+    , actpCartInventoryNotifications :: CartInventoryNotifications
+    , actpShippingAddress :: AddressData
+    , actpSkipShippingAddressVerification :: Bool
+    }
+
+instance FromJSON AnonymousCheckoutTokenParameters where
+    parseJSON = withObject "AnonymousCheckoutTokenParameters" $ \v ->
+        AnonymousCheckoutTokenParameters
+            <$> v .: "sessionToken"
+            <*> v .: "cartInventoryNotifications"
+            <*> v .: "shippingAddress"
+            <*> v .: "skipAddressVerification"
+
+type AnonymousCheckoutTokenRoute =
+    ReqBody '[JSON] AnonymousCheckoutTokenParameters :>
+    Post '[JSON] (CheckoutResult CheckoutTokenData)
+
+anonymousGetCheckoutTokenRoute :: AnonymousCheckoutTokenParameters -> App (CheckoutResult CheckoutTokenData)
+anonymousGetCheckoutTokenRoute AnonymousCheckoutTokenParameters {..} = runDB $ do
+    (Entity cartId _) <- getBy (UniqueAnonymousCart $ Just actpCartToken)
+        >>= maybe (throwIO CartNotFound) return
+    checkCartAndShippingAddress actpCartInventoryNotifications cartId (NewAddress actpShippingAddress) actpSkipShippingAddressVerification $
+        lift $ getCheckoutToken Nothing
+
+getCheckoutToken :: Maybe Helcim.CustomerId -> App CheckoutTokenData
+getCheckoutToken mbHelcimCustomerId = do
+    mbCustomerCode <- case mbHelcimCustomerId of
+        Just helcimCustomerId -> do
+            getCustomer helcimCustomerId >>= either (throwIO . HelcimError) (return . Just . creCustomerCode)
+        Nothing -> return Nothing
+    createVerifyCheckout mbCustomerCode >>= \case
+        Left e -> throwIO $ HelcimError e
+        Right CheckoutCreateResponse {..} ->
+            return CheckoutTokenData { ctdToken = ccrCheckoutToken }
 
 -- Utils
 
@@ -1376,6 +1557,6 @@ eitherM handler =
 
 
 mapException
-    :: (Exception e1, Exception e2, MonadThrow m, MonadCatch m)
+    :: (Exception e1, Exception e2, MonadUnliftIO m)
     => (e1 -> e2) -> m a -> m a
-mapException transform = try >=> eitherM (throwM . transform)
+mapException transform = try >=> eitherM (throwIO . transform)

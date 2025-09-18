@@ -2,17 +2,18 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeFamilies #-}
-{-| Update ProductVariant Prices by SKU from a CSV. -}
+{- Update ProductVariant Prices by SKU from a CSV. -}
 import Control.Monad.Logger (runNoLoggingT)
 import Data.Csv (FromNamedRecord, decodeByName)
 import Database.Persist
 import Database.Persist.Postgresql
-    ( ConnectionPool, SqlPersistT, createPostgresqlPool, runSqlPool
+    ( ConnectionPool, SqlPersistT, runSqlPool
     )
 import GHC.Generics (Generic)
 
 import Models
 import Models.Fields (Cents, fromDollars)
+import Utils (makeSqlPool)
 
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.Char as Char
@@ -27,7 +28,7 @@ main = do
 
 connectToPostgres :: IO ConnectionPool
 connectToPostgres =
-    runNoLoggingT $ createPostgresqlPool "dbname=sese-website" 1
+    runNoLoggingT $ makeSqlPool 1
 
 data ProductData =
     ProductData

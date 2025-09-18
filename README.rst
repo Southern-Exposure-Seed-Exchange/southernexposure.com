@@ -2,8 +2,8 @@
 SESE E-Commerce Website
 =======================
 
-.. image:: https://travis-ci.org/Southern-Exposure-Seed-Exchange/southernexposure.com.svg?branch=develop
-    :target: https://travis-ci.org/Southern-Exposure-Seed-Exchange/southernexposure.com
+.. image:: https://github.com/Southern-Exposure-Seed-Exchange/southernexposure.com/actions/workflows/main.yml/badge.svg
+    :target: https://github.com/Southern-Exposure-Seed-Exchange/southernexposure.com/actions/workflows/main.yml
 
 
 This is a rebuild of the current Southern Exposure Seed Exchange website as a

@@ -5,6 +5,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+
+{-# OPTIONS -Wno-deprecations #-}
 {- | This module contains definitions for asynchronous actions that can be
 performed by worker threads outside the scope of the HTTP request/response
 cycle.
@@ -24,16 +26,14 @@ module Workers
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.Async (wait)
 import Control.Concurrent.STM (TVar, atomically, readTVar, writeTVar)
-import Control.Exception.Safe (Exception(..), throwM)
+import UnliftIO.Exception (Exception(..), throwIO)
 import Control.Immortal.Queue (ImmortalQueue(..))
 import Control.Monad (when)
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Monad.Reader (runReaderT, asks, lift)
-import Control.Monad.Trans.Control (MonadBaseControl)
 import Data.Aeson (ToJSON(toJSON), FromJSON, Result(..), fromJSON)
 import Data.Foldable (asum)
 import Data.Maybe (listToMaybe)
-import Data.Monoid ((<>))
 import Data.Scientific (Scientific)
 import Data.Time
     ( UTCTime, TimeZone, Day, LocalTime(..), getCurrentTime, getCurrentTimeZone
@@ -47,6 +47,7 @@ import Database.Persist.Sql
     )
 import GHC.Generics (Generic)
 import Numeric.Natural (Natural)
+import UnliftIO (MonadUnliftIO)
 
 import Avalara
     ( RefundTransactionRequest(..), VoidTransactionRequest(..), VoidReason(..)
@@ -58,13 +59,13 @@ import Emails (EmailType, getEmailData)
 import Images (makeImageConfig, scaleExistingImage, optimizeImage)
 import Models
 import Models.PersistJSON (JSONValue(..))
-import Models.Fields (AvalaraTransactionCode(..), Cents(..))
+import Models.Fields (AvalaraTransactionCode(..), Cents(..), plusCents)
 import Routes.AvalaraUtils (createAvalaraTransaction)
 import Server (avalaraRequest)
 
 import qualified Avalara
 import qualified Data.Text as T
-import qualified Database.Esqueleto as E
+import qualified Database.Esqueleto.Experimental as E
 import qualified Emails
 
 
@@ -72,9 +73,9 @@ import qualified Emails
 data Task
     = OptimizeImage
         FilePath
-        -- ^ FilePath
+        -- FilePath
         FilePath
-        -- ^ Destination Directory
+        -- Destination Directory
     | SendEmail EmailType
     | CleanDatabase
     | Avalara AvalaraTask
@@ -143,7 +144,7 @@ taskQueueConfig threadCount cfg@Config { getPool, getServerLogger, getCaches } =
         , qFailure = handleError
         }
   where
-    runSql :: MonadBaseControl IO m => SqlPersistT m a -> m a
+    runSql :: MonadUnliftIO m => SqlPersistT m a -> m a
     runSql = flip runSqlPool getPool
 
     -- Grab the next item from Job table, preferring the jobs that have
@@ -209,8 +210,12 @@ taskQueueConfig threadCount cfg@Config { getPool, getServerLogger, getCaches } =
                 "Customer #" <> showSqlKey cId <> " Requested Password Reset Email"
             Emails.PasswordResetSuccess cId ->
                 "Customer #" <> showSqlKey cId <> " Password Reset Succeeded Email"
+            Emails.EmailVerification cId _ ->
+                "Customer #" <> showSqlKey cId <> " Email Verification Email"
             Emails.OrderPlaced oId ->
                 "Order #" <> showSqlKey oId <> " Placed Email"
+            Emails.OrderStatusUpdated oId _ ->
+                "Order #" <> showSqlKey oId <> " Status Updated Email"
         CleanDatabase ->
             "Clean Database"
         Avalara (RefundTransaction code type_ amount) ->
@@ -281,22 +286,25 @@ taskQueueConfig threadCount cfg@Config { getPool, getServerLogger, getCaches } =
                 Avalara.SuccessfulResponse _ ->
                     return ()
                 e ->
-                    throwM $ RequestFailed e
+                    throwIO $ RequestFailed e
         CreateTransaction orderId -> flip runReaderT cfg $ do
-            result <- fmap listToMaybe . runSql $ E.select $ E.from
-                $ \(o `E.InnerJoin` sa `E.LeftOuterJoin` ba `E.InnerJoin` c) -> do
-                    E.on $ c E.^. CustomerId E.==. o E.^. OrderCustomerId
-                    E.on $ o E.^. OrderBillingAddressId E.==. ba E.?. AddressId
-                    E.on $ o E.^. OrderShippingAddressId E.==. sa E.^. AddressId
-                    E.where_ $ o E.^. OrderId E.==. E.val orderId
-                    return (o, sa, ba, c)
+            result <- fmap listToMaybe . runSql $ E.select $ do
+                (o E.:& sa E.:& ba E.:& c) <- E.from $ E.table
+                    `E.innerJoin` E.table
+                        `E.on` (\(o E.:& sa) -> o E.^. OrderShippingAddressId E.==. sa E.^. AddressId)
+                    `E.leftJoin` E.table
+                        `E.on` (\(o E.:& _ E.:& ba) -> o E.^. OrderBillingAddressId E.==. ba E.?. AddressId)
+                    `E.innerJoin` E.table
+                        `E.on` (\(o E.:& _ E.:& _ E.:& c) -> c E.^. CustomerId E.==. o E.^. OrderCustomerId)
+                E.where_ $ o E.^. OrderId E.==. E.val orderId
+                return (o, sa, ba, c)
             case result of
                 Nothing ->
-                    throwM OrderNotFound
+                    throwIO OrderNotFound
                 Just (o, sa, ba, c) -> runSql $
                     createAvalaraTransaction o sa ba c True >>= \case
                         Nothing ->
-                            throwM TransactionCreationFailed
+                            throwIO TransactionCreationFailed
                         Just transaction -> do
                             when (getAvalaraStatus cfg == AvalaraTesting) $
                                 enqueueTask Nothing . Avalara
@@ -311,7 +319,7 @@ taskQueueConfig threadCount cfg@Config { getPool, getServerLogger, getCaches } =
             let companyCode = getAvalaraCompanyCode cfg
             transactionCode <- case Avalara.tCode transaction of
                 Nothing ->
-                    throwM NoTransactionCode
+                    throwIO NoTransactionCode
                 Just tCode ->
                     return tCode
             let request = Avalara.commitTransaction companyCode transactionCode
@@ -320,12 +328,12 @@ taskQueueConfig threadCount cfg@Config { getPool, getServerLogger, getCaches } =
                 Avalara.SuccessfulResponse _ ->
                     return ()
                 e ->
-                    throwM $ RequestFailed e
+                    throwIO $ RequestFailed e
         VoidTransaction transaction -> do
             let companyCode = getAvalaraCompanyCode cfg
             transactionCode <- case Avalara.tCode transaction of
                 Nothing ->
-                    throwM NoTransactionCode
+                    throwIO NoTransactionCode
                 Just tCode ->
                     return tCode
             let request =
@@ -335,7 +343,7 @@ taskQueueConfig threadCount cfg@Config { getPool, getServerLogger, getCaches } =
                 Avalara.SuccessfulResponse _ ->
                     return ()
                 e ->
-                    throwM $ RequestFailed e
+                    throwIO $ RequestFailed e
 
 
 -- | Remove Expired Carts & PasswordResets, Deactivate Expired Coupons.
@@ -343,6 +351,8 @@ cleanDatabase :: SqlPersistT IO ()
 cleanDatabase = do
     currentTime <- lift getCurrentTime
     deleteWhere [PasswordResetExpirationTime <. currentTime]
+    -- TODO sand-witch: "The DeleteCascade module is deprecated.
+    -- You can now set cascade behavior directly on entities in the quasiquoter."
     deleteCascadeWhere [CartExpirationTime <. Just currentTime]
     deactivateCoupons currentTime
     enqueueTask (Just $ addUTCTime 3600 currentTime) CleanDatabase
@@ -353,9 +363,8 @@ cleanDatabase = do
     deactivateCoupons currentTime =
         E.update $ \c -> do
             E.set c [ CouponIsActive E.=. E.val False ]
-            let orderCount = E.sub_select $ E.from $ \o -> do
+            let orderCount = E.subSelectCount $ E.from E.table >>= \o -> do
                     E.where_ $ o E.^. OrderCouponId E.==. E.just (c E.^. CouponId)
-                    return E.countRows
             E.where_ $
                 (orderCount E.>=. c E.^. CouponTotalUses E.&&. c E.^. CouponTotalUses E.!=. E.val 0)
                 E.||.  E.val currentTime E.>. c E.^. CouponExpirationDate
@@ -363,8 +372,9 @@ cleanDatabase = do
 -- | Remove Cart Items for sold-out variants from the order.
 removeSoldOutVariants :: OrderId -> SqlPersistT IO ()
 removeSoldOutVariants orderId = do
-    soldOut <- E.select $ E.from $ \(op `E.InnerJoin` pv) -> do
-        E.on $ pv E.^. ProductVariantId E.==. op E.^. OrderProductProductVariantId
+    soldOut <- E.select $ do
+        (op E.:& pv) <- E.from $ E.table `E.innerJoin` E.table
+            `E.on`  \(op E.:& pv) -> pv E.^. ProductVariantId E.==. op E.^. OrderProductProductVariantId
         E.where_ $ pv E.^. ProductVariantQuantity E.<=. E.val 0
             E.&&. op E.^. OrderProductOrderId E.==. E.val orderId
         return pv
@@ -400,12 +410,12 @@ updateSalesCache cacheTVar orderId = do
                 [ newReport { sdTotal = total } ]
             [sale] ->
                 if sdDay newReport == sdDay sale then
-                    [ sale { sdTotal = total + sdTotal sale } ]
+                    [ sale { sdTotal = total `plusCents` sdTotal sale } ]
                 else
-                    [ sale, newReport { sdTotal = total + sdTotal sale } ]
+                    [ sale, newReport { sdTotal = total `plusCents` sdTotal sale } ]
             sale : nextSale : rest ->
                 if date >= sdDay sale && date < sdDay nextSale then
-                    sale { sdTotal = total + sdTotal sale } : rest
+                    sale { sdTotal = total `plusCents` sdTotal sale } : rest
                 else
                     sale : updateReport total date (nextSale : rest) newReport
 
@@ -466,7 +476,7 @@ updateSalesReports reports zone reportDate reportUpdater =
         in
         SalesData
             { sdDay = toTime zone day
-            , sdTotal = 0
+            , sdTotal = Cents 0
             }
     -- Build a Monthly SalesData item for the given date, starting at the
     -- first of the month, local time.
@@ -478,7 +488,7 @@ updateSalesReports reports zone reportDate reportUpdater =
         in
         SalesData
             { sdDay = toTime zone startOfMonth
-            , sdTotal = 0
+            , sdTotal = Cents 0
             }
 
 -- Convert a Day to a UTCTime representing midnight in the local timezone.

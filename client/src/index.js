@@ -1,9 +1,9 @@
+require("bootstrap");
 const { Elm } = require('./Main.elm');
 
 const authUserIdKey = 'authUserId';
 const cartTokenKey = 'cartSessionToken';
 const cartItemCountKey = 'cartItemCount';
-
 
 /** FLAGS **/
 var cartToken = localStorage.getItem(cartTokenKey);
@@ -17,30 +17,17 @@ var app = Elm.Main.init({
       authUserId: userId,
       cartSessionToken: cartToken,
       cartItemCount: intOrNull(cartItemCount),
+      helcimUrl: helcimUrl,
+      postgridApiKey: POSTGRID_API_KEY,
     },
   },
 );
-
-
-/** STRIPE **/
-var stripeHandler = StripeCheckout.configure({
-  key: STRIPE_API_KEY,
-  locale: 'auto',
-  name: 'Southern Exposure',
-  image: '/static/img/logos/sese.png',
-  zipCode: true,
-  token: function(token) {
-    /** STRIPE SUBSCRIPTION **/
-    app.ports.stripeTokenReceived.send(token.id)
-  }
-});
-
 
 /** ANALYTICS **/
 window.dataLayer = window.dataLayer || [];
 function gtag(){dataLayer.push(arguments);}
 gtag('js', new Date());
-gtag('config', GA_MEASUREMENT_ID, { 'send_page_view': false });
+gtag('config', GA_MEASUREMENT_ID, { 'send_page_view': true });
 
 
 
@@ -132,19 +119,6 @@ app.ports.setCartItemCount.subscribe(function(itemCount) {
   localStorage.setItem(cartItemCountKey, itemCount);
 });
 
-
-/* Open the Stripe Checkout Popup */
-app.ports.collectStripeToken.subscribe(function(portData) {
-  var [customerEmail, checkoutTotal] = portData;
-  stripeHandler.open({
-    email: customerEmail,
-    amount: checkoutTotal,
-  });
-  window.addEventListener('popstate', function() {
-    stripeHandler.close();
-  });
-});
-
 /* Update the Page's Meta Elements & Send a Page Hit to Analytics */
 app.ports.updatePageMetadata.subscribe(function(portData) {
   var url = portData.url,
@@ -188,6 +162,49 @@ app.ports.initializeOrDestroyHomepageCarousel.subscribe(function(isHomepage) {
       $homepageCarousel = null;
     }
   });
+});
+
+let helcimMessageListener = null;
+
+app.ports.appendHelcimPayIframe.subscribe(function(checkoutToken) {
+  window.appendHelcimPayIframe(checkoutToken);
+})
+
+app.ports.removeHelcimPayIframe.subscribe(function() {
+  frame = document.getElementById('helcimPayIframe');
+  if (frame instanceof HTMLIFrameElement) {
+    frame.remove();
+    window.removeEventListener('message', helcimMessageListener);
+  }
+})
+
+app.ports.subscribeToHelcimMessages.subscribe(function() {
+  if (helcimMessageListener) {
+    window.removeEventListener('message', helcimMessageListener);
+  }
+  helcimMessageListener = function(event) {
+    if (event.origin == "https://secure.helcim.app")
+      app.ports.helcimMessageReceived.send(event.data);
+  }
+
+  window.addEventListener('message', helcimMessageListener);
+})
+
+
+// Go back in history
+app.ports.historyBack.subscribe(() => {
+  window.history.back();
+});
+
+
+app.ports.scrollLeftSmooth.subscribe(function({id, amount}) {
+    var el = document.getElementById(id);
+    if (el) {
+        el.scrollBy({
+            left: amount,
+            behavior: "smooth" // ensures smooth scrolling
+        });
+    }
 });
 
 
@@ -236,4 +253,15 @@ function createOrUpdateMeta(name, content) {
     metaElement.setAttribute('content', content);
     document.head.appendChild(metaElement);
   }
+}
+
+/* Focus an element by id */
+/* Note: For some reason, webpack throw an error that, this is undefined. */
+if(app.ports.focus){
+  app.ports.focus.subscribe(function(id) {
+      const el = document.getElementById(id);
+      if (el) {
+        el.focus();
+      }
+  });
 }

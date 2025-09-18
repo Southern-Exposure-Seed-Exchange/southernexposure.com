@@ -2,6 +2,7 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TupleSections #-}
+
 module Validation
     ( Validators
     , Validation(..)
@@ -25,21 +26,20 @@ module Validation
 import Control.Arrow (second)
 import Data.Aeson (ToJSON(..), encode, object)
 import Data.Maybe (isJust, isNothing)
-import Data.Monoid ((<>))
 import Database.Persist
     ( PersistEntityBackend, PersistEntity, Filter, Unique, get, getBy
-    , selectFirst
+    , selectFirst, Entity (..)
     )
 import Database.Persist.Sql (SqlBackend, Key)
 import Servant (err422, errBody)
 
 import Server
-import Models (EntityField(CustomerEmail))
 
 import qualified Data.Text as T
 import qualified Data.HashMap.Strict as HM
 import qualified Data.Map.Strict as M
-import qualified Database.Esqueleto as E
+import Models (Customer(..))
+import Models.Utils (getCustomerByEmail)
 
 
 -- | Force the server to return a 422 HTTP Validation Error with a JSON body.
@@ -140,12 +140,13 @@ noMatches :: (PersistEntityBackend e ~ SqlBackend, PersistEntity e)
 noMatches filters =
     isJust <$> runDB (selectFirst filters [])
 
--- | Ensure a a Customer with the given email doesn't exist.
+-- | Ensure a registered (i.e., non-ephemeral) Customer with the given email doesn't exist.
 uniqueCustomer :: T.Text -> App Bool
-uniqueCustomer email =
-    fmap (not . null) . runDB $ E.select $ E.from $ \c -> do
-        E.where_ $ E.lower_ (c E.^. CustomerEmail) E.==. E.val (T.toLower email)
-        return c
+uniqueCustomer email = runDB $ do
+    mCustomer <- getCustomerByEmail email
+    case mCustomer of
+        Just (Entity _ c) -> pure $ isJust $ customerEncryptedPassword c
+        _ -> pure False
 
 exists :: (PersistEntityBackend r ~ SqlBackend, PersistEntity r)
        => Key r -> App Bool

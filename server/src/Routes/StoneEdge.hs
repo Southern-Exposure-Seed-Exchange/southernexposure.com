@@ -5,6 +5,8 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeApplications #-}
 module Routes.StoneEdge
@@ -14,6 +16,7 @@ module Routes.StoneEdge
     , stoneEdgeRoutes
     , StoneEdgeRequest(..)
     -- * Test Exports
+    , transformOrder
     , transformCoupon
     , transformStoreCredit
     , transformTax
@@ -24,11 +27,12 @@ module Routes.StoneEdge
 
 import Control.Monad ((<=<), when, forM)
 import Control.Monad.Reader (asks, liftIO)
-import Control.Exception.Safe (MonadCatch, Exception, Typeable, throwM, handle)
+import UnliftIO.Exception (Exception, throwIO, handle)
 import Data.Bifunctor (first)
 import Data.Char (isDigit)
+import Data.Map as Map (fromList, lookup)
 import Data.Maybe (fromMaybe, mapMaybe, listToMaybe, maybeToList)
-import Data.Monoid ((<>))
+import Data.List (find)
 import Data.Text (Text)
 import Data.Text.Encoding (decodeUtf8)
 import Data.Time
@@ -43,17 +47,23 @@ import Servant ((:>), ReqBody, FormUrlEncoded, Post, PlainText, MimeRender(..))
 import Web.FormUrlEncoded (FromForm(..), Form, parseMaybe)
 
 import Config
+import Emails (EmailType(..))
 import Models
 import Models.Fields
-    ( Cents(..), Country(..), Region(..), OrderStatus(..), LineItemType(..)
-    , StripeChargeId(..), AdminOrderComment(..), renderLotSize
+    ( AddressType(..), Cents(..), mkCents, Country(..), Region(..), OrderStatus(..), LineItemType(..), LotSize(..)
+    , StripeChargeId(..), AdminOrderComment(..), regionCode, renderLotSize, timesQuantity, sumPrices, plusCents, subtractCents
+    , toDollars, toGrams
     )
+import Helcim.API.Types.Payment (TransactionId(..))
+import Routes.Utils (deletedEmail)
 import Server
 import StoneEdge
+import Workers (Task(..), enqueueTask)
 
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.Text as T
-import qualified Database.Esqueleto as E
+import qualified Database.Esqueleto.Experimental as E
+import qualified Database.Esqueleto.PostgreSQL as E
 import qualified Web.Stripe.Types as Stripe
 
 
@@ -71,7 +81,7 @@ integrationVersion = "1.000"
 data StoneEdgeIntegrationError
     = StoneEdgeAuthError
     -- ^ Request authentication does not match values from the 'Config'.
-    deriving (Show, Typeable)
+    deriving (Show)
 
 instance Exception StoneEdgeIntegrationError
 
@@ -85,16 +95,30 @@ stoneEdgeRoutes = \case
         handle simpleError $ checkAuth rq >> OCRs <$> orderCountRoute rq
     DORq rq ->
         handle (xmlError Orders) $ checkAuth rq >> DORs <$> downloadOrdersRoute rq
+    USRq rq ->
+        handle simpleError $ checkAuth rq >> USRs <$> updateStatusRoute rq
+    QOHRq rq ->
+        handle simpleError $ checkAuth rq >> QOHRs <$> qohReplaceRoute rq
+    GPCRq rq ->
+        handle simpleError $ checkAuth rq >> GPCRs <$> getProductsCountRoute rq
+    DPRq rq ->
+        handle (xmlError Products) $ checkAuth rq >> DPRs <$> downloadProductsRoute rq
+    IURq rq ->
+        handle simpleError $ checkAuth rq >> IURs <$> invUpdateRoute rq
+    GCCRq rq ->
+        handle simpleError $ checkAuth rq >> GCCRs <$> getCustomersCountRoute rq
+    DCRq rq ->
+        handle (xmlError Customers) $ checkAuth rq >> DCRs <$> downloadCustomersRoute rq
     UnexpectedFunction function _ ->
         return . ErrorResponse $ "Integration has no support for function: " <> function
     InvalidRequest form ->
         return . ErrorResponse $ "Expecting a setifunction parameter, received: " <> T.pack (show form)
   where
-    xmlError :: MonadCatch m => TypeOfDownload -> StoneEdgeIntegrationError -> m StoneEdgeResponse
+    xmlError :: Monad m => TypeOfDownload -> StoneEdgeIntegrationError -> m StoneEdgeResponse
     xmlError type_ = \case
         StoneEdgeAuthError ->
             return $ XmlErrorResponse type_ "Invalid username, password, or store code."
-    simpleError :: MonadCatch m => StoneEdgeIntegrationError -> m StoneEdgeResponse
+    simpleError :: Monad m => StoneEdgeIntegrationError -> m StoneEdgeResponse
     simpleError = \case
         StoneEdgeAuthError ->
             return $ ErrorResponse "Invalid username, password, or store code."
@@ -105,6 +129,13 @@ data StoneEdgeRequest
     = SVRq SendVersionRequest
     | OCRq OrderCountRequest
     | DORq DownloadOrdersRequest
+    | USRq UpdateStatusRequest
+    | QOHRq QOHReplaceRequest
+    | GPCRq GetProductsCountRequest
+    | DPRq DownloadProdsRequest
+    | IURq InvUpdateRequest
+    | GCCRq GetCustomersCountRequest
+    | DCRq DownloadCustomersRequest
     | UnexpectedFunction Text Form
     | InvalidRequest Form
     deriving (Eq, Show)
@@ -118,6 +149,20 @@ instance FromForm StoneEdgeRequest where
             wrapError $ OCRq <$> fromForm f
         Just "downloadorders" ->
             wrapErrorXml Orders $ DORq <$> fromForm f
+        Just "updatestatus" ->
+            wrapError $ USRq <$> fromForm f
+        Just "qohreplace" ->
+            wrapError $ QOHRq <$> fromForm f
+        Just "getproductscount" ->
+            wrapError $ GPCRq <$> fromForm f
+        Just "downloadprods" ->
+            wrapError $ DPRq <$> fromForm f
+        Just "invupdate" ->
+            wrapError $ IURq <$> fromForm f
+        Just "getcustomerscount" ->
+            wrapError $ GCCRq <$> fromForm f
+        Just "downloadcustomers" ->
+            wrapError $ DCRq <$> fromForm f
         Just unexpected ->
             return $ UnexpectedFunction unexpected f
         Nothing ->
@@ -133,6 +178,13 @@ data StoneEdgeResponse
     = SVRs SendVersionResponse
     | OCRs OrderCountResponse
     | DORs DownloadOrdersResponse
+    | USRs UpdateStatusResponse
+    | QOHRs QOHReplaceResponse
+    | GPCRs GetProductsCountResponse
+    | DPRs DownloadProdsResponse
+    | IURs InvUpdateResponse
+    | GCCRs GetCustomersCountResponse
+    | DCRs DownloadCustomersResponse
     | ErrorResponse Text
     | XmlErrorResponse TypeOfDownload Text
 
@@ -145,6 +197,20 @@ instance MimeRender PlainText StoneEdgeResponse where
             mimeRender pt $ renderOrderCountResponse resp
         DORs resp ->
             LBS.fromStrict $ renderDownloadOrdersResponse resp
+        USRs resp ->
+            mimeRender pt $ renderUpdateStatusResponse resp
+        QOHRs resp ->
+            mimeRender pt $ renderQOHReplaceResponse resp
+        GPCRs resp ->
+            mimeRender pt $ renderGetProductsCountResponse resp
+        DPRs resp ->
+            LBS.fromStrict $ renderDownloadProdsResponse resp
+        IURs resp ->
+            mimeRender pt $ renderInvUpdateResponse resp
+        GCCRs resp ->
+            mimeRender pt $ renderGetCustomersCountResponse resp
+        DCRs resp ->
+            LBS.fromStrict $ renderDownloadCustomersResponse resp
         ErrorResponse errorMessage ->
             mimeRender pt $ renderSimpleSETIError errorMessage
         XmlErrorResponse type_ errorMessage ->
@@ -187,11 +253,17 @@ downloadOrdersRoute DownloadOrdersRequest { dorLastOrder, dorStartNumber, dorBat
                 Nothing ->
                     return ()
     rawOrderData <- runDB $ do
-        orders <- E.select $ E.from $ \(o `E.InnerJoin` c `E.InnerJoin` sa `E.LeftOuterJoin` ba `E.LeftOuterJoin` cp) -> do
-            E.on (o E.^. OrderCouponId E.==. cp E.?. CouponId)
-            E.on (o E.^. OrderBillingAddressId E.==. ba E.?. AddressId)
-            E.on (o E.^. OrderShippingAddressId E.==. sa E.^. AddressId)
-            E.on (o E.^. OrderCustomerId E.==. c E.^. CustomerId)
+        orders <- E.select $ do
+            (o E.:& c E.:& sa E.:& ba E.:& cp) <- E.from $ E.table
+                `E.innerJoin` E.table
+                    `E.on` (\(o E.:& c) -> o E.^. OrderCustomerId E.==. c E.^. CustomerId)
+                `E.innerJoin` E.table
+                    `E.on` (\(o E.:& _ E.:& sa) -> o E.^. OrderShippingAddressId E.==. sa E.^. AddressId)
+                `E.leftJoin` E.table
+                    `E.on` (\(o E.:& _ E.:& _ E.:& ba) -> o E.^. OrderBillingAddressId E.==. ba E.?. AddressId)
+                `E.leftJoin` E.table
+                    `E.on` (\(o E.:& _ E.:& _ E.:& _ E.:& cp) -> o E.^. OrderCouponId E.==. cp E.?. CouponId)
+
             E.where_ $ orderIdFilter o
             E.orderBy [E.asc $ o E.^. OrderId]
             limitAndOffset
@@ -204,9 +276,12 @@ downloadOrdersRoute DownloadOrdersRequest { dorLastOrder, dorStartNumber, dorBat
                 (adminCommentContent comment,)
                     <$> convertToLocalTime (adminCommentTime comment)
             lineItems <- selectList [OrderLineItemOrderId ==. entityKey o] []
-            products <- E.select $ E.from $ \(op `E.InnerJoin` v `E.InnerJoin` p) -> do
-                E.on (v E.^. ProductVariantProductId E.==. p E.^. ProductId)
-                E.on (op E.^. OrderProductProductVariantId E.==. v E.^. ProductVariantId)
+            products <- E.select $ do
+                (op E.:& v E.:& p) <- E.from $ E.table
+                    `E.innerJoin` E.table
+                        `E.on` (\(op E.:& v) -> op E.^. OrderProductProductVariantId E.==. v E.^. ProductVariantId)
+                    `E.innerJoin` E.table
+                        `E.on` (\(_ E.:& v E.:& p) -> v E.^. ProductVariantProductId E.==. p E.^. ProductId)
                 E.where_ $ op E.^. OrderProductOrderId E.==. E.val (entityKey o)
                 return (op, p, v)
             return (o, createdAt, c, sa, ba, cp, lineItems, products, adminComments)
@@ -286,13 +361,13 @@ transformOrder (order, createdAt, customer, shipping, maybeBilling, maybeCoupon,
         :: (Entity OrderProduct, Entity Product, Entity ProductVariant)
         -> StoneEdgeOrderProduct
     transformProduct (Entity lineId orderProd, Entity _ prod, Entity _ variant) =
-        let q = fromIntegral $ orderProductQuantity orderProd
+        let q = orderProductQuantity orderProd
             p = orderProductPrice orderProd
-            t = Cents $ fromIntegral q * fromCents p
+            t = p `timesQuantity` q
         in StoneEdgeOrderProduct
             { seopSKU = productBaseSku prod <> productVariantSkuSuffix variant
             , seopName = productName prod <> lotSuffix variant
-            , seopQuantity = q
+            , seopQuantity = fromIntegral q
             , seopItemPrice = convertCents p
             , seopProductType = Just TangibleProduct
             , seopTaxable = Just True
@@ -307,30 +382,35 @@ transformOrder (order, createdAt, customer, shipping, maybeBilling, maybeCoupon,
             ", " <> renderLotSize ls
     transformCreditCard :: Maybe StoneEdgeOrderPayment
     transformCreditCard =
-        case orderStripeChargeId $ entityVal order of
-            Nothing ->
-                Nothing
-            Just transactionId ->
-                let maybeCredit = listToMaybe $ mapMaybe (\i ->
-                            if orderLineItemType (entityVal i) == StoreCreditLine then
-                                Just $ orderLineItemAmount $ entityVal i
-                            else Nothing
-                        ) items
-                in Just . StoneEdgeOrderCreditCard $ StoneEdgePaymentCreditCard
+        let maybeCredit = orderLineItemAmount . entityVal <$>
+                find (\i -> orderLineItemType (entityVal i) == StoreCreditLine) items
+        in case (orderStripeChargeId $ entityVal order, orderHelcimTransactionId $ entityVal order) of
+            (Just transactionId, _) ->
+                Just . StoneEdgeOrderCreditCard $ StoneEdgePaymentCreditCard
                     { sepccTransactionId =
-                        Just . (\(Stripe.ChargeId i) -> i)
-                            $ fromStripeChargeId transactionId
+                    Just . (\(Stripe.ChargeId i) -> i)
+                        $ fromStripeChargeId transactionId
                     , sepccCardNumber = orderStripeLastFour $ entityVal order
                     , sepccIssuer = fromMaybe "" . orderStripeIssuer $ entityVal order
                     , sepccAmount = Just . StoneEdgeCents $
-                        secCents (setGrandTotal transformTotals)
-                            - maybe 0 (fromIntegral . fromCents) maybeCredit
+                    secCents (setGrandTotal transformTotals)
+                        - maybe 0 (fromIntegral . fromCents) maybeCredit
                     }
+            (Nothing, Just (TransactionId transactionId)) ->
+                Just . StoneEdgeOrderCreditCard $ StoneEdgePaymentCreditCard
+                    { sepccTransactionId = Just $ T.pack $ show transactionId
+                    , sepccCardNumber = orderHelcimCardNumber $ entityVal order
+                    , sepccIssuer = fromMaybe "" . orderHelcimCardType $ entityVal order
+                    , sepccAmount = Just . StoneEdgeCents $
+                    secCents (setGrandTotal transformTotals) - maybe 0 (fromIntegral . fromCents) maybeCredit
+                    }
+            (Nothing, Nothing) ->
+                Nothing
     transformTotals :: StoneEdgeTotals
     transformTotals =
         let productTotal =
-                sum $ map (\(Entity _ op, _, _) ->
-                        Cents $ fromIntegral (orderProductQuantity op) * fromCents (orderProductPrice op)
+                sumPrices $ map (\(Entity _ op, _, _) ->
+                        orderProductPrice op `timesQuantity` orderProductQuantity op
                     )
                     products
             (discounts, surcharges, maybeShipping, maybeCouponLine, maybeTaxLine) = foldl
@@ -351,19 +431,20 @@ transformOrder (order, createdAt, customer, shipping, maybeBilling, maybeCoupon,
                         RefundLine ->
                             (ds, ss, mShip, mCoupon, mTax)
                         TaxLine ->
-                            if orderLineItemAmount (entityVal item) /= 0 then
+                            if orderLineItemAmount (entityVal item) /= mkCents 0 then
                                 (ds, ss, mShip, mCoupon, Just item)
                             else
                                 (ds, ss, mShip, mCoupon, mTax)
                 ) ([], [], Nothing, Nothing, Nothing) items
-            subTotal = productTotal - sum (map (orderLineItemAmount . entityVal) discounts)
+            subTotal = productTotal `subtractCents` sumPrices (map (orderLineItemAmount . entityVal) discounts)
             grandTotal =
-                productTotal
-                    + maybe 0 (orderLineItemAmount . entityVal) maybeTaxLine
-                    + maybe 0 (orderLineItemAmount . entityVal) maybeShipping
-                    + sum (map (orderLineItemAmount . entityVal) surcharges)
-                    - sum (map (orderLineItemAmount . entityVal) discounts)
-                    - maybe 0 (orderLineItemAmount . entityVal) maybeCouponLine
+                let zero = mkCents 0
+                in productTotal
+                    `plusCents` maybe zero (orderLineItemAmount . entityVal) maybeTaxLine
+                    `plusCents` maybe zero (orderLineItemAmount . entityVal) maybeShipping
+                    `plusCents` sumPrices (map (orderLineItemAmount . entityVal) surcharges)
+                    `subtractCents` sumPrices (map (orderLineItemAmount . entityVal) discounts)
+                    `subtractCents` maybe zero (orderLineItemAmount . entityVal) maybeCouponLine
         in StoneEdgeTotals
             { setProductTotal = convertCents productTotal
             , setDiscount = map transformDiscount discounts
@@ -471,6 +552,292 @@ transformShippingTotal (Entity _ item) =
         , sestDescription = nothingIfNull $ orderLineItemDescription item
         }
 
+updateStatusRoute :: UpdateStatusRequest -> App UpdateStatusResponse
+updateStatusRoute UpdateStatusRequest {..} = runDB $ do
+    mOrder <- E.get usrOrderNumber
+    case mOrder of
+        Just order -> do
+            let currentStoneEdgeStatus = orderStoneEdgeStatus order
+            currentOrderDeliveryData <- map E.entityVal <$>
+                selectList [ OrderDeliveryOrderId ==. usrOrderNumber ] []
+            let existingTrackNumbers = map orderDeliveryTrackNumber currentOrderDeliveryData
+                newOrderDeliveryData = map (trackDataToOrderDelivery usrOrderNumber) $
+                    filter (\td -> setdTrackNum td `notElem` existingTrackNumbers) usrTrackData
+            orderDeliveryIds <- E.insertMany newOrderDeliveryData
+            E.updateWhere [ OrderId ==. usrOrderNumber ]
+                [ OrderStoneEdgeStatus =. Just usrOrderStatus ]
+            -- If there is somethig to update, enqueue the email task.
+            -- We do not want to send an email if the status is the same or there is no new
+            -- delivery track info.
+            when (currentStoneEdgeStatus /= Just usrOrderStatus || not (null newOrderDeliveryData)) $ do
+                enqueueTask Nothing (SendEmail $ OrderStatusUpdated usrOrderNumber orderDeliveryIds) 
+            return UpdateStatusSuccess
+        Nothing ->
+            -- If the order does not exist, we cannot update its status.
+            return UpdateStatusSuccess
+    where
+        trackDataToOrderDelivery :: OrderId -> StoneEdgeTrackData -> OrderDelivery
+        trackDataToOrderDelivery orderId StoneEdgeTrackData {..} =
+            OrderDelivery
+                { orderDeliveryOrderId = orderId
+                , orderDeliveryTrackNumber = setdTrackNum
+                , orderDeliveryTrackCarrier = setdTrackCarrier
+                , orderDeliveryTrackPickupDate = setdPickupDate
+                }
+
+qohReplaceRoute :: QOHReplaceRequest -> App QOHReplaceResponse
+qohReplaceRoute QOHReplaceRequest {..} = runDB $ do
+    -- Collect product variant candidates to update
+    -- We use a distinct query to avoid duplicates.
+    -- We use a join to match the full SKU with the product base SKU and the variant SKU suffix.
+    candidates <- E.select $ E.distinct $ do
+        (p E.:& _ E.:& pv) <- E.from $
+            E.table @Product
+                `E.innerJoin` E.values (fmap (\(sku, _) -> E.val sku) qrrUpdates)
+                `E.on` (\(p E.:& fullSku) -> fullSku `E.like` E.concat_ [p E.^. ProductBaseSku, (E.%)])
+                `E.innerJoin` E.table @ProductVariant
+                `E.on`
+                    (\(p E.:& fullSku E.:& pv) ->
+                        (p E.^. ProductId E.==. pv E.^. ProductVariantProductId) E.&&.
+                        (fullSku `E.like` E.concat_ [(E.%), pv E.^. ProductVariantSkuSuffix])
+                    )
+        E.where_ $ p E.^. ProductDeleted E.==. E.val False
+        return (p E.^. ProductId, pv E.^. ProductVariantId, p E.^. ProductBaseSku, pv E.^. ProductVariantSkuSuffix)
+    -- Build a map of found SKUs from candidates
+    let foundSkus = Map.fromList $
+            [ (baseSku <> variantSkuSuffix, productVariantId)
+            | (_, E.Value productVariantId, E.Value baseSku, E.Value variantSkuSuffix) <- candidates
+            ]
+
+    -- Iterate over the list of updates and update the quantities in the DB
+    updates <- forM qrrUpdates $ \(sku, quantity) -> do
+        case Map.lookup sku foundSkus of
+            Just productVariantId -> do
+                -- Update the quantity on hand for the found SKU
+                updateWhere
+                    [ ProductVariantId ==. productVariantId ]
+                    [ ProductVariantQuantity =. fromIntegral quantity ]
+                return (sku, Ok)
+            Nothing ->
+                return (sku, NotFound)
+                -- If the SKU was not found, we can choose to log it or ignore it.
+
+    return $ QOHReplaceResponse updates
+
+-- Product Count
+
+getProductsCountRoute :: GetProductsCountRequest -> App GetProductsCountResponse
+getProductsCountRoute GetProductsCountRequest {} = do
+    -- Count the products in the database.
+    productCount :: [E.Value Int] <- runDB $ E.select $ do
+        (p E.:& _) <- E.from $ E.table @Product
+            `E.innerJoin` E.table @ProductVariant
+                `E.on` (\(p E.:& v) -> v E.^. ProductVariantProductId E.==. p E.^. ProductId)
+        E.where_ $ p E.^. ProductDeleted E.==. E.val False
+        return E.countRows
+    return $ GetProductsCountResponse $ fromIntegral $ E.unValue $ head productCount
+
+-- Download Products
+
+downloadProductsRoute :: DownloadProdsRequest -> App DownloadProdsResponse
+downloadProductsRoute DownloadProdsRequest {..} = runDB $ do
+    products <- E.select $ do
+        (p E.:& v E.:& sa) <- E.from $ E.table @Product
+            `E.innerJoin` E.table @ProductVariant
+                `E.on` (\(p E.:& v) -> v E.^. ProductVariantProductId E.==. p E.^. ProductId)
+            `E.leftJoin` E.table @SeedAttribute
+                `E.on` (\(p E.:& _ E.:& sa) -> sa E.?. SeedAttributeProductId E.==. E.just (p E.^. ProductId))
+        E.where_ $ p E.^. ProductDeleted E.==. E.val False
+        E.orderBy [E.asc $ v E.^. ProductVariantId]
+        E.offset (fromIntegral $ fromMaybe 1 dprStartNumber - 1)
+        E.limit (fromIntegral $ fromMaybe 100 dprBatchSize)
+        return (p, v, sa)
+    let stoneEdgeProducts = flip map products $ \(Entity _ p, Entity _ v, mbSa) ->
+            transformProduct (p, v, fmap E.entityVal mbSa)
+    return $ DownloadProdsResponse stoneEdgeProducts
+    where
+        transformProduct :: (Product, ProductVariant, Maybe SeedAttribute) -> StoneEdgeProduct
+        transformProduct (prod, variant, maybeSeedAttr) =
+            let price = toDollars $ productVariantPrice variant
+                weight = case productVariantLotSize variant of
+                    -- milligrams to grams
+                    Just (Mass mass) -> toGrams mass
+                    _ -> 0
+                customFields = case maybeSeedAttr of
+                    Nothing ->
+                        [ ("Organic", "False")
+                        , ("Heirloom", "False")
+                        ]
+                    Just sa ->
+                        [ ("Organic", T.pack $ show $ seedAttributeIsOrganic sa)
+                        , ("Heirloom", T.pack $ show $ seedAttributeIsHeirloom sa)
+                        ]
+            in
+                StoneEdgeProduct
+                    { sepCode = productBaseSku prod <> productVariantSkuSuffix variant
+                    , sepName = productName prod
+                    , sepDescription = Just $ T.strip $ productLongDescription prod
+                    , sepPrice = price
+                    , sepWeight = weight
+                    , sepDiscontinued = not $ productVariantIsActive variant
+                    , sepQOH = fromIntegral $ productVariantQuantity variant
+                    , sepCustomFields = customFields
+                    }
+
+-- Inventory Update
+
+invUpdateRoute :: InvUpdateRequest -> App InvUpdateResponse
+invUpdateRoute InvUpdateRequest {..} = runDB $ do
+    let fullSKU = fst iurUpdate
+        qohUpdate = snd iurUpdate
+    productVariant <- fmap listToMaybe . E.select $ do
+        (p E.:& pv) <- E.from $ E.table @Product
+            `E.innerJoin` E.table @ProductVariant
+                `E.on` (\(p E.:& v) -> v E.^. ProductVariantProductId E.==. p E.^. ProductId)
+        E.where_ $ E.concat_ [ p E.^.ProductBaseSku, pv E.^. ProductVariantSkuSuffix ] E.==. E.val fullSKU
+        return pv
+    case productVariant of
+        Nothing ->
+            return InvUpdateResponse
+                { iruSuccess = False
+                , iruSKU = fullSKU
+                , iruQOH = Right NotFound
+                , iruNote = Just "NotFound"
+                }
+        Just (Entity pvId pv) -> do
+            let newQuantity = productVariantQuantity pv + fromIntegral qohUpdate
+            E.updateWhere
+                [ ProductVariantId ==. pvId ]
+                [ ProductVariantQuantity =. newQuantity ]
+            return InvUpdateResponse
+                { iruSuccess = True
+                , iruSKU = fullSKU
+                , iruQOH = Left $ fromIntegral newQuantity
+                , iruNote = Nothing
+                }
+
+-- Customer Count
+
+getCustomersCountRoute :: GetCustomersCountRequest -> App GetCustomersCountResponse
+getCustomersCountRoute GetCustomersCountRequest {} = do
+    -- Count the customers in the database.
+    customerCount :: [E.Value Int] <- runDB $ E.select $ do
+        c <- E.from $ E.table @Customer
+        -- Exclude the "deleted" customer
+        E.where_ $ c E.^. CustomerEmail E.!=. E.val deletedEmail
+        -- Only count customers that have at least one order
+        E.where_ $ E.exists $ do
+            o <- E.from $ E.table @Order
+            E.where_ (c E.^. CustomerId E.==. o E.^. OrderCustomerId)
+            return ()
+        return E.countRows
+    return $ GetCustomersCountResponse $ fromIntegral $ E.unValue $ head customerCount
+
+-- Download Customers
+
+downloadCustomersRoute :: DownloadCustomersRequest -> App DownloadCustomersResponse
+downloadCustomersRoute DownloadCustomersRequest {..} = runDB $ do
+    customers <- E.select $ do
+        (c E.:& sa E.:& ba) <- E.from $ E.table @Customer
+            `E.innerJoin` E.table @Address
+                `E.on`
+                    (\(c E.:& sa) ->
+                        sa E.^. AddressType E.==. E.val Shipping E.&&.
+                        sa E.^. AddressIsDefault E.==. E.val True E.&&.
+                        -- For some reason a single user may have multiple default shipping addresses.
+                        -- it's not clear why, but we're picking the one with the highest ID since we
+                        -- assume that the highest ID is the most recent.
+                        E.just (E.just (sa E.^. AddressId)) E.==. E.subSelect (do
+                            a <- E.from $ E.table @Address
+                            E.where_ $ a E.^. AddressCustomerId E.==. c E.^. CustomerId
+                            E.where_ $ a E.^. AddressType E.==. E.val Shipping
+                            E.where_ $ a E.^. AddressIsDefault E.==. E.val True
+                            return $ E.max_ (a E.^. AddressId)
+                        )
+                    )
+            `E.leftJoin` E.table @Address
+                `E.on`
+                    (\(c E.:& _ E.:& ba) ->
+                        ba E.?. AddressType E.==. E.val (Just Billing) E.&&.
+                        ba E.?. AddressIsDefault E.==. E.val (Just True) E.&&.
+                        -- For some reason a single user may have multiple default billing addresses.
+                        -- it's not clear why, but we're picking the one with the highest ID since we
+                        -- assume that the highest ID is the most recent.
+                        E.just (ba E.?. AddressId) E.==. E.subSelect (do
+                            a <- E.from $ E.table @Address
+                            E.where_ $ a E.^. AddressCustomerId E.==. c E.^. CustomerId
+                            E.where_ $ a E.^. AddressType E.==. E.val Billing
+                            E.where_ $ a E.^. AddressIsDefault E.==. E.val True
+                            return $ E.max_ (a E.^. AddressId)
+                        )
+                    )
+        -- Exclude the "deleted" customer
+        E.where_ $ c E.^. CustomerEmail E.!=. E.val deletedEmail
+        -- Only select customers that have at least one order
+        E.where_ $ E.exists $ do
+            o <- E.from $ E.table @Order
+            E.where_ (c E.^. CustomerId E.==. o E.^. OrderCustomerId)
+            return ()
+        E.orderBy [E.asc $ c E.^. CustomerId]
+        E.offset (fromIntegral $ fromMaybe 1 dcrStartNumber - 1)
+        E.limit (fromIntegral $ fromMaybe 100 dcrBatchSize)
+
+        return (c, sa, ba)
+    let stoneEdgeCustomers = map transformCustomer customers
+    return $ DownloadCustomersResponse stoneEdgeCustomers
+    where
+        transformCustomer :: (Entity Customer, Entity Address, Maybe (Entity Address)) -> StoneEdgeCustomer
+        transformCustomer (Entity customerId customer, Entity _ shipping, maybeBilling) =
+            StoneEdgeCustomer
+                { secWebID = Just . fromIntegral . fromSqlKey $ customerId
+                , secUserName = Nothing
+                , secuPassword = Nothing
+                , secAffiliateId = Nothing
+                , secBillAddr = maybe
+                    (toStoneEdgeCustomerBillingAddress customer shipping)
+                    (toStoneEdgeCustomerBillingAddress customer . entityVal)
+                    maybeBilling
+                , secShipAddr = toStoneEdgeCustomerShippingAddress customer shipping
+                , secCustomFields = []
+                }
+        transformAddress :: Address -> StoneEdgeCustomerAddress
+        transformAddress addr =
+            StoneEdgeCustomerAddress
+                { secaAddr1 = addressAddressOne addr
+                , secaAddr2 = nothingIfNull $ addressAddressTwo addr
+                , secaCity = addressCity addr
+                , secaState = regionCode $ addressState addr
+                , secaZip = addressZipCode addr
+                , secaCountry = T.pack . show . fromCountry $ addressCountry addr
+                }
+        toStoneEdgeCustomerBillingAddress :: Customer -> Address -> StoneEdgeCustomerBillingAddress
+        toStoneEdgeCustomerBillingAddress customer addr =
+            StoneEdgeCustomerBillingAddress
+                { secbaNamePrefix = Nothing
+                , secbaFirstName = addressFirstName addr
+                , secbaMiddleName = Nothing
+                , secbaLastName = addressLastName addr
+                , secbaNameSuffix = Nothing
+                , secbaCompany = nothingIfNull $ addressCompanyName addr
+                , secbaPhone = Just $ addressPhoneNumber addr
+                , secbaEmail = Just $ customerEmail customer
+                , secbaTaxId = Nothing
+                , secbaAddress = transformAddress addr
+                }
+        toStoneEdgeCustomerShippingAddress :: Customer -> Address -> StoneEdgeCustomerShippingAddress
+        toStoneEdgeCustomerShippingAddress customer addr =
+            StoneEdgeCustomerShippingAddress
+                { secsaNamePrefix = Nothing
+                , secsaFirstName = addressFirstName addr
+                , secsaMiddleName = Nothing
+                , secsaLastName = addressLastName addr
+                , secsaNameSuffix = Nothing
+                , secsaCompany = nothingIfNull $ addressCompanyName addr
+                , secsaPhone = Just $ addressPhoneNumber addr
+                , secsaEmail = Just $ customerEmail customer
+                , secsaAddress = transformAddress addr
+                }
+
 -- Utils
 
 -- | Convert the Cents DB Field to StoneEdgeCents.
@@ -490,4 +857,4 @@ checkAuth request = do
     let credentials = getStoneEdgeRequestCredentials request
     expectedCredentials <- asks getStoneEdgeAuth
     when (expectedCredentials /= credentials) $
-        throwM StoneEdgeAuthError
+        throwIO StoneEdgeAuthError

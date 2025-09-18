@@ -5,6 +5,9 @@ CHANGELOG
 develop
 ========
 
+* Added an ``export-stoneedge-xml`` script which creates the XML export of an
+  arbitrary number of orders for StoneEdge.
+
 
 v1.04.08
 ========

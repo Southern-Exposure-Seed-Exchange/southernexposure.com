@@ -5,7 +5,8 @@ module Api
     ( app
     ) where
 
-import Control.Monad.Reader (runReaderT)
+import Servant.Server.Experimental.Auth (AuthHandler)
+import Network.Wai (Request)
 import Servant
 
 import Auth
@@ -17,22 +18,20 @@ import Server
 app :: Config -> Application
 app cfg =
     let
-        readerServer :: Server API
-        readerServer =
-            enter readerToHandler server
 
-        readerToHandler :: App :~> Handler
-        readerToHandler =
-            NT $ \x -> runReaderT x cfg
+
+        readerToHandler :: App a -> Handler a
+        readerToHandler x = runApp x cfg
+        contextProxy = Proxy :: Proxy '[AuthHandler Request WrappedAuthToken]
         context =
             authServerContext $ getCookieSecret cfg
     in
         case getEnv cfg of
             Production ->
-                serveWithContext api context readerServer
+                serveWithContext api context $ hoistServerWithContext api contextProxy readerToHandler server
             Development ->
-                serveWithContext devApi context $
-                         readerServer
+                serveWithContext devApi context $ hoistServerWithContext devApi contextProxy readerToHandler $
+                         server
                     :<|> serveDirectoryWebApp (getMediaDirectory cfg)
 
 api :: Proxy API

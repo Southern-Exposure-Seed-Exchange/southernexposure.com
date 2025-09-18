@@ -16,19 +16,17 @@ module Emails
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.Async (Async, async)
 import Control.Exception (SomeException, try)
-import Control.Monad ((<=<), when)
-import Control.Monad.IO.Class (MonadIO)
 import Data.Aeson (ToJSON, FromJSON)
-import Data.Monoid ((<>))
 import Data.Pool (withResource)
 import Database.Persist (get)
-import Database.Persist.Sql (SqlReadT)
+import Database.Persist.Sql (SqlPersistT)
 import GHC.Generics (Generic)
 import Network.Mail.SMTP (login, renderAndSend)
 import Network.Mail.Mime (Address(..), Mail(..), plainPart, htmlPart)
 import Text.Blaze.Html.Renderer.Text (renderHtml)
 import Text.Markdown (markdown, def)
 import Text.Pandoc (readHtml, writeMarkdown, runPure)
+import Control.Monad.Except
 
 import Config
 import Models hiding (Address, PasswordReset)
@@ -37,8 +35,10 @@ import qualified Data.Text as T
 import qualified Data.Text.Lazy as L
 import qualified Emails.AccountCreated as AccountCreated
 import qualified Emails.OrderPlaced as OrderPlaced
+import qualified Emails.OrderStatusUpdated as OrderStatusUpdated
 import qualified Emails.PasswordReset as PasswordReset
 import qualified Models.DB as DB
+import qualified Emails.VerifyEmail as EmailVerification
 
 
 data EmailType
@@ -46,6 +46,8 @@ data EmailType
     | PasswordReset CustomerId DB.PasswordResetId
     | PasswordResetSuccess CustomerId
     | OrderPlaced OrderId
+    | EmailVerification CustomerId VerificationId
+    | OrderStatusUpdated OrderId [OrderDeliveryId]
     deriving (Show, Generic, Eq)
 
 instance FromJSON EmailType
@@ -56,37 +58,41 @@ data EmailData
     | PasswordResetData Customer DB.PasswordReset
     | PasswordResetSuccessData Customer
     | OrderPlacedData OrderPlaced.Parameters
+    | EmailVerificationData Customer T.Text
+    | OrderStatusUpdatedData OrderStatusUpdated.Parameters
 
-getEmailData :: MonadIO m => EmailType -> SqlReadT m (Either T.Text EmailData)
-getEmailData = \case
+getEmailData :: MonadIO m => EmailType -> SqlPersistT m (Either T.Text EmailData)
+getEmailData = runExceptT . \case
     AccountCreated cId ->
-        tryGet AccountCreatedData "Could not find customer" cId
-    PasswordReset cId prId ->
-        get cId >>= \case
-            Nothing ->
-                return $ Left "Could not find customer"
-            Just customer ->
-                get prId >>= \case
-                    Nothing ->
-                        return $ Left "Could not find password reset"
-                    Just reset ->
-                        return . Right $ PasswordResetData customer reset
-    PasswordResetSuccess cId ->
-        tryGet PasswordResetSuccessData "Could not find customer" cId
-    OrderPlaced oId ->
-        maybe (Left "Could not find order") (Right . OrderPlacedData)
-            <$> OrderPlaced.fetchData oId
-  where
-    tryGet constr errMsg sqlId =
-        maybe (Left errMsg) (Right . constr) <$> get sqlId
+        AccountCreatedData <$> tryGet "Could not find customer" cId
 
--- TODO: Make Configurable
-developmentEmailRecipient :: Address
-developmentEmailRecipient =
-    Address
-        { addressName = Nothing
-        , addressEmail = "pavan@acorncommunity.org"
-        }
+    PasswordReset cId prId -> do
+        customer <- tryGet "Could not find customer" cId
+        reset <- tryGet "Could not find password reset" prId
+        pure $ PasswordResetData customer reset
+
+    PasswordResetSuccess cId ->
+        PasswordResetSuccessData <$> tryGet "Could not find customer" cId
+
+    OrderPlaced oId -> do
+        mOrder <- lift $ OrderPlaced.fetchData oId
+        case mOrder of
+            Nothing -> throwError "Could not find order"
+            Just order -> pure $ OrderPlacedData order
+
+    EmailVerification cId vId ->  do
+        customer <- tryGet "Could not find customer" cId
+        verification <- tryGet "Could not find ongoing verification" vId
+        pure (EmailVerificationData customer (verificationCode verification))
+    OrderStatusUpdated oId odIds -> do
+       mParameters <- lift $ OrderStatusUpdated.fetchData oId odIds
+       case mParameters of
+           Nothing -> throwError "Could not find order"
+           Just parameters -> pure $ OrderStatusUpdatedData parameters
+
+  where
+    tryGet errMsg sqlId =
+        ExceptT $ maybe (Left errMsg) Right <$> get sqlId
 
 -- TODO: Make Configurable
 customerServiceAddress :: Address
@@ -105,7 +111,8 @@ sendWithRetries cfg email =
     sendEmail :: Int -> IO ()
     sendEmail retries =
         try (send cfg email) >>= \case
-            Left (_ :: SomeException) ->
+            Left (e :: SomeException) -> do
+                print e
                 when (retries > 0) $
                     threadDelay (1000 * 500) >> sendEmail (retries - 1)
             Right _ ->
@@ -120,28 +127,16 @@ send cfg email =
 
         bcc =
             case email of
-                OrderPlacedData _ ->
-                    if env /= Production then
-                        []
-                    else
-                        [ Address
-                            { addressName = Just "Southern Exposure Seed Exchange"
-                            , addressEmail = "gardens@southernexposure.com"
-                            }
-                        ]
+                OrderPlacedData _  | env == Production ->
+                    [ Address
+                        { addressName = Just "Southern Exposure Seed Exchange"
+                        , addressEmail = "gardens@southernexposure.com"
+                        }
+                    ]
                 _ ->
                     []
 
-
-        -- TODO: Make this configurable - real domain is needed in several
-        -- places(here & Feeds)
-        domainName =
-            case getEnv cfg of
-                Development ->
-                    "http://localhost:7000"
-                Production ->
-                    "https://www.southernexposure.com"
-
+        domainName = L.fromStrict $ getBaseUrl cfg
 
         (subject, message) =
             case email of
@@ -153,7 +148,11 @@ send cfg email =
                 PasswordResetSuccessData _ ->
                     PasswordReset.getSuccess
                 OrderPlacedData parameters ->
-                    OrderPlaced.get parameters
+                    OrderPlaced.get domainName parameters
+                EmailVerificationData _ vCode ->
+                    EmailVerification.get domainName (L.fromStrict vCode)
+                OrderStatusUpdatedData parameters ->
+                    OrderStatusUpdated.get domainName parameters
 
         (plainMessage, htmlMessage) =
             case email of
@@ -168,7 +167,7 @@ send cfg email =
         mail =
             Mail
                 { mailFrom = customerServiceAddress
-                , mailTo = [makeRecipient env email]
+                , mailTo = [makeRecipient (getDeveloperEmail cfg) email]
                 , mailCc = []
                 , mailBcc = bcc
                 , mailHeaders = [("Subject", T.pack subject)]
@@ -186,8 +185,8 @@ send cfg email =
             logger $ "SMTP Authentication Failed for User `" <> T.pack user <> "`: " <> T.pack (show loginResponse)
 
 
-makeRecipient :: Environment -> EmailData -> Address
-makeRecipient env email =
+makeRecipient :: Maybe T.Text -> EmailData -> Address
+makeRecipient devMail email =
     let
         recipientEmail =
             customerEmail $ case email of
@@ -199,6 +198,10 @@ makeRecipient env email =
                     customer
                 OrderPlacedData parameters ->
                     OrderPlaced.customer parameters
+                EmailVerificationData customer _ ->
+                    customer
+                OrderStatusUpdatedData parameters ->
+                    OrderStatusUpdated.customer parameters
 
         recipientName =
             case email of
@@ -210,10 +213,14 @@ makeRecipient env email =
                 _ ->
                     Nothing
     in
-    if env /= Production then
-        developmentEmailRecipient
-    else
-        Address
-            { addressName = recipientName
-            , addressEmail = recipientEmail
-            }
+    case devMail of
+        Just m ->
+            Address
+                { addressName = Nothing
+                , addressEmail = m
+                }
+        Nothing ->
+            Address
+                { addressName = recipientName
+                , addressEmail = recipientEmail
+                }
