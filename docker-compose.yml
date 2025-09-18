@@ -2,6 +2,7 @@ services:
   backend:
     image: ${BACKEND_IMAGE:-ghcr.io/southern-exposure-seed-exchange/sese-backend}:${BACKEND_TAG:-latest}
     container_name: sese-backend
+    restart: unless-stopped
     ports:
       - 127.0.0.1:3000:3000
     environment:
@@ -51,6 +52,7 @@ services:
   frontend:
     image: ${FRONTEND_IMAGE:-ghcr.io/southern-exposure-seed-exchange/sese-frontend}:${FRONTEND_TAG:-latest}
     container_name: sese-frontend
+    restart: unless-stopped
     ports:
       - 127.0.0.1:8080:8080
 
