@@ -99,7 +99,9 @@ main = do
             , getSmtpPass = smtpPass
             , getStripeConfig = StripeConfig (StripeKey $ C.pack stripeToken) Nothing
             , getHelcimAuthKey = Helcim.ApiToken $ T.pack helcimToken
-            , getPostgridApiKey = Postgrid.ApiKey . T.pack <$> postgridApiKey
+            , getPostgridApiKey =
+                fmap (Postgrid.ApiKey . T.pack) $ postgridApiKey >>=
+                    \k -> if null k then Nothing else Just k
             , getStoneEdgeAuth = stoneEdgeAuth
             , getCookieSecret = cookieSecret
             , getCookieEntropySource = entropySource
