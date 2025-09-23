@@ -552,7 +552,7 @@ handlePasswordValidationError = \case
 -- Carts
 
 data CartItemError
-    = OutOfStockError Natural Natural
+    = OutOfStockError Int Int
     | GenericError T.Text
     deriving (Eq, Ord, Show)
 
@@ -695,15 +695,21 @@ getCartItems whereQuery = do
     mapM toItemData items
     where toItemData (i, p, v@(Entity _ pv), q) =
             let
-                quantity =
+                cartQuantity =
                     E.unValue q
+                -- Oddly enough, but the quantity can be negative for the product.
+                -- In this case, we want to show the 'OutOfStockError' error, but it doesn't make a lot of sense
+                -- to show the negative quantity in the error message, hence we use 'max 0', also ensuring
+                -- that 'pvQuantity' fits 'Natural' type.
+                pvQuantity = max 0 (productVariantQuantity pv)
+                pvInventoryPolicy = productVariantInventoryPolicy pv
                 errors =
-                    [ OutOfStockError (fromIntegral $ productVariantQuantity pv) (fromIntegral quantity)
-                    | quantity > productVariantQuantity pv && productVariantInventoryPolicy pv == RequireStock
+                    [ OutOfStockError (fromIntegral pvQuantity) (fromIntegral cartQuantity)
+                    | cartQuantity > pvQuantity && pvInventoryPolicy == RequireStock
                     ]
                 warnings =
                     [ LimitedAvailabilityWarning (fromIntegral $ productVariantQuantity pv)
-                    | quantity > productVariantQuantity pv && productVariantInventoryPolicy pv == AllowBackorder
+                    | cartQuantity > pvQuantity && pvInventoryPolicy == AllowBackorder
                     ]
             in do
                 categories <- getAdditionalCategories (entityKey p)
@@ -715,7 +721,7 @@ getCartItems whereQuery = do
                     { cidItemId = E.unValue i
                     , cidProduct = productData
                     , cidVariant = variantData
-                    , cidQuantity = coerce quantity
+                    , cidQuantity = coerce cartQuantity
                     , cidErrors = S.fromList errors
                     , cidWarnings = S.fromList warnings
                     }
