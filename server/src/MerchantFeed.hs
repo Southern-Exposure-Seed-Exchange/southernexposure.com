@@ -58,7 +58,7 @@ gElemWithText name content =
     isValidXMLChar c =
         let o = ord c
         in o == 0x9 || o == 0xA || o == 0xD || (o >= 0x20 && o <= 0xD7FF) ||
-            (o >= 0xE000 && o <= 0xFFFD)
+            (o >= 0xE000 && o <= 0xFFFD) || (o >= 0x10000 && o <= 0x10FFFF)
 
 
 data Product =
