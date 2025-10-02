@@ -20,6 +20,7 @@ https://support.google.com/merchants/answer/7052112
 
 -}
 
+import Data.Char (ord)
 import Data.Scientific (Scientific, FPFormat(..), formatScientific)
 import Data.Time (UTCTime, formatTime, defaultTimeLocale)
 import GHC.Generics (Generic)
@@ -50,7 +51,14 @@ gNS = namespace "g" "http://base.google.com/ns/1.0"
 
 gElemWithText :: T.Text -> T.Text -> Xml Elem
 gElemWithText name content =
-    xelemQ gNS name $ xtext content
+    xelemQ gNS name $ xtext $ cleanForXML content
+  where
+    cleanForXML :: T.Text -> T.Text
+    cleanForXML = T.filter isValidXMLChar
+    isValidXMLChar c =
+        let o = ord c
+        in o == 0x9 || o == 0xA || o == 0xD || (o >= 0x20 && o <= 0xD7FF) ||
+            (o >= 0xE000 && o <= 0xFFFD) || (o >= 0x10000 && o <= 0x10FFFF)
 
 
 data Product =
