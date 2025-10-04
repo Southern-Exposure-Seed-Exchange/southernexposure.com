@@ -1478,8 +1478,8 @@ view model authStatus locations checkoutDetails =
 
         hasShippingAddressVerificationErrors =
             case Dict.get "shipping-address-verification" model.errors of
-                Just errs ->
-                    not (List.isEmpty errs)
+                Just _ ->
+                    True
 
                 Nothing ->
                     False
