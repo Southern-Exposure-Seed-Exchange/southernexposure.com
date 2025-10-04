@@ -85,7 +85,7 @@ instance ToJSON AddressVerificationStatus where
 
 -- Data type for the "data" field
 data VerifyStructuredAddressData = VerifyStructuredAddressData
-    { vsadCity            :: Text
+    { vsadCity            :: Maybe Text
     , vsadCountry         :: Maybe CountryCodeLowercase
     , vsadCountryName     :: Maybe Text
     , vsadErrors          :: VerifyStructuredAddressErrors
