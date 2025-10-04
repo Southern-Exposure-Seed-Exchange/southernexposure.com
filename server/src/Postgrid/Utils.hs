@@ -6,6 +6,7 @@ module Postgrid.Utils
     ) where
 
 import Data.ISO3166_CountryCodes (CountryCode(CA, US))
+import Data.Maybe (fromMaybe)
 import Data.Text as T (null, pack)
 
 import Postgrid.API.Types
@@ -31,7 +32,7 @@ correctAddressData :: AddressData -> VerifyStructuredAddressData -> AddressData
 correctAddressData addrData vsaData = addrData
     { adAddressOne = vsadLine1 vsaData
     , adAddressTwo = ""
-    , adCity = vsadCity vsaData
+    , adCity = fromMaybe "" $ vsadCity vsaData
     , adState = USState $ vsadProvinceOrState vsaData
     , adZipCode = vsadPostalOrZip vsaData
     , adCountry = maybe (adCountry addrData) (Country . unCountryCodeLowercase) (vsadCountry vsaData)
