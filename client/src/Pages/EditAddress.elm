@@ -182,22 +182,12 @@ update key postgridApiKey msg model authStatus details =
                         AddressEditSuccess ->
                             ( initial, Routing.newUrl key MyAccount )
 
-                        AddressEditCorrected correctedAddress ->
-                            let
-                                correctionMessage =
-                                    "We've made some corrections to your address. Please review and save."
-                                newAddrModel =
-                                    { correctedAddress
-                                    | warnings = Api.addError "" correctionMessage correctedAddress.warnings
-                                    }
-                            in
+                        AddressEditCorrected _ ->
                             { model
                                 | forms =
                                     Dict.update addressId
-                                        (Maybe.map <| \form ->
-                                            { form
-                                            | model = newAddrModel
-                                            }
+                                        (Maybe.map <|
+                                                addressVerificationFailureMsg >> skipAddressVerification
                                         )
                                         model.forms
                             }
