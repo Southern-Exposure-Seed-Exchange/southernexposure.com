@@ -10,6 +10,7 @@ import Data.Aeson (ToJSON, encode)
 import Data.ISO3166_CountryCodes (CountryCode(..))
 import Servant.Client (ClientM)
 
+import Postgrid.API (PostgridError)
 import Postgrid.API.Types
 import Postgrid.Cache (CachedApiEndpoint(..), cached)
 import Postgrid.Utils (addressDataToVerifyStructuredAddressRequest, correctAddressData)
@@ -58,16 +59,17 @@ data AddressVerificationResult
     = AddressVerifiedSuccessfully
     | AddressCorrected AddressData VerifyStructuredAddressErrors
     | AddressVerificationFailed VerifyStructuredAddressErrors
+    | AddressVerificationPostgridApiFailed PostgridError
 
 verifyAddressData
     :: AddressData
     -> AddressType
-    -> App (Either API.PostgridError AddressVerificationResult)
+    -> App AddressVerificationResult
 verifyAddressData addrData addrType = do
     case (adCountry addrData, addrType) of
         -- We only verify US shipping addresses at the moment
         (Country US, Shipping) -> proceed
-        _ -> return $ Right AddressVerifiedSuccessfully
+        _ -> return AddressVerifiedSuccessfully
     where
         proceed = do
             res <- runPostgrid
@@ -75,13 +77,13 @@ verifyAddressData addrData addrType = do
                     (addressDataToVerifyStructuredAddressRequest addrData)
                     (Just CachedVerifyStructuredAddress)
             case res of
-                Just (Left err) -> return $ Left err
+                Just (Left err) -> return $ AddressVerificationPostgridApiFailed err
                 Just (Right resp) ->
                     let
                         verificationData = vsarData resp
                     in case vsadStatus verificationData of
-                            AVVerified -> return $ Right AddressVerifiedSuccessfully
-                            AVCorrected -> return $ Right $
+                            AVVerified -> return AddressVerifiedSuccessfully
+                            AVCorrected -> return $
                                 AddressCorrected (correctAddressData addrData verificationData) (vsadErrors verificationData)
-                            AVFailed -> return $ Right $ AddressVerificationFailed $ vsadErrors verificationData
-                Nothing -> return $ Right AddressVerifiedSuccessfully
+                            AVFailed -> return $ AddressVerificationFailed $ vsadErrors verificationData
+                Nothing -> return AddressVerifiedSuccessfully

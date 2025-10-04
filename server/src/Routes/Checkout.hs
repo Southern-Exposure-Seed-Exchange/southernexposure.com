@@ -534,24 +534,19 @@ instance FromJSON CustomerAddress where
 
 verifyCustomerAddress :: CustomerAddress -> AddressType -> AppSQL AddressVerificationResult
 verifyCustomerAddress addr addrType = case addr of
-    NewAddress a -> lift $ verifyAddressData a addrType >>= \case
-        Left _ -> throwIO AddressVerificationAPIFailed
-        Right r -> return r
+    NewAddress a -> lift $ verifyAddressData a addrType
     ExistingAddress addrId _ -> do
         maybeAddr <- getEntity addrId
         res <- case maybeAddr of
             Just a -> if addressVerified (entityVal a)
-                then return $ Right AddressVerifiedSuccessfully
+                then return AddressVerifiedSuccessfully
                 else lift $ verifyAddressData (toAddressData a) addrType
             Nothing -> throwIO $ AddressNotFound addrType
         case res of
-            Left _ -> throwIO AddressVerificationAPIFailed
-            Right r -> do
-                case r of
-                    AddressVerifiedSuccessfully -> do
-                        update addrId [AddressVerified =. True]
-                    _ -> return ()
-                return r
+            AddressVerifiedSuccessfully -> do
+                update addrId [AddressVerified =. True]
+            _ -> return ()
+        return res
 
 
 data CheckoutResult a
@@ -560,6 +555,7 @@ data CheckoutResult a
 
 data CheckoutValidationError
     = ShippingAddressVerificationFailed VerifyStructuredAddressErrors
+    | ShippingAddressVerificationPostgridApiFailed
     | NewCartInventoryNotifications
     deriving (Eq, Show)
 
@@ -568,6 +564,10 @@ instance ToJSON CheckoutValidationError where
         object
             [ "type" .= ("shippingAddressVerificationFailed" :: T.Text)
             , "errors" .= errors
+            ]
+    toJSON ShippingAddressVerificationPostgridApiFailed =
+        object
+            [ "type" .= ("shippingAddressVerificationPostgridApiFailed" :: T.Text)
             ]
     toJSON NewCartInventoryNotifications =
         object
@@ -612,7 +612,8 @@ checkCartAndShippingAddress cartNotifications cartId shippingAddress skipAddress
                     ++ (case shippingAddressVerification of
                         AddressVerifiedSuccessfully -> []
                         AddressCorrected _ errs -> [ShippingAddressVerificationFailed errs]
-                        AddressVerificationFailed errs -> [ShippingAddressVerificationFailed errs])
+                        AddressVerificationFailed errs -> [ShippingAddressVerificationFailed errs]
+                        AddressVerificationPostgridApiFailed _ -> [ShippingAddressVerificationPostgridApiFailed])
             in return $ CheckoutValidationErrors validationErrors
 
 data CustomerPlaceOrderParameters =

@@ -73,6 +73,7 @@ type AddressEditResult
     = AddressEditSuccess
     | AddressEditCorrected Address.Model
     | AddressEditFailed (Dict String (List String))
+    | AddressEditPostgridApiFailed
 
 addressEditResultDecoder : Decode.Decoder AddressEditResult
 addressEditResultDecoder = Decode.field "status" Decode.string |> Decode.andThen
@@ -84,6 +85,8 @@ addressEditResultDecoder = Decode.field "status" Decode.string |> Decode.andThen
                 Decode.map AddressEditCorrected (Decode.field "address" Address.decoder)
             "failed" ->
                 Decode.map AddressEditFailed (Decode.field "errors" (Decode.dict (Decode.list Decode.string)))
+            "postgrid-failed" ->
+                Decode.succeed AddressEditPostgridApiFailed
             _ ->
                 Decode.fail ("Unknown status: " ++ status)
     )
@@ -194,6 +197,17 @@ update key postgridApiKey msg model authStatus details =
                                 |> noCommand
 
                         AddressEditFailed _ ->
+                            { model
+                                | forms =
+                                    Dict.update addressId
+                                        (Maybe.map <|
+                                                addressVerificationFailureMsg >> skipAddressVerification
+                                        )
+                                        model.forms
+                            }
+                                |> noCommand
+
+                        AddressEditPostgridApiFailed ->
                             { model
                                 | forms =
                                     Dict.update addressId

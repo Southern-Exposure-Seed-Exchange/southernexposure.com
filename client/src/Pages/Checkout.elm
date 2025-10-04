@@ -258,6 +258,7 @@ type CheckoutResult a
 
 type CheckoutValidationError
     = ShippingAddressVerificationFailed (Dict String (List String))
+    | ShippingAddressVerificationPostgridApiFailed
     | NewCartInventoryNotifications
 
 
@@ -273,6 +274,9 @@ checkoutValidationErrorDecoder =
                     "shippingAddressVerificationFailed" ->
                         Decode.field "errors" (Decode.dict (Decode.list Decode.string))
                             |> Decode.map ShippingAddressVerificationFailed
+
+                    "shippingAddressVerificationPostgridApiFailed" ->
+                        Decode.succeed ShippingAddressVerificationPostgridApiFailed
 
                     _ ->
                         Decode.fail ("Unexpected error type: " ++ errorType)
@@ -324,6 +328,9 @@ processCheckoutValidationErrors model errs authStatus maybeSessionToken =
                         ShippingAddressVerificationFailed fieldErrors ->
                             Dict.union fieldErrors dict
 
+                        ShippingAddressVerificationPostgridApiFailed ->
+                            Dict.insert "shipping-address-verification" ["PostGrid API failed"] dict
+
                         NewCartInventoryNotifications ->
                             dict
                 )
@@ -335,6 +342,9 @@ processCheckoutValidationErrors model errs authStatus maybeSessionToken =
                 (\e ->
                     case e of
                         ShippingAddressVerificationFailed _ ->
+                            True
+
+                        ShippingAddressVerificationPostgridApiFailed ->
                             True
 
                         _ ->

@@ -711,6 +711,7 @@ data AddressEditResult
     = AddressEditSuccess
     | AddressEditCorrected AddressData
     | AddressEditFailed VerifyStructuredAddressErrors
+    | AddressEditPostgridApiFailed
 
 instance ToJSON AddressEditResult where
     toJSON AddressEditSuccess = object
@@ -722,6 +723,9 @@ instance ToJSON AddressEditResult where
     toJSON (AddressEditFailed errors) = object
         [ "status" .= ("failed" :: T.Text)
         , "errors" .= errors
+        ]
+    toJSON AddressEditPostgridApiFailed = object
+        [ "status" .= ("postgrid-failed" :: T.Text)
         ]
 
 type AddressEditRoute =
@@ -752,10 +756,10 @@ addressEditRoute token aId addressData = withValidatedCookie token $ \(Entity cu
                         else do
                             verificationFeedback <- lift $ verifyAddressData addressData (addressType $ entityVal address)
                             case verificationFeedback of
-                                Left _ -> throwIO AddressVerificationAPIFailed
-                                Right AddressVerifiedSuccessfully -> updateAddress address addressId True customerId
-                                Right (AddressCorrected correctedData _) -> return $ AddressEditCorrected correctedData
-                                Right (AddressVerificationFailed errors) -> return $ AddressEditFailed errors
+                                AddressVerifiedSuccessfully -> updateAddress address addressId True customerId
+                                AddressCorrected correctedData _ -> return $ AddressEditCorrected correctedData
+                                AddressVerificationFailed errors -> return $ AddressEditFailed errors
+                                AddressVerificationPostgridApiFailed _ -> return AddressEditPostgridApiFailed
     where
         updateAddress address addressId addressVerified customerId = do
             let addrType = addressType $ entityVal address
