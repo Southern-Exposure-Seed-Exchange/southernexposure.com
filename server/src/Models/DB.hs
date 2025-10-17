@@ -286,6 +286,12 @@ Settings
     deriving Show
 |]
 
+-- In addition to indexes created by persistent, the DB has the following indexes created manually:
+-- CREATE INDEX CONCURRENTLY idx_address_first_name_trgm ON address USING GIN (first_name gin_trgm_ops);
+-- CREATE INDEX CONCURRENTLY idx_address_last_name_trgm ON address USING GIN (last_name gin_trgm_ops);
+-- CREATE INDEX CONCURRENTLY idx_address_zip_code_trgm ON address USING GIN (zip_code gin_trgm_ops);
+-- CREATE INDEX CONCURRENTLY idx_address_address_one_trgm ON address USING GIN (address_one gin_trgm_ops);
+-- CREATE INDEX CONCURRENTLY idx_customer_email_trgm ON customer USING GIN (email gin_trgm_ops);
 
 -- Global Settings
 
