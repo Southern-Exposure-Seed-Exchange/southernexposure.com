@@ -57,7 +57,7 @@ import Routes.AvalaraUtils (renderAvalaraError)
 import Routes.CommonData
     ( OrderDetails(..), toCheckoutOrder, getCheckoutProducts, toAddressData, toDeliveryData, toOrderStatus
     )
-import Routes.Utils (extractRowCount, buildWhereQuery, getClientIP)
+import Routes.Utils (extractRowCount, getClientIP)
 import Server (App, AppSQL, runDB, serverError, stripeRequest, avalaraRequest)
 import Validation (Validation(..))
 import Workers (Task(Avalara), AvalaraTask(RefundTransaction), enqueueTask)
@@ -145,15 +145,8 @@ orderListRoute token maybePage maybePerPage maybeQuery = withAdminCookie token $
                 count ([] :: [Filter Order])
             else
                 extractRowCount . E.select $ do
-                    (o E.:& c E.:& sa) <- E.from $ E.table
-                        `E.leftJoin` E.table
-                            `E.on` (\(o E.:& c) ->
-                                E.just (o E.^. OrderCustomerId) E.==. c E.?. CustomerId)
-                        `E.leftJoin` E.table
-                            `E.on` (\(o E.:& _ E.:& sa) ->
-                                E.just (o E.^. OrderShippingAddressId) E.==. sa E.?. AddressId)
-                    E.where_ $ makeQuery o c sa query
-                    return E.countRows
+                    o <- E.from $ makeMatchingOrderIds query
+                    return $ E.countDistinct o
         orders <- do
             orders <-
                 if T.null query then
@@ -165,18 +158,19 @@ orderListRoute token maybePage maybePerPage maybeQuery = withAdminCookie token $
                             ]
                 else
                     E.select $ do
-                        (o E.:& c E.:& sa) <- E.from $ E.table
-                            `E.leftJoin` E.table
-                                `E.on` (\(o E.:& c) ->
+                        (_ E.:& o E.:& c E.:& sa) <- E.from $ makeMatchingOrderIds query
+                            `E.innerJoin` E.table @Order
+                                `E.on` (\(matchId E.:& o) -> matchId E.==. o E.^. OrderId)
+                            `E.leftJoin` E.table @Customer
+                                `E.on` (\(_ E.:& o E.:& c) ->
                                     E.just (o E.^. OrderCustomerId) E.==. c E.?. CustomerId)
-                            `E.leftJoin` E.table
-                                `E.on` (\(o E.:& _ E.:& sa) ->
+                            `E.leftJoin` E.table @Address
+                                `E.on` (\(_ E.:& o E.:& _ E.:& sa) ->
                                     E.just (o E.^. OrderShippingAddressId) E.==. sa E.?. AddressId)
-                        E.limit $ fromIntegral perPage
-                        E.offset $ fromIntegral offset
-                        E.orderBy [E.desc $ o E.^. OrderCreatedAt]
-                        E.where_ $ makeQuery o c sa query
-                        return (o, c, sa)
+                        E.distinctOnOrderBy [E.desc $ o E.^. OrderId] $ do
+                            E.limit $ fromIntegral perPage
+                            E.offset $ fromIntegral offset
+                            return (o, c, sa)
             forM orders $ \(o@(Entity orderId order), c, sa) -> do
                 total <- getOrderTotal orderId
                 customer <- getIfNothing (orderCustomerId order) c
@@ -188,32 +182,78 @@ orderListRoute token maybePage maybePerPage maybeQuery = withAdminCookie token $
         , oldTotalOrders = orderCount
         }
   where
-    -- | Search the Order ID, Customer Email, Name, Street Line 1,
-    -- & ZipCode.
-    makeQuery
-        :: E.SqlExpr (Entity Order)
-        -> E.SqlExpr (Maybe (Entity Customer))
-        -> E.SqlExpr (Maybe (Entity Address))
-        -> T.Text
-        -> E.SqlExpr (E.Value Bool)
-    makeQuery o c sa =
-        buildWhereQuery $ \term ->
-            let wildQuery = E.just $ E.concat_ [(E.%), E.val term, (E.%)]
-                idQuery = case readMaybe (T.unpack term) of
-                    Nothing -> E.val False
-                    Just num -> o E.^. OrderId E.==. E.valkey num
-            in  [ idQuery
-                , c E.?. CustomerEmail `E.ilike` wildQuery
-                , sa E.?. AddressFirstName `E.ilike` wildQuery
-                , sa E.?. AddressLastName `E.ilike` wildQuery
-                , sa E.?. AddressAddressOne `E.ilike` wildQuery
-                , sa E.?. AddressZipCode `E.ilike` wildQuery
-                ]
+    -- | Build UNION ALL query for matching order IDs
+    makeMatchingOrderIds :: T.Text -> E.SqlQuery (E.SqlExpr (E.Value OrderId))
+    makeMatchingOrderIds term =
+        let wildQuery = E.concat_ [(E.%), E.val term, (E.%)]
+            maybeOrderId = readMaybe (T.unpack term)
+            -- Branch 1: Exact Order ID match
+            branch1 = do
+                o <- E.from $ E.table @Order
+                case maybeOrderId of
+                    Just orderId -> E.where_ (o E.^. OrderId E.==. E.valkey orderId)
+                    Nothing -> E.where_ (E.val False)
+                return (o E.^. OrderId)
+
+            -- Branch 2: Customer email match
+            branch2 = do
+                (o E.:& c) <- E.from $ E.table @Order
+                    `E.innerJoin` E.table @Customer
+                        `E.on` (\(o E.:& c) ->
+                            E.just (o E.^. OrderCustomerId) E.==. E.just (c E.^. CustomerId))
+                E.where_ (c E.^. CustomerEmail `E.ilike` wildQuery)
+                return (o E.^. OrderId)
+
+            -- Branch 3: Address first name match
+            branch3 = do
+                (o E.:& sa) <- E.from $ E.table @Order
+                    `E.innerJoin` E.table @Address
+                        `E.on` (\(o E.:& sa) ->
+                            E.just (o E.^. OrderShippingAddressId) E.==. E.just (sa E.^. AddressId))
+                E.where_ (sa E.^. AddressFirstName `E.ilike` wildQuery)
+                return (o E.^. OrderId)
+
+            -- Branch 4: Address last name match
+            branch4 = do
+                (o E.:& sa) <- E.from $ E.table @Order
+                    `E.innerJoin` E.table @Address
+                        `E.on` (\(o E.:& sa) ->
+                            E.just (o E.^. OrderShippingAddressId) E.==. E.just (sa E.^. AddressId))
+                E.where_ (sa E.^. AddressLastName `E.ilike` wildQuery)
+                return (o E.^. OrderId)
+
+            -- Branch 5: Address line 1 match
+            branch5 = do
+                (o E.:& sa) <- E.from $ E.table @Order
+                    `E.innerJoin` E.table @Address
+                        `E.on` (\(o E.:& sa) ->
+                            E.just (o E.^. OrderShippingAddressId) E.==. E.just (sa E.^. AddressId))
+                E.where_ (sa E.^. AddressAddressOne `E.ilike` wildQuery)
+                return (o E.^. OrderId)
+
+            -- Branch 6: Exact zip code match
+            branch6 = do
+                (o E.:& sa) <- E.from $ E.table @Order
+                    `E.innerJoin` E.table @Address
+                        `E.on` (\(o E.:& sa) ->
+                            E.just (o E.^. OrderShippingAddressId) E.==. E.just (sa E.^. AddressId))
+                E.where_ (sa E.^. AddressZipCode E.==. E.val term)
+                return (o E.^. OrderId)
+
+        in E.from $
+            branch1
+            `E.unionAll_` branch2
+            `E.unionAll_` branch3
+            `E.unionAll_` branch4
+            `E.unionAll_` branch5
+            `E.unionAll_` branch6
+
     -- | Try fetching a row if we haven't yet.
     getIfNothing :: (E.PersistEntityBackend a ~ E.SqlBackend, E.PersistEntity a)
         => E.Key a -> Maybe (Entity a) -> AppSQL (Maybe a)
     getIfNothing key =
         maybe (get key) (return . Just . entityVal)
+
     -- | Build the ListOrder from the queried Order data.
     convertOrder :: (Entity Order, Maybe Customer, Maybe Address, Integer) -> ListOrder
     convertOrder (Entity orderId order, mCustomer, mShipping, orderTotal) =
