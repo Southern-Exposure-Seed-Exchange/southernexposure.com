@@ -77,7 +77,7 @@ import           Control.Concurrent.Async       ( Async
                                                 , race
                                                 , cancel
                                                 )
-import           Control.Exception              ( Exception, throwIO )
+import           Control.Exception              ( Exception )
 import           Control.Immortal               ( Thread )
 import           Control.Monad                  ( (>=>)
                                                 , forever
@@ -112,27 +112,35 @@ data ImmortalQueue a =
 processImmortalQueue :: forall a . ImmortalQueue a -> IO QueueId
 processImmortalQueue queue = do
     shutdown   <- newEmptyMVar
-    asyncQueue <- async $ do
-        threads          <- mapM (const makeWorker) [1 .. qThreadCount queue]
-        nextAction       <- newEmptyMVar
-        asyncQueuePopper <- async $ popQueue nextAction threads
-        finishAction <- takeMVar shutdown `race` waitCatch asyncQueuePopper
-        case finishAction of
-            Left cleanClose -> do
-                cancel asyncQueuePopper
-                if cleanClose
-                    then do
-                        mapM_ (Immortal.mortalize . wdThread) threads
-                        mapM_ (flip putMVar () . wdCloseMVar) threads
-                    else mapM_ (Immortal.stop . wdThread) threads
-                mapM_ (Immortal.wait . wdThread) threads
-                tryTakeMVar nextAction >>= \case
-                    Nothing     -> return ()
-                    Just action -> qPush queue action
-            Right (Left e) ->
-                throwIO e
-            Right (Right _) ->
-                throwIO $ userError "Immortal queue finished."
+    threads    <- mapM (const makeWorker) [1 .. qThreadCount queue]
+    nextAction <- newEmptyMVar
+
+    let startQueuePopper = async $ popQueue nextAction threads
+        -- Wait for shutdown or popper finish, restart popper on error or unexpected finish
+        manageQueuePopper = do
+            asyncQueuePopper <- startQueuePopper
+            finishAction <- takeMVar shutdown `race` waitCatch asyncQueuePopper
+            case finishAction of
+                Left cleanClose -> do
+                    cancel asyncQueuePopper
+                    if cleanClose
+                        then do
+                            mapM_ (Immortal.mortalize . wdThread) threads
+                            mapM_ (flip putMVar () . wdCloseMVar) threads
+                        else mapM_ (Immortal.stop . wdThread) threads
+                    mapM_ (Immortal.wait . wdThread) threads
+                    tryTakeMVar nextAction >>= \case
+                        Nothing     -> return ()
+                        Just action -> qPush queue action
+                Right (Left err) -> do
+                    -- Restart the popper on error
+                    putStrLn $ "Error occured in immortal queue popper: " ++ show err
+                    manageQueuePopper
+                Right (Right _) -> do
+                    putStrLn "Immortal unexpectedly finished. Restarting..."
+                    manageQueuePopper
+
+    asyncQueue <- async manageQueuePopper
     return QueueId { qiCloseCleanly = shutdown, qiAsyncQueue = asyncQueue }
   where
     -- Create the communication MVars for a worker & then start the
