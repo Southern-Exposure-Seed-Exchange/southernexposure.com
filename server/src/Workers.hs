@@ -28,7 +28,7 @@ import Control.Concurrent.Async (wait)
 import Control.Concurrent.STM (TVar, atomically, readTVar, writeTVar)
 import UnliftIO.Exception (Exception(..), throwIO)
 import Control.Immortal.Queue (ImmortalQueue(..))
-import Control.Monad (when)
+import Control.Monad (join, when)
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Monad.Reader (runReaderT, asks, lift)
 import Data.Aeson (ToJSON(toJSON), FromJSON, Result(..), fromJSON)
@@ -47,6 +47,7 @@ import Database.Persist.Sql
     )
 import GHC.Generics (Generic)
 import Numeric.Natural (Natural)
+import System.Timeout (timeout)
 import UnliftIO (MonadUnliftIO)
 
 import Avalara
@@ -147,14 +148,15 @@ taskQueueConfig threadCount cfg@Config { getPool, getServerLogger, getCaches } =
     runSql :: MonadUnliftIO m => SqlPersistT m a -> m a
     runSql = flip runSqlPool getPool
 
-    -- Grab the next item from Job table, preferring the jobs that have
-    -- passed their scheduled run time. When a job is found, remove it from
+    -- Grab the next item from Job table with 5 seconds timeout,
+    -- preferring the jobs that have passed their scheduled run time.
+    -- When a job is found, remove it from
     -- the database. If there are no jobs, wait 5 seconds before trying
     -- again.
     getNextItem :: IO (Entity Job)
     getNextItem = do
         currentTime <- getCurrentTime
-        maybeJob <- runSql $
+        maybeJob <- join <$> timeout (5 * 1000000) (runSql $
             (asum <$> sequence
                 [ selectFirst [JobRunAt <=. Just currentTime]
                     [Asc JobRunAt]
@@ -162,7 +164,7 @@ taskQueueConfig threadCount cfg@Config { getPool, getServerLogger, getCaches } =
                     [Asc JobQueuedAt]
                 ]) >>=
                     maybe (return Nothing)
-                        (\e -> delete (entityKey e) >> return (Just e))
+                        (\e -> delete (entityKey e) >> return (Just e)))
         case maybeJob of
             Nothing ->
                 threadDelay (5 * 1000000) >> getNextItem
