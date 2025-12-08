@@ -6,7 +6,6 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
-{-# OPTIONS -Wno-deprecations #-}
 {- | This module contains definitions for asynchronous actions that can be
 performed by worker threads outside the scope of the HTTP request/response
 cycle.
@@ -43,7 +42,7 @@ import Data.Time
 import Database.Persist.Sql
     ( (=.), (==.), (<=.), (<.), (<-.), Entity(..), SelectOpt(..), ToBackendKey
     , SqlBackend, SqlPersistT, runSqlPool, selectList, selectFirst, delete
-    , insert_, fromSqlKey, deleteWhere, deleteCascadeWhere, update, get
+    , insert_, fromSqlKey, deleteWhere, update, get
     )
 import GHC.Generics (Generic)
 import Numeric.Natural (Natural)
@@ -351,9 +350,7 @@ cleanDatabase :: SqlPersistT IO ()
 cleanDatabase = do
     currentTime <- lift getCurrentTime
     deleteWhere [PasswordResetExpirationTime <. currentTime]
-    -- TODO sand-witch: "The DeleteCascade module is deprecated.
-    -- You can now set cascade behavior directly on entities in the quasiquoter."
-    deleteCascadeWhere [CartExpirationTime <. Just currentTime]
+    deleteWhere [CartExpirationTime <. Just currentTime]
     deactivateCoupons currentTime
     enqueueTask (Just $ addUTCTime 3600 currentTime) CleanDatabase
   where
