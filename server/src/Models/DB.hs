@@ -152,7 +152,7 @@ Cart
     UniqueAnonymousCart sessionToken !force
 
 CartItem
-    cartId CartId
+    cartId CartId OnDeleteCascade
     productVariantId ProductVariantId
     quantity Int64
     UniqueCartItem cartId productVariantId
@@ -753,5 +753,14 @@ migrations =
     , 4 ~> 5 :=
         -- Add 'verified' to 'Address'
         [ AddColumn "address" (Column "verified" SqlBool [NotNull, Default $ toPersistValue False]) (Just $ toPersistValue False)
+        ]
+    , 5 ~> 6 :=
+        -- Add 'ON DELETE CASCADE' to 'CartItem.cartId' foreign key
+        -- persistent-migration doesn't support non-default 'ON DELETE *' 'ON UPDATE *' for foreign keys,
+        -- so we need to manually set it
+        [ RawOperation "" $ return
+            [ MigrateSql "ALTER TABLE \"cart_item\" DROP CONSTRAINT \"cart_item_cart_id_fkey\"" [] ]
+        , RawOperation "" $ return
+            [ MigrateSql "ALTER TABLE \"cart_item\" ADD CONSTRAINT \"cart_item_cart_id_fkey\" FOREIGN KEY(\"cart_id\") REFERENCES \"cart\"(\"id\") ON DELETE CASCADE  ON UPDATE RESTRICT" [] ]
         ]
     ]
