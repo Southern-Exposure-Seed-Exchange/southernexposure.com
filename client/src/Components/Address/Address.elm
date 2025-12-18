@@ -300,7 +300,12 @@ updateModel addressCompletionSetting msg model =
                             { model
                                 | street = addr.address
                                 , city = addr.city
-                                , state = Just <| USState (String.toUpper addr.prov)
+                                , state =
+                                    if List.member addr.prov Locations.armedForcesCodes
+                                    then
+                                        Just <| ArmedForces (String.toUpper addr.prov)
+                                    else
+                                        Just <| USState (String.toUpper addr.prov)
                                 , zipCode = addr.pc
                                 , country = String.toUpper addr.country
                                 , selectSuggestionRd = Success ()
