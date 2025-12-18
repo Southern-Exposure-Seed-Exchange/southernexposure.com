@@ -5,6 +5,7 @@ module Postgrid.API.Types
     ( AddressVerificationStatus(..)
     , CountryCodeLowercase(..)
     , PostgridResponse(..)
+    , StateCodeOrArmedForcesRegionCode(..)
     , VerifyStructuredAddressData(..)
     , VerifyStructuredAddressErrors(..)
     , VerifyStructuredAddressRequest(..)
@@ -12,6 +13,7 @@ module Postgrid.API.Types
     , VerifyStructuredAddressResponse(..)
     ) where
 
+import Control.Applicative ((<|>))
 import Data.Aeson (FromJSON(..), ToJSON(..), Value(..), withText)
 import Data.Aeson.TH (deriveJSON, deriveToJSON)
 import Data.ISO3166_CountryCodes (CountryCode)
@@ -21,6 +23,7 @@ import Data.Text (Text, pack, toLower, toUpper, unpack)
 import GHC.Generics (Generic)
 import Text.Read (readMaybe)
 
+import Models.Fields (ArmedForcesRegionCode)
 import Postgrid.API.Utils (aesonOptions)
 
 -- postgrid uses lowercase country codes
@@ -83,6 +86,18 @@ instance ToJSON AddressVerificationStatus where
     toJSON AVFailed   = String "failed"
     toJSON AVCorrected = String "corrected"
 
+data StateCodeOrArmedForcesRegionCode
+    = SCStateCode StateCode
+    | SCAFCode ArmedForcesRegionCode
+    deriving (Show, Eq)
+
+instance FromJSON StateCodeOrArmedForcesRegionCode where
+    parseJSON v = (SCStateCode <$> parseJSON v) <|> (SCAFCode <$> parseJSON v)
+
+instance ToJSON StateCodeOrArmedForcesRegionCode where
+    toJSON (SCStateCode sc) = toJSON sc
+    toJSON (SCAFCode afc) = toJSON afc
+
 -- Data type for the "data" field
 data VerifyStructuredAddressData = VerifyStructuredAddressData
     { vsadCity            :: Maybe Text
@@ -91,7 +106,7 @@ data VerifyStructuredAddressData = VerifyStructuredAddressData
     , vsadErrors          :: VerifyStructuredAddressErrors
     , vsadLine1           :: Text
     , vsadPostalOrZip     :: Text
-    , vsadProvinceOrState :: StateCode
+    , vsadProvinceOrState :: StateCodeOrArmedForcesRegionCode
     , vsadStatus          :: AddressVerificationStatus
     } deriving (Show, Generic)
 
