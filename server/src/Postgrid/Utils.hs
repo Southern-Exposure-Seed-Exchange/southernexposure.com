@@ -10,7 +10,7 @@ import Data.Maybe (fromMaybe)
 import Data.Text as T (null, pack)
 
 import Postgrid.API.Types
-    ( CountryCodeLowercase(..), VerifyStructuredAddressData(..)
+    ( CountryCodeLowercase(..), StateCodeOrArmedForcesRegionCode(..), VerifyStructuredAddressData(..)
     , VerifyStructuredAddressRequest(..), VerifyStructuredAddressRequestData(..))
 import Models.Fields (regionCode, Country(..), Region(..))
 import Routes.CommonData (AddressData(..))
@@ -33,7 +33,9 @@ correctAddressData addrData vsaData = addrData
     { adAddressOne = vsadLine1 vsaData
     , adAddressTwo = ""
     , adCity = fromMaybe "" $ vsadCity vsaData
-    , adState = USState $ vsadProvinceOrState vsaData
+    , adState = case vsadProvinceOrState vsaData of
+        SCStateCode sc -> USState sc
+        SCAFCode afc -> USArmedForces afc
     , adZipCode = vsadPostalOrZip vsaData
     , adCountry = maybe (adCountry addrData) (Country . unCountryCodeLowercase) (vsadCountry vsaData)
     }
