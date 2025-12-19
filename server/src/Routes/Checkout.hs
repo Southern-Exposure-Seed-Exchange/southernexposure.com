@@ -45,7 +45,6 @@ import Helcim.API.Types.Common (CardToken(..))
 import Helcim.API.Types.Customer (CustomerResponse(..), CreateCustomerRequest(..), GetCustomersRequest(..))
 import qualified Helcim.API.Types.Customer as Helcim
 import Helcim.API.Types.Payment (CardData(..), TransactionResponse(..), PurchaseRequest(..), Status(..))
-import Helcim.Utils (addressToHelcimAddress)
 import Models
 import Models.Fields
 import Postgrid (AddressVerificationResult(..), verifyAddressData)
@@ -980,15 +979,15 @@ getAndUpdateHelcimCustomerByCode customerId customer helcimCustomerCode billingA
         Nothing -> throwIO NoHelcimCustomer
 
 updateHelcimCustomer :: Helcim.CustomerId -> Customer -> Address -> Address -> AppSQL ()
-updateHelcimCustomer helcimCustomerId customer billingAddress shippingAddress = do
+updateHelcimCustomer helcimCustomerId customer billingAddress _shippingAddress = do
     -- Update Helcim Customer billing & shipping addresses with provided values
     void $ lift $ (updateCustomer helcimCustomerId $ CreateCustomerRequest
         { ccrCustomerCode = Nothing
         , ccrContactName = Just (customerEmail customer)
         , ccrBusinessName = Just $ addressCompanyName billingAddress
         , ccrCellPhone = Nothing
-        , ccrBillingAddress = Just $ addressToHelcimAddress billingAddress
-        , ccrShippingAddress = Just $ addressToHelcimAddress shippingAddress
+        , ccrBillingAddress = Nothing
+        , ccrShippingAddress = Nothing
         }) >>= either (throwIO . HelcimError) return
 
 -- | Commit an uncommited Avalara Sales Tax Transaction. Throws
