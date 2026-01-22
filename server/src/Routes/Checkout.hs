@@ -62,7 +62,7 @@ import Routes.AvalaraUtils (createAvalaraTransaction, createAvalaraCustomer)
 import Routes.Utils (getDisabledCheckoutDetails, getClientIP, generateUniqueToken)
 import Routes.Carts (ValidateCartParameters(..))
 import Routes.Customers (RegistrationParametersWith(..), registerNewCustomer)
-import Validation (Validation(..))
+import Validation (Validation(..), singleFieldError)
 import Workers (Task(..), AvalaraTask(..), enqueueTask)
 
 import qualified Avalara
@@ -1534,6 +1534,9 @@ type AnonymousCheckoutTokenRoute =
 
 anonymousGetCheckoutTokenRoute :: AnonymousCheckoutTokenParameters -> App (CheckoutResult CheckoutTokenData)
 anonymousGetCheckoutTokenRoute AnonymousCheckoutTokenParameters {..} = runDB $ do
+    customerExists <- lift $ V.uniqueCustomer actpEmail
+    when customerExists $
+        lift $ singleFieldError "email" "Email is already associated with an existing account. Log in or use a different email."
     (Entity cartId _) <- getBy (UniqueAnonymousCart $ Just actpCartToken)
         >>= maybe (throwIO CartNotFound) return
     checkCartAndShippingAddress actpCartInventoryNotifications cartId (NewAddress actpShippingAddress) actpSkipShippingAddressVerification $
