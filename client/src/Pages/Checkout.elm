@@ -641,6 +641,7 @@ update msg postgridApiKey model authStatus maybeSessionToken checkoutDetails =
                             , getHelcimCheckoutToken
                                 authStatus
                                 maybeSessionToken
+                                model.email
                                 (checkoutDetailsToCartInventoryNotifications details)
                                 model.shippingAddress
                                 model.skipAddressVerification
@@ -1112,8 +1113,8 @@ encodeStringAsMaybe str =
         Encode.string str
 
 
-getHelcimCheckoutToken : AuthStatus -> Maybe String -> CartInventoryNotifications -> CheckoutAddress -> Bool -> Cmd Msg
-getHelcimCheckoutToken authStatus maybeSessionToken cartInventoryNotifications shippingAddress skipAddressVerification =
+getHelcimCheckoutToken : AuthStatus -> Maybe String -> String -> CartInventoryNotifications -> CheckoutAddress -> Bool -> Cmd Msg
+getHelcimCheckoutToken authStatus maybeSessionToken email cartInventoryNotifications shippingAddress skipAddressVerification =
     case authStatus of
         User.Authorized _ ->
             let
@@ -1137,6 +1138,7 @@ getHelcimCheckoutToken authStatus maybeSessionToken cartInventoryNotifications s
                         , ( "sessionToken", encodeMaybe Encode.string maybeSessionToken )
                         , ( "shippingAddress", encodeAddress shippingAddress False )
                         , ( "skipAddressVerification", Encode.bool skipAddressVerification )
+                        , ( "email", Encode.string email )
                         ]
             in
             Api.post Api.CheckoutHelcimTokenAnonymous
