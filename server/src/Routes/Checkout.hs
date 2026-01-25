@@ -62,7 +62,7 @@ import Routes.AvalaraUtils (createAvalaraTransaction, createAvalaraCustomer)
 import Routes.Utils (getDisabledCheckoutDetails, getClientIP, generateUniqueToken)
 import Routes.Carts (ValidateCartParameters(..))
 import Routes.Customers (RegistrationParametersWith(..), registerNewCustomer)
-import Validation (Validation(..))
+import Validation (Validation(..), singleFieldError)
 import Workers (Task(..), AvalaraTask(..), enqueueTask)
 
 import qualified Avalara
@@ -1508,10 +1508,12 @@ getCheckoutTokenRoute token CheckoutTokenParameters {..} = withValidatedCookie t
     (Entity cartId _) <- getBy (UniqueCustomerCart $ Just customerId)
         >>= maybe (throwIO CartNotFound) return
     checkCartAndShippingAddress ctpCartInventoryNotifications cartId ctpShippingAddress ctpSkipShippingAddressVerification $
-        lift $ getCheckoutToken (customerHelcimCustomerId customer)
+        lift $ getCheckoutToken $
+            maybe (Left $ customerEmail customer) Right (customerHelcimCustomerId customer)
 
 data AnonymousCheckoutTokenParameters = AnonymousCheckoutTokenParameters
     { actpCartToken :: T.Text
+    , actpEmail :: T.Text
     , actpCartInventoryNotifications :: CartInventoryNotifications
     , actpShippingAddress :: AddressData
     , actpSkipShippingAddressVerification :: Bool
@@ -1521,6 +1523,7 @@ instance FromJSON AnonymousCheckoutTokenParameters where
     parseJSON = withObject "AnonymousCheckoutTokenParameters" $ \v ->
         AnonymousCheckoutTokenParameters
             <$> v .: "sessionToken"
+            <*> v .: "email"
             <*> v .: "cartInventoryNotifications"
             <*> v .: "shippingAddress"
             <*> v .: "skipAddressVerification"
@@ -1531,17 +1534,27 @@ type AnonymousCheckoutTokenRoute =
 
 anonymousGetCheckoutTokenRoute :: AnonymousCheckoutTokenParameters -> App (CheckoutResult CheckoutTokenData)
 anonymousGetCheckoutTokenRoute AnonymousCheckoutTokenParameters {..} = runDB $ do
+    customerExists <- lift $ V.uniqueCustomer actpEmail
+    when customerExists $
+        lift $ singleFieldError "email" "Email is already associated with an existing account. Log in or use a different email."
     (Entity cartId _) <- getBy (UniqueAnonymousCart $ Just actpCartToken)
         >>= maybe (throwIO CartNotFound) return
     checkCartAndShippingAddress actpCartInventoryNotifications cartId (NewAddress actpShippingAddress) actpSkipShippingAddressVerification $
-        lift $ getCheckoutToken Nothing
+        lift $ getCheckoutToken (Left actpEmail)
 
-getCheckoutToken :: Maybe Helcim.CustomerId -> App CheckoutTokenData
-getCheckoutToken mbHelcimCustomerId = do
-    mbCustomerCode <- case mbHelcimCustomerId of
-        Just helcimCustomerId -> do
+getCheckoutToken :: Either T.Text Helcim.CustomerId -> App CheckoutTokenData
+getCheckoutToken emailOrHelcimCustomerId = do
+    mbCustomerCode <- case emailOrHelcimCustomerId of
+        Right helcimCustomerId -> do
             getCustomer helcimCustomerId >>= either (throwIO . HelcimError) (return . Just . creCustomerCode)
-        Nothing -> return Nothing
+        Left email -> do
+            getCustomers GetCustomersRequest
+                { gcrSearch = Just email
+                , gcrCustomerCode = Nothing
+                , gcrLimit = Just 1
+                , gcrPage = Just 1
+                , gcrIncludeCards = Nothing
+                } >>= either (throwIO . HelcimError) (return . fmap creCustomerCode . listToMaybe)
     createVerifyCheckout mbCustomerCode >>= \case
         Left e -> throwIO $ HelcimError e
         Right CheckoutCreateResponse {..} ->
