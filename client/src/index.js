@@ -14,18 +14,31 @@ var userId = getAuthData();
 /** ELM **/
 var app = Elm.Main.init({
   flags: {
-      authUserId: userId,
-      cartSessionToken: cartToken,
-      cartItemCount: intOrNull(cartItemCount),
-      helcimUrl: helcimUrl,
-      postgridApiKey: POSTGRID_API_KEY,
-    },
+    authUserId: userId,
+    cartSessionToken: cartToken,
+    cartItemCount: intOrNull(cartItemCount),
+    helcimUrl: helcimUrl,
+    postgridApiKey: POSTGRID_API_KEY,
   },
+},
 );
+
+/** STRIPE **/
+var stripeHandler = StripeCheckout.configure({
+  key: STRIPE_API_KEY,
+  locale: 'auto',
+  name: 'Southern Exposure',
+  image: '/static/img/logos/sese.png',
+  zipCode: true,
+  token: function (token) {
+    /** STRIPE SUBSCRIPTION **/
+    app.ports.stripeTokenReceived.send(token.id)
+  }
+});
 
 /** ANALYTICS **/
 window.dataLayer = window.dataLayer || [];
-function gtag(){dataLayer.push(arguments);}
+function gtag() { dataLayer.push(arguments); }
 gtag('js', new Date());
 gtag('config', GA_MEASUREMENT_ID, { 'send_page_view': true });
 
@@ -34,7 +47,7 @@ gtag('config', GA_MEASUREMENT_ID, { 'send_page_view': true });
 /** SUBSCRIPTIONS **/
 
 /* Changes to Stored Auth Details */
-window.addEventListener('storage', function(e) {
+window.addEventListener('storage', function (e) {
   if ((e.key === authUserIdKey || e.key === null) && e.oldValue !== e.newValue) {
     if (e.newValue === null) {
       /* Send a Logged Out Message When Another Tab Deletes the User ID */
@@ -48,16 +61,16 @@ window.addEventListener('storage', function(e) {
 });
 
 /* Changes to Stored Cart Session */
-window.addEventListener('storage', function(e) {
+window.addEventListener('storage', function (e) {
   if ((e.key === cartTokenKey) && e.oldValue !== e.newValue) {
     if (e.newValue !== null) {
-       app.ports.newCartSessionToken.send(e.newValue);
+      app.ports.newCartSessionToken.send(e.newValue);
     }
   }
 });
 
 /* Changes to Cart Item Count */
-window.addEventListener('storage', function(e) {
+window.addEventListener('storage', function (e) {
   if ((e.key === cartItemCountKey) && e.oldValue !== e.newValue) {
     if (e.newValue !== null) {
       var itemCount = parseInt(e.newValue);
@@ -72,8 +85,8 @@ window.addEventListener('storage', function(e) {
 /** PORTS **/
 
 /* Scroll to Top of Element if it's not in view */
-app.ports.scrollToSelector.subscribe(function(selector) {
-  requestAnimationFrame(function() {
+app.ports.scrollToSelector.subscribe(function (selector) {
+  requestAnimationFrame(function () {
     var $selector = $(selector);
     if ($selector.length > 0) {
       var elementTop = $selector.offset().top;
@@ -88,43 +101,39 @@ app.ports.scrollToSelector.subscribe(function(selector) {
 });
 
 /* Collapse the Mobile Menus */
-app.ports.collapseMobileMenus.subscribe(function() {
+app.ports.collapseMobileMenus.subscribe(function () {
   $('.navbar-collapse.show').collapse('hide');
 });
 
 
 /* Store the User ID in Local Storage */
-app.ports.storeAuthDetails.subscribe(function(authDetails) {
+app.ports.storeAuthDetails.subscribe(function (authDetails) {
   var userId = authDetails;
   localStorage.setItem(authUserIdKey, userId);
 });
 
 /* Remove the Stored User ID from Local Storage */
-app.ports.removeAuthDetails.subscribe(function() {
+app.ports.removeAuthDetails.subscribe(function () {
   localStorage.removeItem(authUserIdKey);
 });
 
 /* Store the Cart Session Token in Local Storage */
-app.ports.storeCartSessionToken.subscribe(function(token) {
+app.ports.storeCartSessionToken.subscribe(function (token) {
   localStorage.setItem(cartTokenKey, token);
 });
 
 /* Remove the Cart Session Token from Local Storage */
-app.ports.removeCartSessionToken.subscribe(function() {
+app.ports.removeCartSessionToken.subscribe(function () {
   localStorage.removeItem(cartTokenKey);
 });
 
-/* Store the Number of Items in the Cart */
-app.ports.setCartItemCount.subscribe(function(itemCount) {
-  localStorage.setItem(cartItemCountKey, itemCount);
-});
 
 /* Update the Page's Meta Elements & Send a Page Hit to Analytics */
-app.ports.updatePageMetadata.subscribe(function(portData) {
+app.ports.updatePageMetadata.subscribe(function (portData) {
   var url = portData.url,
-      title = portData.title,
-      description = portData.description,
-      maybeImage = portData.image;
+    title = portData.title,
+    description = portData.description,
+    maybeImage = portData.image;
   gtag('config', GA_MEASUREMENT_ID, { 'page_path': url, 'page_title': title });
   setOgMeta('title', title);
   setOgMeta('url', document.location.origin + url);
@@ -141,18 +150,18 @@ app.ports.updatePageMetadata.subscribe(function(portData) {
 });
 
 /* Log Purchases with Google Analytics */
-app.ports.logPurchase.subscribe(function(purchaseData) {
+app.ports.logPurchase.subscribe(function (purchaseData) {
   gtag('event', 'purchase', purchaseData);
 });
 
 /* Log the Status Code for the Prerender Server */
-app.ports.logStatusCode.subscribe(function(code) {
+app.ports.logStatusCode.subscribe(function (code) {
   createOrUpdateMeta('prerender-status-code', code)
 });
 
 /* Initialize the Homepage Carousel When the Page is Loaded, Destroy it when Navigating Away. */
 var $homepageCarousel = null;
-app.ports.initializeOrDestroyHomepageCarousel.subscribe(function(isHomepage) {
+app.ports.initializeOrDestroyHomepageCarousel.subscribe(function (isHomepage) {
   requestAnimationFrame(function () {
     if (isHomepage) {
       $homepageCarousel = $('#homepage-carousel');
@@ -166,11 +175,11 @@ app.ports.initializeOrDestroyHomepageCarousel.subscribe(function(isHomepage) {
 
 let helcimMessageListener = null;
 
-app.ports.appendHelcimPayIframe.subscribe(function(checkoutToken) {
+app.ports.appendHelcimPayIframe.subscribe(function (checkoutToken) {
   window.appendHelcimPayIframe(checkoutToken);
 })
 
-app.ports.removeHelcimPayIframe.subscribe(function() {
+app.ports.removeHelcimPayIframe.subscribe(function () {
   frame = document.getElementById('helcimPayIframe');
   if (frame instanceof HTMLIFrameElement) {
     frame.remove();
@@ -178,11 +187,11 @@ app.ports.removeHelcimPayIframe.subscribe(function() {
   }
 })
 
-app.ports.subscribeToHelcimMessages.subscribe(function() {
+app.ports.subscribeToHelcimMessages.subscribe(function () {
   if (helcimMessageListener) {
     window.removeEventListener('message', helcimMessageListener);
   }
-  helcimMessageListener = function(event) {
+  helcimMessageListener = function (event) {
     if (event.origin == "https://secure.helcim.app")
       app.ports.helcimMessageReceived.send(event.data);
   }
@@ -197,14 +206,19 @@ app.ports.historyBack.subscribe(() => {
 });
 
 
-app.ports.scrollLeftSmooth.subscribe(function({id, amount}) {
-    var el = document.getElementById(id);
-    if (el) {
-        el.scrollBy({
-            left: amount,
-            behavior: "smooth" // ensures smooth scrolling
-        });
-    }
+app.ports.scrollLeftSmooth.subscribe(function ({ id, amount }) {
+  var el = document.getElementById(id);
+  if (el) {
+    el.scrollBy({
+      left: amount,
+      behavior: "smooth" // ensures smooth scrolling
+    });
+  }
+});
+
+/* Store the Number of Items in the Cart */
+app.ports.setCartItemCount.subscribe(function (itemCount) {
+  localStorage.setItem(cartItemCountKey, itemCount);
 });
 
 
@@ -257,11 +271,25 @@ function createOrUpdateMeta(name, content) {
 
 /* Focus an element by id */
 /* Note: For some reason, webpack throw an error that, this is undefined. */
-if(app.ports.focus){
-  app.ports.focus.subscribe(function(id) {
-      const el = document.getElementById(id);
-      if (el) {
-        el.focus();
-      }
+if (app.ports.focus) {
+  app.ports.focus.subscribe(function (id) {
+    const el = document.getElementById(id);
+    if (el) {
+      el.focus();
+    }
+  });
+}
+
+if (app.ports.collectStripeToken) {
+  /* Open the Stripe Checkout Popup */
+  app.ports.collectStripeToken.subscribe(function (portData) {
+    var [customerEmail, checkoutTotal] = portData;
+    stripeHandler.open({
+      email: customerEmail,
+      amount: checkoutTotal,
+    });
+    window.addEventListener('popstate', function () {
+      stripeHandler.close();
+    });
   });
 }
