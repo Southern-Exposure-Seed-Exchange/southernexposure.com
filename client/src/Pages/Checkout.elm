@@ -1083,7 +1083,7 @@ submitHandler model authStatus maybeSessionToken checkoutDetails provider =
                     )
 
                 else
-                    ( { model | isPaymentProcessing = True }
+                    ( { model | isPaymentProcessing = provider == Helcim }
                     , Nothing
                     , case provider of
                         Helcim ->
