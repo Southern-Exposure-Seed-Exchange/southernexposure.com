@@ -86,7 +86,7 @@ port cartItemCountChanged : (Int -> msg) -> Sub msg
 
 
 
--- Checkout
+-- Helcim
 
 
 port subscribeToHelcimMessages : () -> Cmd msg
@@ -99,6 +99,16 @@ port removeHelcimPayIframe : () -> Cmd msg
 
 
 port appendHelcimPayIframe : String -> Cmd msg
+
+
+
+-- Stripe
+
+
+port collectStripeToken : ( String, Int ) -> Cmd msg
+
+
+port stripeTokenReceived : (String -> msg) -> Sub msg
 
 
 

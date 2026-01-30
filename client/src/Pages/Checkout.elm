@@ -55,6 +55,20 @@ import Utils.View exposing (decimalInput, disableGrammarly, emailInput, icon, la
 
 
 
+-- Type
+
+
+type PaymentProvider
+    = Stripe
+    | Helcim
+
+
+type PaymentProviderToken
+    = StripeToken String
+    | HelcimToken ( String, String )
+
+
+
 -- Model
 
 
@@ -195,11 +209,12 @@ type Msg
     | Comment String
     | ApplyCoupon
     | RemoveCoupon
-    | Submit
-    | SubmitResponse (WebData (Result Api.FormErrors (CheckoutResult CheckoutResponse)))
+    | Submit PaymentProvider
+    | SubmitResponse PaymentProvider (WebData (Result Api.FormErrors (CheckoutResult CheckoutResponse)))
     | RefreshDetails (WebData (Result Api.FormErrors PageData.CheckoutDetails))
     | HelcimCheckoutTokenReceived (WebData (Result Api.FormErrors (CheckoutResult HelcimCheckoutTokenResponse)))
     | HelcimEventReceived Decode.Value
+    | StripeTokenReceived String
     | ConfirmPayment
     | CancelPayment
     | ValidateCart
@@ -529,7 +544,10 @@ type OutMsg
 
 subscriptions : Sub Msg
 subscriptions =
-    Ports.helcimMessageReceived HelcimEventReceived
+    Sub.batch
+        [ Ports.helcimMessageReceived HelcimEventReceived
+        , Ports.stripeTokenReceived StripeTokenReceived
+        ]
 
 
 update :
@@ -618,132 +636,17 @@ update msg postgridApiKey model authStatus maybeSessionToken checkoutDetails =
         Comment comment ->
             { model | comment = comment } |> nothingAndNoCommand
 
-        Submit ->
-            case checkoutDetails of
-                RemoteData.Success details ->
-                    let
-                        (Cents finalTotal) =
-                            getFinalTotal details model.storeCredit
+        Submit provider ->
+            submitHandler model authStatus maybeSessionToken checkoutDetails provider
 
-                        freeCheckout =
-                            PageData.isFreeCheckout checkoutDetails || finalTotal == 0
-                    in
-                    validateForm model (not freeCheckout) details <|
-                        if freeCheckout then
-                            ( { model | isProcessing = True }
-                            , Nothing
-                            , placeOrder model authStatus maybeSessionToken Nothing checkoutDetails
-                            )
+        SubmitResponse provider result ->
+            submitResponseHandler model authStatus maybeSessionToken provider result
 
-                        else
-                            ( { model | isPaymentProcessing = True }
-                            , Nothing
-                            , getHelcimCheckoutToken
-                                authStatus
-                                maybeSessionToken
-                                model.email
-                                (checkoutDetailsToCartInventoryNotifications details)
-                                model.shippingAddress
-                                model.skipAddressVerification
-                            )
-
-                _ ->
-                    ( model, Nothing, Cmd.none )
-
-        SubmitResponse (RemoteData.Success (Ok res)) ->
-            case res of
-                CheckoutSuccess response ->
-                    let
-                        orderId =
-                            response.orderId
-
-                        outMsg =
-                            if authStatus == User.Anonymous then
-                                AnonymousOrderCompleted orderId response.guestToken
-
-                            else
-                                CustomerOrderCompleted orderId
-
-                        analyticsData =
-                            encodeAnalyticsPurchase orderId response.orderLines response.orderProducts
-                    in
-                    ( initial, Just outMsg, Ports.logPurchase analyticsData )
-
-                CheckoutValidationErrors errs ->
-                    processCheckoutValidationErrors model errs authStatus maybeSessionToken
-
-        SubmitResponse (RemoteData.Success (Err errors)) ->
-            let
-                ( generalErrors, shippingErrors, billingErrors ) =
-                    List.foldl
-                        (\( field, fieldErrors ) ( generalErr, shippingErr, billingErr ) ->
-                            case String.split "-" field of
-                                "shipping" :: xs ->
-                                    ( generalErr
-                                    , ( String.join "" xs, fieldErrors ) :: shippingErr
-                                    , billingErr
-                                    )
-
-                                "billing" :: xs ->
-                                    ( generalErr
-                                    , shippingErr
-                                    , ( String.join "" xs, fieldErrors ) :: billingErr
-                                    )
-
-                                _ ->
-                                    ( ( field, fieldErrors ) :: generalErr
-                                    , shippingErr
-                                    , billingErr
-                                    )
-                        )
-                        ( [], [], [] )
-                        (Dict.toList errors)
-
-                updatedShippingForm =
-                    case model.shippingAddress of
-                        ExistingAddress _ ->
-                            model.shippingAddress
-
-                        NewAddress addrForm ->
-                            NewAddress { addrForm | errors = Dict.fromList shippingErrors }
-
-                updatedBillingForm =
-                    case model.billingAddress of
-                        ExistingAddress _ ->
-                            model.billingAddress
-
-                        NewAddress addrForm ->
-                            NewAddress { addrForm | errors = Dict.fromList billingErrors }
-
-                addAddressErrorIfExisting prefix address =
-                    case address of
-                        ExistingAddress _ ->
-                            Dict.update prefix (always <| Dict.get (prefix ++ "-") errors)
-
-                        NewAddress _ ->
-                            identity
-            in
-            ( { model
-                | shippingAddress = updatedShippingForm
-                , billingAddress = updatedBillingForm
-                , isProcessing = False
-                , errors =
-                    Dict.fromList generalErrors
-                        |> addAddressErrorIfExisting "shipping" model.shippingAddress
-                        |> addAddressErrorIfExisting "billing" model.billingAddress
-              }
+        StripeTokenReceived stripeTokenId ->
+            ( { model | isProcessing = True }
             , Nothing
-            , Ports.scrollToTop
+            , placeOrder model authStatus maybeSessionToken Stripe (Just <| StripeToken stripeTokenId) checkoutDetails
             )
-
-        SubmitResponse (RemoteData.Failure error) ->
-            ( { model | errors = Api.apiFailureToError error, isProcessing = False }
-            , Nothing
-            , Ports.scrollToTop
-            )
-
-        SubmitResponse _ ->
-            { model | isProcessing = False } |> nothingAndNoCommand
 
         RefreshDetails (RemoteData.Success (Ok details)) ->
             let
@@ -814,7 +717,7 @@ update msg postgridApiKey model authStatus maybeSessionToken checkoutDetails =
                 Just confirmationModel ->
                     ( { model | confirmationModel = Nothing, isProcessing = True }
                     , Nothing
-                    , placeOrder model authStatus maybeSessionToken (Just ( confirmationModel.cardToken, confirmationModel.customerCode )) checkoutDetails
+                    , placeOrder model authStatus maybeSessionToken Helcim (Just <| HelcimToken ( confirmationModel.cardToken, confirmationModel.customerCode )) checkoutDetails
                     )
 
         CancelPayment ->
@@ -1147,9 +1050,187 @@ getHelcimCheckoutToken authStatus maybeSessionToken email cartInventoryNotificat
                 |> Api.sendRequest HelcimCheckoutTokenReceived
 
 
-placeOrder : Form -> AuthStatus -> Maybe String -> Maybe ( String, String ) -> WebData PageData.CheckoutDetails -> Cmd Msg
-placeOrder model authStatus maybeSessionToken helcimData checkoutDetails =
+submitHandler :
+    Form
+    -> AuthStatus
+    -> Maybe String
+    -> WebData PageData.CheckoutDetails
+    -> PaymentProvider
+    -> ( Form, Maybe OutMsg, Cmd Msg )
+submitHandler model authStatus maybeSessionToken checkoutDetails provider =
+    case checkoutDetails of
+        RemoteData.Success details ->
+            let
+                (Cents finalTotal) =
+                    getFinalTotal details model.storeCredit
+
+                freeCheckout =
+                    PageData.isFreeCheckout checkoutDetails || finalTotal == 0
+
+                customerEmail =
+                    case authStatus of
+                        User.Authorized user ->
+                            user.email
+
+                        User.Anonymous ->
+                            model.email
+            in
+            validateForm model (not freeCheckout) details <|
+                if freeCheckout then
+                    ( { model | isProcessing = True }
+                    , Nothing
+                    , placeOrder model authStatus maybeSessionToken provider Nothing checkoutDetails
+                    )
+
+                else
+                    ( { model | isPaymentProcessing = provider == Helcim }
+                    , Nothing
+                    , case provider of
+                        Helcim ->
+                            getHelcimCheckoutToken
+                                authStatus
+                                maybeSessionToken
+                                model.email
+                                (checkoutDetailsToCartInventoryNotifications details)
+                                model.shippingAddress
+                                model.skipAddressVerification
+
+                        Stripe ->
+                            Ports.collectStripeToken ( customerEmail, finalTotal )
+                    )
+
+        _ ->
+            ( model, Nothing, Cmd.none )
+
+
+submitResponseHandler :
+    Form
+    -> AuthStatus
+    -> Maybe String
+    -> PaymentProvider
+    -> WebData (Result Api.FormErrors (CheckoutResult CheckoutResponse))
+    -> ( Form, Maybe OutMsg, Cmd Msg )
+submitResponseHandler model authStatus maybeSessionToken _ result =
+    case result of
+        RemoteData.Success (Ok res) ->
+            case res of
+                CheckoutSuccess response ->
+                    let
+                        orderId =
+                            response.orderId
+
+                        outMsg =
+                            if authStatus == User.Anonymous then
+                                AnonymousOrderCompleted orderId response.guestToken
+
+                            else
+                                CustomerOrderCompleted orderId
+
+                        analyticsData =
+                            encodeAnalyticsPurchase orderId response.orderLines response.orderProducts
+                    in
+                    ( initial, Just outMsg, Ports.logPurchase analyticsData )
+
+                CheckoutValidationErrors errs ->
+                    processCheckoutValidationErrors model errs authStatus maybeSessionToken
+
+        RemoteData.Success (Err errors) ->
+            let
+                ( generalErrors, shippingErrors, billingErrors ) =
+                    List.foldl
+                        (\( field, fieldErrors ) ( generalErr, shippingErr, billingErr ) ->
+                            case String.split "-" field of
+                                "shipping" :: xs ->
+                                    ( generalErr
+                                    , ( String.join "" xs, fieldErrors ) :: shippingErr
+                                    , billingErr
+                                    )
+
+                                "billing" :: xs ->
+                                    ( generalErr
+                                    , shippingErr
+                                    , ( String.join "" xs, fieldErrors ) :: billingErr
+                                    )
+
+                                _ ->
+                                    ( ( field, fieldErrors ) :: generalErr
+                                    , shippingErr
+                                    , billingErr
+                                    )
+                        )
+                        ( [], [], [] )
+                        (Dict.toList errors)
+
+                updatedShippingForm =
+                    case model.shippingAddress of
+                        ExistingAddress _ ->
+                            model.shippingAddress
+
+                        NewAddress addrForm ->
+                            NewAddress { addrForm | errors = Dict.fromList shippingErrors }
+
+                updatedBillingForm =
+                    case model.billingAddress of
+                        ExistingAddress _ ->
+                            model.billingAddress
+
+                        NewAddress addrForm ->
+                            NewAddress { addrForm | errors = Dict.fromList billingErrors }
+
+                addAddressErrorIfExisting prefix address =
+                    case address of
+                        ExistingAddress _ ->
+                            Dict.update prefix (always <| Dict.get (prefix ++ "-") errors)
+
+                        NewAddress _ ->
+                            identity
+            in
+            ( { model
+                | shippingAddress = updatedShippingForm
+                , billingAddress = updatedBillingForm
+                , isProcessing = False
+                , errors =
+                    Dict.fromList generalErrors
+                        |> addAddressErrorIfExisting "shipping" model.shippingAddress
+                        |> addAddressErrorIfExisting "billing" model.billingAddress
+              }
+            , Nothing
+            , Ports.scrollToTop
+            )
+
+        RemoteData.Failure error ->
+            ( { model | errors = Api.apiFailureToError error, isProcessing = False }
+            , Nothing
+            , Ports.scrollToTop
+            )
+
+        _ ->
+            { model | isProcessing = False } |> nothingAndNoCommand
+
+
+placeOrder :
+    Form
+    -> AuthStatus
+    -> Maybe String
+    -> PaymentProvider
+    -> Maybe PaymentProviderToken
+    -> WebData PageData.CheckoutDetails
+    -> Cmd Msg
+placeOrder model authStatus maybeSessionToken provider providerToken checkoutDetails =
     let
+        token =
+            case providerToken of
+                Just (HelcimToken ( helcimToken, helcimCustomerCode )) ->
+                    [ ( "helcimToken", Encode.string helcimToken )
+                    , ( "helcimCustomerCode", Encode.string helcimCustomerCode )
+                    ]
+
+                Just (StripeToken stripeTokenId) ->
+                    [ ( "stripeToken", Encode.string stripeTokenId ) ]
+
+                _ ->
+                    []
+
         customerData =
             Encode.object
                 ([ ( "shippingAddress", encodedShippingAddress )
@@ -1161,15 +1242,7 @@ placeOrder model authStatus maybeSessionToken helcimData checkoutDetails =
                  , ( "cartInventoryNotifications", encodedCartInventoryNotifications )
                  , ( "skipAddressVerification", Encode.bool model.skipAddressVerification )
                  ]
-                    ++ (helcimData
-                            |> Maybe.map
-                                (\( helcimToken, helcimCustomerCode ) ->
-                                    [ ( "helcimToken", Encode.string helcimToken )
-                                    , ( "helcimCustomerCode", Encode.string helcimCustomerCode )
-                                    ]
-                                )
-                            |> Maybe.withDefault []
-                       )
+                    ++ token
                 )
 
         anonymousData =
@@ -1184,15 +1257,7 @@ placeOrder model authStatus maybeSessionToken helcimData checkoutDetails =
                  , ( "cartInventoryNotifications", encodedCartInventoryNotifications )
                  , ( "skipAddressVerification", Encode.bool model.skipAddressVerification )
                  ]
-                    ++ (helcimData
-                            |> Maybe.map
-                                (\( helcimToken, helcimCustomerCode ) ->
-                                    [ ( "helcimToken", Encode.string helcimToken )
-                                    , ( "helcimCustomerCode", Encode.string helcimCustomerCode )
-                                    ]
-                                )
-                            |> Maybe.withDefault []
-                       )
+                    ++ token
                 )
 
         encodedStoreCredit =
@@ -1256,13 +1321,13 @@ placeOrder model authStatus maybeSessionToken helcimData checkoutDetails =
             Api.post Api.CheckoutPlaceOrderAnonymous
                 |> Api.withJsonBody anonymousData
                 |> Api.withErrorHandler (cartInventoryCheckResultDecoder decoder)
-                |> Api.sendRequest SubmitResponse
+                |> Api.sendRequest (SubmitResponse provider)
 
         User.Authorized _ ->
             Api.post Api.CheckoutPlaceOrderCustomer
                 |> Api.withJsonBody customerData
                 |> Api.withErrorHandler (cartInventoryCheckResultDecoder decoder)
-                |> Api.sendRequest SubmitResponse
+                |> Api.sendRequest (SubmitResponse provider)
 
 
 handleHelcimCheckoutEvent : Form -> PageData.CheckoutDetails -> HelcimPayCheckoutEvent -> ( Form, Maybe OutMsg, Cmd Msg )
@@ -1701,7 +1766,19 @@ view model authStatus locations checkoutDetails =
         freeCheckout =
             finalTotal <= 0
 
-        buttonContents =
+        buttonHelcimContents =
+            if model.isPaymentProcessing || model.isProcessing then
+                { text = "Placing Order..."
+                , icon = Just <| icon "spinner fa-spin ml-2"
+                }
+
+            else if freeCheckout then
+                { text = "Place Order", icon = Nothing }
+
+            else
+                { text = "Pay with Helcim", icon = Just <| icon "arrow-right" }
+
+        buttonStripeContents =
             if model.isPaymentProcessing || model.isProcessing then
                 { text = "Placing Order..."
                 , icon = Just <| icon "spinner fa-spin ml-2"
@@ -1730,7 +1807,7 @@ view model authStatus locations checkoutDetails =
             [ rawHtml checkoutDetails.disabledMessage ]
 
       else
-        form [ onSubmit Submit ]
+        form []
             [ processingOverlay
             , paymentConfirmationOverlay
             , genericErrorText hasErrors
@@ -1806,18 +1883,32 @@ view model authStatus locations checkoutDetails =
                         []
                     ]
                 ]
-            , div [ class "tw:flex tw:justify-end tw:pt-[20px] tw:pb-[500px] tw:lg:pb-0" ]
-                [ Button.view
+            , div [ class "tw:flex tw:justify-end tw:pt-[20px] tw:pb-[500px] tw:lg:pb-0 tw:gap-[8px]" ]
+                [ -- TODO: Helcim is disabled for now
+                  --     Button.view
+                  --     { defaultButton
+                  --         | label = buttonHelcimContents.text
+                  --         , style = Button.Outline
+                  --         , iconEnd = buttonHelcimContents.icon
+                  --         , padding = Button.Width "tw:w-full tw:lg:w-auto tw:px-[16px]"
+                  --         , type_ =
+                  --             if model.isProcessing then
+                  --                 Button.Disabled
+                  --             else
+                  --                 Button.TriggerMsg (Submit Helcim)
+                  --     }
+                  -- ,
+                  Button.view
                     { defaultButton
-                        | label = buttonContents.text
-                        , iconEnd = buttonContents.icon
+                        | label = buttonStripeContents.text
+                        , iconEnd = buttonStripeContents.icon
                         , padding = Button.Width "tw:w-full tw:lg:w-auto tw:px-[16px]"
                         , type_ =
                             if model.isProcessing then
                                 Button.Disabled
 
                             else
-                                Button.FormSubmit
+                                Button.TriggerMsg (Submit Stripe)
                     }
                 ]
             ]
