@@ -91,6 +91,8 @@ type CheckoutAPI =
     :<|> "anonymous-success" :> AnonymousSuccessRoute
     -- :<|> "helcim-checkout-token" :> CheckoutTokenRoute
     -- :<|> "anonymous-helcim-checkout-token" :> AnonymousCheckoutTokenRoute
+    :<|> "validate-anonymous-customer-details" :> AnonymousCustomerValidationRoute
+    :<|> "validate-customer-details" :> CustomerValidationRoute
 
 type CheckoutRoutes = ServerT CheckoutAPI App
 
@@ -104,6 +106,8 @@ checkoutRoutes =
     :<|> anonymousSuccessRoute
     -- :<|> getCheckoutTokenRoute
     -- :<|> anonymousGetCheckoutTokenRoute
+    :<|> anonymousCustomerValidationRoute
+    :<|> customerValidationRoute
 
 
 -- COUPON ERRORS
@@ -1077,6 +1081,62 @@ getFirstStripeCard stripeCustomerId =
         >>= either (throwIO . StripeError)
             (return . fmap Stripe.cardId . listToMaybe . Stripe.list)
         >>= maybe (throwIO CardChargeError) return
+
+data AnonymousCustomerValidationParameters = AnonymousCustomerValidationParameters
+    { acvpCartToken :: T.Text
+    , acvpEmail :: T.Text
+    , acvpCartInventoryNotifications :: CartInventoryNotifications
+    , acvpShippingAddress :: AddressData
+    , acvpSkipShippingAddressVerification :: Bool
+    }
+
+instance FromJSON AnonymousCustomerValidationParameters where
+    parseJSON = withObject "AnonymousCustomerValidationParameters" $ \v ->
+        AnonymousCustomerValidationParameters
+            <$> v .: "sessionToken"
+            <*> v .: "email"
+            <*> v .: "cartInventoryNotifications"
+            <*> v .: "shippingAddress"
+            <*> v .: "skipAddressVerification"
+
+type AnonymousCustomerValidationRoute =
+    ReqBody '[JSON] AnonymousCustomerValidationParameters :>
+    Post '[JSON] (CheckoutResult ())
+
+anonymousCustomerValidationRoute :: AnonymousCustomerValidationParameters -> App (CheckoutResult ())
+anonymousCustomerValidationRoute AnonymousCustomerValidationParameters {..} = runDB $ do
+    customerExists <- lift $ V.uniqueCustomer acvpEmail
+    when customerExists $
+        lift $ singleFieldError "email" "Email is already associated with an existing account. Log in or use a different email."
+    (Entity cartId _) <- getBy (UniqueAnonymousCart $ Just acvpCartToken)
+        >>= maybe (throwIO CartNotFound) return
+    checkCartAndShippingAddress acvpCartInventoryNotifications cartId (NewAddress acvpShippingAddress) acvpSkipShippingAddressVerification $
+        pure ()
+
+data CustomerValidationParameters = CustomerValidationParameters
+    { cvpCartInventoryNotifications :: CartInventoryNotifications
+    , cvpShippingAddress :: CustomerAddress
+    , cvpSkipShippingAddressVerification :: Bool
+    }
+
+instance FromJSON CustomerValidationParameters where
+    parseJSON = withObject "CustomerValidationParameters" $ \v ->
+        CustomerValidationParameters
+            <$> v .: "cartInventoryNotifications"
+            <*> v .: "shippingAddress"
+            <*> v .: "skipAddressVerification"
+
+type CustomerValidationRoute =
+    AuthProtect "cookie-auth" :>
+    ReqBody '[JSON] CustomerValidationParameters :>
+    Post '[JSON] (Cookied (CheckoutResult ()))
+
+customerValidationRoute :: WrappedAuthToken -> CustomerValidationParameters -> App (Cookied (CheckoutResult ()))
+customerValidationRoute token CustomerValidationParameters {..} = withValidatedCookie token $ \(Entity customerId _customer) -> runDB $ do
+    (Entity cartId _) <- getBy (UniqueCustomerCart $ Just customerId)
+        >>= maybe (throwIO CartNotFound) return
+    checkCartAndShippingAddress cvpCartInventoryNotifications cartId cvpShippingAddress cvpSkipShippingAddressVerification $
+        pure ()
 
 -- -- | Get a Helcim Customer by their CustomerCode.
 -- -- And update their billing & shipping addresses with the current order's values. Map the Helcim Customer id
