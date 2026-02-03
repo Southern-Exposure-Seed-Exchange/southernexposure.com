@@ -2,9 +2,10 @@ module Data.Api exposing
     ( Endpoint(..), get, post, put, patch, delete
     , withJsonBody, withStringResponse, withJsonResponse, withStringErrorHandler, withErrorHandler
     , sendRequest
-    , FormErrors, initialErrors, addError, addErrors, prefixedArrayErrors
+    , FormErrors, initialErrors, addError, prefixedArrayErrors
     , apiFailureToError, formErrorsDecoder
     , errorHtml, generalFormErrors, getErrorHtml
+    , addErrors
     )
 
 {-|
@@ -79,8 +80,10 @@ type Endpoint
     | CheckoutPlaceOrderAnonymous
     | CheckoutSuccess
     | GuestCheckoutSuccess
-    | CheckoutHelcimToken
-    | CheckoutHelcimTokenAnonymous
+    | HelcimValidateCheckout
+    | HelcimValidateCheckoutAnonymous
+    | StripeValidateCheckout
+    | StripeValidateCheckoutAnonymous
     | AdminCategoryList
     | AdminNewCategory
     | AdminEditCategoryData CategoryId
@@ -244,11 +247,17 @@ toUrl endpoint =
                 GuestCheckoutSuccess ->
                     joinPath [ "checkout", "anonymous-success" ]
 
-                CheckoutHelcimToken ->
+                HelcimValidateCheckout ->
                     joinPath [ "checkout", "helcim-checkout-token" ]
 
-                CheckoutHelcimTokenAnonymous ->
+                HelcimValidateCheckoutAnonymous ->
                     joinPath [ "checkout", "anonymous-helcim-checkout-token" ]
+
+                StripeValidateCheckout ->
+                    joinPath [ "checkout", "validate-customer-details" ]
+
+                StripeValidateCheckoutAnonymous ->
+                    joinPath [ "checkout", "validate-anonymous-customer-details" ]
 
                 AdminCategoryList ->
                     joinPath [ "admin", "categories", "list" ]
@@ -581,6 +590,7 @@ formErrorsDecoder =
 addError : Field -> ErrorMessage -> FormErrors -> FormErrors
 addError field message errors =
     addErrors field [ message ] errors
+
 
 addErrors : Field -> List ErrorMessage -> FormErrors -> FormErrors
 addErrors field messages errors =

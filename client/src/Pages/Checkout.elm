@@ -112,7 +112,11 @@ type alias Form =
     , couponCode : String
     , comment : String
     , errors : Api.FormErrors
-    , isPaymentProcessing : Bool
+
+    -- Button state for validating checkout details
+    , isValidating : Bool
+
+    -- Button state for processing payment
     , isProcessing : Bool
     , hasNewCartInventoryNotifications : Bool
     , skipAddressVerification : Bool
@@ -134,7 +138,7 @@ initial =
     , couponCode = ""
     , comment = ""
     , errors = Api.initialErrors
-    , isPaymentProcessing = False
+    , isValidating = False
     , isProcessing = False
     , hasNewCartInventoryNotifications = False
     , skipAddressVerification = False
@@ -181,7 +185,7 @@ initialWithDefaults shippingAddresses billingAddresses restrictionsError =
     , couponCode = ""
     , comment = ""
     , errors = errors
-    , isPaymentProcessing = False
+    , isValidating = False
     , isProcessing = False
     , hasNewCartInventoryNotifications = False
     , skipAddressVerification = False
@@ -212,7 +216,8 @@ type Msg
     | Submit PaymentProvider
     | SubmitResponse PaymentProvider (WebData (Result Api.FormErrors (CheckoutResult CheckoutResponse)))
     | RefreshDetails (WebData (Result Api.FormErrors PageData.CheckoutDetails))
-    | HelcimCheckoutTokenReceived (WebData (Result Api.FormErrors (CheckoutResult HelcimCheckoutTokenResponse)))
+    | HelcimValidateCheckoutResult (WebData (Result Api.FormErrors (CheckoutResult HelcimValidateCheckoutResponse)))
+    | StripeValidateCheckoutResult PageData.CheckoutDetails (WebData (Result Api.FormErrors (CheckoutResult ())))
     | HelcimEventReceived Decode.Value
     | StripeTokenReceived String
     | ConfirmPayment
@@ -368,7 +373,7 @@ processCheckoutValidationErrors model errs authStatus maybeSessionToken =
                 nothingAndNoCommand
     in
     { model
-        | isPaymentProcessing = False
+        | isValidating = False
         , isProcessing = False
         , hasNewCartInventoryNotifications = hasNewCartInventoryNotifications
         , skipAddressVerification = hasShippingAddressVerificationErrors
@@ -377,14 +382,23 @@ processCheckoutValidationErrors model errs authStatus maybeSessionToken =
         |> refreshAction
 
 
-type alias HelcimCheckoutTokenResponse =
+type alias HelcimValidateCheckoutResponse =
     { checkoutToken : String }
 
 
-helcimCheckoutTokenResponseDecoder : Decode.Decoder HelcimCheckoutTokenResponse
-helcimCheckoutTokenResponseDecoder =
-    Decode.map HelcimCheckoutTokenResponse
+helcimValidateCheckoutResponseDecoder : Decode.Decoder HelcimValidateCheckoutResponse
+helcimValidateCheckoutResponseDecoder =
+    Decode.map HelcimValidateCheckoutResponse
         (Decode.field "token" Decode.string)
+
+
+type alias StripeValidateCheckoutResponse =
+    ()
+
+
+stripeValidateCheckoutResponseDecoder : Decode.Decoder StripeValidateCheckoutResponse
+stripeValidateCheckoutResponseDecoder =
+    Decode.succeed ()
 
 
 type alias CheckoutResponse =
@@ -673,30 +687,22 @@ update msg postgridApiKey model authStatus maybeSessionToken checkoutDetails =
         RefreshDetails _ ->
             model |> nothingAndNoCommand
 
-        HelcimCheckoutTokenReceived (RemoteData.Success (Ok res)) ->
-            case res of
-                CheckoutSuccess token ->
-                    ( { model | checkoutToken = Just token.checkoutToken }
-                    , Nothing
-                    , Cmd.batch [ Ports.appendHelcimPayIframe token.checkoutToken, Ports.subscribeToHelcimMessages () ]
-                    )
+        HelcimValidateCheckoutResult result ->
+            helcimValidateCheckoutResultHandler model authStatus maybeSessionToken result
 
-                CheckoutValidationErrors errs ->
-                    processCheckoutValidationErrors model errs authStatus maybeSessionToken
-
-        HelcimCheckoutTokenReceived (RemoteData.Success (Err errors)) ->
-            { model | errors = errors, isPaymentProcessing = False } |> nothingAndNoCommand
-
-        HelcimCheckoutTokenReceived (RemoteData.Failure error) ->
-            { model | errors = Api.apiFailureToError error, isPaymentProcessing = False } |> nothingAndNoCommand
-
-        HelcimCheckoutTokenReceived _ ->
-            { model | isPaymentProcessing = False } |> nothingAndNoCommand
+        StripeValidateCheckoutResult detail result ->
+            stripeValidateCheckoutResultHandler model authStatus maybeSessionToken detail result
 
         HelcimEventReceived event ->
             case Decode.decodeValue helcimPayEventDecoder event of
                 Err _ ->
-                    { model | errors = Api.addError "" "Unexpected HelcimPay.js response." model.errors, isPaymentProcessing = False } |> nothingAndNoCommand
+                    { model
+                        | errors = Api.addError "" "Unexpected HelcimPay.js response." model.errors
+
+                        -- Considering using `isProcessing` for processing Helcim payment instead
+                        , isValidating = False
+                    }
+                        |> nothingAndNoCommand
 
                 Ok (HelcimPayInit _) ->
                     model |> nothingAndNoCommand
@@ -1016,8 +1022,8 @@ encodeStringAsMaybe str =
         Encode.string str
 
 
-getHelcimCheckoutToken : AuthStatus -> Maybe String -> String -> CartInventoryNotifications -> CheckoutAddress -> Bool -> Cmd Msg
-getHelcimCheckoutToken authStatus maybeSessionToken email cartInventoryNotifications shippingAddress skipAddressVerification =
+helcimValidateCheckout : AuthStatus -> Maybe String -> String -> CartInventoryNotifications -> CheckoutAddress -> Bool -> Cmd Msg
+helcimValidateCheckout authStatus maybeSessionToken email cartInventoryNotifications shippingAddress skipAddressVerification =
     case authStatus of
         User.Authorized _ ->
             let
@@ -1028,10 +1034,10 @@ getHelcimCheckoutToken authStatus maybeSessionToken email cartInventoryNotificat
                         , ( "skipAddressVerification", Encode.bool skipAddressVerification )
                         ]
             in
-            Api.post Api.CheckoutHelcimToken
+            Api.post Api.HelcimValidateCheckout
                 |> Api.withJsonBody requestData
-                |> Api.withErrorHandler (cartInventoryCheckResultDecoder helcimCheckoutTokenResponseDecoder)
-                |> Api.sendRequest HelcimCheckoutTokenReceived
+                |> Api.withErrorHandler (cartInventoryCheckResultDecoder helcimValidateCheckoutResponseDecoder)
+                |> Api.sendRequest HelcimValidateCheckoutResult
 
         User.Anonymous ->
             let
@@ -1044,10 +1050,52 @@ getHelcimCheckoutToken authStatus maybeSessionToken email cartInventoryNotificat
                         , ( "email", Encode.string email )
                         ]
             in
-            Api.post Api.CheckoutHelcimTokenAnonymous
+            Api.post Api.HelcimValidateCheckoutAnonymous
                 |> Api.withJsonBody requestData
-                |> Api.withErrorHandler (cartInventoryCheckResultDecoder helcimCheckoutTokenResponseDecoder)
-                |> Api.sendRequest HelcimCheckoutTokenReceived
+                |> Api.withErrorHandler (cartInventoryCheckResultDecoder helcimValidateCheckoutResponseDecoder)
+                |> Api.sendRequest HelcimValidateCheckoutResult
+
+
+stripeValidateCheckout :
+    AuthStatus
+    -> Maybe String
+    -> PageData.CheckoutDetails
+    -> String
+    -> CartInventoryNotifications
+    -> CheckoutAddress
+    -> Bool
+    -> Cmd Msg
+stripeValidateCheckout authStatus maybeSessionToken details email cartInventoryNotifications shippingAddress skipAddressVerification =
+    case authStatus of
+        User.Authorized _ ->
+            let
+                requestData =
+                    Encode.object
+                        [ ( "cartInventoryNotifications", encodeCartInventoryNotifications cartInventoryNotifications )
+                        , ( "shippingAddress", encodeAddress shippingAddress False )
+                        , ( "skipAddressVerification", Encode.bool skipAddressVerification )
+                        ]
+            in
+            Api.post Api.StripeValidateCheckout
+                |> Api.withJsonBody requestData
+                |> Api.withErrorHandler (cartInventoryCheckResultDecoder stripeValidateCheckoutResponseDecoder)
+                |> Api.sendRequest (StripeValidateCheckoutResult details)
+
+        User.Anonymous ->
+            let
+                requestData =
+                    Encode.object
+                        [ ( "cartInventoryNotifications", encodeCartInventoryNotifications cartInventoryNotifications )
+                        , ( "sessionToken", encodeMaybe Encode.string maybeSessionToken )
+                        , ( "shippingAddress", encodeAddress shippingAddress False )
+                        , ( "skipAddressVerification", Encode.bool skipAddressVerification )
+                        , ( "email", Encode.string email )
+                        ]
+            in
+            Api.post Api.StripeValidateCheckoutAnonymous
+                |> Api.withJsonBody requestData
+                |> Api.withErrorHandler (cartInventoryCheckResultDecoder stripeValidateCheckoutResponseDecoder)
+                |> Api.sendRequest (StripeValidateCheckoutResult details)
 
 
 submitHandler :
@@ -1066,14 +1114,6 @@ submitHandler model authStatus maybeSessionToken checkoutDetails provider =
 
                 freeCheckout =
                     PageData.isFreeCheckout checkoutDetails || finalTotal == 0
-
-                customerEmail =
-                    case authStatus of
-                        User.Authorized user ->
-                            user.email
-
-                        User.Anonymous ->
-                            model.email
             in
             validateForm model (not freeCheckout) details <|
                 if freeCheckout then
@@ -1083,11 +1123,11 @@ submitHandler model authStatus maybeSessionToken checkoutDetails provider =
                     )
 
                 else
-                    ( { model | isPaymentProcessing = provider == Helcim }
+                    ( { model | isValidating = True }
                     , Nothing
                     , case provider of
                         Helcim ->
-                            getHelcimCheckoutToken
+                            helcimValidateCheckout
                                 authStatus
                                 maybeSessionToken
                                 model.email
@@ -1096,7 +1136,14 @@ submitHandler model authStatus maybeSessionToken checkoutDetails provider =
                                 model.skipAddressVerification
 
                         Stripe ->
-                            Ports.collectStripeToken ( customerEmail, finalTotal )
+                            stripeValidateCheckout
+                                authStatus
+                                maybeSessionToken
+                                details
+                                model.email
+                                (checkoutDetailsToCartInventoryNotifications details)
+                                model.shippingAddress
+                                model.skipAddressVerification
                     )
 
         _ ->
@@ -1206,6 +1253,81 @@ submitResponseHandler model authStatus maybeSessionToken _ result =
 
         _ ->
             { model | isProcessing = False } |> nothingAndNoCommand
+
+
+{-| Proceed to show Helcim payment popup after successful checkout validation.
+-}
+helcimValidateCheckoutResultHandler :
+    Form
+    -> AuthStatus
+    -> Maybe String
+    -> WebData (Result Api.FormErrors (CheckoutResult HelcimValidateCheckoutResponse))
+    -> ( Form, Maybe OutMsg, Cmd Msg )
+helcimValidateCheckoutResultHandler model authStatus maybeSessionToken result =
+    case result of
+        RemoteData.Success (Ok res) ->
+            case res of
+                CheckoutSuccess token ->
+                    ( { model | checkoutToken = Just token.checkoutToken }
+                    , Nothing
+                    , Cmd.batch [ Ports.appendHelcimPayIframe token.checkoutToken, Ports.subscribeToHelcimMessages () ]
+                    )
+
+                CheckoutValidationErrors errs ->
+                    processCheckoutValidationErrors model errs authStatus maybeSessionToken
+
+        RemoteData.Success (Err errors) ->
+            { model | errors = errors, isValidating = False } |> nothingAndNoCommand
+
+        RemoteData.Failure error ->
+            { model | errors = Api.apiFailureToError error, isValidating = False } |> nothingAndNoCommand
+
+        _ ->
+            { model | isValidating = False } |> nothingAndNoCommand
+
+
+{-| Proceed to show Stripe payment popup after successful checkout validation.
+-}
+stripeValidateCheckoutResultHandler :
+    Form
+    -> AuthStatus
+    -> Maybe String
+    -> PageData.CheckoutDetails
+    -> WebData (Result Api.FormErrors (CheckoutResult ()))
+    -> ( Form, Maybe OutMsg, Cmd Msg )
+stripeValidateCheckoutResultHandler model authStatus maybeSessionToken details result =
+    let
+        (Cents finalTotal) =
+            getFinalTotal details model.storeCredit
+
+        customerEmail =
+            case authStatus of
+                User.Authorized user ->
+                    user.email
+
+                User.Anonymous ->
+                    model.email
+    in
+    case result of
+        RemoteData.Success (Ok res) ->
+            case res of
+                CheckoutSuccess _ ->
+                    ( { model | isValidating = False }
+                    , Nothing
+                    , Ports.collectStripeToken ( customerEmail, finalTotal )
+                    )
+
+                CheckoutValidationErrors errs ->
+                    processCheckoutValidationErrors model errs authStatus maybeSessionToken
+
+        RemoteData.Success (Err errors) ->
+            { model | errors = errors, isValidating = False } |> nothingAndNoCommand
+
+        RemoteData.Failure error ->
+            { model | errors = Api.apiFailureToError error, isValidating = False } |> nothingAndNoCommand
+
+        _ ->
+            { model | isValidating = False } |> nothingAndNoCommand
 
 
 placeOrder :
@@ -1334,7 +1456,7 @@ handleHelcimCheckoutEvent : Form -> PageData.CheckoutDetails -> HelcimPayCheckou
 handleHelcimCheckoutEvent model checkoutDetails checkoutEvent =
     if checkoutEvent.eventName == "helcim-pay-js-" ++ (model.checkoutToken |> Maybe.withDefault "") then
         if checkoutEvent.eventStatus == "HIDE" then
-            ( { model | checkoutToken = Nothing, isPaymentProcessing = False }
+            ( { model | checkoutToken = Nothing, isValidating = False }
             , Nothing
             , Ports.removeHelcimPayIframe ()
             )
@@ -1342,7 +1464,7 @@ handleHelcimCheckoutEvent model checkoutDetails checkoutEvent =
         else if checkoutEvent.eventStatus == "ABORTED" then
             case checkoutEvent.eventMessage of
                 Err errors ->
-                    ( { model | checkoutToken = Nothing, isPaymentProcessing = False, errors = Api.addError "" errors model.errors }
+                    ( { model | checkoutToken = Nothing, isValidating = False, errors = Api.addError "" errors model.errors }
                     , Nothing
                     , Ports.removeHelcimPayIframe ()
                     )
@@ -1350,7 +1472,7 @@ handleHelcimCheckoutEvent model checkoutDetails checkoutEvent =
                 Ok _ ->
                     ( { model
                         | checkoutToken = Nothing
-                        , isPaymentProcessing = False
+                        , isValidating = False
                         , errors = Api.addError "" "Unexpected HelcimPay.js response for ABORTED event." model.errors
                       }
                     , Nothing
@@ -1360,13 +1482,13 @@ handleHelcimCheckoutEvent model checkoutDetails checkoutEvent =
         else
             case checkoutEvent.eventMessage of
                 Err errors ->
-                    { model | errors = Api.addError "" errors model.errors, isPaymentProcessing = False } |> nothingAndNoCommand
+                    { model | errors = Api.addError "" errors model.errors, isValidating = False } |> nothingAndNoCommand
 
                 Ok eventMessage ->
                     if eventMessage.data.data.status == "APPROVED" then
                         ( { model
                             | checkoutToken = Nothing
-                            , isPaymentProcessing = False
+                            , isValidating = False
                             , confirmationModel =
                                 Just
                                     (initPaymentConfirmation
@@ -1381,7 +1503,7 @@ handleHelcimCheckoutEvent model checkoutDetails checkoutEvent =
                         )
 
                     else
-                        ( { model | checkoutToken = Nothing, isPaymentProcessing = False, errors = Api.addError "" "Helcim purchase was declined." model.errors }
+                        ( { model | checkoutToken = Nothing, isValidating = False, errors = Api.addError "" "Helcim purchase was declined." model.errors }
                         , Nothing
                         , Ports.removeHelcimPayIframe ()
                         )
@@ -1767,7 +1889,7 @@ view model authStatus locations checkoutDetails =
             finalTotal <= 0
 
         buttonHelcimContents =
-            if model.isPaymentProcessing || model.isProcessing then
+            if model.isValidating || model.isProcessing then
                 { text = "Placing Order..."
                 , icon = Just <| icon "spinner fa-spin ml-2"
                 }
@@ -1779,7 +1901,7 @@ view model authStatus locations checkoutDetails =
                 { text = "Pay with Helcim", icon = Just <| icon "arrow-right" }
 
         buttonStripeContents =
-            if model.isPaymentProcessing || model.isProcessing then
+            if model.isValidating || model.isProcessing then
                 { text = "Placing Order..."
                 , icon = Just <| icon "spinner fa-spin ml-2"
                 }
