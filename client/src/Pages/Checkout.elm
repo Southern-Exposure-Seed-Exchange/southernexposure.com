@@ -1929,7 +1929,7 @@ view model authStatus locations checkoutDetails =
             [ rawHtml checkoutDetails.disabledMessage ]
 
       else
-        form []
+        form [ onSubmit (Submit Stripe) ]
             [ processingOverlay
             , paymentConfirmationOverlay
             , genericErrorText hasErrors
@@ -2030,7 +2030,7 @@ view model authStatus locations checkoutDetails =
                                 Button.Disabled
 
                             else
-                                Button.TriggerMsg (Submit Stripe)
+                                Button.FormSubmit
                     }
                 ]
             ]
