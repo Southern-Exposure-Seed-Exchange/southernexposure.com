@@ -14,9 +14,13 @@ var RobotsTxtPlugin = require('robotstxt-webpack-plugin');
 
 var isProduction = process.env.NODE_ENV === 'production';
 var isHelcimProduction = process.env.HELCIM_ENV === 'production';
+var isStripeProduction = process.env.STRIPE_ENV === 'production';
 var isPostgridProduction = process.env.POSTGRID_ENV === 'production';
 
 var helcimUrl = isHelcimProduction ? "https://southern-exposure-seed-exchange.myhelcim.com" : "https://test-southern-exposure-seed-exchange.myhelcim.com";
+
+var STRIPE_API_KEY = isStripeProduction
+  ? 'pk_live_TBFfasfS7K7wBmYGrsbetA4W' : 'pk_test_F6Mr5XLKEDMn4rUsmsv5aqvr';
 
 const GA_MEASUREMENT_ID = process.env.GA_MEASUREMENT_ID;
 const POSTGRID_API_KEY = process.env.POSTGRID_API_KEY || (isPostgridProduction ? "live_pk_ewm39rmWfJJ6zLUnShubgv" : "test_pk_qEwkqHZgmPL1h3xBkwyZ7T");
@@ -137,6 +141,7 @@ module.exports = {
       ],
       scripts:
         [ 'https://secure.helcim.app/helcim-pay/services/start.js',
+          'https://checkout.stripe.com/checkout.js',
           { "src": 'https://www.googletagmanager.com/gtag/js?id=' + GA_MEASUREMENT_ID,
             "async": true
           }
@@ -169,6 +174,7 @@ module.exports = {
       GA_MEASUREMENT_ID: JSON.stringify(GA_MEASUREMENT_ID),
       helcimUrl: JSON.stringify(helcimUrl),
       POSTGRID_API_KEY: JSON.stringify(POSTGRID_API_KEY),
+      STRIPE_API_KEY: JSON.stringify(STRIPE_API_KEY),
     }),
     new SriWebpackPlugin({
       hashFuncNames: ['sha512'],
@@ -195,10 +201,16 @@ module.exports = {
       'upgrade-insecure-requests': [],
       'default-src': ["'self'", "data:"],
       'object-src': "'none'",
-      'connect-src': ["'self'", "https://api.helcim.app", "https://www.google-analytics.com", "https://www.googletagmanager.com", "https://api.postgrid.com"],
-      'frame-src': ["'self'", "https://www.farmraiser.com", "https://secure.helcim.app"],
-      'script-src': ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://www.googletagmanager.com", "https://www.google-analytics.com/"],
-      'img-src': ["'self'", "data:", "https://www.googletagmanager.com", "https://www.google-analytics.com/", "https://stats.g.doubleclick.net/", "https://www.google.com"],
+      'connect-src': ["'self'",
+        "https://api.helcim.app",
+        "https://checkout.stripe.com",
+        "https://www.google-analytics.com",
+        "https://www.googletagmanager.com",
+        "https://api.postgrid.com"
+      ],
+      'frame-src': ["'self'", "https://www.farmraiser.com", "https://secure.helcim.app", "https://checkout.stripe.com"],
+      'script-src': ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://www.googletagmanager.com", "https://www.google-analytics.com/", "https://checkout.stripe.com"],
+      'img-src': ["'self'", "data:", "https://www.googletagmanager.com", "https://www.google-analytics.com/", "https://stats.g.doubleclick.net/", "https://www.google.com", "https://*.stripe.com"],
       'font-src': ["'self'", "data:", "https://fonts.gstatic.com"],
       'style-src': ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
     }, {

@@ -122,6 +122,7 @@ jobs:
       - name: Prepare env
         run: |
           echo "HELCIM_ENV=${{ github.ref == 'refs/heads/master' && 'production' || 'staging' }}" >> $GITHUB_ENV
+          echo "STRIPE_ENV=${{ github.ref == 'refs/heads/master' && 'production' || 'staging' }}" >> $GITHUB_ENV
           echo "POSTGRID_ENV=${{ github.ref == 'refs/heads/master' && 'production' || 'staging' }}" >> $GITHUB_ENV
           echo "GA_MEASUREMENT_ID='UA-5070189-1'" >> $GITHUB_ENV
 
@@ -148,5 +149,6 @@ jobs:
           cache-to: type=gha,mode=max
           build-args: |
             HELCIM_ENV
+            STRIPE_ENV
             GA_MEASUREMENT_ID
             POSTGRID_ENV
