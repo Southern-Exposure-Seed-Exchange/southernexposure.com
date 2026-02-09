@@ -13,6 +13,7 @@ module Pages.Checkout exposing
     , view
     )
 
+import Checkout.View as CheckoutView
 import Components.Address.Address as Address exposing (AddressId(..))
 import Components.Alert as Alert exposing (defaultAlert)
 import Components.Aria as Aria
@@ -225,6 +226,8 @@ type Msg
     | ValidateCart
     | ValidateCartResponse (WebData (Result Api.FormErrors PageData.CartDetails))
     | GoBack
+    | CloseVerifyAddressPopup
+    | NoOp
 
 
 type alias CartInventoryNotifications =
@@ -745,6 +748,12 @@ update msg postgridApiKey model authStatus maybeSessionToken checkoutDetails =
 
         GoBack ->
             ( model, Nothing, historyBack () )
+
+        CloseVerifyAddressPopup ->
+            ( { model | errors = Api.initialErrors }, Nothing, Ports.scrollToTop )
+
+        NoOp ->
+            model |> nothingAndNoCommand
 
 
 selectAddress : Int -> CheckoutAddress
@@ -1268,7 +1277,7 @@ helcimValidateCheckoutResultHandler model authStatus maybeSessionToken result =
         RemoteData.Success (Ok res) ->
             case res of
                 CheckoutSuccess token ->
-                    ( { model | checkoutToken = Just token.checkoutToken }
+                    ( { model | checkoutToken = Just token.checkoutToken, errors = Api.initialErrors, isValidating = False }
                     , Nothing
                     , Cmd.batch [ Ports.appendHelcimPayIframe token.checkoutToken, Ports.subscribeToHelcimMessages () ]
                     )
@@ -1312,7 +1321,7 @@ stripeValidateCheckoutResultHandler model authStatus maybeSessionToken details r
         RemoteData.Success (Ok res) ->
             case res of
                 CheckoutSuccess _ ->
-                    ( { model | isValidating = False }
+                    ( { model | isValidating = False, errors = Api.initialErrors }
                     , Nothing
                     , Ports.collectStripeToken ( customerEmail, finalTotal )
                     )
@@ -1659,6 +1668,14 @@ view model authStatus locations checkoutDetails =
             else
                 text ""
 
+        addrErrors addr =
+            case addr of
+                ExistingAddress _ ->
+                    Dict.empty
+
+                NewAddress addrForm ->
+                    addrForm.errors
+
         hasErrors =
             not <|
                 Dict.isEmpty model.errors
@@ -1674,28 +1691,26 @@ view model authStatus locations checkoutDetails =
                     False
 
         shippingAddressVerificationErrorsView =
+            let
+                shippingAddressForm =
+                    case model.shippingAddress of
+                        NewAddress form ->
+                            form
+
+                        ExistingAddress id ->
+                            findBy (\a -> a.id == Just id) checkoutDetails.shippingAddresses
+                                |> Maybe.map Address.fromModel
+                                |> Maybe.withDefault Address.initialForm
+            in
             viewIf hasShippingAddressVerificationErrors <|
-                div [ class "tw:pb-[16px]" ]
-                    [ Alert.view
-                        { defaultAlert
-                            | content =
-                                div [ class "tw:text-[#bd8e00]" ]
-                                    [ p [ class "tw:font-semibold" ] [ text "We failed to verify your shipping address." ]
-                                    , br [] []
-                                    , p [] [ text "Please double-check your details." ]
-                                    , p [] [ text "If the address is correct, proceed with the checkout." ]
-                                    ]
-                            , style = Alert.Warning
+                (CheckoutView.addPopupContainerView <|
+                    CheckoutView.failedAddressVerificationPopupView
+                        { onEdit = CloseVerifyAddressPopup
+                        , onContinue = Submit Stripe
+                        , address = shippingAddressForm
+                        , locations = locations
                         }
-                    ]
-
-        addrErrors addr =
-            case addr of
-                ExistingAddress _ ->
-                    Dict.empty
-
-                NewAddress addrForm ->
-                    addrForm.errors
+                )
 
         guestCard =
             case authStatus of
