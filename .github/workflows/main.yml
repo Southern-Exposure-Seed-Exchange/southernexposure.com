@@ -150,5 +150,5 @@ jobs:
           build-args: |
             HELCIM_ENV
             STRIPE_ENV
-            GA_MEASUREMENT_ID
+            GA_MEASUREMENT_ID=G-GDJXY0885K
             POSTGRID_ENV
