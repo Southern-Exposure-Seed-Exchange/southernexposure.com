@@ -124,7 +124,7 @@ jobs:
           echo "HELCIM_ENV=${{ github.ref == 'refs/heads/master' && 'production' || 'staging' }}" >> $GITHUB_ENV
           echo "STRIPE_ENV=${{ github.ref == 'refs/heads/master' && 'production' || 'staging' }}" >> $GITHUB_ENV
           echo "POSTGRID_ENV=${{ github.ref == 'refs/heads/master' && 'production' || 'staging' }}" >> $GITHUB_ENV
-          echo "GA_MEASUREMENT_ID='UA-5070189-1'" >> $GITHUB_ENV
+          echo "GA_MEASUREMENT_ID='G-GDJXY0885K'" >> $GITHUB_ENV
 
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v3
