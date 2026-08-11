@@ -206,6 +206,7 @@ module.exports = {
         "https://checkout.stripe.com",
         "https://www.google-analytics.com",
         "https://www.googletagmanager.com",
+        "https://www.google.com",
         "https://api.postgrid.com"
       ],
       'frame-src': ["'self'", "https://www.farmraiser.com", "https://secure.helcim.app", "https://checkout.stripe.com"],

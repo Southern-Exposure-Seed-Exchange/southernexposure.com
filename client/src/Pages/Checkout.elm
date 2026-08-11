@@ -1595,8 +1595,8 @@ encodeAnalyticsPurchase orderId lines products =
 
         encodeProduct p =
             Encode.object
-                [ ( "id", Encode.string p.sku )
-                , ( "name", Encode.string <| nameWithLotSize p )
+                [ ( "item_id", Encode.string p.sku )
+                , ( "item_name", Encode.string <| nameWithLotSize p )
                 , ( "quantity", Encode.int p.quantity )
                 , ( "price", encodeCentsAsDollars p.price )
                 ]
@@ -1610,7 +1610,7 @@ encodeAnalyticsPurchase orderId lines products =
     in
     Encode.object
         [ ( "transaction_id", Encode.string <| String.fromInt orderId )
-        , ( "value", encodeCentsAsDollars orderTotal )
+        , ( "value", encodeCentsAsDollars productTotal )
         , ( "currency", Encode.string "USD" )
         , ( "tax", encodeCentsAsDollars taxTotal )
         , ( "shipping", encodeCentsAsDollars shippingTotal )
