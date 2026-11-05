@@ -47,7 +47,6 @@ view route =
                     , staticPageLink "retail-stores" "Retail Stores"
                     , staticPageLink "growing-guides" "Growing Guides"
                     , staticPageLink "events" "Events"
-                    , staticPageLink "fundraisers" "Fundraisers"
                     , div [ class "tw:py-[12px] tw:px-[32px]" ]
                         [ a [ href "/blog/", target "_blank", class "" ]
                             [ text "Blog" ]
